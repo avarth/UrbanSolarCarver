@@ -7,6 +7,19 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed (Simulate and Inspect, after use on Allatini)
+
+- **Simulate colours each point by its share of its open-site value** (its value with nothing built), 0 to 100 % on one scale for
+  every geometry, by default; the legend switches to the value in the study's unit, where the target is set. Both use viridis in
+  place of cividis, whose grey middle hid the facades' gains. The result card leads with what the geometry keeps of the open-site
+  value ("keeps 99 % of the open-site value (78)"). On Allatini's Solar energy study the maximum volume keeps 78 % and the envelope
+  99 %; on the old value scale the gain looked slight.
+- **A study is on the view without a press**: the first study with a result when none is selected, so a finished run shows its values.
+- **"Useful solar energy" is now "Useful solar gains"** (the energy received in the hours that need heating); studies named by
+  default take the new name. The metric's key `useful_solar_energy` is unchanged.
+- **Inspect**: the toggle is called **Face normals**; the closed bodies line is gone (CAD exports keep a corner per face, so every face
+  counted as an open body, and the voxelizer's three-axis vote does not need closed bodies).
+
 ### Added (Inspect)
 
 - **Inspect, a third workspace.** The header switch is now **Design | Simulate | Inspect**. Inspect shows which way every test

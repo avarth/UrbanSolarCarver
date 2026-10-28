@@ -8,7 +8,7 @@ import {
 } from "./layers";
 import { decodeStudyValues, patchCorners } from "../simulate/study_values_decoder";
 import { studyValuesOf } from "../simulate/study_values_for_test";
-import { changeRamp, cividis, colourToken } from "./colour_scales";
+import { changeRamp, colourToken, viridis } from "./colour_scales";
 import type { ScorePoints } from "./score_points_decoder";
 
 function scorePoints(indices: number[], scores: number[], kept: number[] | null): ScorePoints {
@@ -172,9 +172,9 @@ test("test surfaces are drawn in front of a context or maximum volume face they 
 
 // The study values of Simulate --------------------------------------------------------------------------------------------------
 
-function studyView(change: boolean, target: number | null) {
+function studyView(change: boolean, target: number | null, colourBy: "share" | "value" = "value") {
   const values = decodeStudyValues(studyValuesOf({ open: [4, 4, 4, 4], max_volume: [1, 1, 1, 1], envelope: [0, 2, 4, 1.0005] }));
-  return { view: { values, geometry: "envelope" as const, change, target, unit: "h", dimmed: false }, corners: patchCorners(values, [0, 0, 0]) };
+  return { view: { values, geometry: "envelope" as const, change, colourBy, target, unit: "h", dimmed: false }, corners: patchCorners(values, [0, 0, 0]) };
 }
 
 const BELOW_TARGET = "#8e7b88", BELOW_TARGET_ON_DARK = "#6e5f6a", CONTEXT = "#b9c1c4", TERRAIN = "#cfc8b8", PANEL = "#ffffff";
@@ -198,7 +198,7 @@ function patchColours(layer: THREE.Object3D): string[] {
 
 const hexOf = (colour: string) => new THREE.Color(colour).getHexString();
 
-test("the study values layer colours each point's patch by its value, cividis from 0 to the highest, below the target muted", () => {
+test("the study values layer colours each point's patch by its value, viridis from 0 to the highest, below the target muted", () => {
   setColourTokens();
   const { view, corners } = studyView(false, 1.5);
   const layer = studyValuesLayer(view, corners);
@@ -206,9 +206,21 @@ test("the study values layer colours each point's patch by its value, cividis fr
   const geometry = (layer as THREE.Mesh).geometry;
   expect(geometry.getAttribute("position").count).toBe(4 * 4);
   expect(Array.from(geometry.index!.array.slice(0, 6))).toEqual([0, 1, 2, 0, 2, 3]);
-  expect(patchColours(layer)).toEqual([hexOf(BELOW_TARGET), hexOf(cividis(0.5)), hexOf(cividis(1)), hexOf(BELOW_TARGET)]);
-  expect(patchColours(studyValuesLayer({ ...view, target: null }, corners))[0]).toBe(hexOf(cividis(0)));
+  expect(patchColours(layer)).toEqual([hexOf(BELOW_TARGET), hexOf(viridis(0.5)), hexOf(viridis(1)), hexOf(BELOW_TARGET)]);
+  expect(patchColours(studyValuesLayer({ ...view, target: null }, corners))[0]).toBe(hexOf(viridis(0)));
   expect(layer.userData.summary).toBe("4 points");
+});
+
+test("by share each point is coloured by its value over its open-site value, one 0 to 100 % scale; no open-site value is neutral", () => {
+  setColourTokens();
+  // Open 4, 8, 4, 0 and envelope 0, 4, 4, 0: shares 0, 0.5 and 1 (the second point's value is the highest of the envelope, yet half
+  // of its own open-site value), and none for a point the open site gives nothing.
+  const values = decodeStudyValues(studyValuesOf({ open: [4, 8, 4, 0], max_volume: [1, 1, 1, 0], envelope: [0, 4, 4, 0] }));
+  const view = { values, geometry: "envelope" as const, change: false, colourBy: "share" as const, target: null, unit: "h", dimmed: false };
+  const layer = studyValuesLayer(view, patchCorners(values, [0, 0, 0]));
+  expect(patchColours(layer)).toEqual([hexOf(viridis(0)), hexOf(viridis(0.5)), hexOf(viridis(1)), hexOf("#dfe6ea")]);
+  layer.userData.recolour({ ...view, target: 3 });          // the target is in the unit: points below it stay muted by share too
+  expect(patchColours(layer)).toEqual([hexOf(BELOW_TARGET), hexOf(viridis(0.5)), hexOf(viridis(1)), hexOf(BELOW_TARGET)]);
 });
 
 test("points below the target are in a muted colour of their own, not the grey of the surroundings, terrain or volumes", () => {
@@ -228,7 +240,7 @@ test("a new target or Change recolours the same layer in place", () => {
   const colours = (layer as THREE.Mesh).geometry.getAttribute("color") as THREE.BufferAttribute;
   const version = colours.version;
   layer.userData.recolour({ ...view, target: 3 });
-  expect(patchColours(layer)).toEqual([hexOf(BELOW_TARGET), hexOf(BELOW_TARGET), hexOf(cividis(1)), hexOf(BELOW_TARGET)]);
+  expect(patchColours(layer)).toEqual([hexOf(BELOW_TARGET), hexOf(BELOW_TARGET), hexOf(viridis(1)), hexOf(BELOW_TARGET)]);
   expect(colours.version).toBeGreaterThan(version);          // uploaded again
   layer.userData.recolour({ ...view, change: true });
   expect(patchColours(layer)[0]).toBe(hexOf("#c8553d"));
@@ -246,7 +258,7 @@ test("changeTolerance on 527,633 points takes under 1 s: the Change view of that
   const values = decodeStudyValues(studyValuesOf({ open, max_volume: open.map((value) => value * 0.8), envelope: open.map((value) => value * 0.9) }));
   const corners = patchCorners(values, [0, 0, 0]);
   const started = performance.now();
-  const layer = studyValuesLayer({ values, geometry: "envelope", change: true, target: null, unit: "h", dimmed: false }, corners);
+  const layer = studyValuesLayer({ values, geometry: "envelope", change: true, colourBy: "share", target: null, unit: "h", dimmed: false }, corners);
   const elapsed = performance.now() - started;
   expect(layer.userData.summary).toBe("527 633 points");
   expect(elapsed).toBeLessThan(1000);

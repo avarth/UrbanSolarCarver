@@ -10,12 +10,21 @@ export const STUDY_GEOMETRIES: readonly StudyGeometry[] = ["max_volume", "envelo
 /** The column of the values without any geometry, which the change tolerance is measured on. */
 export const OPEN_COLUMN = "open";
 
-/** The study the 3D view draws: its values on the geometry shown, by value or by change from the maximum volume. */
+/**
+ * How the values are coloured when Change is off: by each point's share of its open-site value (its value with nothing built, the open
+ * column), one 0 to 100 % scale for every geometry, or by the value in the study's unit. Share is the default: the spread of values
+ * follows the surfaces' orientation (roofs far above facades), which a value scale shows instead of what the building takes away
+ * (user, 2026-10-28).
+ */
+export type ColourBy = "share" | "value";
+
+/** The study the 3D view draws: its values on the geometry shown, by share, by value or by change from the maximum volume. */
 export interface StudyView {
   values: StudyValues;
   geometry: StudyGeometry;
-  /** Colour by the change from the maximum volume instead of the value. */
+  /** Colour by the change from the maximum volume, whatever colourBy says. */
   change: boolean;
+  colourBy: ColourBy;
   /** Points below it are drawn in one muted colour; null without a target. */
   target: number | null;
   unit: string;
@@ -29,6 +38,24 @@ export interface StudyStatistics {
   lowestTenth: number;
   /** The share of points (0 to 1) at or above the target; null without one. Every point stands for about the same test area. */
   shareAtTarget: number | null;
+  /** The sum of the values over the sum of the open-site values (0 to 1): what the geometry keeps of what the site gives with nothing
+   * built; null when the open site gives nothing. */
+  keptShare: number | null;
+}
+
+/** What *values* keep of the open-site values: their sum over the open column's (0 to 1); null when the open column sums to nothing. */
+export function keptShareOf(values: Float32Array, open: Float32Array): number | null {
+  let kept = 0, possible = 0;
+  for (let point = 0; point < values.length; point++) {
+    kept += values[point];
+    possible += open[point];
+  }
+  return possible > 0 ? kept / possible : null;
+}
+
+/** A point's value as a share (0 to 1) of its open-site value; null where the open site gives it nothing (within *tolerance*). */
+export function shareOfOpen(value: number, open: number, tolerance: number): number | null {
+  return open > tolerance ? Math.min(1, Math.max(0, value / open)) : null;
 }
 
 /** The value at *share* (0 to 1) of the sorted values, interpolated between the two nearest points as numpy does. */
@@ -40,7 +67,7 @@ export function percentile(sortedValues: Float32Array, share: number): number {
 }
 
 /** The mean and the lowest tenth: the part of the statistics that does not depend on the target. */
-export function distributionOf(values: Float32Array): Omit<StudyStatistics, "shareAtTarget"> {
+export function distributionOf(values: Float32Array): Omit<StudyStatistics, "shareAtTarget" | "keptShare"> {
   let sum = 0;
   for (let point = 0; point < values.length; point++) sum += values[point];
   return { mean: values.length ? sum / values.length : NaN, lowestTenth: percentile(Float32Array.from(values).sort(), 0.1) };
@@ -54,8 +81,8 @@ export function shareAtOrAbove(values: Float32Array, target: number | null): num
   return atTarget / values.length;
 }
 
-export function statisticsOf(values: Float32Array, target: number | null): StudyStatistics {
-  return { ...distributionOf(values), shareAtTarget: shareAtOrAbove(values, target) };
+export function statisticsOf(values: Float32Array, target: number | null, open?: Float32Array): StudyStatistics {
+  return { ...distributionOf(values), shareAtTarget: shareAtOrAbove(values, target), keptShare: open === undefined ? null : keptShareOf(values, open) };
 }
 
 /** Each point's value less the baseline's (the maximum volume's). */

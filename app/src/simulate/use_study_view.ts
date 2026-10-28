@@ -6,8 +6,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, getStudyValues, serviceProblemOf } from "../api_client/client";
 import type { RunLoop } from "../steps/run_state";
 import type { StageState } from "../steps/step_summaries";
-import { changeOf, changeTolerance, distributionOf, highestOf, OPEN_COLUMN, shareAtOrAbove, type StudyGeometry, type StudyStatistics,
-  type StudyView } from "./study_values";
+import { changeOf, changeTolerance, distributionOf, highestOf, keptShareOf, OPEN_COLUMN, shareAtOrAbove, type ColourBy, type StudyGeometry,
+  type StudyStatistics, type StudyView } from "./study_values";
 import { decodeStudyValues, type StudyValues } from "./study_values_decoder";
 import type { StudiesHook } from "./use_studies";
 
@@ -37,6 +37,9 @@ export interface StudyViewHook {
   /** Colour by the change from the maximum volume (never on the maximum volume itself). */
   change: boolean;
   setChange: (change: boolean) => void;
+  /** How the values are coloured when Change is off (kept across studies): share of the open-site value, or the value. */
+  colourBy: ColourBy;
+  setColourBy: (colourBy: ColourBy) => void;
   available: StudyGeometry[];
   outOfDateInDesign: StudyGeometry[];
   /** Geometries Design has built that the selected study's last result does not have: they wait for a new run of the study. */
@@ -48,7 +51,7 @@ export interface StudyViewHook {
   /** What the 3D view draws; null without a selected study whose values have the geometry shown. */
   view: StudyView | null;
   /** The legend and the result card; null when the view draws nothing. */
-  legend: { label: string; unit: string; range: [number, number]; mode: "value" | "change"; hasLoss: boolean; target: number | null; disabled: boolean } | null;
+  legend: { label: string; unit: string; range: [number, number]; mode: "share" | "value" | "change"; hasLoss: boolean; target: number | null; disabled: boolean } | null;
   card: { geometry: StudyGeometry; unit: string; statistics: StudyStatistics; baseline: StudyStatistics | null } | null;
   /** Shows the target at once and saves it with the selected study once the gesture ends. */
   setTarget: (target: number | null) => void;
@@ -61,6 +64,7 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
                                onServiceProblem }: StudyViewSource): StudyViewHook {
   const [chosenGeometry, setGeometry] = useState<StudyGeometry>("max_volume");
   const [chosenChange, setChange] = useState(false);
+  const [colourBy, setColourBy] = useState<ColourBy>("share");
   const [loaded, setLoaded] = useState<{ id: string; values: StudyValues } | null>(null);
   // A target being saved, shown until the study's entry has it.
   const [savingTarget, setSavingTarget] = useState<{ id: string; target: number | null } | null>(null);
@@ -103,6 +107,10 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
   const baselineDistribution = useMemo(() => (baselineValues === null || geometry === "max_volume" ? null : distributionOf(baselineValues)),
                                        [baselineValues, geometry]);
   const share = useMemo(() => (shown === null ? null : shareAtOrAbove(shown, target)), [shown, target]);
+  const openValues = values?.values[OPEN_COLUMN] ?? null;
+  const kept = useMemo(() => (shown === null || openValues === null ? null : keptShareOf(shown, openValues)), [shown, openValues]);
+  const baselineKept = useMemo(() => (baselineValues === null || openValues === null || geometry === "max_volume" ? null
+    : keptShareOf(baselineValues, openValues)), [baselineValues, openValues, geometry]);
   const baselineShare = useMemo(() => (baselineDistribution === null || baselineValues === null ? null : shareAtOrAbove(baselineValues, target)),
                                    [baselineDistribution, baselineValues, target]);
   const highest = useMemo(() => (shown === null ? 0 : highestOf(shown)), [shown]);
@@ -147,17 +155,17 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
   };
 
   return {
-    geometry, setGeometry, change, setChange, available, outOfDateInDesign, waitingForStudy, setTarget,
+    geometry, setGeometry, change, setChange, colourBy, setColourBy, available, outOfDateInDesign, waitingForStudy, setTarget,
     waitingForRun: active && running && hasResult && values === null,
     studyOutOfDate: active && selected?.state === "out_of_date",
-    view: drawn ? { values, geometry, change, target, unit, dimmed: selected.state === "out_of_date" } : null,
+    view: drawn ? { values, geometry, change, colourBy, target, unit, dimmed: selected.state === "out_of_date" } : null,
     legend: drawn ? {
-      label, unit, target, disabled: editDisabled, mode: change ? "change" : "value", hasLoss: changeScale?.hasLoss ?? false,
-      range: [0, changeScale?.highest ?? highest],
+      label, unit, target, disabled: editDisabled, mode: change ? "change" : colourBy, hasLoss: changeScale?.hasLoss ?? false,
+      range: change ? [0, changeScale?.highest ?? 0] : colourBy === "share" ? [0, 100] : [0, highest],
     } : null,
     card: drawn && distribution !== null ? {
-      geometry, unit, statistics: { ...distribution, shareAtTarget: share },
-      baseline: baselineDistribution === null ? null : { ...baselineDistribution, shareAtTarget: baselineShare },
+      geometry, unit, statistics: { ...distribution, shareAtTarget: share, keptShare: kept },
+      baseline: baselineDistribution === null ? null : { ...baselineDistribution, shareAtTarget: baselineShare, keptShare: baselineKept },
     } : null,
   };
 }

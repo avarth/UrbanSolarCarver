@@ -13,7 +13,7 @@ const PERIOD = { start_month: 12, start_day: 21, start_hour: 10, end_month: 12, 
 export const METRICS: MetricInfo[] = [
   { name: "sun_hours", label: "Sun hours", unit: "h", needs_epw: true, available: true, default_settings: PERIOD },
   { name: "solar_energy", label: "Solar energy", unit: "kWh/m²", needs_epw: true, available: true, default_settings: PERIOD },
-  { name: "useful_solar_energy", label: "Useful solar energy", unit: "kWh/m²", needs_epw: true, available: true,
+  { name: "useful_solar_energy", label: "Useful solar gains", unit: "kWh/m²", needs_epw: true, available: true,
     default_settings: { ...PERIOD, balance_temperature: 15, balance_offset: 2, include_harm: false } },
   { name: "sky_component", label: "Overcast sky component", unit: "%", needs_epw: false, available: true, default_settings: {} },
   { name: "cooling_sky", label: "Cooling sky", unit: "%", needs_epw: false, available: true, default_settings: { dew_point_celsius: 10, bliss_k: 1.8 } },

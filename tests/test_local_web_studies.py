@@ -43,7 +43,7 @@ def test_add_a_study_from_a_metric_takes_its_defaults_and_name(project_with_inpu
     assert store.studies(name) == [study]
     benefit = store.add_study(name, metric="useful_solar_energy")
     assert benefit.id == "2" and benefit.colour == CRITERION_COLOURS[1]
-    assert benefit.name == "Useful solar energy, 15 Oct to 15 Apr"
+    assert benefit.name == "Useful solar gains, 15 Oct to 15 Apr"
     assert benefit.settings["balance_temperature"] == 15.0 and benefit.settings["include_harm"] is False
     assert benefit.settings["start_month"] == 10 and benefit.settings["end_month"] == 4
     sky = store.add_study(name, metric="sky_component")
@@ -78,7 +78,7 @@ def test_add_a_study_like_a_criterion_copies_metric_period_settings_and_files(pr
     assert study.metric == "useful_solar_energy" and study.test_surface_files == ["surface.ply"]
     assert study.settings["balance_temperature"] == 17.5 and study.settings["start_month"] == 11 and study.settings["end_month"] == 3
     assert study.settings["start_day"] == criterion.settings["start_day"]
-    assert study.name == "Useful solar energy, 15 Nov to 15 Mar" and not study.named_by_user
+    assert study.name == "Useful solar gains, 15 Nov to 15 Mar" and not study.named_by_user
     assert store.criteria(name)[1] == criterion      # no link is kept, and the criterion is as it was
     study.test_surface_files.append("elsewhere.ply")
     assert store.criteria(name)[1].test_surface_files == ["surface.ply"]
@@ -133,6 +133,19 @@ def test_changing_metric_or_period_renames_a_study_the_user_did_not_name(project
     kept = store.update_study(name, study.id, metric="sun_hours")
     assert kept.name == "My facade" and kept.settings == {**PERIOD_21_DEC, "time_basis": "standard"}    # reset to the new metric's defaults
     assert store.studies(name) == [kept]
+
+
+def test_a_study_named_by_an_earlier_label_takes_the_label_of_now(project_with_inputs):
+    store, name = _with_weather(project_with_inputs)
+    study = store.add_study(name, metric="useful_solar_energy")
+    named = store.add_study(name, metric="useful_solar_energy")
+    store.update_study(name, named.id, name="Winter gains")
+    with store.project_lock(name):
+        project_json = store.read_project_json(name)
+        project_json.studies[0].name = "Useful solar energy, 15 Oct to 15 Apr"      # as an earlier version named it
+        store.write_project_json(name, project_json)
+    assert [entry.name for entry in store.studies(name)] == ["Useful solar gains, 15 Oct to 15 Apr", "Winter gains"]
+    assert study.id == store.studies(name)[0].id
 
 
 def test_a_study_is_changed_by_its_target_and_its_settings(project_with_inputs):

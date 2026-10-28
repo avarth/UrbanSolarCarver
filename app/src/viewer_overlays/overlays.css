@@ -278,7 +278,11 @@
   width: min(420px, calc(100% - 2 * var(--overlay-gap)));
   padding: 8px 12px 6px;
 }
-.target-legend-title { margin-bottom: 6px; font-weight: 600; }
+.target-legend-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.target-legend-title { font-weight: 600; }
+.target-legend-colour-by button { padding: 1px 8px; font-size: inherit; }
+.target-legend-note { margin: 4px 0 0; color: var(--colour-muted); }
+.viewer-overlay[data-viewport-theme="dark"] .target-legend-note { color: var(--colour-muted-on-dark); }
 .target-legend-bar { position: relative; height: 12px; border-radius: 2px; cursor: pointer; touch-action: none; user-select: none; }
 .target-legend-bar[data-disabled="true"] { cursor: default; }
 .target-legend-below { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 2px 0 0 2px; pointer-events: none; }

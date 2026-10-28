@@ -1,25 +1,30 @@
-// The legend along the bottom of Simulate's view (simulate design, section 3): the scale of the selected study's values in its unit,
-// with the target as a draggable mark. By value, the scale is cividis from 0 to the highest value of the geometry shown, the part
-// below the target in the muted colour the view gives those points. A press or drag on the scale moves the mark, and the target is
+// The legend along the bottom of Simulate's view (simulate design, section 3): the scale the selected study's values are coloured by,
+// with a switch between share of the open-site value (the default: viridis from 0 to 100 % of each point's value with nothing built)
+// and the value in the study's unit (viridis from 0 to the highest value of the geometry shown, with the target as a draggable mark,
+// the part below the target in the muted colour the view gives those points). The target is in the study's unit, so it is moved on the
+// value scale; by share, a set target is named under the scale, as its points stay muted. A press or drag on the scale moves the mark, and the target is
 // given once, at the release; on the mark (a slider) the arrow keys move it by 1 % of the range, Page Up and Page Down by 10 %,
 // Home and End to the ends, and Delete (or Backspace) clears it. By change from the maximum volume the scale is the change ramp, without a target,
 // with the loss colour when some point lost.
 import { useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import { messages } from "../messages";
 import { formattedNumber, withUnit } from "../steps/format_numbers";
-import { changeRamp, cividis, colourToken, type ViewportTheme } from "../viewer/colour_scales";
+import type { ColourBy } from "../simulate/study_values";
+import { changeRamp, colourToken, viridis, type ViewportTheme } from "../viewer/colour_scales";
 import "./overlays.css";
 
 export interface TargetLegendProps {
   /** The metric's label, which the scale's title gives with the unit. */
   label: string;
   unit: string;
-  /** The scale, from 0 to the highest value (or change) of the geometry shown. */
+  /** The scale: 0 to 100 (%) by share, 0 to the highest value (or change) of the geometry shown otherwise. */
   range: [number, number];
   target: number | null;
   /** The target the user set, or null when cleared: at the end of a drag, or at each key. */
   onTargetChange: (target: number | null) => void;
-  mode: "value" | "change";
+  mode: "share" | "value" | "change";
+  /** Switches between share and value (not shown by change). */
+  onColourByChange?: (colourBy: ColourBy) => void;
   /** By change: some point lost, so the loss colour is named. */
   hasLoss?: boolean;
   /** The target cannot be changed now (a run of the project). */
@@ -42,7 +47,8 @@ function keptInRange(value: number, [low, high]: [number, number]): number {
   return Number(Math.min(high, Math.max(low, value)).toPrecision(SIGNIFICANT_DIGITS));
 }
 
-export function TargetLegend({ label, unit, range, target, onTargetChange, mode, hasLoss = false, disabled = false, theme = "light" }: TargetLegendProps) {
+export function TargetLegend({ label, unit, range, target, onTargetChange, mode, onColourByChange, hasLoss = false, disabled = false,
+                              theme = "light" }: TargetLegendProps) {
   const bar = useRef<HTMLDivElement>(null);
   const mark = useRef<HTMLDivElement>(null);
   // While a drag goes on, the mark follows the pointer; the target is given at the release. The ref has the latest move, which a
@@ -97,12 +103,20 @@ export function TargetLegend({ label, unit, range, target, onTargetChange, mode,
   };
 
   const valueMode = mode === "value";
-  const title = valueMode ? messages.metricOption(label, unit) : messages.changeLegend(unit);
+  const title = mode === "share" ? messages.shareLegend(label) : valueMode ? messages.metricOption(label, unit) : messages.changeLegend(unit);
   return (
     <div className="viewer-overlay target-legend" role="group" aria-label={title}>
-      <div className="target-legend-title">{title}</div>
+      <div className="target-legend-header">
+        <div className="target-legend-title">{title}</div>
+        {mode !== "change" && onColourByChange !== undefined && (
+          <div className="segmented-switch target-legend-colour-by" role="group" aria-label={messages.colourBy}>
+            <button type="button" aria-pressed={mode === "share"} onClick={() => onColourByChange("share")}>{messages.colourByShare}</button>
+            <button type="button" aria-pressed={valueMode} onClick={() => onColourByChange("value")}>{unit}</button>
+          </div>
+        )}
+      </div>
       <div ref={bar} className="target-legend-bar" data-disabled={disabled ? "true" : undefined}
-           style={{ background: gradientOf(valueMode ? cividis : changeRamp) }}
+           style={{ background: gradientOf(mode === "change" ? changeRamp : viridis) }}
            onPointerDown={valueMode ? onPointerDown : undefined} onPointerMove={valueMode ? onPointerMove : undefined}
            onPointerUp={valueMode ? endDrag : undefined} onPointerCancel={valueMode ? endDrag : undefined}
            onLostPointerCapture={valueMode ? endDrag : undefined}>
@@ -119,12 +133,13 @@ export function TargetLegend({ label, unit, range, target, onTargetChange, mode,
         )}
       </div>
       <div className="target-legend-ends">
-        <span>{formattedNumber(low)}</span>
+        <span>{mode === "share" ? withUnit(formattedNumber(low), "%") : formattedNumber(low)}</span>
         {!valueMode && hasLoss && (
           <span className="target-legend-loss"><span className="target-legend-loss-swatch" style={{ background: changeRamp(-1) }} aria-hidden="true" />{messages.changeLoss}</span>
         )}
-        <span>{formattedNumber(high)}</span>
+        <span>{mode === "share" ? withUnit(formattedNumber(high), "%") : formattedNumber(high)}</span>
       </div>
+      {mode === "share" && target !== null && <p className="target-legend-note">{messages.belowTargetMuted(withUnit(formattedNumber(target), unit))}</p>}
     </div>
   );
 }

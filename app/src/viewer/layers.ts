@@ -7,8 +7,8 @@ import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
 import type { SkyDome } from "../api_client/client";
 import { messages } from "../messages";
-import { changeOf, changeTolerance, highestOf, OPEN_COLUMN, type StudyView } from "../simulate/study_values";
-import { changeRamp, changeRampStops, cividis, colourToken, storeyColour, sunRamp, type ViewportTheme } from "./colour_scales";
+import { changeOf, changeTolerance, highestOf, OPEN_COLUMN, shareOfOpen, type StudyView } from "../simulate/study_values";
+import { changeRamp, changeRampStops, cividis, colourToken, storeyColour, sunRamp, viridis, type ViewportTheme } from "./colour_scales";
 import type { CarvedVoxels } from "./carved_by_criterion_decoder";
 import type { Point3 } from "./local_origin";
 import type { ScorePoints } from "./score_points_decoder";
@@ -373,6 +373,7 @@ function voxelObject(centres: Float32Array, voxelSize: number, colours: THREE.Co
 }
 
 const CIVIDIS_COLOURS = Array.from({ length: 256 }, (_, index) => new THREE.Color(cividis((index + 0.5) / 256)));
+const VIRIDIS_COLOURS = Array.from({ length: 256 }, (_, index) => new THREE.Color(viridis((index + 0.5) / 256)));
 
 export interface KeptVoxelsDrawing {
   voxels: VoxelSet;
@@ -469,20 +470,34 @@ function paintStudyValues(colours: Float32Array, view: StudyView, theme: Viewpor
       paint(point, value < -tolerance ? loss : ramp[Math.round(Math.min(1, share) * (CHANGE_RAMP_STEPS - 1))]);
     }
   } else {
-    const highest = highestOf(shown);
-    const span = highest > 0 ? highest : 1;
     const belowTarget = new THREE.Color(colourToken(theme === "dark" ? "below-target-on-dark" : "below-target"));
-    for (let point = 0; point < count; point++) {
-      const value = shown[point];
-      paint(point, target !== null && value < target ? belowTarget : CIVIDIS_COLOURS[Math.min(255, Math.max(0, Math.floor((value / span) * 256)))]);
+    const rampAt = (share: number) => VIRIDIS_COLOURS[Math.min(255, Math.max(0, Math.floor(share * 256)))];
+    if (view.colourBy === "share") {
+      // Each point by its share of its own open-site value; a point the open site gives nothing has no share and takes a neutral colour.
+      const open = studyValues.values[OPEN_COLUMN];
+      const tolerance = changeTolerance(open, studyValues.values.max_volume);
+      const noShare = new THREE.Color(colourToken("storey-low"));
+      for (let point = 0; point < count; point++) {
+        const value = shown[point];
+        const share = open === undefined ? null : shareOfOpen(value, open[point], tolerance);
+        paint(point, target !== null && value < target ? belowTarget : share === null ? noShare : rampAt(share));
+      }
+    } else {
+      const highest = highestOf(shown);
+      const span = highest > 0 ? highest : 1;
+      for (let point = 0; point < count; point++) {
+        const value = shown[point];
+        paint(point, target !== null && value < target ? belowTarget : rampAt(value / span));
+      }
     }
   }
 }
 
 /**
  * The selected study's test point patches on the geometry shown (*corners*: study_values_decoder.patchCorners), unlit so the colours
- * read as the legend's. By value: cividis from 0 to the highest value of the geometry shown, the points below the target in one
- * muted mauve (apart from the greys of the surroundings and volumes; a darker one on the dark viewport). By change from the maximum
+ * read as the legend's. By share (the default): viridis from 0 to 100 % of each point's open-site value, a point the open site gives
+ * nothing in a neutral grey. By value: viridis from 0 to the highest value of the geometry shown. In both the points below the target
+ * take one muted mauve (apart from the greys of the surroundings and volumes; a darker one on the dark viewport). By change from the maximum
  * volume: the change ramp from no change to the largest gain, a loss in the carved colour, a change within the tolerance none. The
  * patches lie on test surfaces, so they are pulled forward in depth as those are. A new target or Change of the same values and
  * geometry recolours the patches in place (userData.recolour), as the viewport theme does (userData.applyTheme).
