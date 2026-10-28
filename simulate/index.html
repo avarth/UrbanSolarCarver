@@ -16,7 +16,7 @@
         <link rel="prev" href="../ui/">
       
       
-        <link rel="next" href="../modes/">
+        <link rel="next" href="../inspect/">
       
       
         
@@ -587,10 +587,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-legend-the-target-and-the-result-card" class="md-nav__link">
+  <a href="#the-legend-the-colour-range-and-the-result-card" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The legend, the target and the result card
+        The legend, the colour range and the result card
       
     </span>
   </a>
@@ -620,6 +620,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#the-sun-panel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Sun panel
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#not-there-yet" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -634,6 +645,33 @@
   
 </nav>
       
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../inspect/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inspect
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -883,7 +921,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_12" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_13" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -905,14 +943,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_12" id="__nav_12_label" tabindex="">
+              <label class="md-nav__link " for="__nav_13" id="__nav_13_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_12">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_13_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_13">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1416,10 +1454,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-legend-the-target-and-the-result-card" class="md-nav__link">
+  <a href="#the-legend-the-colour-range-and-the-result-card" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The legend, the target and the result card
+        The legend, the colour range and the result card
       
     </span>
   </a>
@@ -1442,6 +1480,17 @@
     <span class="md-ellipsis">
       
         Where the results are kept
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-sun-panel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Sun panel
       
     </span>
   </a>
@@ -1484,8 +1533,9 @@
 <p>Simulate is a workspace beside the pipeline. It changes no criterion, no shared setting and no pipeline step, and it starts nothing by itself: a study runs only when you press <strong>Run</strong>.</p>
 <h2 id="design-and-simulate">Design and Simulate<a class="headerlink" href="#design-and-simulate" title="Permanent link">&para;</a></h2>
 <p>The switch <strong>Design | Simulate</strong> in the header, next to the project name, changes the workspace. Simulate hides the steps and gives the 3D view the whole window. Design shows the step you left, with its folds and scroll position. The Layers menu and the viewer tools are the same in both. The context and the terrain are drawn in Simulate; the test surfaces of criteria and of other studies are not, only those of the selected study.</p>
+<p>The <strong>Sky dome</strong> layer (Layers menu, off at first) is the selected study's, not Design's: each of the 145 sky patches coloured by the value it carried in the study's last run, the solar energy of the period from that patch for Solar energy and Useful solar gains (kWh/m²), its weight of the overcast sky, the night sky cooling or the sky for the three sky metrics. It changes with the study selected and is dimmed with it when the study is out of date. A sun hours study traces sun positions, not patches, so it has no dome; nor has a result run before the patch values were kept: the Layers menu then lists the Sky dome without a check box and says to run the study again.</p>
 <h2 id="studies">Studies<a class="headerlink" href="#studies" title="Permanent link">&para;</a></h2>
-<p>A study is a metric on test surface files over a period. The <strong>Studies</strong> panel floats over the top left of the 3D view and collapses to an icon. Each row has a colour swatch, the study's name and one line: its test surface files while its result is current, otherwise <strong>Out of date</strong>, <strong>Not run yet</strong> or the reason it cannot run (for example <strong>Add test surfaces</strong>). Pressing a row selects the study for the view: <strong>one study is on the view at a time</strong>, and its test surfaces are the ones coloured. The settings button of a row opens its popover.</p>
+<p>A study is a metric on test surface files over a period. The <strong>Studies</strong> panel floats over the top left of the 3D view and collapses to an icon. Each row has a colour swatch, the study's name and one line: its test surface files while its result is current, otherwise <strong>Out of date</strong>, <strong>Not run yet</strong> or the reason it cannot run (for example <strong>Add test surfaces</strong>). Pressing a row selects the study for the view: <strong>one study is on the view at a time</strong>, and its test surfaces are the ones coloured. When none is selected, the first study with a result is (or the first study), so a finished run shows its values without a press. The settings button of a row opens its popover.</p>
 <p><strong>Add study</strong> offers two kinds of entries in one menu:</p>
 <ul>
 <li><strong>Like <em>criterion name</em></strong> makes a study from a criterion: the metric of its mode (see the table below), its period, the mode settings the metric reads and a copy of its test surface files. No link to the criterion is kept; changing the criterion later does not change the study.</li>
@@ -1502,7 +1552,7 @@
 <tbody>
 <tr>
 <td>Name</td>
-<td>A study is named from its metric and period, for example "Sun hours, 21 Dec" or "Useful solar energy, 15 Oct to 15 Apr". Typing a name keeps it from then on</td>
+<td>A study is named from its metric and period, for example "Sun hours, 21 Dec" or "Useful solar gains, 15 Oct to 15 Apr". Typing a name keeps it from then on</td>
 </tr>
 <tr>
 <td>Metric</td>
@@ -1514,7 +1564,7 @@
 </tr>
 <tr>
 <td>More settings</td>
-<td>The few settings the metric reads: balance temperature, dead band and harm for useful solar energy; dew point and Bliss coefficient for the cooling sky; the time basis (standard, daylight saving or solar time) for sun hours</td>
+<td>The few settings the metric reads: balance temperature, dead band and harm for useful solar gains; dew point and Bliss coefficient for the cooling sky; the time basis (standard, daylight saving or solar time) for sun hours</td>
 </tr>
 <tr>
 <td>Test surfaces</td>
@@ -1552,7 +1602,7 @@
 <td>needed</td>
 </tr>
 <tr>
-<td>Useful solar energy</td>
+<td>Useful solar gains</td>
 <td>kWh/m²</td>
 <td>Solar usefulness</td>
 <td>needed</td>
@@ -1579,7 +1629,7 @@
 </table>
 <ul>
 <li><strong>Sun hours</strong>: hours of direct sun in the period. Each hour counts the sun position of that hour, and a position counts 1 h when it is above 5° altitude and in front of the test surface (no cosine of incidence). The 5° is the same for every study: "Like <em>criterion</em>" does not copy the minimum altitude of a time-based criterion, so a study counts the sun above 5° whatever the criterion's minimum altitude. The time basis says which clock the hours are read in; it is a setting of sun hours only. A new study starts at 21 December, 10 to 14 h.</li>
-<li><strong>Solar energy</strong> and <strong>Useful solar energy</strong>: direct and diffuse energy that reaches the surface in the period, from the weather file's Perez sky and the cosine of incidence. Useful solar energy counts the hours that need heating, with the balance temperature, dead band and weights of Solar usefulness. Ground reflection is left out. A new study starts with the whole year (solar energy) or 15 October to 15 April, 7 to 19 h (useful solar energy).</li>
+<li><strong>Solar energy</strong> and <strong>Useful solar gains</strong>: direct and diffuse energy that reaches the surface in the period, from the weather file's Perez sky and the cosine of incidence. Useful solar gains count only the hours that need heating (the gains that heat the building; it was called useful solar energy before), with the balance temperature, dead band and weights of Solar usefulness. Ground reflection is left out. A new study starts with the whole year (solar energy) or 15 October to 15 April, 7 to 19 h (useful solar gains).</li>
 <li><strong>Overcast sky component</strong>: light from a CIE overcast sky. On a vertical facade this is the vertical sky component, at most 39.6 %.</li>
 <li><strong>Cooling sky</strong>: the long-wave cooling potential toward the clear night sky that the surface sees, from the dew point and the Bliss coefficient.</li>
 <li><strong>Sky view factor</strong>: the cosine-weighted share of the view taken by the sky. An unobstructed horizontal surface has 100 %, an unobstructed wall 50 %.</li>
@@ -1619,18 +1669,25 @@
 </tbody>
 </table>
 <p>The context and the terrain block in all three. With several criteria the envelope is the result of the whole chain. <strong>Envelope</strong> and <strong>Massing</strong> wait, with the reason as a tooltip, until Design has built them, and also when the selected study ran before they were built (the tooltip says to run the study again). A geometry that Design shows out of date is marked; Simulate still traces the mesh on disk.</p>
-<p><strong>Change</strong> colours each test point by its change from the maximum volume (the baseline) on the geometry shown: gains on a ramp from no change to the largest gain, losses in the colour the carving uses for carved voxels, a change smaller than a thousandth of the highest value without any geometry as none. Change waits while Max volume is shown.</p>
+<p><strong>Change</strong> colours each test point by its change from the maximum volume (the baseline) on the geometry shown: gains in Viridis from no change (dark) to the largest gain (yellow), losses in the colour the carving uses for carved voxels, a change smaller than a thousandth of the highest value without any geometry as none. Change waits while Max volume is shown.</p>
 <h2 id="run">Run<a class="headerlink" href="#run" title="Permanent link">&para;</a></h2>
 <p><strong>Run</strong> runs every study that can run, for every geometry that is built: the maximum volume always, the envelope and the massing when they exist. Switching the geometry afterwards needs no new run. A study that cannot run says why on its row (no test surface files, no maximum volume, no weather file for a metric that needs one, a setting the engine refuses). One that the engine refuses, for example for too many test points, keeps its message until its inputs change, and the other studies still run.</p>
 <p>There is one job at a time. While a Design run is going, Run shows "A Design run is in progress" and waits; while a simulation is going, Design's run buttons say so. Nothing is queued. The progress shows under Run with a Cancel button.</p>
-<h2 id="the-legend-the-target-and-the-result-card">The legend, the target and the result card<a class="headerlink" href="#the-legend-the-target-and-the-result-card" title="Permanent link">&para;</a></h2>
-<p>The legend along the bottom of the view shows the selected study's scale in its unit: cividis from 0 to the highest value of the geometry shown. In the Change view it shows the change ramp, and the loss colour when some point lost.</p>
-<p>The <strong>target</strong> is a mark on the legend. Drag it, or focus it and use the arrow keys (1 % of the range), Page Up and Page Down (10 %) and Home and End; Delete clears it. The target is saved with the study, once per drag. Points below the target are drawn in one muted colour of their own, apart from the scale. The target does not apply to the Change view.</p>
+<h2 id="the-legend-the-colour-range-and-the-result-card">The legend, the colour range and the result card<a class="headerlink" href="#the-legend-the-colour-range-and-the-result-card" title="Permanent link">&para;</a></h2>
+<p>The legend along the bottom of the view shows the scale the values are coloured by, with a switch between two:</p>
+<ul>
+<li><strong>Value</strong> in the study's unit (for example kWh/m²), the default: each point coloured by its value.</li>
+<li><strong>% of no-build</strong>: each point coloured by its share of its <strong>no-build value</strong>, its value with nothing built on the plot (no maximum volume, envelope or massing). The surroundings and the terrain still block, so the no-build value is not a value without any context: it is the most each point can receive in the city as it is. The scale runs from 0 to 100 %, the same for every geometry, so Max volume, Envelope and Massing compare directly. A point that gets nothing in the no-build case (a facade that sees no sun in the period, say) loses nothing, so it counts as 100 %.</li>
+</ul>
+<p>A study's values spread mostly with the way each surface faces: on Allatini's Solar energy study the roofs reach about 1,550 kWh/m² while the facades lie between 200 and 800. By value, move the high end down to the facades' range to see their differences (below); by share, every point is measured against its own no-build value, and the maximum volume keeps 78 % of the no-build value there and the envelope 99 %.</p>
+<p><strong>The colour range.</strong> Two marks on the legend set the low and the high end of the colours. The palette runs between them, and a value beyond an end takes that end's colour, so the colours can spread over the values that matter (the facades between 200 and 800 kWh/m², say, rather than 0 to the roofs' 1,550). Drag a mark, or press on the bar to move the nearer one; or focus a mark and use the arrow keys (1 % of the bar), Page Up and Page Down (10 %) and Home and End; Delete puts it back to its default. The ends cannot pass each other. By value the low end is the study's <strong>target</strong> and the high end its upper end, both saved with the study (by default 0 and the highest value of the geometry shown); the result card's "at target" counts the points at or above the low end. By share the ends are percentages, 0 and 100 by default, kept for each study while the app is open.</p>
+<p><strong>The palettes</strong> are fixed: Magma by value, Viridis by share and for Change. Both are matplotlib's perceptually even palettes, from dark to light without a grey middle (Viridis is the one most readable with the common colour vision deficiencies), so the two colourings do not look alike. In the Change view the legend shows the change ramp instead, without ends, and the loss colour when some point lost.</p>
 <p>The <strong>result card</strong> in the bottom right corner is for the selected study on the geometry shown. It gives:</p>
 <ul>
+<li>what the geometry keeps of the no-build value: the sum of its values over the sum with nothing built on the plot, for example "keeps 99 % of the no-build value (78)",</li>
 <li>the mean,</li>
 <li>the lowest tenth (10th percentile),</li>
-<li>with a target, the share of points at or above it.</li>
+<li>with a target (the low end by value), the share of points at or above it.</li>
 </ul>
 <p>On Envelope and Massing each line has the maximum volume's value in brackets, for example "mean 3.6 h (4.1)".</p>
 <h2 id="out-of-date">Out of date<a class="headerlink" href="#out-of-date" title="Permanent link">&para;</a></h2>
@@ -1654,6 +1711,10 @@
 <td>One value per point for each geometry (<code>open</code> with no geometry, <code>max_volume</code>, then <code>envelope</code> and <code>massing</code> when traced)</td>
 </tr>
 <tr>
+<td><code>check_sky.json</code></td>
+<td>The value of each of the 145 sky patches for the study's metric, drawn as the study's sky dome; none for sun hours</td>
+</tr>
+<tr>
 <td><code>check_summary.json</code></td>
 <td>The metric, unit, settings, and for each geometry its mesh, triangle count, surface tolerance and statistics, and what the result was computed from. It is written last, so a folder without it has no result</td>
 </tr>
@@ -1665,6 +1726,18 @@
 </table>
 <p>Reopening the project shows the last results. The studies also use <code>inputs/joined/study_surfaces_&lt;number&gt;.ply</code>, the joined test surface file of a study, beside the criteria's.</p>
 <p>The service routes are under <code>/projects/{name}/studies</code> and <code>POST /projects/{name}/simulate</code>; the engine request is <code>check</code> (see <a href="../api/engine-requests/#commands">Engine requests</a>).</p>
+<h2 id="the-sun-panel">The Sun panel<a class="headerlink" href="#the-sun-panel" title="Permanent link">&para;</a></h2>
+<p>The <strong>Sun</strong> panel, under the studies panel and collapsed at first (the sun icon opens it), shows the site with the sun as architects study it on a sun path diagram and with shadow drawings, beside the studies. Opening it shows the sun on the view; collapsing it takes everything of the sun away again. It needs the project's weather file, whose location gives the sun's course; without one it says so. North is the project's, as in the carving.</p>
+<ul>
+<li>The <strong>sun path</strong> is drawn while the panel is open, on the hemisphere around the scene: the sun's arcs on the March equinox (the September one lies within a fraction of a degree of it) and the two solstices (dashed), a line for each whole hour showing where the sun stands at that hour through the year (labelled at its highest point), the day's arc (bold) and, at a moment, the sun.</li>
+<li>A switch chooses what the view shows besides the sun path, one at a time: <strong>Sun path only</strong>, <strong>Shadows at a time</strong> or <strong>Hours in shade</strong>. Each has its own controls.</li>
+<li><strong>Clock</strong>, at the end: the times are read as the weather file's <strong>local standard time</strong>, <strong>local solar time</strong> (noon when the sun crosses the meridian) or <strong>local daylight saving time</strong> (an hour ahead of standard time on every date, as the engine reads it).</li>
+</ul>
+<p><strong>Shadows at a time</strong> is a moment: a day on a year strip (with 21 Mar, 21 Jun, 21 Sep and 21 Dec as presets) and a time on a day strip, each with one handle, as the criteria panel's strips are drawn (drag the handle or press on the strip; the arrow keys move a day or 5 minutes, Page Up and Page Down a month or an hour). The panel says how high the sun stands and its bearing from north, or that it is below the horizon. The scene is lit by the sun at that moment: the maximum volume, the envelope, the massing, the surroundings and the terrain cast shadows on each other, and on the ground where there is no terrain. The sky light is lowered meanwhile, so the shade reads.</p>
+<p><strong>Hours in shade</strong> is a period: the criteria panel's analysis period control, a range of days on the year strip and a range of hours on the day strip (the end hour counted: 8 to 15 h is 08:00 to 16:00; days across the new year and hours across midnight wrap), with its presets. For every surface the view shows it counts how many of those hours the surface spends in shade, on the one day or as a mean per day over the days. A surface is in shade at a time when something stands between it and the sun or it faces away from the sun. <strong>Colours</strong> chooses viridis (yellow in sun all the range, dark in shade all of it) or grey (light to dark). The colours are drawn under the sun path and the compass ring, which stay visible over them.</p>
+<p>The hours in shade are a quick count, not a study. They are worked out on the graphics card from the camera: the view is drawn once for each sun position (every 10 minutes on one day, every 30 minutes over several days, on every n-th day when that would be more than 240 positions), and each draw adds the time it stands for where the surface is in shade. So the count is of what the camera sees, at the resolution of the shadow map (4096 pixels across about five times the site's radius), and it is counted again when the camera stops moving. A <strong>Sun hours</strong> study is the precise count, per test point, traced against the meshes.</p>
+<p>The <strong>Show</strong> switch beside the studies panel's title hides the selected study from the view (its colours, legend and result card) and shows it again, for a clear view of the shadows or the hours in shade.</p>
+<p>The panel reads two routes: <code>GET /projects/{name}/sun-chart?date=MM-DD&amp;time_basis=</code> (the arcs of the March equinox, the solstices and <code>date</code>, every 5 minutes, and an hour line for each whole hour, a point a week) and <code>GET /projects/{name}/sun-positions?from=MM-DD&amp;to=MM-DD&amp;start=&amp;end=&amp;step=&amp;time_basis=</code> (the sun above the horizon every <code>step</code> minutes from minute <code>start</code> to <code>end</code> of each day from <code>from</code> to <code>to</code>, over the new year when <code>to</code> comes first and over midnight when <code>end</code> comes before <code>start</code>, with its altitude and azimuth; on every n-th day, <code>day_step</code>, when that would be more than 240 positions). <code>time_basis</code> is <code>standard</code> (the default), <code>solar</code> or <code>daylight_saving</code>. Both answer 404 without a weather file.</p>
 <h2 id="not-there-yet">Not there yet<a class="headerlink" href="#not-there-yet" title="Permanent link">&para;</a></h2>
 <p>These belong to a later milestone:</p>
 <ul>

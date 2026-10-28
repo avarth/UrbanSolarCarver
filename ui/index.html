@@ -715,6 +715,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#inspect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inspect
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#where-projects-are-kept" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -798,6 +809,33 @@
     
   
     Simulate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../inspect/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inspect
   
 
     
@@ -1055,7 +1093,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_12" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_13" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -1077,14 +1115,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_12" id="__nav_12_label" tabindex="">
+              <label class="md-nav__link " for="__nav_13" id="__nav_13_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_12">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_13_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_13">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1743,6 +1781,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#inspect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inspect
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#where-projects-are-kept" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2152,23 +2201,36 @@
 <li><strong>Add study</strong> lists the criteria as <strong>Like <em>name</em></strong> (the metric of its mode, its period, mode settings and files, copied) and the metrics (a metric that needs a weather file is greyed without one). <strong>Run</strong> runs every study that can run, on the maximum volume and on the envelope and the massing when they are built.</li>
 <li>One job runs at a time. While a Design run is going Run says "A Design run is in progress", and while a simulation is going Design's run buttons say so.</li>
 <li>At the top centre, <strong>Max volume | Envelope | Massing</strong> chooses the geometry the values are shown on (the last two wait until Design has built them), and <strong>Change</strong> colours each point by its change from the maximum volume.</li>
-<li>The legend along the bottom shows the scale in the study's unit with a <strong>target</strong> you drag (arrow keys move it, Delete clears it); points below it are drawn in a muted colour. The result card in the bottom right corner gives the mean, the lowest tenth and the share of points at the target, with the maximum volume's value in brackets.</li>
-<li>A result whose inputs changed stays on the view, dimmed, with the <strong>Out of date</strong> stamp. Reopening the project shows the last results.</li>
+<li>The legend along the bottom colours the values by the study's unit (the default) or by <strong>% of no-build</strong> (each point's share of its value with nothing built on the plot, the surroundings and terrain still blocking; 0 to 100 % for every geometry). Two marks set the low and high end of the colours (drag them, or use the arrow keys; Delete puts one back): the palette runs between them and values beyond an end take its colour. By value the low end is the study's <strong>target</strong>, and both ends are saved with the study. The palettes are fixed: Magma by value, Viridis by share and for Change. The result card in the bottom right corner gives what the geometry keeps of the no-build value, the mean, the lowest tenth and the share of points at the target, with the maximum volume's value in brackets. When no study is selected the first one with a result is.</li>
+<li>The <strong>Sun</strong> panel under the studies panel (it needs the weather file) draws the year's sun path with a day while it is open, and shows one of two views: the shadows at a moment (a day and a time, each on a strip with one handle) or the hours in shade over a period (the analysis period's control), in viridis or grey, a quick count on the view (a Sun hours study is the precise one). Its clock, at the end, reads the times in local standard, solar or daylight saving time. The <strong>Show</strong> switch beside the studies panel's title hides the selected study from the view.</li>
+<li>The <strong>Sky dome</strong> layer shows the selected study's sky patches, each coloured by the value it carried in the study's last run (none for sun hours); Design's dome is not shown in Simulate.</li>
+<li>A result whose inputs changed stays on the view with the <strong>Out of date</strong> stamp, its colours kept but muted part of the way to grey (other out-of-date layers fade to a grey). Reopening the project shows the last results.</li>
+</ul>
+<h2 id="inspect">Inspect<a class="headerlink" href="#inspect" title="Permanent link">&para;</a></h2>
+<p>The switch <strong>Design | Simulate | Inspect</strong> in the header also opens Inspect, a workspace beside the pipeline that shows which way the test surfaces face and summarises the input mesh files. <a href="../inspect/">Inspect</a> explains it in full. It runs no engine step, and only <strong>Save</strong> and <strong>Restore original</strong> change a file.</p>
+<ul>
+<li>Inspect hides the five steps and gives the 3D view the whole window. Switching back returns to the step you left.</li>
+<li>The <strong>Files</strong> panel floats over the top left of the view and collapses to an icon. It lists the maximum volume, test surface, surroundings and terrain files, each with its triangle count and area; pressing a row frames the file, draws the other test surface files faint and opens its bounds and (for test surfaces) surface count. A file the app cannot read is listed with its problem.</li>
+<li>Test surfaces are drawn two-sided: the side the normal points to in the test surface colour, the back side in orange, so a surface the wrong way round shows orange from outside. <strong>Face normals</strong> draws one normal per surface.</li>
+<li>On a test surface file, <strong>Flip mode</strong> turns the whole surface under a click (a second click turns it back) and <strong>Flip all</strong> turns every surface. Turns are staged and shown at once; <strong>Save</strong> writes the file once in its own format, <strong>Discard</strong> drops the turns, and <strong>Restore original</strong> puts back the file as it was before the first save. A file that is closed as a whole cannot be flipped.</li>
+<li>Save and Restore original act like an upload: the criteria and studies that list the file go out of date. They wait while a run of the project is going. If the file was replaced in the project folder since Inspect read it, they write nothing and say so, and its staged turns are dropped.</li>
+<li>Leaving Inspect with turns not saved, or while a save is under way, asks Save, Discard or Stay. A save under way is said in the dialog, and if it is refused the dialog stays open with the reason.</li>
 </ul>
 <h2 id="where-projects-are-kept">Where projects are kept<a class="headerlink" href="#where-projects-are-kept" title="Permanent link">&para;</a></h2>
 <p>Each project is a folder in the projects folder:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>&lt;projects folder&gt;/&lt;project name&gt;/
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>├── inputs/        The files you added (max_volume/, test_surfaces/, context/, terrain/, weather.epw)
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>│                  and the joined meshes the engine reads (joined/, one test_surfaces_&lt;id&gt;.ply per criterion
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>│                  and one study_surfaces_&lt;id&gt;.ply per study that lists files)
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>├── config.yaml    The settings, a normal USC chain file (shared settings, then the criteria that are on)
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>├── project.json   The project&#39;s record: the files you added with their triangle counts, size, time and digest,
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>│                  the notices of files replaced in the folder, the input revision,
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>│                  the example it came from (if any), the criteria with their own settings and test surface files,
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>│                  the studies of Simulate, and one record per completed stage (with the settings that stage ran with)
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>├── run/           The engine&#39;s output: criteria/&lt;id&gt;/preprocessing and thresholding, criteria/chain.json,
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>│                  exporting/ and massing/
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>└── simulate/      The results of the studies, one folder per study (see Simulate)
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>│                  and one study_surfaces_&lt;id&gt;.ply per study that lists files), and originals/test_surfaces/,
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>│                  the test surface files as they were before Inspect first saved a flip of them
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>├── config.yaml    The settings, a normal USC chain file (shared settings, then the criteria that are on)
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>├── project.json   The project&#39;s record: the files you added with their triangle counts, size, time and digest,
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>│                  the notices of files replaced in the folder, the input revision,
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>│                  the example it came from (if any), the criteria with their own settings and test surface files,
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>│                  the studies of Simulate, and one record per completed stage (with the settings that stage ran with)
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>├── run/           The engine&#39;s output: criteria/&lt;id&gt;/preprocessing and thresholding, criteria/chain.json,
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>│                  exporting/ and massing/
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>└── simulate/      The results of the studies, one folder per study (see Simulate)
 </code></pre></div>
 <p><code>config.yaml</code> works outside the interface: its paths are relative to the project folder, so <code>usc run -c &lt;project folder&gt;/config.yaml</code> runs the same analysis from the command line (see <a href="#criteria-in-a-project">Criteria in a project</a>). Thresholding also writes <code>scores_compared_with_cutoff.npy</code> in its folder (the values the cutoff is applied to, which the histogram draws). To delete a project, use Delete in its menu (see <a href="#managing-a-project">Managing a project</a>), or delete its folder in the file manager.</p>
 <h3 id="replacing-a-file-in-the-project-folder">Replacing a file in the project folder<a class="headerlink" href="#replacing-a-file-in-the-project-folder" title="Permanent link">&para;</a></h3>

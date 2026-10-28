@@ -488,6 +488,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../inspect/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inspect
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../modes/" class="md-nav__link">
         
   
@@ -922,7 +949,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_12" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_13" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -944,14 +971,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_12" id="__nav_12_label" tabindex="">
+              <label class="md-nav__link " for="__nav_13" id="__nav_13_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_12">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_13_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_13">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1743,7 +1770,7 @@
 <tbody>
 <tr>
 <td><code>check_settings.py</code></td>
-<td>The metrics of the check (<code>CHECK_METRICS</code>: sun hours, solar energy, useful solar energy, overcast sky component, cooling sky, sky view factor, each with its unit, whether it reads the weather file and which mode's starting period it takes), the metric each carving mode starts with (<code>DEFAULT_CHECK_METRIC</code>), <code>CheckSettings</code> (period, time basis, lowest sun altitude, rays per patch, sample spacing, ...) with <code>for_config</code>, <code>settings_digest</code> (sha256 of the settings without the weather file's path) and <code>build_check_settings</code>. Standard library and Pydantic only, so the service lists the metrics without importing torch.</td>
+<td>The metrics of the check (<code>CHECK_METRICS</code>: sun hours, solar energy, useful solar gains (key <code>useful_solar_energy</code>), overcast sky component, cooling sky, sky view factor, each with its unit, whether it reads the weather file and which mode's starting period it takes), the metric each carving mode starts with (<code>DEFAULT_CHECK_METRIC</code>), <code>CheckSettings</code> (period, time basis, lowest sun altitude, rays per patch, sample spacing, ...) with <code>for_config</code>, <code>settings_digest</code> (sha256 of the settings without the weather file's path) and <code>build_check_settings</code>. Standard library and Pydantic only, so the service lists the metrics without importing torch.</td>
 </tr>
 <tr>
 <td><code>solar_check.py</code></td>
@@ -1875,6 +1902,10 @@
 <td>Running the studies: a study's check settings (north, ray length and carving spacing from the shared settings, rays per patch of the first criterion that is on, the study's metric, period, time basis and mode settings), its <code>check</code> engine request, why it cannot run (<code>refusal_of</code>), the engine's refusal of a study kept in <code>simulate/&lt;id&gt;/refusal.json</code> until its inputs change, its state (<code>study_state</code>: current, out of date when a file, setting or surface tolerance it was computed from changed, not run, refused) and the binary of its patches and values for the 3D view. Reads the result files through <code>check_files.py</code>, so it does not import torch.</td>
 </tr>
 <tr>
+<td><code>local_web_service/inspection.py</code></td>
+<td>The Inspect workspace's view of the input mesh files. <strong><code>inspect_file</code></strong> reads a stored file with <code>load_mesh</code> (the maximum volume and test surfaces with <code>fix_normals</code>) and keeps the result until its size or modification time changes; a surface is the triangles joined by shared edges, and a test surface file closed as a whole is not flippable. <strong><code>project_inspection</code></strong>: the summary of each mesh file (triangles, area, bounds, closed bodies, surfaces), a file that cannot be read listed with its problem. <strong><code>inspection_geometry</code></strong>: the triangles of a test surface file with a surface number per triangle, as one binary. <strong><code>save_turned_surfaces</code></strong>: turns whole surfaces, writes the file in its own format (OBJ at 10 decimals, PLY float64, GLB and STL float32), reads it back with <code>load_mesh</code>, saves nothing when the turns or corners did not hold, keeps the original in <code>inputs/originals/test_surfaces/</code> before the first save and builds the joined files of the criteria and studies that list the file as an upload does. <strong><code>restore_original</code></strong> puts the kept original back.</td>
+</tr>
+<tr>
 <td><code>local_web_service/migration.py</code></td>
 <td><code>migrate_to_criteria</code>: a project of an earlier version becomes a chain of one criterion with its results kept (run folders moved to <code>run/criteria/1/</code>, manifests that name them rewritten, records moved). It runs when a project opens, when a run starts and at a first settings save, and undoes its steps when one fails.</td>
 </tr>
@@ -1960,6 +1991,33 @@
 </tbody>
 </table>
 <p>None of these changes <code>inputs_revision</code>, <code>config.yaml</code> or a stage record.</p>
+<p><strong>Routes for Inspect</strong> (all under <code>/api</code>; the two writes hold the project's lock and answer 409 while a run of the project is active):</p>
+<table>
+<thead>
+<tr>
+<th>Route</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /projects/{name}/inspect</code></td>
+<td>The <code>InspectReply</code>: the summary of each mesh file by role, allowed while a run is active</td>
+</tr>
+<tr>
+<td><code>GET /projects/{name}/inspect/test_surfaces/{file}/geometry</code></td>
+<td>The triangles of a test surface file with a surface number per triangle, as one binary (layout in <code>inspection.inspection_geometry</code>)</td>
+</tr>
+<tr>
+<td><code>POST /projects/{name}/inspect/test_surfaces/{file}/turn</code></td>
+<td>Body <code>surfaces</code>: turn those surfaces and save the file. 422 for a file closed as a whole, an unreadable file or a surface that does not exist, 500 when the written file does not read as turned (nothing is saved)</td>
+</tr>
+<tr>
+<td><code>POST /projects/{name}/inspect/test_surfaces/{file}/restore</code></td>
+<td>Put the kept original back; 404 when none is kept</td>
+</tr>
+</tbody>
+</table>
 <p><strong>Routes for criteria</strong> (all under <code>/api</code>; the writes hold the project's lock and answer 409 while a run of the project is active; an unknown criterion id is a 404 that names the id):</p>
 <table>
 <thead>
@@ -2032,7 +2090,7 @@
 </tbody>
 </table>
 <p><code>POST /projects/{name}/runs</code> answers with <code>criterion_stages</code> besides <code>stages</code>, and refuses with a 422 (<code>missing_inputs</code>) when no criterion is on or a criterion that is on has no test surfaces.</p>
-<p><code>app/</code> holds the front-end source (<code>src/simulate/</code> the Simulate workspace: <code>SimulateView.tsx</code>, what it puts over the 3D view, <code>StudiesPanel.tsx</code> and <code>AddStudyMenu.tsx</code>, the Studies panel and its Add study menu, <code>StudyPopover.tsx</code>, a study's settings, <code>GeometrySwitch.tsx</code> and <code>ResultCard.tsx</code>, the geometry switch with Change and the result card, <code>use_studies.ts</code> and <code>use_study_view.ts</code>, the studies and the study on the view (geometry, Change, target, legend, card), and <code>study_values.ts</code> with <code>study_values_decoder.ts</code>, the statistics and the reader of the values binary; <code>src/viewer_overlays/TargetLegend.tsx</code> is its legend with the draggable target; <code>src/steps/</code> the five steps: <code>InputsStep.tsx</code>, <code>SiteAndGridStep.tsx</code>, the result steps and the export, with <code>ActionMenu.tsx</code>, the menu of a project and of a criterion row, <code>menu_popup.ts</code>, the placement and keys of a popup menu that <code>ActionMenu.tsx</code> and the mode menu share, and <code>CriteriaRunBar.tsx</code>, the Run analysis and Build buttons pinned under the Criteria step; <code>src/criteria/</code> the criteria hook and its helpers (<code>use_criteria.ts</code>, <code>criteria_state.ts</code>), the Criteria step, the criterion list and its rows (<code>CriterionList.tsx</code>, <code>CriterionCard.tsx</code>) and their dialogs, <code>ModeMenu.tsx</code>, the short menu of modes behind Add criterion, the criterion panel with <code>PanelSection.tsx</code>, its folded sections, and <code>section_summaries.ts</code>, the one-line summary of each section, and its Test surfaces box; <code>src/settings_form/</code> the settings, with <code>two_forms.ts</code> for the shared and the criterion settings held side by side; <code>src/viewer/</code> and <code>src/viewer_overlays/</code> the 3D view, with <code>carved_by_criterion_decoder.ts</code> for the carved-by-criterion layer; <code>src/api_client/</code> the typed client). See <a href="../ui/#rebuilding-the-front-end-after-changing-app">Browser UI</a> for building it.</p>
+<p><code>app/</code> holds the front-end source (<code>src/inspect/</code> the Inspect workspace: <code>InspectView.tsx</code>, what it puts over the 3D view, <code>FilesPanel.tsx</code>, the Files panel with a file's summary, Flip mode, Save, Discard and Restore original, <code>use_inspection.ts</code>, the summaries, the selected file and the staged turns, <code>UnsavedTurnsDialog.tsx</code>, the Save, Discard or Stay question when leaving Inspect, and <code>inspect_geometry_decoder.ts</code>, the reader of the geometry binary; <code>src/simulate/</code> the Simulate workspace: <code>SimulateView.tsx</code>, what it puts over the 3D view, <code>StudiesPanel.tsx</code> and <code>AddStudyMenu.tsx</code>, the Studies panel and its Add study menu, <code>StudyPopover.tsx</code>, a study's settings, <code>GeometrySwitch.tsx</code> and <code>ResultCard.tsx</code>, the geometry switch with Change and the result card, <code>use_studies.ts</code> and <code>use_study_view.ts</code>, the studies and the study on the view (geometry, Change, target, legend, card), and <code>study_values.ts</code> with <code>study_values_decoder.ts</code>, the statistics and the reader of the values binary; <code>src/viewer_overlays/TargetLegend.tsx</code> is its legend with the draggable target; <code>src/steps/</code> the five steps: <code>InputsStep.tsx</code>, <code>SiteAndGridStep.tsx</code>, the result steps and the export, with <code>ActionMenu.tsx</code>, the menu of a project and of a criterion row, <code>menu_popup.ts</code>, the placement and keys of a popup menu that <code>ActionMenu.tsx</code> and the mode menu share, and <code>CriteriaRunBar.tsx</code>, the Run analysis and Build buttons pinned under the Criteria step; <code>src/criteria/</code> the criteria hook and its helpers (<code>use_criteria.ts</code>, <code>criteria_state.ts</code>), the Criteria step, the criterion list and its rows (<code>CriterionList.tsx</code>, <code>CriterionCard.tsx</code>) and their dialogs, <code>ModeMenu.tsx</code>, the short menu of modes behind Add criterion, the criterion panel with <code>PanelSection.tsx</code>, its folded sections, and <code>section_summaries.ts</code>, the one-line summary of each section, and its Test surfaces box; <code>src/settings_form/</code> the settings, with <code>two_forms.ts</code> for the shared and the criterion settings held side by side; <code>src/viewer/</code> and <code>src/viewer_overlays/</code> the 3D view, with <code>carved_by_criterion_decoder.ts</code> for the carved-by-criterion layer; <code>src/api_client/</code> the typed client). See <a href="../ui/#rebuilding-the-front-end-after-changing-app">Browser UI</a> for building it.</p>
 <h2 id="grasshopper-plugin-grasshopper">Grasshopper plugin (<code>grasshopper/</code>)<a class="headerlink" href="#grasshopper-plugin-grasshopper" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>grasshopper/
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>├── USC_GHplugin/       27 .ghuser components (copy into the GH User Objects folder)
