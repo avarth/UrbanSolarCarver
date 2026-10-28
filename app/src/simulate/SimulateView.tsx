@@ -135,7 +135,7 @@ export function SimulateView({ project, studies, criteria, storedTestSurfaces, r
       {legend !== null && (
         <TargetLegend label={legend.label} unit={legend.unit} mode={legend.mode} scale={legend.scale} low={legend.low} high={legend.high}
                       palette={legend.palette} hasLoss={legend.hasLoss} disabled={legend.disabled} onRangeEndChange={studyView.setRangeEnd}
-                      onColourByChange={studyView.setColourBy} onPaletteChange={studyView.setPalette} />
+                      onColourByChange={studyView.setColourBy} />
       )}
       {card !== null && <ResultCard geometry={card.geometry} unit={card.unit} statistics={card.statistics} baseline={card.baseline} />}
     </>

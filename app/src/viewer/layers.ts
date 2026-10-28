@@ -500,9 +500,9 @@ function paletteColours(palette: StudyPalette): THREE.Color[] {
 
 /**
  * The selected study's test point patches on the geometry shown (*corners*: study_values_decoder.patchCorners), unlit so the colours
- * read as the legend's. By share (the default) or by value: the chosen palette (magma by default) between the two ends of the colour
+ * read as the legend's. By value (magma) or by share (viridis): the palette between the two ends of the colour
  * range, in percent of each point's no-build value or in the study's unit; a value beyond an end takes that end's colour. By change from the maximum
- * volume: the change ramp from no change to the largest gain, a loss in the carved colour, a change within the tolerance none. The
+ * volume: the change ramp (viridis) from no change to the largest gain, a loss in the carved colour, a change within the tolerance none. The
  * patches lie on test surfaces, so they are pulled forward in depth as those are. A new range, palette, colouring or Change of the same
  * values and geometry recolours the patches in place (userData.recolour); the palettes do not depend on the viewport theme.
  */

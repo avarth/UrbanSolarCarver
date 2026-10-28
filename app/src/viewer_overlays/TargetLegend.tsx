@@ -1,7 +1,7 @@
 // The legend along the bottom of Simulate's view (simulate design, section 3): the colour scale of the selected study, with the two
 // ends of its colour range as draggable marks (user, 2026-10-28: a low and a high threshold; values beyond an end take that end's
 // colour, so the palette spreads over the range that matters), a switch between the value in the study's unit (first) and the share
-// of the no-build value (0 to 100 %), and the palette. By value the low end is the study's target and the high end its target_max, both saved
+// of the no-build value (0 to 100 %), each with its palette. By value the low end is the study's target and the high end its target_max, both saved
 // with the study; by share they are percentages. A press or drag on the bar moves the nearer end, which is given once, at the
 // release; on a mark (a slider) the arrow keys move it by 1 % of the bar, Page Up and Page Down by 10 %, Home and End to the ends of
 // the bar, and Delete (or Backspace) puts it back to its default. By change from the maximum volume the bar is the change ramp,
@@ -11,7 +11,7 @@ import { messages } from "../messages";
 import type { ColourBy } from "../simulate/study_values";
 import { formattedNumber, withUnit } from "../steps/format_numbers";
 import { changeRamp } from "../viewer/colour_scales";
-import { STUDY_PALETTES, studyPaletteColour, type StudyPalette } from "../viewer/study_palettes";
+import { studyPaletteColour, type StudyPalette } from "../viewer/study_palettes";
 import "./overlays.css";
 
 type End = "low" | "high";
@@ -31,7 +31,6 @@ export interface TargetLegendProps {
   onRangeEndChange: (end: End, value: number | null) => void;
   /** Switches between share and value (not shown by change). */
   onColourByChange?: (colourBy: ColourBy) => void;
-  onPaletteChange?: (palette: StudyPalette) => void;
   /** By change: some point lost, so the loss colour is named. */
   hasLoss?: boolean;
   /** The ends cannot be moved now (a run of the project). */
@@ -48,7 +47,7 @@ function kept(value: number, low: number, high: number): number {
   return Number(Math.min(high, Math.max(low, value)).toPrecision(SIGNIFICANT_DIGITS));
 }
 
-export function TargetLegend({ label, unit, mode, scale, low, high, palette, onRangeEndChange, onColourByChange, onPaletteChange,
+export function TargetLegend({ label, unit, mode, scale, low, high, palette, onRangeEndChange, onColourByChange,
                               hasLoss = false, disabled = false }: TargetLegendProps) {
   const bar = useRef<HTMLDivElement>(null);
   const marks = { low: useRef<HTMLDivElement>(null), high: useRef<HTMLDivElement>(null) };
@@ -135,12 +134,6 @@ export function TargetLegend({ label, unit, mode, scale, low, high, palette, onR
     <div className="viewer-overlay target-legend" role="group" aria-label={title}>
       <div className="target-legend-header">
         <div className="target-legend-title">{title}</div>
-        {mode !== "change" && onPaletteChange !== undefined && (
-          <select className="target-legend-palette" aria-label={messages.palette} value={palette}
-                  onChange={(event) => onPaletteChange(event.target.value as StudyPalette)}>
-            {STUDY_PALETTES.map((name) => <option key={name} value={name}>{messages.paletteNames[name]}</option>)}
-          </select>
-        )}
       </div>
       {mode !== "change" && onColourByChange !== undefined && (
         <div className="segmented-switch target-legend-colour-by" role="group" aria-label={messages.colourBy}>

@@ -13,8 +13,8 @@ versioning follows [Semantic Versioning](https://semver.org/).
   default) or by each point's share of its **no-build value**, its value with nothing built on the plot (the surroundings and terrain
   still block), 0 to 100 % on one scale for every geometry. A **colour range** with a low and a high end, both draggable, spreads the
   palette over the values that matter; values beyond an end take its colour (no muted colour any more); by value the ends are the
-  study's target and `target_max`, saved with it. **Palettes**: Magma by default, Inferno, Plasma, Viridis, chosen on the legend and
-  kept in the browser, in place of cividis, whose grey middle hid the facades' gains. The result card leads with what the geometry
+  study's target and `target_max`, saved with it. **Palettes**: Magma by value, Viridis by share and for Change, in place of cividis,
+  whose grey middle hid the facades' gains, and of Change's grey-to-accent ramp. The result card leads with what the geometry
   keeps of the no-build value ("keeps 99 % of the no-build value (78)"). On Allatini's Solar energy study the maximum volume keeps
   78 % and the envelope 99 %; on the old value scale the gain looked slight.
 - **A study is on the view without a press**: the first study with a result when none is selected, so a finished run shows its values.

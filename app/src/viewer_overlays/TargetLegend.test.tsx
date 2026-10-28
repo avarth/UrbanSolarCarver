@@ -87,9 +87,9 @@ test("arrow keys move an end by 1 % of the bar, Home and End to its limits, Dele
   expect(keyDown(mark("low")!, "a")).toBe(false);
 });
 
-test("by share the scale is 0 to 100 %, and the switch and the palette are offered", () => {
-  const onColourByChange = vi.fn(), onPaletteChange = vi.fn();
-  renderLegend({ mode: "share", scale: [0, 100], low: 20, high: 100, onColourByChange, onPaletteChange });
+test("by share the scale is 0 to 100 % in viridis, the switch is offered, and no palette is chosen", () => {
+  const onColourByChange = vi.fn();
+  renderLegend({ mode: "share", scale: [0, 100], low: 20, high: 100, palette: "viridis", onColourByChange });
   expect(container().querySelector(".target-legend-title")!.textContent).toBe("Sun hours, share of the no-build value");
   expect([...container().querySelectorAll(".target-legend-ends > span")].map((end) => end.textContent))
     .toEqual(["0 %", "100 %"]);
@@ -97,10 +97,8 @@ test("by share the scale is 0 to 100 %, and the switch and the palette are offer
   expect(buttons.map((button) => [button.textContent, button.getAttribute("aria-pressed")])).toEqual([["Value (h)", "false"], ["% of no-build", "true"]]);
   act(() => buttons[0].click());
   expect(onColourByChange).toHaveBeenCalledWith("value");
-  const select = container().querySelector<HTMLSelectElement>(".target-legend-palette")!;
-  expect([...select.options].map((option) => option.textContent)).toEqual(["Magma", "Inferno", "Plasma", "Viridis"]);
-  act(() => { select.value = "viridis"; select.dispatchEvent(new Event("change", { bubbles: true })); });
-  expect(onPaletteChange).toHaveBeenCalledWith("viridis");
+  expect(container().querySelector(".target-legend-palette")).toBeNull();
+  expect(bar().style.background).toContain(cssColour(studyPaletteColour("viridis", 1)));
 });
 
 test("while disabled the ends do not move", () => {
@@ -116,6 +114,5 @@ test("the change scale has no ends, and names losses when there are some", () =>
   renderLegend({ mode: "change", scale: [0, 2], hasLoss: true });
   expect(container().querySelector(".target-legend-title")!.textContent).toBe("Change from max volume (h)");
   expect(mark("low")).toBeNull();
-  expect(container().querySelector(".target-legend-palette")).toBeNull();
   expect(container().querySelector(".target-legend-loss")!.textContent).toBe("Loss");
 });

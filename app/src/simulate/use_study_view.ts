@@ -6,19 +6,19 @@
 // The colour range (user, 2026-10-28): a low and a high end; the palette runs between them and values beyond either end take that
 // end's colour. By value the ends are the study's target (the low end, which the result card's "at target" reads) and target_max,
 // saved with the study, by default 0 and the highest value of the geometry shown. By share they are percentages of the no-build
-// value, 0 and 100 by default, kept for each study while the app is open. The palette is the viewer's choice, kept in the browser.
+// value, 0 and 100 by default, kept for each study while the app is open. The palettes are pinned (user, 2026-10-28): magma by
+// value, viridis by share (and for Change).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, getStudyValues, serviceProblemOf, type StudyChange } from "../api_client/client";
 import type { RunLoop } from "../steps/run_state";
 import type { StageState } from "../steps/step_summaries";
-import { isStudyPalette, STUDY_PALETTES, type StudyPalette } from "../viewer/study_palettes";
+import type { StudyPalette } from "../viewer/study_palettes";
 import { changeOf, changeTolerance, distributionOf, highestOf, keptShareOf, OPEN_COLUMN, shareAtOrAbove, type ColourBy, type StudyGeometry,
   type StudyStatistics, type StudyView } from "./study_values";
 import { decodeStudyValues, type StudyValues } from "./study_values_decoder";
 import type { StudiesHook } from "./use_studies";
 
 const NOT_FOUND = 404;
-const PALETTE_STORAGE_KEY = "usc.studyPalette";
 const FULL_SHARE: [number, number] = [0, 100];
 
 interface StudyViewSource {
@@ -64,8 +64,6 @@ export interface StudyViewHook {
   /** How the values are coloured when Change is off (kept across studies): share of the no-build value, or the value. */
   colourBy: ColourBy;
   setColourBy: (colourBy: ColourBy) => void;
-  palette: StudyPalette;
-  setPalette: (palette: StudyPalette) => void;
   available: StudyGeometry[];
   outOfDateInDesign: StudyGeometry[];
   /** Geometries Design has built that the selected study's last result does not have: they wait for a new run of the study. */
@@ -87,26 +85,15 @@ export interface StudyViewHook {
 /** How long after the last change of a saved end it is saved: a held arrow key is one save, of the value it ended on. */
 export const TARGET_SAVE_DELAY_MILLISECONDS = 300;
 
-/** The palette kept in the browser, magma when there is none or the storage cannot be read. */
-function storedPalette(): StudyPalette {
-  try {
-    const stored = window.localStorage.getItem(PALETTE_STORAGE_KEY);
-    return isStudyPalette(stored) ? stored : STUDY_PALETTES[0];
-  } catch {
-    return STUDY_PALETTES[0];
-  }
-}
+/** The palette of each colouring: magma by value, viridis by share of the no-build value. */
+const PALETTE_OF: Record<ColourBy, StudyPalette> = { value: "magma", share: "viridis" };
 
 export function useStudyView({ token, project, studies, active, runs, envelopeBuilt, massingBuilt, envelopeStage, massingStage, editDisabled,
                                onServiceProblem }: StudyViewSource): StudyViewHook {
   const [chosenGeometry, setGeometry] = useState<StudyGeometry>("max_volume");
   const [chosenChange, setChange] = useState(false);
   const [colourBy, setColourBy] = useState<ColourBy>("value");
-  const [palette, setPaletteState] = useState<StudyPalette>(storedPalette);
-  const setPalette = (next: StudyPalette) => {
-    setPaletteState(next);
-    try { window.localStorage.setItem(PALETTE_STORAGE_KEY, next); } catch { /* the choice lasts this session */ }
-  };
+  const palette = PALETTE_OF[colourBy];
   // By share: each study's range, while the app is open.
   const [shareRanges, setShareRanges] = useState<Record<string, [number, number]>>({});
   const [loaded, setLoaded] = useState<{ id: string; values: StudyValues } | null>(null);
@@ -224,7 +211,7 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
   };
 
   return {
-    geometry, setGeometry, change, setChange, colourBy, setColourBy, palette, setPalette, available, outOfDateInDesign, waitingForStudy,
+    geometry, setGeometry, change, setChange, colourBy, setColourBy, available, outOfDateInDesign, waitingForStudy,
     setRangeEnd,
     waitingForRun: active && running && hasResult && values === null,
     studyOutOfDate: active && selected?.state === "out_of_date",

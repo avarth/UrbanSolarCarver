@@ -197,6 +197,7 @@ function patchColours(layer: THREE.Object3D): string[] {
 
 const hexOf = (colour: string) => new THREE.Color(colour).getHexString();
 const magma = (t: number) => hexOf(studyPaletteColour("magma", t));
+const viridis = (t: number) => hexOf(studyPaletteColour("viridis", t));
 
 test("the study values layer colours each point's patch by its value, the palette between the two ends of the range", () => {
   setColourTokens();
@@ -263,11 +264,11 @@ test("changeTolerance on 527,633 points takes under 1 s: the Change view of that
   expect(elapsed).toBeLessThan(1000);
 });
 
-test("with Change the layer colours the change from the maximum volume on the change ramp, losses in the carved colour", () => {
+test("with Change the layer colours the change from the maximum volume in viridis, losses in the carved colour", () => {
   setColourTokens();
   const { view, corners } = studyView(true, [0, 4]);
   // Changes -1, 1, 3 and 0.0005: a loss, a third of the largest gain, the largest gain, and less than the tolerance (0.004), none.
-  expect(patchColours(studyValuesLayer(view, corners))).toEqual([hexOf("#c8553d"), hexOf(changeRamp(1 / 3)), hexOf("#2f5d7c"), hexOf("#dfe6ea")]);
+  expect(patchColours(studyValuesLayer(view, corners))).toEqual([hexOf("#c8553d"), hexOf(changeRamp(1 / 3)), viridis(1), viridis(0)]);
 });
 
 test("study values are drawn in front of the test surfaces they lie on, unlit, and leave the corners they are given as they are", () => {

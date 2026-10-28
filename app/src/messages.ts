@@ -101,13 +101,11 @@ export const messages = {
   changeLegend: (unit: string) => `Change from max volume (${unit})`,
   changeLoss: "Loss",
   // Colouring by the value (the default), or by each point's share of what it receives with nothing built on the plot (the no-build
-  // value: the surroundings and terrain still block), between the two ends of the colour range, in a palette of the viewer's choice.
+  // value: the surroundings and terrain still block), between the two ends of the colour range.
   shareLegend: (label: string) => `${label}, share of the no-build value`,
   colourBy: "Colour by",
   colourByShare: "% of no-build",
   colourByValue: (unit: string) => `Value (${unit})`,
-  palette: "Palette",
-  paletteNames: { magma: "Magma", inferno: "Inferno", plasma: "Plasma", viridis: "Viridis" } as Record<string, string>,
   rangeLow: "Low end of the colours (target)",
   rangeHigh: "High end of the colours",
   rangeEndHint: "Drag to move. Values beyond an end take its colour. Delete puts it back.",

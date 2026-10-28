@@ -73,7 +73,7 @@ The geometry switch at the top centre of the view chooses what the values are sh
 
 The context and the terrain block in all three. With several criteria the envelope is the result of the whole chain. **Envelope** and **Massing** wait, with the reason as a tooltip, until Design has built them, and also when the selected study ran before they were built (the tooltip says to run the study again). A geometry that Design shows out of date is marked; Simulate still traces the mesh on disk.
 
-**Change** colours each test point by its change from the maximum volume (the baseline) on the geometry shown: gains on a ramp from no change to the largest gain, losses in the colour the carving uses for carved voxels, a change smaller than a thousandth of the highest value without any geometry as none. Change waits while Max volume is shown.
+**Change** colours each test point by its change from the maximum volume (the baseline) on the geometry shown: gains in Viridis from no change (dark) to the largest gain (yellow), losses in the colour the carving uses for carved voxels, a change smaller than a thousandth of the highest value without any geometry as none. Change waits while Max volume is shown.
 
 ## Run
 
@@ -92,7 +92,7 @@ A study's values spread mostly with the way each surface faces: on Allatini's So
 
 **The colour range.** Two marks on the legend set the low and the high end of the colours. The palette runs between them, and a value beyond an end takes that end's colour, so the colours can spread over the values that matter (the facades between 200 and 800 kWh/m², say, rather than 0 to the roofs' 1,550). Drag a mark, or press on the bar to move the nearer one; or focus a mark and use the arrow keys (1 % of the bar), Page Up and Page Down (10 %) and Home and End; Delete puts it back to its default. The ends cannot pass each other. By value the low end is the study's **target** and the high end its upper end, both saved with the study (by default 0 and the highest value of the geometry shown); the result card's "at target" counts the points at or above the low end. By share the ends are percentages, 0 and 100 by default, kept for each study while the app is open.
 
-**The palette** is chosen on the legend: Magma (the default), Inferno, Plasma or Viridis, matplotlib's perceptually even palettes, each from dark to light without a grey middle (Viridis is the one most readable with the common colour vision deficiencies). The choice is kept in the browser. In the Change view the legend shows the change ramp instead, without ends, and the loss colour when some point lost.
+**The palettes** are fixed: Magma by value, Viridis by share and for Change. Both are matplotlib's perceptually even palettes, from dark to light without a grey middle (Viridis is the one most readable with the common colour vision deficiencies), so the two colourings do not look alike. In the Change view the legend shows the change ramp instead, without ends, and the loss colour when some point lost.
 
 The **result card** in the bottom right corner is for the selected study on the geometry shown. It gives:
 

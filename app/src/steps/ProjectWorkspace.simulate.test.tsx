@@ -9,6 +9,7 @@ import type * as THREE from "three";
 import { studyValuesOf } from "../simulate/study_values_for_test";
 import { TARGET_SAVE_DELAY_MILLISECONDS } from "../simulate/use_study_view";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
+import { studyPaletteColour } from "../viewer/study_palettes";
 import {
   CARVING, ENVELOPE, NOTHING_RUN, FakeService, buttonIn, container, endWorkspaceTest, openStep, openWorkspace, pinnedBar, pressRunAnalysis, project, reasonOf,
   settle, startWorkspaceTest, stepRow, switchMode,
@@ -486,25 +487,21 @@ test("while a study's popover is open the geometry switch moves to the right of 
   expect(bar().classList.contains("simulate-geometry-bar-beside-popover")).toBe(false);
 });
 
-test("the palette is magma at first, can be chosen on the legend, and is kept in the browser", async () => {
-  window.localStorage.clear();
-  try {
-    await openSimulate(undefined, (service) => {
-      service.studies = [study("1", "sun_hours", ["facades.obj"], "current")];
-      service.valuesOf = { 1: studyValuesOf({ open: [4, 4, 4], max_volume: [1, 2, 3] }) };
-    });
-    const select = () => container().querySelector<HTMLSelectElement>(".target-legend-palette")!;
-    expect(select().value).toBe("magma");
-    const layer = scene().layers.get("study_values")!;
-    const colours = (layer as THREE.Mesh).geometry.getAttribute("color") as THREE.BufferAttribute;
-    const version = colours.version;
-    act(() => { select().value = "viridis"; select().dispatchEvent(new Event("change", { bubbles: true })); });
-    expect(select().value).toBe("viridis");
-    expect(colours.version).toBeGreaterThan(version);
-    expect(window.localStorage.getItem("usc.studyPalette")).toBe("viridis");
-  } finally {
-    window.localStorage.clear();
-  }
+test("the palettes are pinned: magma by value, viridis by share; none is offered", async () => {
+  await openSimulate(undefined, (service) => {
+    service.studies = [study("1", "sun_hours", ["facades.obj"], "current")];
+    service.valuesOf = { 1: studyValuesOf({ open: [4, 4, 4], max_volume: [1, 2, 3] }) };
+  });
+  const probe = document.createElement("span");
+  const cssColour = (hex: string) => { probe.style.color = hex; return probe.style.color; };
+  expect(container().querySelector(".target-legend-palette")).toBeNull();
+  expect(targetBar().style.background).toContain(cssColour(studyPaletteColour("magma", 1)));
+  const layer = scene().layers.get("study_values")!;
+  const colours = (layer as THREE.Mesh).geometry.getAttribute("color") as THREE.BufferAttribute;
+  const version = colours.version;
+  colourByShare();
+  expect(targetBar().style.background).toContain(cssColour(studyPaletteColour("viridis", 1)));
+  expect(colours.version).toBeGreaterThan(version);
 });
 
 test("during a run, a study whose values are not read yet says they are shown when the run ends", async () => {

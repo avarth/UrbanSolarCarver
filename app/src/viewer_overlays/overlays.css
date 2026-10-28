@@ -282,10 +282,6 @@
 .target-legend-title { font-weight: 600; }
 .target-legend-colour-by { margin-bottom: 8px; }
 .target-legend-colour-by button { padding: 1px 8px; font-size: inherit; }
-.target-legend-palette { font: inherit; padding: 1px 4px; border: 1px solid var(--colour-line); border-radius: var(--radius-small);
-  background: var(--colour-panel); color: var(--colour-ink); }
-.viewer-overlay[data-viewport-theme="dark"] .target-legend-palette { background: var(--colour-overlay-on-dark); color: var(--colour-ink-on-dark);
-  border-color: var(--colour-line-on-dark); }
 .target-legend-bar { position: relative; height: 12px; border-radius: 2px; cursor: pointer; touch-action: none; user-select: none; }
 .target-legend-bar[data-disabled="true"] { cursor: default; }
 .target-legend-mark {
