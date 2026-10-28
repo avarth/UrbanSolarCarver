@@ -7,6 +7,28 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (energy-weighted Solar usefulness)
+
+- **Which hours count** in the Settings of a Solar usefulness criterion: **Cold hours** (the balance temperature rule, as before,
+  the default) or **Energy-weighted**, which counts each hour by what its sun saves a **typical building** in heating over the
+  year: the engine's simulated weights (ISO 13790, the model the engine calls 5R1C; the app says "a simple hourly model of one
+  room"). Energy-weighted hides the balance temperature, whose values are kept for Cold hours; the cold period preset says it
+  follows the cold hours rule. `PATCH /projects/{name}/criteria/{id}` takes `energy_weighted`.
+- **The typical building**, one per project, shared by its energy-weighted criteria, in a sheet beside the criterion panel (**Edit
+  building**): **Start from** three types based on the engine's validation cases (Office, medium mass; Older home, heavy masonry;
+  Light, well-insulated home), its shoebox values in six folded groups (Shape, Windows, Walls and glass, Air, Use, Summer
+  shading), each checked as the engine checks it with the error at its field, and **Calculate** (about 10 s): a day-by-hour chart
+  of the weights (viridis, 0 to 1), a second one of harm when the criterion counts harm, the building's heating and cooling in
+  kWh/m² a year and the hours that count. On Golden, CO the office needs 189.5 kWh/m² of heating and 26.9 of cooling, and 7,082
+  hours count. Once the building or the weather file changes, the chart is dimmed and the button reads **Calculate again**. Routes
+  `GET /typical-building-presets`, `GET` and `PUT /projects/{name}/typical-building`, `POST .../typical-building/calculate` and
+  `GET .../typical-building/weights`.
+- **Run analysis calculates the weights first** when it analyses an energy-weighted criterion whose weights are missing or out of
+  date, shown as the progress row "Typical building"; a changed building puts only the energy-weighted criteria out of date. Their
+  `config.yaml` has `simulated_weights_path: inputs/typical_building/weights.json` and no balance values.
+- `generate_simulated_weights` records the base run's annual heating and cooling demand in the artifact's `meta`
+  (`heating_kwh_m2`, `cooling_kwh_m2`).
+
 ### Changed (Simulate and Inspect, after use on Allatini)
 
 - **Simulate's sky dome is the selected study's**: a study keeps the value of each sky patch for its metric (`check_sky.json`,

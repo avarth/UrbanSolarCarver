@@ -73,6 +73,24 @@ usc archetype --from my_building.yaml -o variant.yaml -s mass_class=light   # de
 
 In Grasshopper, **USC_Archetype** assembles the archetype from five family feeder components (USC_ZoneGeometry / Fabric / Ventilation / Operation / Shading, one wire each), feeding **USC_SimulateWeights**, whose output path wires into **USC_BenefitParams**.
 
+## In the app
+
+In the browser app a Solar usefulness criterion offers the weights as **Which hours count**: **Energy-weighted** (the other choice, **Cold hours**, is the balance temperature rule). The app describes the model as a simple hourly model of one room (ISO 13790) and does not use the name 5R1C, which stays the engine's. A project has one **typical building**, the archetype of every energy-weighted criterion, edited in a sheet beside the criterion's panel ([Browser UI: the typical building](ui.md#the-typical-building)).
+
+The sheet edits the shoebox form only, in six groups: Shape (`width`, `length`, `height`, `orientation`), Windows (`wwr` of each side, 0 to 0.9, and `g_value`), Walls and glass (`u_opaque`, `u_window`, `mass_class`), Air (`ach_vent`, `ach_infiltration`, `heat_recovery`), Use (`t_set_heating`, `t_set_cooling`, and internal gains by day and by night, written as the 24-value `internal_gains_profile_w_m2` with the day value from 8:00 to 20:00, or a flat `internal_gains_w_m2` when the two are equal) and Summer shading (`shading_permanent`, `shading_hot` and `hot_months`, each factor one value for all facades). Each value is checked as the engine checks it (`expand_shoebox`, `ZoneParams.from_archetype`, the shading factors), and an error is shown at its field. The explicit-area form, per-facade shading factors and uploading a ready weights file stay in the CLI and Grasshopper.
+
+**Start from** offers three types based on the validation scenarios. Their U values, air, mass and set points are the scenarios'; their floor area and volume became a box, and their window areas window shares:
+
+| Type | Box (m) | Window share | U walls / glass (W/m²K) | Air (vent + infiltration, 1/h), recovery | Mass | Gains day / night (W/m²) |
+|------|---------|--------------|-------------------------|------------------------------------------|------|--------------------------|
+| Office, medium mass | 5 × 7 × 3 | S 0.27, E 0.10, W 0.10 | 0.5 / 1.8 | 1.2 + 0.3, 0 | medium | 7.1 / 1.7 |
+| Older home, heavy masonry | 5 × 8 × 2.75 | S 0.15, E 0.05, W 0.05, N 0.07 | 1.2 / 2.8 | 0.8 + 0.5, 0 | heavy | 5 / 5 |
+| Light, well-insulated home | 5 × 6 × 3 | S 0.4, W 0.22 | 0.25 / 1.0 | 1.5 + 0.2, 0.6 | light | 5 / 5 |
+
+All three have set points of 20 and 26 °C, g = 0.6, orientation 0 and no shading. The scenarios used office gains (250 W by day, 60 W at night on 35 m²) for all three; the two homes take the engine's default 5 W/m² instead. On the bundled Golden, CO weather file their base runs need 189.5, 314.8 and 58.8 kWh/m² of heating and 26.9, 6.8 and 91.9 kWh/m² of cooling a year, and 7,082, 7,501 and 5,591 hours have a benefit weight above 0.01.
+
+**Calculate** in the sheet runs `generate_simulated_weights` with the project's weather file into `inputs/typical_building/weights.json` (with `weights.png`) and shows the benefit weights of each hour as a day-by-hour chart, the harm weights too when the criterion has `include_harm`, and the base run's annual heating and cooling demand, which the generator records in the artifact's `meta` (`heating_kwh_m2`, `cooling_kwh_m2`). The calculation is keyed by a hash of the values and of the weather file: a change of either marks the weights out of date, and Run analysis calculates them again before it analyses an energy-weighted criterion, so a run never uses old weights. The generated `config.yaml` of such a criterion has `simulated_weights_path` and no `balance_temperature` or `balance_offset`.
+
 ## Limitations
 
 The weights are a *marginal, single-zone, schedule-free* physical signal. They capture effects the binary balance-point rule cannot (thermal lag, mass state, gain saturation), but the model makes the following simplifications on purpose:

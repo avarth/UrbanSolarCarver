@@ -222,6 +222,8 @@ simulated_weights_path: simulated_weights.json
 # include_harm: true   # experimental: also subtract summer-overheating contributions
 ```
 
+**In the browser app** the same weights come from the Settings of a Solar usefulness criterion: **Which hours count**, **Energy-weighted**. The project's **typical building** is described in a form (a shoebox: its shape, windows, walls and glass, air, use and summer shading, starting from one of three types) and calculated there or by Run analysis; the app writes `simulated_weights_path` into the criterion's config and leaves out its balance values. See [Browser UI: the typical building](ui.md#the-typical-building).
+
 A full-year `analysis_period` is the natural choice with simulated weights, since the schedule itself selects the useful hours. `balance_temperature` / `balance_offset` are unused (USC warns if you customize them). With `diagnostic_plots: true`, the run's diagnostics include a comparison dome showing how the simulated weights shifted the sky relative to the simple rule.
 
 **Use case**: benefit envelopes that respond to the thermal mass, insulation, and glazing of the building stock being protected.
