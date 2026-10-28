@@ -28,6 +28,9 @@ interface SimulateViewProps {
   criteria: CriterionEntry[];
   /** The test surface files the project stores, with their triangle counts. */
   storedTestSurfaces: InputFileInfo[];
+  /** The project has surroundings files, and a terrain file: a study can sample them (the ground around the site without a terrain). */
+  hasSurroundings: boolean;
+  hasTerrain: boolean;
   runs: RunLoop;
   /** A study let a file go, which the project may then no longer store: the stored files are asked for again. */
   onStoredFilesChange: () => void;
@@ -42,8 +45,8 @@ interface SimulateViewProps {
   notice?: ReactNode;
 }
 
-export function SimulateView({ project, studies, criteria, storedTestSurfaces, runs, onStoredFilesChange, onServiceProblem, studyView,
-                               sunStudy, notice }: SimulateViewProps) {
+export function SimulateView({ project, studies, criteria, storedTestSurfaces, hasSurroundings, hasTerrain, runs, onStoredFilesChange, onServiceProblem,
+                               studyView, sunStudy, notice }: SimulateViewProps) {
   const [popoverStudyId, setPopoverStudyId] = useState<string | null>(null);
   const view = useRef<HTMLDivElement>(null);
   const popoverId = useId();
@@ -101,6 +104,7 @@ export function SimulateView({ project, studies, criteria, storedTestSurfaces, r
   const shown = studies.studies.find((study) => study.entry.id === popoverStudyId) ?? null;
   const popover = shown === null ? null : (
     <StudyPopover key={shown.entry.id} id={popoverId} study={shown} metrics={studies.metrics} storedFiles={storedTestSurfaces}
+                  hasSurroundings={hasSurroundings} hasTerrain={hasTerrain}
                   disabledReason={editDisabledReason} onChange={(change) => attempt(() => studies.update(shown.entry.id, change))}
                   onAddFiles={(files) => addFiles(shown.entry.id, files)}
                   onUseFile={(fileName) => attempt(() => studies.useFile(shown.entry.id, fileName))}

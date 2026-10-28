@@ -11,8 +11,9 @@ afterEach(() => {
   rendered = null;
 });
 
-function study(id: string, name: string, files: string[], state: StudyWithState["state"], reason: string | null = null): StudyWithState {
-  return { entry: { id, name, named_by_user: false, colour: "#336699", metric: "sun_hours", settings: {}, target: null, test_surface_files: files },
+function study(id: string, name: string, files: string[], state: StudyWithState["state"], reason: string | null = null,
+               settings: Record<string, unknown> = {}): StudyWithState {
+  return { entry: { id, name, named_by_user: false, colour: "#336699", metric: "sun_hours", settings, target: null, test_surface_files: files },
            state, reason, geometries: [] };
 }
 
@@ -20,7 +21,7 @@ const STUDIES = [
   study("1", "Sun hours, 21 Dec", ["facades.obj", "windows.obj"], "current"),
   study("2", "Sky view factor", ["roofs.obj"], "not_run"),
   study("3", "Solar energy, 21 Jun", ["facades.obj"], "out_of_date"),
-  study("4", "Overcast sky component", [], "refused", "Add test surfaces"),
+  study("4", "Overcast sky component", [], "refused", "Add study surfaces"),
 ];
 
 function panelProps(overrides: Partial<StudiesPanelProps> = {}): StudiesPanelProps {
@@ -40,11 +41,20 @@ test("a study row shows its files, Not run yet, Out of date or the reason it can
   expect(rows().map((row) => row.querySelector(".study-row-name")!.textContent))
     .toEqual(["Sun hours, 21 Dec", "Sky view factor", "Solar energy, 21 Jun", "Overcast sky component"]);
   expect(rows().map((row) => row.querySelector(".study-row-line")!.textContent))
-    .toEqual(["facades.obj, windows.obj", "Not run yet", "Out of date", "Add test surfaces"]);
+    .toEqual(["facades.obj, windows.obj", "Not run yet", "Out of date", "Add study surfaces"]);
   expect(rows().map((row) => (row.querySelector<HTMLElement>(".study-row-swatch")!.style.background))).toEqual(Array(4).fill("rgb(51, 102, 153)"));
   expect(rows().map((row) => row.getAttribute("aria-current"))).toEqual(["true", null, null, null]);
   click(rows()[1].querySelector(".study-row-select")!);
   expect(onSelect).toHaveBeenCalledExactlyOnceWith("2");
+});
+
+test("the line of a current study names the project's surfaces it samples after its files", () => {
+  rendered = renderForTest(<StudiesPanel {...panelProps({ studies: [
+    study("1", "Sun hours, 21 Dec", ["facades.obj"], "current", null, { surfaces_from: ["context", "ground"] }),
+    study("2", "Sky view factor", [], "current", null, { surfaces_from: ["terrain"] }),
+  ] })} />);
+  expect(rows().map((row) => row.querySelector(".study-row-line")!.textContent))
+    .toEqual(["facades.obj, the surroundings, the ground", "the terrain"]);
 });
 
 test("each row's settings button opens its popover, and says whether it is open", () => {

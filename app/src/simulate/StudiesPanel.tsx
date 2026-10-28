@@ -1,5 +1,6 @@
 // The studies panel of Simulate (simulate design, section 3): small, floating over the top left of the 3D view, collapsible to an
-// icon button. One row per study: its colour swatch, its name and a line (its test surface files while its result is current, else
+// icon button. One row per study: its colour swatch, its name and a line (its study surfaces while its result is current: its files and
+// the project's surfaces it samples, else
 // "Out of date", "Not run yet" or why it cannot run). A press on a row selects the study for the view; its settings button opens the
 // popover beside the panel. Under the rows, Add study (AddStudyMenu) and, once there is a study, Run with its progress. Beside the
 // title a switch shows or hides the selected study on the view (its colours, the legend and the result card; user, 2026-10-28). While a run
@@ -9,6 +10,7 @@ import type { CriterionEntry, MetricInfo, StudySource, StudyWithState } from "..
 import { messages } from "../messages";
 import { RunAnalysisButton } from "../steps/SettingsStep";
 import { AddStudyMenu } from "./AddStudyMenu";
+import { surfacesFromOf } from "./StudyPopover";
 import "./simulate.css";
 
 export interface StudiesPanelProps {
@@ -48,7 +50,8 @@ export interface StudiesPanelProps {
 /** The line under a study's name. */
 export function studyLine(study: StudyWithState): string {
   switch (study.state) {
-    case "current": return (study.entry.test_surface_files ?? []).join(", ");
+    case "current": return [...(study.entry.test_surface_files ?? []),
+                            ...surfacesFromOf(study.entry.settings ?? {}).map((source) => messages.studySurfacesFromInLine[source] ?? source)].join(", ");
     case "out_of_date": return messages.outOfDateSummary;
     case "not_run": return messages.notRunYet;
     case "refused": return study.reason ?? "";

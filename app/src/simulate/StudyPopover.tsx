@@ -1,7 +1,8 @@
 // The settings of one study, in a popover beside the studies panel (simulate design, section 4): its name (a change renames it),
 // its metric (a select; the metrics whose inputs are missing are greyed with the reason), the analysis period when the metric has
-// one (the period control of the Criteria step), the metric's few mode settings in a fold, its test surface files (the files the
-// project stores, to use or take out, and new files to add by the button or by dropping them) and Delete. Each change is saved at once: a text or number
+// one (the period control of the Criteria step), the metric's few mode settings in a fold, its study surfaces (its files: the files
+// the project stores, to use or take out, and new files to add by the button or by dropping them; then check boxes for the project's
+// surfaces it samples too: the surroundings, and the terrain or, without one, the ground around the site) and Delete. Each change is saved at once: a text or number
 // field when it is left or Enter is pressed, the other controls on the change. The popover is a non-modal dialog: the view
 // around it stays usable; Escape and Close end it, and the focus goes back to the study's settings button.
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
@@ -19,6 +20,10 @@ interface StudyPopoverProps {
   metrics: MetricInfo[];
   /** The test surface files the project stores (every criterion's and study's), with their triangle counts. */
   storedFiles: InputFileInfo[];
+  /** The project has surroundings files: the study can sample them. */
+  hasSurroundings: boolean;
+  /** The project has a terrain file: the study can sample it, and the ground around the site is not offered. */
+  hasTerrain: boolean;
   /** Why the study cannot be changed now (a run of the project); null when it can. */
   disabledReason: string | null;
   /** Saves a change of the study; resolves with the reason it was refused, or null. */
@@ -36,6 +41,15 @@ interface StudyPopoverProps {
 const PERIOD_KEYS: readonly string[] = ANALYSIS_PERIOD_FIELDS;
 const TIME_BASIS = "time_basis";
 const METRICS_WITH_A_CLOCK = ["sun_hours"];
+// The setting of the surfaces the study samples besides its files, drawn as check boxes under them.
+const SURFACES_FROM = "surfaces_from";
+const SOURCE_ORDER = ["context", "terrain", "ground"];
+
+/** The project's surfaces the study samples besides its files, from its settings. */
+export function surfacesFromOf(settings: Record<string, unknown>): string[] {
+  const value = settings[SURFACES_FROM];
+  return Array.isArray(value) ? value.filter((source): source is string => typeof source === "string") : [];
+}
 
 function labelOf(setting: string): string {
   return SETTING_PRESENTATIONS[setting]?.label ?? setting;
@@ -71,7 +85,7 @@ function MoreSettings({ metric, settings, disabled, onChange }: { metric: string
   const balanceInputId = useId();
   const timeBasisId = useId();
   const keys = Object.keys(settings).filter((key) => !PERIOD_KEYS.includes(key) && (key !== TIME_BASIS || METRICS_WITH_A_CLOCK.includes(metric))
-    && key !== BALANCE_TEMPERATURE_FIELDS[1]);
+    && key !== BALANCE_TEMPERATURE_FIELDS[1] && key !== SURFACES_FROM);
   if (keys.length === 0) return null;
   const balance = SETTING_PRESENTATIONS[BALANCE_TEMPERATURE_FIELDS[0]];
   return (
@@ -114,7 +128,36 @@ function MoreSettings({ metric, settings, disabled, onChange }: { metric: string
   );
 }
 
-export function StudyPopover({ id, study, metrics, storedFiles, disabledReason, onChange, onAddFiles, onUseFile, onRemoveFile, onDelete, onClose }: StudyPopoverProps) {
+/** Check boxes for the project's surfaces the study samples besides its files. The surroundings wait for the project's surroundings
+ *  files; the terrain is offered when the project has one, the ground around the site when it has none. A source the study samples
+ *  is shown and can be turned off even when its file has gone. */
+function SurfacesFrom({ chosen, hasSurroundings, hasTerrain, disabled, onChange }: { chosen: string[]; hasSurroundings: boolean; hasTerrain: boolean;
+                                                                                     disabled: boolean; onChange: (sources: string[]) => void }) {
+  const shown = [
+    { source: "context", available: hasSurroundings, reason: messages.studyNeedsSurroundingsFiles },
+    ...(hasTerrain || chosen.includes("terrain") ? [{ source: "terrain", available: hasTerrain, reason: undefined }] : []),
+    ...(!hasTerrain || chosen.includes("ground") ? [{ source: "ground", available: true, reason: undefined }] : []),
+  ];
+  const toggle = (source: string, on: boolean) =>
+    onChange(SOURCE_ORDER.filter((each) => (each === source ? on : chosen.includes(each))));
+  return (
+    <div className="study-surfaces-from">
+      {shown.map(({ source, available, reason }) => {
+        const checked = chosen.includes(source);
+        return (
+          <label key={source} className="study-field study-field-check" title={available ? undefined : reason}>
+            <input type="checkbox" checked={checked} disabled={disabled || (!available && !checked)}
+                   onChange={(event) => toggle(source, event.target.checked)} />
+            {messages.studySurfacesFrom[source]}
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+export function StudyPopover({ id, study, metrics, storedFiles, hasSurroundings, hasTerrain, disabledReason, onChange, onAddFiles, onUseFile, onRemoveFile,
+                               onDelete, onClose }: StudyPopoverProps) {
   const { entry } = study;
   const settings = entry.settings ?? {};
   const files = entry.test_surface_files ?? [];
@@ -178,11 +221,13 @@ export function StudyPopover({ id, study, metrics, storedFiles, disabledReason, 
       )}
       <MoreSettings metric={entry.metric} settings={settings} disabled={disabled} onChange={(values) => change({ values })} />
       <div className="study-files" role="group" aria-labelledby={filesTitleId}>
-        <p id={filesTitleId} className="study-files-title">{messages.studyTestSurfaces}</p>
+        <p id={filesTitleId} className="study-files-title">{messages.studySurfaces}</p>
         <ProtectsBox files={files.map((name) => storedFiles.find((file) => file.name === name) ?? { name, triangle_count: 0 })} mode=""
-                     hint={messages.studyNoTestSurfaces} onAddFiles={onAddFiles} onRemoveFile={onRemoveFile} disabledReason={disabledReason}
-                     otherFiles={storedFiles.map((file) => file.name).filter((name) => !files.includes(name))} onUseFile={onUseFile}
-                     otherFilesTitle={messages.useFileOfProject} />
+                     hint={messages.studyNoSurfaceFiles} addLabel={messages.addStudySurfaces} onAddFiles={onAddFiles} onRemoveFile={onRemoveFile}
+                     disabledReason={disabledReason} otherFiles={storedFiles.map((file) => file.name).filter((name) => !files.includes(name))}
+                     onUseFile={onUseFile} otherFilesTitle={messages.useFileOfProject} />
+        <SurfacesFrom chosen={surfacesFromOf(settings)} hasSurroundings={hasSurroundings} hasTerrain={hasTerrain} disabled={disabled}
+                      onChange={(sources) => change({ values: { [SURFACES_FROM]: sources } })} />
       </div>
       {problem !== null && <p className="studies-panel-problem" role="alert">{problem}</p>}
       <button type="button" className="secondary-button study-delete" disabled={disabled} onClick={() => void send(onDelete)}>{messages.deleteStudy}</button>

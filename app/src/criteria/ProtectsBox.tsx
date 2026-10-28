@@ -21,6 +21,8 @@ interface ProtectsBoxProps {
   onAddFiles?: (files: File[]) => Promise<string[]>;
   /** The line of the empty box in place of the mode's hint. */
   hint?: string;
+  /** The label of the add button in place of "Add test surfaces". */
+  addLabel?: string;
   /** The title over the stored files to use, in place of "Use a file from another criterion". */
   otherFilesTitle?: string;
   /** Takes the file out of the criterion; resolves with the reason it could not, or null. */
@@ -69,10 +71,10 @@ function FilesOfOtherCriteria({ files, onUseFile, disabledReason, title }: Files
 }
 
 export function ProtectsBox({ files, mode, onAddFiles, onRemoveFile, disabledReason, drawingProblems, otherFiles = [], onUseFile, hint,
-                              otherFilesTitle = messages.useFileOfOtherCriterion }: ProtectsBoxProps) {
+                              addLabel = messages.addTestSurfaces, otherFilesTitle = messages.useFileOfOtherCriterion }: ProtectsBoxProps) {
   return (
     <div className="protects">
-      <InputBox role="test_surfaces" files={files} hint={hint ?? protectsHintOf(mode)} addLabel={messages.addTestSurfaces} titleHidden
+      <InputBox role="test_surfaces" files={files} hint={hint ?? protectsHintOf(mode)} addLabel={addLabel} titleHidden
                 weatherLocation={null} weatherHint="" onAddFiles={onAddFiles === undefined ? undefined : (_role, chosen) => onAddFiles(chosen)}
                 onRemoveFile={(_role, fileName) => onRemoveFile(fileName)} disabledReason={disabledReason} drawingProblems={drawingProblems}
                 showsDisabledReason={false} />

@@ -136,6 +136,9 @@ class CheckSettings(BaseModel):
     sample_spacing: float = Field(0.5, gt=0.0, description="Test points every this many meters on the test surfaces")
     origin_offset: float = Field(0.01, ge=0.0, description="Ray origins move this far along the test normal (m)")
     ray_length: float = Field(3000.0, gt=0.0)
+    # Simulate: the surfaces a study samples besides its own file, sorted and each once (solar_check.study_surfaces).
+    surfaces_from: list[Literal["context", "terrain", "ground"]] = Field(
+        default_factory=list, description="Also sample the context, the terrain, or a flat ground around the maximum volume")
 
     @field_validator("sun_steps_per_hour")
     @classmethod
@@ -144,6 +147,11 @@ class CheckSettings(BaseModel):
         if value not in allowed:
             raise ValueError(f"sun_steps_per_hour must be one of {allowed} (Ladybug timesteps)")
         return value
+
+    @field_validator("surfaces_from")
+    @classmethod
+    def _sorted_sources(cls, value: list) -> list:
+        return sorted(set(value))
 
     @model_validator(mode="after")
     def _metric_inputs(self) -> "CheckSettings":
@@ -196,8 +204,9 @@ class CheckSettings(BaseModel):
 
 def settings_digest(settings: CheckSettings) -> str:
     """The sha256 of the settings' JSON (sorted keys) without the weather file's path, which a result records apart (with its
-    size and time), so moving the project's folder leaves the digest as it was."""
-    values = settings.model_dump(exclude={"epw_path"})
+    size and time), so moving the project's folder leaves the digest as it was. An empty ``surfaces_from`` is left out too, so
+    the results written before the setting existed keep their digest."""
+    values = settings.model_dump(exclude={"epw_path"} if settings.surfaces_from else {"epw_path", "surfaces_from"})
     return hashlib.sha256(json.dumps(values, sort_keys=True).encode("utf-8")).hexdigest()
 
 

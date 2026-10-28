@@ -40,6 +40,14 @@ versioning follows [Semantic Versioning](https://semver.org/).
   location, the project's North), with `time_basis`.
 - **The hours in shade are coloured inside the compass circle only.**
 - **A Show switch beside the studies panel's title** hides the selected study from the view (its colours, legend and result card).
+- **Study surfaces: a study can sample the surroundings, the terrain or the ground.** Simulate calls a study's surfaces study
+  surfaces, apart from the criteria's test surfaces. Under its files, check boxes add the context files (each closed body turned
+  to face out), the terrain file (turned to face up) or, without a terrain, a flat square at the maximum volume's foot reaching
+  20 m or half its longer side beyond it; they are cut into their flat pieces and sampled with the files. A study needs files, a
+  source, or both. Engine: `CheckSettings.surfaces_from` (`context`, `terrain`, `ground`), part of the settings digest when set;
+  `simulate_study` takes no test surface file then and records the sources in the summary; `CheckRequest.test_surface_path` is
+  optional. The service refuses a study that names the surroundings or the terrain without the file ("Add surroundings",
+  "Add a terrain") and says "Add study surfaces" for one with nothing to sample.
 
 ### Added (Inspect)
 

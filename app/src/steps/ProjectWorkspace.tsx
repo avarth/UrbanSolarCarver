@@ -440,6 +440,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const sunStudy = useSunStudy({ token, project: project.name, active: simulating, hasWeatherFile, onServiceProblem });
   const simulateView = (theme: ViewportTheme) => (
     <SimulateView project={project.name} studies={studies} criteria={criteria.criteria} storedTestSurfaces={files.test_surfaces} runs={runs}
+                  hasSurroundings={files.context.length > 0} hasTerrain={files.terrain.length > 0}
                   onStoredFilesChange={() => { void testSurfaceCalls.reloadStoredFiles(); refreshStageStatus(); }} onServiceProblem={onServiceProblem} studyView={studyView} sunStudy={sunStudy}
                   theme={theme} notice={inputChangesNotice} />
   );

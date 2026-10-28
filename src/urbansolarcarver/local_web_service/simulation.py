@@ -25,7 +25,7 @@ from .api_models import SkyDome, StudyEntry, StudyState
 from .criteria import OPTIONAL_SERVICE_PATHS, SERVICE_PATHS, active_criteria
 from .projects import RUN_FOLDER, ProjectStore
 from .stage_records import envelope_voxel_size
-from .studies import joined_study_surfaces_path, study_folder
+from .studies import SURFACES_FROM, joined_study_surfaces_path, study_folder
 
 SIMULATE_STAGE = "simulate"     # the one stage of a simulation, not one of PIPELINE_STAGES
 REFUSAL_FILE = "refusal.json"   # in simulate/<id>: the engine refused the study with these inputs
@@ -37,8 +37,10 @@ SHARED_SETTING_KEYS = ("north_deg", "ray_length")
 DEFAULT_RAYS_PER_PATCH = CheckSettings.model_fields["rays_per_patch"].default
 # The input files a result records by key (fingerprints in the summary), besides the geometries of the run.
 RECORDED_FILE_KEYS = ("test_surface", "max_volume", "weather", "context", "terrain")
-ADD_TEST_SURFACES = "Add test surfaces"
+ADD_STUDY_SURFACES = "Add study surfaces"
 ADD_MAX_VOLUME = "Add a maximum volume"
+# A study that samples the surroundings or the terrain (its settings' surfaces_from) waits for the project's file of that role.
+ADD_SOURCE_FILE = {"context": "Add surroundings", "terrain": "Add a terrain"}
 ADD_WEATHER_FILE = "Add a weather file"
 NO_STUDY = "Add a study to run."
 
@@ -82,10 +84,16 @@ def tracing_voxel_size(store: ProjectStore, name: str) -> float:
 
 
 def refusal_of(store: ProjectStore, name: str, study: StudyEntry) -> str | None:
-    """Why the study cannot run, as the label the app shows; None when it can."""
+    """Why the study cannot run, as the label the app shows; None when it can. A study samples its files, the sources of its
+    surfaces_from, or both: it needs one of them, and the project's file of each source it names."""
     project_folder = store.open(name)
-    if not study.test_surface_files or not (project_folder / joined_study_surfaces_path(study.id)).is_file():
-        return ADD_TEST_SURFACES
+    sources = study.settings.get(SURFACES_FROM) or []
+    has_files = bool(study.test_surface_files) and (project_folder / joined_study_surfaces_path(study.id)).is_file()
+    if (study.test_surface_files and not has_files) or not (has_files or sources):
+        return ADD_STUDY_SURFACES
+    for source, label in ADD_SOURCE_FILE.items():
+        if source in sources and not (project_folder / OPTIONAL_SERVICE_PATHS[source][1]).is_file():
+            return label
     if not (project_folder / SERVICE_PATHS["max_volume_path"]).is_file():
         return ADD_MAX_VOLUME
     spec = CHECK_METRICS.get(study.metric)
@@ -99,15 +107,17 @@ def refusal_of(store: ProjectStore, name: str, study: StudyEntry) -> str | None:
 
 
 def study_request(store: ProjectStore, name: str, study: StudyEntry, device: str = "auto") -> CheckRequest:
-    """The engine request that runs the study into simulate/<id>: its joined test surface file, the joined maximum volume, the run
-    folder (whose envelope and massing are traced when built, current in Design or not), the context and terrain when they exist.
+    """The engine request that runs the study into simulate/<id>: its joined test surface file (None when it has no files and
+    samples only the sources of its surfaces_from), the joined maximum volume, the run folder (whose envelope and massing are traced
+    when built, current in Design or not), the context and terrain when they exist.
 
     Raises ConfigError when the study's settings are not valid (refusal_of says so first).
     """
     project_folder = store.open(name)
     optional_paths = {key: str(project_folder / path) for key, path in OPTIONAL_SERVICE_PATHS.values() if (project_folder / path).is_file()}
+    test_surface_path = str(project_folder / joined_study_surfaces_path(study.id)) if study.test_surface_files else None
     return CheckRequest(
-        cmd="check", test_surface_path=str(project_folder / joined_study_surfaces_path(study.id)),
+        cmd="check", test_surface_path=test_surface_path,
         out_dir=str(study_folder(project_folder, study.id)), settings=study_settings(store, name, study).model_dump(),
         max_volume_path=str(project_folder / SERVICE_PATHS["max_volume_path"]), run_folder=str(project_folder / RUN_FOLDER),
         voxel_size=tracing_voxel_size(store, name), device=device, **optional_paths)

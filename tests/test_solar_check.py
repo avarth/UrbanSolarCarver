@@ -446,8 +446,9 @@ def test_simulate_study_records_the_fingerprints_and_the_settings_digest(tmp_pat
     assert saved["max_volume"] == file_fingerprint(max_volume)
     assert saved["context"] == file_fingerprint(context) and saved["context"]["size"] > 0
     assert saved["terrain"] is None and saved["weather"] is None and saved["geometries"] == {}
+    # An empty surfaces_from is left out, so the results written before it existed keep their digest.
     assert saved["settings_digest"] == hashlib.sha256(
-        json.dumps(settings.model_dump(exclude={"epw_path"}), sort_keys=True).encode("utf-8")).hexdigest()
+        json.dumps(settings.model_dump(exclude={"epw_path", "surfaces_from"}), sort_keys=True).encode("utf-8")).hexdigest()
     assert result.summary["inputs"]["blocking"] == [saved["context"]]
     # The digest follows the settings and the context follows the file.
     other = simulate_study(surface, max_volume, _settings("sky_view", sample_spacing=2.0, rays_per_patch=4),
@@ -462,6 +463,14 @@ def test_the_settings_digest_leaves_out_where_the_weather_file_is():
     here = settings_digest(_settings("sun_hours", epw_path="C:/a/weather.epw", **period))
     assert here == settings_digest(_settings("sun_hours", epw_path="D:/moved/weather.epw", **period))
     assert here != settings_digest(_settings("sun_hours", epw_path="C:/a/weather.epw", **{**period, "end_hour": 13}))
+    assert here != settings_digest(_settings("sun_hours", epw_path="C:/a/weather.epw", surfaces_from=["ground"], **period))
+
+
+def test_the_sources_of_a_study_are_kept_sorted_and_once_and_unknown_ones_are_refused():
+    from pydantic import ValidationError
+    assert _settings("sky_view", surfaces_from=["terrain", "context", "terrain"]).surfaces_from == ["context", "terrain"]
+    with pytest.raises(ValidationError):
+        _settings("sky_view", surfaces_from=["roofs"])
 
 
 def test_simulate_study_refuses_too_many_points_with_the_spacing_that_fits(tmp_path, monkeypatch):
@@ -474,6 +483,77 @@ def test_simulate_study_refuses_too_many_points_with_the_spacing_that_fits(tmp_p
         solar_check.simulate_study(surface, max_volume, _settings("sky_view", sample_spacing=0.5),
                                    out_dir=tmp_path / "study", device="cpu")
     assert "144" in str(refused.value) and not (tmp_path / "study").exists()
+
+
+@REQUIRES_WARP_CPU
+def test_a_study_that_samples_the_context_has_points_on_it_and_none_without(tmp_path):
+    from urbansolarcarver.solar_check import simulate_study
+    surface, max_volume, context = _study_files(tmp_path)
+    alone = simulate_study(surface, max_volume, _settings("sky_view", sample_spacing=2.0, rays_per_patch=1),
+                           context_path=str(context), out_dir=tmp_path / "alone", device="cpu")
+    with_context = simulate_study(surface, max_volume,
+                                  _settings("sky_view", sample_spacing=2.0, rays_per_patch=1, surfaces_from=["context"]),
+                                  context_path=str(context), out_dir=tmp_path / "with_context", device="cpu")
+    points, normals = with_context.points.points, with_context.points.normals
+    on_context = points[:, 0] >= 20.0 - 1e-6        # the block is 20 to 25 m in x, the wall at 11 m
+    assert not (alone.points.points[:, 0] >= 20.0 - 1e-6).any()
+    assert on_context.any() and (~on_context).sum() == len(alone.points.points)
+    assert alone.summary["surfaces_from"] == [] and with_context.summary["surfaces_from"] == ["context"]
+    # The closed block faces out: the points facing east are on its east side, those facing up on its roof, and the roof sees
+    # the whole sky past the block.
+    east = on_context & (normals[:, 0] > 0.99)
+    roof = on_context & (normals[:, 2] > 0.99)
+    assert east.any() and np.allclose(points[east, 0], 25.0)
+    assert roof.any() and np.allclose(points[roof, 2], 30.0)
+    assert with_context.values["open"][roof].min() > 95.0
+
+
+@REQUIRES_WARP_CPU
+def test_a_study_that_samples_the_ground_has_points_at_the_maximum_volumes_foot_and_its_margin(tmp_path):
+    from urbansolarcarver.solar_check import simulate_study
+    _surface, max_volume, _context = _study_files(tmp_path)
+    result = simulate_study(None, max_volume,
+                            _settings("sky_view", sample_spacing=2.0, rays_per_patch=1, surfaces_from=["ground"]),
+                            out_dir=tmp_path / "study", device="cpu")
+    points = result.points.points
+    assert np.allclose(points[:, 2], 0.0) and np.allclose(result.points.normals, [0.0, 0.0, 1.0])
+    # The cube is 0 to 10 m: a margin of 20 m makes the ground -20 to 30 m both ways.
+    assert points[:, :2].min() == pytest.approx(-20.0, abs=1.0) and points[:, :2].max() == pytest.approx(30.0, abs=1.0)
+    assert result.summary["inputs"]["test_surfaces"] is None and result.summary["fingerprints"]["test_surface"] is None
+
+
+def test_the_ground_margin_is_half_the_longer_side_of_a_large_maximum_volume():
+    from urbansolarcarver.solar_check import ground_square
+    ground = ground_square(_box([0, 0, 2], [100, 40, 30]))
+    # Half of 100 m is 50 m, more than 20 m: the square is 200 m wide, centred on (50, 20).
+    assert np.allclose(ground.bounds, [[-50, -80, 2], [150, 120, 2]])
+    assert np.allclose(ground.face_normals, [0.0, 0.0, 1.0])
+
+
+def test_a_terrain_stored_facing_down_is_sampled_facing_up_on_each_of_its_slopes(tmp_path):
+    from urbansolarcarver.io import save_mesh
+    from urbansolarcarver.solar_check import sample_test_surfaces, study_surfaces
+    # A low pyramid of four slopes, wound to face down: one connected part that is not flat.
+    hill = trimesh.Trimesh(vertices=[[0, 0, 0], [20, 0, 0], [20, 20, 0], [0, 20, 0], [10, 10, 3]],
+                           faces=[[0, 4, 1], [1, 4, 2], [2, 4, 3], [3, 4, 0]])
+    assert hill.face_normals[:, 2].max() < 0.0
+    save_mesh(hill, str(tmp_path / "terrain.ply"))
+    surfaces = study_surfaces(None, ["terrain"], _box([0, 0, 0], [5, 5, 5]), terrain_path=str(tmp_path / "terrain.ply"))
+    sampled = sample_test_surfaces(surfaces, 2.0)
+    assert len(sampled.points) > 4 * 30 and sampled.normals[:, 2].min() > 0.0
+
+
+def test_a_study_refuses_a_source_without_its_file_and_a_study_with_nothing_to_sample(tmp_path):
+    from urbansolarcarver.errors import InputError
+    from urbansolarcarver.solar_check import simulate_study
+    surface, max_volume, _context = _study_files(tmp_path)
+    for source, named in (("context", "surroundings"), ("terrain", "terrain")):
+        with pytest.raises(InputError, match=f"samples the {named}, but there is no {named} file"):
+            simulate_study(surface, max_volume, _settings("sky_view", surfaces_from=[source]), out_dir=tmp_path / "study",
+                           device="cpu")
+    with pytest.raises(InputError, match="no surface to sample"):
+        simulate_study(None, max_volume, _settings("sky_view"), out_dir=tmp_path / "study", device="cpu")
+    assert not (tmp_path / "study").exists()
 
 
 # --- Ladybug's incident radiation ------------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 // queries of the studies panel: shared by ProjectWorkspace.simulate.test.tsx. Each test file mocks ../viewer/scene with
 // FakeViewerScene itself and calls startWorkspaceTest and endWorkspaceTest.
 import { act } from "react";
-import type { CriterionEntry, MetricInfo, SkyDome, StudyEntry, StudyWithState } from "../api_client/client";
+import type { CriterionEntry, InputFileInfo, MetricInfo, SkyDome, StudyEntry, StudyWithState } from "../api_client/client";
 import { ChainService, CURRENT, FACADES, OUT_OF_DATE, openChainWith, type CriterionStages } from "./chain_service_for_test";
 import { buttonIn, container, json, settle, switchMode } from "./project_workspace_for_test";
 import type { PipelineStage, StageState } from "./step_summaries";
@@ -46,6 +46,9 @@ export class SimulateService extends ChainService {
   studies: StudyWithState[] = [];
   /** The project has a weather file: the metrics that need one are available. */
   hasWeatherFile = true;
+  /** The project's surroundings and terrain files, as the opened project lists them (none by default). */
+  surroundingsFiles: InputFileInfo[] = [];
+  terrainFiles: InputFileInfo[] = [];
   /** The status and body a request to simulate is refused with; null: it starts. */
   simulateRefusal: { status: number; body: unknown } | null = null;
   /** Counts the simulations started. */
@@ -90,7 +93,7 @@ export class SimulateService extends ChainService {
       const settings = criterion === undefined ? defaults
         : Object.fromEntries(Object.entries(defaults).map(([key, value]) => [key, criterion.settings![key] ?? value]));
       const files = [...(criterion?.test_surface_files ?? [])];
-      const added = files.length === 0 ? study(id, metric, files, "refused", "Add test surfaces", settings) : study(id, metric, files, "not_run", null, settings);
+      const added = files.length === 0 ? study(id, metric, files, "refused", "Add study surfaces", settings) : study(id, metric, files, "not_run", null, settings);
       this.studies = [...this.studies, added];
       return json(added.entry);
     }
@@ -162,8 +165,9 @@ export async function openSimulate(entries: CriterionEntry[] = [FACADES], prepar
   simulateService = new SimulateService(entries, { ...stages });
   await openChainWith(simulateService, entries, stages, prepare, [], (opened) => {
     simulateService.stages = { ...simulateService.stages, ...designStages };
-    const withStages = { ...opened, stage_status: { stages: simulateService.stages } };
-    return simulateService.hasWeatherFile ? withStages : { ...withStages, inputs: { ...withStages.inputs, weather: [] } };
+    const inputs = { ...opened.inputs, context: simulateService.surroundingsFiles, terrain: simulateService.terrainFiles };
+    const withStages = { ...opened, inputs, stage_status: { stages: simulateService.stages } };
+    return simulateService.hasWeatherFile ? withStages : { ...withStages, inputs: { ...inputs, weather: [] } };
   });
   await switchMode("simulate");
   await settle();

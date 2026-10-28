@@ -112,8 +112,44 @@ def test_simulate_runs_every_study_that_can_run_and_names_the_ones_that_cannot(s
     assert request.settings["sample_spacing"] == 0.5        # half the voxel size of 1 m, as the carving samples
     studies = {study["entry"]["id"]: study for study in client.get("/api/projects/p/studies").json()["studies"]}
     assert (studies[ready]["state"], studies[ready]["reason"], studies[ready]["geometries"]) == ("current", None, ["max_volume"])
-    assert (studies[without_files]["state"], studies[without_files]["reason"]) == ("refused", "Add test surfaces")
+    assert (studies[without_files]["state"], studies[without_files]["reason"]) == ("refused", "Add study surfaces")
     assert studies[without_files]["geometries"] == []
+
+
+def test_a_study_without_files_runs_on_the_ground_it_names(service):
+    _client, worker, engine = service
+    store = worker.store
+    study = add_study(store, "p", files=(), surfaces_from=["ground"])
+    assert state_of(store, "p", study) == ("not_run", None)
+    assert simulate_and_wait(worker)[-1]["type"] == "run_finished"
+    assert engine.requests[-1].test_surface_path is None and engine.requests[-1].settings["surfaces_from"] == ["ground"]
+    assert state_of(store, "p", study) == ("current", None)
+    summary = json.loads((store.open("p") / "simulate" / study / "check_summary.json").read_text(encoding="utf-8"))
+    assert summary["surfaces_from"] == ["ground"] and summary["point_count"] > 0
+
+
+def test_a_study_that_samples_the_surroundings_or_the_terrain_waits_for_their_file(service):
+    _client, worker, _engine = service
+    store = worker.store
+    on_context = add_study(store, "p", files=(), surfaces_from=["context"])
+    on_terrain = add_study(store, "p", surfaces_from=["terrain"])
+    assert state_of(store, "p", on_context) == ("refused", "Add surroundings")
+    assert state_of(store, "p", on_terrain) == ("refused", "Add a terrain")
+    store.add_input("p", "context", "context.ply", box_bytes([30, 0, 5]))
+    store.add_input("p", "terrain", "terrain.ply", box_bytes([0, 0, -1], extents=(80, 80, 0.5)))
+    assert state_of(store, "p", on_context) == ("not_run", None)
+    assert state_of(store, "p", on_terrain) == ("not_run", None)
+
+
+def test_choosing_or_dropping_a_source_makes_a_current_study_out_of_date(service):
+    _client, worker, _engine = service
+    store = worker.store
+    study = add_study(store, "p")
+    for sources in (["ground"], []):
+        assert simulate_and_wait(worker)[-1]["type"] == "run_finished"
+        assert state_of(store, "p", study) == ("current", None)
+        store.update_study("p", study, values={"surfaces_from": sources})
+        assert state_of(store, "p", study) == ("out_of_date", None), sources
 
 
 def test_a_study_whose_metric_needs_the_missing_weather_file_is_refused(service):
@@ -454,7 +490,7 @@ def test_simulate_with_no_study_that_can_run_is_422(service):
     assert reply.status_code == 422 and reply.json()["detail"] == "Add a study to run."
     add_study(worker.store, "p", files=())
     reply = client.post("/api/projects/p/simulate")
-    assert reply.status_code == 422 and reply.json()["detail"] == "No study can run. Sky view factor: Add test surfaces."
+    assert reply.status_code == 422 and reply.json()["detail"] == "No study can run. Sky view factor: Add study surfaces."
     assert engine.requests == [] and worker.active_project() is None
     assert client.post("/api/projects/nope/simulate").status_code == 404
 

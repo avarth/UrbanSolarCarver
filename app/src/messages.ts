@@ -93,8 +93,14 @@ export const messages = {
   studyName: "Name",
   studyMetric: "Metric",
   studyMoreSettings: "More settings",
-  studyTestSurfaces: "Test surfaces",
-  studyNoTestSurfaces: "No test surfaces yet",
+  // A study's surfaces are "study surfaces", apart from the criteria's test surfaces: its files and the project's surfaces it samples.
+  studySurfaces: "Study surfaces",
+  studyNoSurfaceFiles: "No study surface files yet",
+  addStudySurfaces: "Add study surfaces",
+  studySurfacesFrom: { context: "The surroundings", terrain: "The terrain", ground: "The ground around the site" } as Record<string, string>,
+  // The same in the line of a study's row, after its file names: "facades.obj, the surroundings".
+  studySurfacesFromInLine: { context: "the surroundings", terrain: "the terrain", ground: "the ground" } as Record<string, string>,
+  studyNeedsSurroundingsFiles: "The project has no surroundings files: add them in Inputs",
   useFileOfProject: "Use a file of the project",
   deleteStudy: "Delete study",
   closeStudySettings: "Close",

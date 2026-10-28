@@ -125,10 +125,11 @@ class CheckRequest(_EngineRequest):
 
     The columns are ``open``, ``max_volume`` (*max_volume_path*) and, when built, ``envelope`` and ``massing`` from
     *run_folder*.  *context_path* and *terrain_path* block in every column.  *settings* are CheckSettings values.
+    *test_surface_path* is None for a study that samples only the sources of the settings' ``surfaces_from``.
     *voxel_size* is the envelope's and massing's surface tolerance when their run folder does not record it.
     """
     cmd: Literal["check"]
-    test_surface_path: str
+    test_surface_path: Optional[str] = None
     out_dir: str
     settings: Dict[str, Any]
     max_volume_path: str

@@ -175,6 +175,20 @@ def test_a_study_is_changed_by_its_target_and_its_settings(project_with_inputs):
     assert metric.value.status_code == 422
 
 
+def test_a_study_of_any_metric_takes_the_surfaces_it_samples_and_keeps_them_through_a_new_metric(project_with_inputs):
+    store, name = _with_weather(project_with_inputs)
+    study = store.add_study(name, metric="sky_view")
+    assert "surfaces_from" not in study.settings          # none until chosen: the study samples its files
+    changed = store.update_study(name, study.id, values={"surfaces_from": ["terrain", "context", "terrain"]})
+    assert changed.settings == {"surfaces_from": ["context", "terrain"]} and changed.name == "Sky view factor"
+    kept = store.update_study(name, study.id, metric="sun_hours")
+    assert kept.settings == {**PERIOD_21_DEC, "time_basis": "standard", "surfaces_from": ["context", "terrain"]}
+    for bad in ({"surfaces_from": ["roofs"]}, {"surfaces_from": "ground"}):
+        with pytest.raises(ProjectError) as refused:
+            store.update_study(name, study.id, values=bad)
+        assert refused.value.status_code == 422 and store.studies(name)[0].settings == kept.settings
+
+
 def test_a_new_metric_that_does_not_take_the_time_basis_resets_it_to_standard(project_with_inputs):
     from urbansolarcarver.local_web_service.simulation import refusal_of
     store, name = _with_weather(project_with_inputs)

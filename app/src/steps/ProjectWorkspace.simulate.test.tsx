@@ -193,7 +193,7 @@ test("changing the period in the popover saves the study and renames it", async 
 });
 
 test("a study's settings take the focus, use a stored file, and Escape gives the focus back to its settings button", async () => {
-  await openSimulate(undefined, (service) => { service.studies = [study("1", "sky_view", [], "refused", "Add test surfaces")]; });
+  await openSimulate(undefined, (service) => { service.studies = [study("1", "sky_view", [], "refused", "Add study surfaces")]; });
   await openStudySettings("Sky view factor");
   const settingsButton = studyRow("Sky view factor").querySelector<HTMLButtonElement>(".study-row-settings")!;
   expect(settingsButton.getAttribute("aria-expanded")).toBe("true");
@@ -212,6 +212,47 @@ test("a study's settings take the focus, use a stored file, and Escape gives the
   expect(settingsButton.getAttribute("aria-expanded")).toBe("false");
 });
 
+const surfacesFromBoxes = () => [...studyPopover()!.querySelectorAll<HTMLLabelElement>(".study-surfaces-from label")]
+  .map((label) => ({ label: label.textContent, checked: label.querySelector("input")!.checked, disabled: label.querySelector("input")!.disabled }));
+const surfacesFromBox = (label: string) => [...studyPopover()!.querySelectorAll<HTMLLabelElement>(".study-surfaces-from label")]
+  .find((each) => each.textContent === label)!.querySelector("input")!;
+
+test("the study surfaces offer the surroundings, greyed without their files, and the ground without a terrain", async () => {
+  await openSimulate(undefined, (service) => { service.studies = [study("1", "sky_view", ["facades.obj"], "current")]; });
+  await openStudySettings("Sky view factor");
+  expect(studyPopover()!.querySelector(".study-files-title")!.textContent).toBe("Study surfaces");
+  expect(studyPopover()!.querySelector('[role="group"]')!.getAttribute("aria-labelledby"))
+    .toBe(studyPopover()!.querySelector(".study-files-title")!.id);
+  expect(surfacesFromBoxes()).toEqual([
+    { label: "The surroundings", checked: false, disabled: true }, { label: "The ground around the site", checked: false, disabled: false },
+  ]);
+  await act(async () => surfacesFromBox("The ground around the site").click());
+  await settle();
+  expect(simulateService.studyPatches).toEqual([{ id: "1", body: { values: { surfaces_from: ["ground"] } } }]);
+  expect(surfacesFromBoxes()[1]).toEqual({ label: "The ground around the site", checked: true, disabled: false });
+  expect(studyLine("Sky view factor")).toBe("Out of date");
+});
+
+test("with surroundings and a terrain, the study can sample both, and its line names them once its result is current", async () => {
+  await openSimulate(undefined, (service) => {
+    service.surroundingsFiles = [{ name: "city.obj", triangle_count: 12 }];
+    service.terrainFiles = [{ name: "hill.obj", triangle_count: 8 }];
+    service.studies = [study("1", "sky_view", ["facades.obj"], "current", null, { surfaces_from: ["terrain"] })];
+  });
+  expect(studyLine("Sky view factor")).toBe("facades.obj, the terrain");
+  await openStudySettings("Sky view factor");
+  expect(surfacesFromBoxes()).toEqual([
+    { label: "The surroundings", checked: false, disabled: false }, { label: "The terrain", checked: true, disabled: false },
+  ]);
+  await act(async () => surfacesFromBox("The surroundings").click());
+  await settle();
+  expect(simulateService.studyPatches).toEqual([{ id: "1", body: { values: { surfaces_from: ["context", "terrain"] } } }]);
+  await act(async () => surfacesFromBox("The terrain").click());
+  await settle();
+  expect(simulateService.studyPatches.at(-1)).toEqual({ id: "1", body: { values: { surfaces_from: ["context"] } } });
+  expect(studyPopover()!.querySelector(".study-more-settings")).toBeNull();       // the sources are not a field of More settings
+});
+
 /** Chooses the files in the popover's file input, as the user does with the add button. */
 async function chooseStudyFiles(...files: File[]) {
   const picker = studyPopover()!.querySelector<HTMLInputElement>('input[type="file"]')!;
@@ -222,9 +263,9 @@ async function chooseStudyFiles(...files: File[]) {
 const popoverFiles = () => [...studyPopover()!.querySelectorAll(".input-file-name")].map((name) => name.textContent);
 
 test("the popover's files box takes a new file and lists it on the study", async () => {
-  await openSimulate(undefined, (service) => { service.studies = [study("1", "sky_view", [], "refused", "Add test surfaces")]; });
+  await openSimulate(undefined, (service) => { service.studies = [study("1", "sky_view", [], "refused", "Add study surfaces")]; });
   await openStudySettings("Sky view factor");
-  expect(buttonIn(studyPopover()!, "Add test surfaces")).toBeDefined();
+  expect(buttonIn(studyPopover()!, "Add study surfaces")).toBeDefined();
   await chooseStudyFiles(new File(["v 0 0 0"], "roof.obj"));
   expect(simulateService.requests).toContain("POST /studies/1/test-surfaces");
   expect(simulateService.requests.some((request) => request.startsWith("POST /inputs/") || request.startsWith("POST /criteria/"))).toBe(false);
@@ -237,7 +278,7 @@ test("the popover's files box takes a new file and lists it on the study", async
 
 test("a new file with a stored name replaces it: the criteria and studies that list it follow the new content", async () => {
   await openSimulate(undefined, (service) => {
-    service.studies = [study("1", "sky_view", [], "refused", "Add test surfaces"), study("2", "sky_view", ["facades.obj"], "current")];
+    service.studies = [study("1", "sky_view", [], "refused", "Add study surfaces"), study("2", "sky_view", ["facades.obj"], "current")];
   });
   await openStudySettings("Sky view factor");
   const statusReads = simulateService.count("GET /stage-status");
@@ -252,7 +293,7 @@ test("a new file with a stored name replaces it: the criteria and studies that l
 
 test("a file the service refuses is named with its reason, and the study keeps what it had", async () => {
   await openSimulate(undefined, (service) => {
-    service.studies = [study("1", "sky_view", [], "refused", "Add test surfaces")];
+    service.studies = [study("1", "sky_view", [], "refused", "Add study surfaces")];
     service.uploadRefusal = "It is not a readable mesh.";
   });
   await openStudySettings("Sky view factor");

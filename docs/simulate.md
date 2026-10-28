@@ -12,7 +12,7 @@ The **Sky dome** layer (Layers menu, off at first) is the selected study's, not 
 
 ## Studies
 
-A study is a metric on test surface files over a period. The **Studies** panel floats over the top left of the 3D view and collapses to an icon. Each row has a colour swatch, the study's name and one line: its test surface files while its result is current, otherwise **Out of date**, **Not run yet** or the reason it cannot run (for example **Add test surfaces**). Pressing a row selects the study for the view: **one study is on the view at a time**, and its test surfaces are the ones coloured. When none is selected, the first study with a result is (or the first study), so a finished run shows its values without a press. The settings button of a row opens its popover.
+A study is a metric on **study surfaces** over a period. Simulate calls them study surfaces so they are not taken for the test surfaces of the criteria, which Design protects. The **Studies** panel floats over the top left of the 3D view and collapses to an icon. Each row has a colour swatch, the study's name and one line: its study surfaces while its result is current (its files, then the project's surfaces it samples, for example "facades.obj, the surroundings"), otherwise **Out of date**, **Not run yet** or the reason it cannot run (for example **Add study surfaces**). Pressing a row selects the study for the view: **one study is on the view at a time**, and its test surfaces are the ones coloured. When none is selected, the first study with a result is (or the first study), so a finished run shows its values without a press. The settings button of a row opens its popover.
 
 **Add study** offers two kinds of entries in one menu:
 
@@ -27,10 +27,20 @@ The popover of a study holds:
 | Metric | One of the metrics below. Changing it resets the settings to those of the new metric and keeps the values both metrics have |
 | Analysis period | The same control as in the Criteria step. Shown for the metrics that sum over a period |
 | More settings | The few settings the metric reads: balance temperature, dead band and harm for useful solar gains; dew point and Bliss coefficient for the cooling sky; the time basis (standard, daylight saving or solar time) for sun hours |
-| Test surfaces | The files the study uses. You can add new files (button or drop) or use a file the project stores already, for example a criterion's. A stored file is kept while a criterion or a study lists it and goes to the recycle bin when none does |
+| Study surfaces | The files the study uses. You can add new files (button or drop) or use a file the project stores already, for example a criterion's. A stored file is kept while a criterion or a study lists it and goes to the recycle bin when none does. Under the files, check boxes add the project's own surfaces (see below) |
 | Delete study | Removes the study and moves its results to the recycle bin. Its number is not used again |
 
 Every change is saved at once. The studies are stored in `project.json` under `studies`, apart from the criteria. They cannot be changed while a Design run or a simulation is going.
+
+Besides its files, a study can sample three surfaces of the project, for example to count the sun hours on the neighbours' facades or on the ground. A study needs files, one of these, or both:
+
+- **The surroundings**: every face of the context files. Each closed body is turned to face out first, so its facades and roofs face away from it. The check box is greyed until the project has surroundings files.
+- **The terrain**: the terrain file, turned to face up when most of its area faces down. Offered when the project has a terrain file.
+- **The ground around the site**: offered when the project has no terrain. A flat square at the lowest point of the maximum volume, centred on its plan, reaching beyond the maximum volume on each side by 20 m or half its longer side, whichever is more. For a 30 m by 50 m maximum volume that is 25 m, so the square is 100 m wide.
+
+The surroundings and the terrain are sampled face by face (each flat piece of them on its own), and the ground as one panel. They are sampled in the setting `surfaces_from` of the study (`context`, `terrain`, `ground`); choosing or dropping one makes the result out of date. A study that names the surroundings or the terrain while the project has no such file cannot run (**Add surroundings**, **Add a terrain**).
+
+The surroundings still block while they are sampled. A test point on one of their faces starts its rays a centimetre off the face, along the face's normal (the origin offset every test point has), so the face it stands on does not block it, while the rest of its body and the other bodies do. That needs closed bodies, which face out once turned. An open body (a facade without a roof, say) or one whose faces point into it after the turn reads as shaded by itself on the faces that point the wrong way: a point on such a face looks into its own body. The points under the bodies (their bottom faces, and the ground or terrain under them) see nothing and get 0, and they count in the result card's statistics.
 
 ## Metrics
 
@@ -59,7 +69,7 @@ These choices are not settings:
 
 - **Sky**: Tregenza's 145 patches. Each patch is traced with jittered sub-rays, as the carving traces them, at the project's rays per patch (the value of the first criterion that is on, 4 when the project has no criterion). One ray per patch would leave gaps of about 12° between the rays and show banding.
 - **Sun**: one position per hour.
-- **Test points**: sampled on the study's test surfaces at the carving's spacing (the grid step of the shared settings, else half the voxel size). A study with more than 2 million test points is refused, and the message gives the spacing that fits.
+- **Test points**: sampled on the study's surfaces (its files and the project's surfaces it names) at the carving's spacing (the grid step of the shared settings, else half the voxel size). A study with more than 2 million test points is refused, and the message gives the spacing that fits. The surroundings and a large ground square can reach that quickly: a 200 m square at 0.5 m is 160,000 points.
 - **Blocking**: the context and the terrain of the project block in every geometry.
 - **North and ray length** come from the shared settings.
 
@@ -79,7 +89,7 @@ The context and the terrain block in all three. With several criteria the envelo
 
 ## Run
 
-**Run** runs every study that can run, for every geometry that is built: the maximum volume always, the envelope and the massing when they exist. Switching the geometry afterwards needs no new run. A study that cannot run says why on its row (no test surface files, no maximum volume, no weather file for a metric that needs one, a setting the engine refuses). One that the engine refuses, for example for too many test points, keeps its message until its inputs change, and the other studies still run.
+**Run** runs every study that can run, for every geometry that is built: the maximum volume always, the envelope and the massing when they exist. Switching the geometry afterwards needs no new run. A study that cannot run says why on its row (no study surfaces, no surroundings or terrain file for a study that samples them, no maximum volume, no weather file for a metric that needs one, a setting the engine refuses). One that the engine refuses, for example for too many test points, keeps its message until its inputs change, and the other studies still run.
 
 There is one job at a time. While a Design run is going, Run shows "A Design run is in progress" and waits; while a simulation is going, Design's run buttons say so. Nothing is queued. The progress shows under Run with a Cancel button.
 
@@ -107,7 +117,7 @@ On Envelope and Massing each line has the maximum volume's value in brackets, fo
 
 ## Out of date
 
-A result is **out of date** when any of these changed since it was computed: the study's settings (including its metric and period), its test surface files, the weather file, the context, the terrain, the maximum volume, or the envelope or massing mesh it traced (including one built or removed). The surface tolerance of the envelope and massing, which follows the voxel size they were built with, counts too. So do the shared settings a study reads: north, the ray length, the test point spacing (the voxel size and the grid step) and the rays per patch of the first criterion that is on. Turning a criterion on or off in Design can therefore make every study out of date. The result stays on the view, dimmed, with the **Out of date** stamp at the top of the view, and the row says "Out of date". Nothing reruns by itself: press **Run**. Moving the project folder does not make a result out of date. Changing the target does not either. A file saved over an input file in the project folder counts as a change once the app has found it (see [Replacing a file in the project folder](ui.md#replacing-a-file-in-the-project-folder)).
+A result is **out of date** when any of these changed since it was computed: the study's settings (including its metric, its period and the project's surfaces it samples), its study surface files, the weather file, the context, the terrain, the maximum volume, or the envelope or massing mesh it traced (including one built or removed). The surface tolerance of the envelope and massing, which follows the voxel size they were built with, counts too. So do the shared settings a study reads: north, the ray length, the test point spacing (the voxel size and the grid step) and the rays per patch of the first criterion that is on. Turning a criterion on or off in Design can therefore make every study out of date. The result stays on the view, dimmed, with the **Out of date** stamp at the top of the view, and the row says "Out of date". Nothing reruns by itself: press **Run**. Moving the project folder does not make a result out of date. Changing the target does not either. A file saved over an input file in the project folder counts as a change once the app has found it (see [Replacing a file in the project folder](ui.md#replacing-a-file-in-the-project-folder)).
 
 ## Where the results are kept
 

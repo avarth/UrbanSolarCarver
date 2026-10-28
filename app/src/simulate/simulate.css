@@ -113,6 +113,8 @@
 .study-more-settings > summary { cursor: pointer; }
 .study-more-settings[open] > summary { margin-bottom: calc(var(--space-unit) * 2); }
 .study-files-title { font-weight: 600; }
+/* Under a study's files, the project's surfaces it can sample too: the surroundings, the terrain or the ground. */
+.study-surfaces-from { display: flex; flex-direction: column; gap: var(--space-unit); margin-top: calc(var(--space-unit) * 2); }
 
 /* The geometry switch at the top centre of the view: three toggle segments joined in one bar, and Change beside them. A segment that
    waits (not built yet) is greyed; one out of date in Design has a dot in the stamp's colour. The out-of-date stamp of the view goes

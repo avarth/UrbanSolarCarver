@@ -27,8 +27,12 @@ METRIC_MODE_SETTING_KEYS: Mapping[str, tuple[str, ...]] = {
 # The settings of a metric that sums over a period: the period and the clock its hours are read in (a stored study without
 # time_basis reads it as "standard", the CheckSettings default).
 PERIOD_SETTING_KEYS = (*PERIOD_KEYS, "time_basis")
+# The surfaces a study of any metric samples besides its files (CheckSettings.surfaces_from: "context", "terrain", "ground"). A
+# study stores it once it is set; without it the study samples its files alone.
+SURFACES_FROM = "surfaces_from"
 # Every key a study's settings can hold.
-STUDY_SETTING_KEYS = (*PERIOD_SETTING_KEYS, "balance_temperature", "balance_offset", "include_harm", "dew_point_celsius", "bliss_k")
+STUDY_SETTING_KEYS = (*PERIOD_SETTING_KEYS, "balance_temperature", "balance_offset", "include_harm", "dew_point_celsius", "bliss_k",
+                      SURFACES_FROM)
 MONTH_ABBREVIATIONS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 NOT_SENT = object()     # an update that does not mention the target (None means: no target)
 # A weather file name for the validation of settings, which does not read the file.
@@ -60,10 +64,10 @@ def checked_study_name(name: str) -> str:
 
 
 def settings_keys_of(metric: str) -> tuple[str, ...]:
-    """The keys of the settings of a study of this metric: the period and its time basis when the metric needs a period, and its
-    mode settings."""
+    """The keys of the settings of a study of this metric: the period and its time basis when the metric needs a period, its
+    mode settings, and the surfaces it samples besides its files."""
     spec = CHECK_METRICS[metric]
-    return (*(PERIOD_SETTING_KEYS if spec.needs_period else ()), *METRIC_MODE_SETTING_KEYS.get(metric, ()))
+    return (*(PERIOD_SETTING_KEYS if spec.needs_period else ()), *METRIC_MODE_SETTING_KEYS.get(metric, ()), SURFACES_FROM)
 
 
 def default_study_settings(metric: str) -> dict:
@@ -158,8 +162,9 @@ def change_study(entry: StudyEntry, *, name: str | None = None, metric: str | No
                  target: object = NOT_SENT, target_max: object = NOT_SENT) -> None:
     """Change a study in place; what is not given stays. A ProjectError(422) leaves it as it was.
 
-    A new metric resets the settings to its defaults, keeping the values of the keys both metrics have, except a time basis the new
-    metric does not take (only sun hours reads another clock than standard time), which becomes the default. *values* then change
+    A new metric resets the settings to its defaults, keeping the values of the keys both metrics have and the surfaces the study
+    samples, except a time basis the new metric does not take (only sun hours reads another clock than standard time), which
+    becomes the default. *values* then change
     those keys. The settings are checked after a metric change or with *values*, so no study is stored with settings its metric
     refuses. A study the user did not name is named again by its metric and period.
     """
@@ -168,7 +173,8 @@ def change_study(entry: StudyEntry, *, name: str | None = None, metric: str | No
     settings = dict(entry.settings)
     if new_metric != entry.metric:
         defaults = default_study_settings(new_metric)
-        settings = {key: settings.get(key, default) for key, default in defaults.items()}
+        settings = {**{key: settings.get(key, default) for key, default in defaults.items()},
+                    **({SURFACES_FROM: settings[SURFACES_FROM]} if SURFACES_FROM in settings else {})}
         if "time_basis" in settings and not _takes_time_basis(new_metric, settings["time_basis"]):
             settings["time_basis"] = defaults["time_basis"]
     if new_metric != entry.metric or values is not None:

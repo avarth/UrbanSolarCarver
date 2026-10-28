@@ -63,6 +63,8 @@ MAX_CHECK_POINTS = 2_000_000
 _RAYS_PER_LAUNCH = 1 << 25
 # Hits closer than this to a ray's origin are ignored (m).
 _MIN_HIT = 1e-3
+# The least margin of the ground a study can sample around the maximum volume's plan bounds (m; ground_square).
+GROUND_MARGIN = 20.0
 
 
 class CheckDirections(NamedTuple):
@@ -601,6 +603,79 @@ def _refuse_too_many_points(test_surfaces, spacing: float) -> None:
         f"{spacing:g} m; a check takes at most {MAX_CHECK_POINTS:,}. A spacing of {fitting:g} m or more fits.")
 
 
+def _paths_of(value) -> list:
+    """A mesh path or a list of them as a list of strings; none for None."""
+    if value is None:
+        return []
+    return [str(path) for path in value] if isinstance(value, (list, tuple)) else [str(value)]
+
+
+def flat_pieces(mesh):
+    """*mesh* with no vertex shared between its flat pieces (trimesh's facets, the adjacent coplanar faces, and each other face
+    alone), the faces wound as they were.  :func:`sample_test_surfaces` samples each connected part that is flat and skips the
+    others, so a closed body or a terrain gives points only once its pieces are apart."""
+    import trimesh
+    piece = np.full(len(mesh.faces), -1, dtype=np.int64)
+    for index, facet in enumerate(mesh.facets):
+        piece[facet] = index
+    alone = piece < 0
+    piece[alone] = len(mesh.facets) + np.arange(int(alone.sum()))
+    keys = np.stack([np.repeat(piece, 3), np.asarray(mesh.faces).ravel()], axis=1)
+    unique, inverse = np.unique(keys, axis=0, return_inverse=True)
+    return trimesh.Trimesh(vertices=np.asarray(mesh.vertices)[unique[:, 1]], faces=np.asarray(inverse).reshape(-1, 3),
+                           process=False)
+
+
+def ground_square(max_volume):
+    """A flat square facing up at the lowest z of *max_volume*, centred on its plan bounds and covering them with a margin on
+    each side of :data:`GROUND_MARGIN` m or half the longer side of the bounds, whichever is more."""
+    import trimesh
+    (x0, y0, z0), (x1, y1, _z1) = np.asarray(max_volume.bounds, dtype=np.float64)
+    longer = max(x1 - x0, y1 - y0)
+    half = longer / 2.0 + max(GROUND_MARGIN, longer / 2.0)
+    cx, cy = (x0 + x1) / 2.0, (y0 + y1) / 2.0
+    vertices = [[cx - half, cy - half, z0], [cx + half, cy - half, z0], [cx + half, cy + half, z0], [cx - half, cy + half, z0]]
+    return trimesh.Trimesh(vertices=vertices, faces=[[0, 1, 2], [0, 2, 3]], process=False)
+
+
+def study_surfaces(test_surface_path, surfaces_from, max_volume, *, context_path=None, terrain_path=None):
+    """The surfaces a Simulate study samples, joined into one mesh: its test surface file when it has one, and each source of
+    *surfaces_from*: ``"context"`` the context files, their closed bodies turned to face out; ``"terrain"`` the terrain file,
+    turned to face up when most of its area faces down; ``"ground"`` :func:`ground_square` under *max_volume* (a mesh).  The
+    context and the terrain are cut into their flat pieces (:func:`flat_pieces`).
+
+    Raises
+    ------
+    InputError
+        When a source has no file, or there is nothing to sample.
+    """
+    import trimesh
+    from .errors import InputError
+    from .io import load_mesh
+    meshes = [] if test_surface_path is None else [load_mesh(str(test_surface_path))]
+    for source in surfaces_from:
+        if source == "context":
+            paths = _paths_of(context_path)
+            if not paths:
+                raise InputError("The study samples the surroundings, but there is no surroundings file.")
+            meshes += [flat_pieces(load_mesh(path, fix_normals=True)) for path in paths]
+        elif source == "terrain":
+            if terrain_path is None:
+                raise InputError("The study samples the terrain, but there is no terrain file.")
+            terrain = load_mesh(str(terrain_path))
+            if float((terrain.face_normals[:, 2] * terrain.area_faces).sum()) < 0.0:
+                terrain.invert()
+            meshes.append(flat_pieces(terrain))
+        elif source == "ground":
+            meshes.append(ground_square(max_volume))
+        else:
+            raise InputError(f"'{source}' is not a surface a study can sample: use context, terrain or ground.")
+    if not meshes:
+        raise InputError("The study has no surface to sample: add study surface files, or choose the surroundings, the "
+                         "terrain or the ground.")
+    return meshes[0] if len(meshes) == 1 else trimesh.util.concatenate(meshes)
+
+
 def simulate_study(
     test_surface_path,
     max_volume_path,
@@ -613,9 +688,11 @@ def simulate_study(
     voxel_size: float = 1.0,
     device=None,
 ) -> SolarCheckResult:
-    """Run one Simulate study: the check of the test surface file against a project's geometries, written to *out_dir*.
+    """Run one Simulate study: the check of its surfaces against a project's geometries, written to *out_dir*.
 
-    The columns are "open", ``max_volume``, and the carved ``envelope`` and
+    The surfaces sampled are the test surface file (None for none) and the sources of ``settings.surfaces_from``
+    (:func:`study_surfaces`: the context, the terrain, the ground around the maximum volume); the summary lists those
+    sources under ``surfaces_from``.  The columns are "open", ``max_volume``, and the carved ``envelope`` and
     ``massing`` of *run_folder* when their manifests exist
     (:func:`run_geometries`; *voxel_size* is their surface tolerance when
     the manifests do not record it).  The context and terrain files block in
@@ -634,12 +711,14 @@ def simulate_study(
     Raises
     ------
     InputError
-        When the test surfaces would need more than :data:`MAX_CHECK_POINTS` points at the settings' spacing.
+        When the surfaces would need more than :data:`MAX_CHECK_POINTS` points at the settings' spacing, when a source of
+        ``surfaces_from`` has no file, or when there is no surface to sample.
     """
-    from .io import load_mesh, load_optional_mesh
+    from .io import load_optional_mesh
     geometries = run_geometries(max_volume_path, run_folder, voxel_size)
     max_volume = geometries[0]
-    test_surfaces = load_mesh(str(test_surface_path))
+    test_surfaces = study_surfaces(test_surface_path, settings.surfaces_from, max_volume.mesh, context_path=context_path,
+                                   terrain_path=terrain_path)
     _refuse_too_many_points(test_surfaces, settings.sample_spacing)
     loaded = [(path, load_optional_mesh(path, name)) for path, name in ((context_path, "context"), (terrain_path, "terrain"))]
     blocking = [mesh for _path, mesh in loaded if mesh is not None]
@@ -659,4 +738,5 @@ def simulate_study(
               "blocking": [file_fingerprint(path) for path, mesh in loaded if mesh is not None],
               "weather": fingerprints["weather"]}
     return solar_check(test_surfaces, geometries, settings, blocking=blocking, sampling_frame=frame, out_dir=out_dir,
-                       device=device, summary_extra={"inputs": inputs, "fingerprints": fingerprints})
+                       device=device, summary_extra={"inputs": inputs, "fingerprints": fingerprints,
+                                                     "surfaces_from": list(settings.surfaces_from)})
