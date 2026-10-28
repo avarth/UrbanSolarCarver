@@ -729,47 +729,113 @@ export const messages = {
   whichHoursCountHelp: "Cold hours: the sun of the hours colder than the balance temperature counts. Energy-weighted: each hour counts by " +
     "what its sun saves a typical building in heating over the year, from a simple hourly model of one room (ISO 13790).",
   typicalBuilding: "Typical building",
-  typicalBuildingCustom: "Custom",
   typicalBuildingStates: { current: "Calculated", out_of_date: "Changed since it was calculated", missing: "Not calculated yet" },
   // Under the state while the weights are not current: the run does it on its own.
   typicalBuildingRunCalculates: "Run analysis calculates it first.",
   typicalBuildingReading: "Reading the typical building",
   editBuilding: "Edit building",
   closeTypicalBuilding: "Close",
-  startFrom: "Start from",
-  typicalBuildingGroups: { shape: "Shape", windows: "Windows", walls: "Walls and glass", air: "Air", use: "Use", shading: "Summer shading" },
-  typicalBuildingFields: {
-    width: "Width, east to west", length: "Length, north to south", height: "Storey height", orientation: "Orientation", wwr: "Window share of each wall",
-    g_value: "Glass solar transmittance (g)", u_opaque: "U of the walls and roof", u_window: "U of the glass", mass_class: "Thermal mass",
-    ach_vent: "Ventilation", ach_infiltration: "Infiltration", heat_recovery: "Heat recovery", t_set_heating: "Heating set point",
-    t_set_cooling: "Cooling set point", gains_day_w_m2: "Internal gains by day", gains_night_w_m2: "Internal gains by night",
-    shading_permanent: "Permanent shading factor", shading_hot: "Summer shading factor", hot_months: "Months of the summer shading",
+  // The library of typical buildings, at the top of the sheet: the examples by group, then the user's own.
+  typicalBuildingLibrary: "Library",
+  libraryGroups: { apartment: "Apartment", office: "Office", test: "Test boxes", own: "Your buildings" } as Record<string, string>,
+  // What the building is, in the library section's line and the box in Settings.
+  changedFrom: (entryName: string) => `Changed from ${entryName}`,
+  goneFromLibrary: (entryName: string) => `${entryName}, no longer in the library`,
+  notFromLibrary: "Not from the library",
+  libraryChooseNote: "Choosing a building replaces the values below with its own.",
+  saveToLibrary: "Save to library",
+  saveAsNew: "Save as new",
+  exampleCannotChange: (entryName: string) => `${entryName} is an example: Save as new keeps these values in the library.`,
+  renameLibraryEntry: (entryName: string) => `Rename ${entryName}`,
+  deleteLibraryEntry: (entryName: string) => `Delete ${entryName}`,
+  rename: "Rename",
+  delete: "Delete",
+  save: "Save",
+  libraryEntryName: "Name",
+  libraryEntryNeedsName: "Give the building a name.",      // the service's words for an empty name
+  deleteLibraryEntryTitle: "Delete building",
+  deleteLibraryEntryExplanation: (entryName: string) => `${entryName} leaves the library. Projects that use it keep their own copy.`,
+  // The groups of the sheet: Use, Fabric and Summer shading, then under Advanced, Room, Roof and floor, and Air.
+  typicalBuildingGroups: {
+    use: "Use", fabric: "Fabric", shading: "Summer shading", room: "Room", roof_and_floor: "Roof and floor", air: "Air",
   } as Record<string, string>,
-  typicalBuildingSides: { north: "North", east: "East", south: "South", west: "West" } as Record<string, string>,
-  typicalBuildingSideInitials: { north: "N", east: "E", south: "S", west: "W" } as Record<string, string>,
-  typicalBuildingUnits: { metres: "m", degrees: "°", uValue: "W/m²K", perHour: "per hour", celsius: "°C", wattsPerSquareMetre: "W/m²" },
+  typicalBuildingAdvanced: "Advanced",
+  typicalBuildingFields: {
+    schedule: "Hours in use", t_set_heating: "Heating set point", t_set_cooling: "Cooling set point", gains_w_m2: "Internal gains while in use",
+    fresh_air_m3h_m2: "Fresh air while in use", heat_recovery: "Heat recovery", u_wall: "U of the walls", u_window: "U of the windows",
+    g_value: "Window solar transmittance (g)", mass_kind: "Thermal mass", mass_class: "ISO 13790 class", totee_category: "ΤΟΤΕΕ category",
+    shading_factor: "Shading factor", shading_start: "From", shading_end: "To", room: "Kind of room", height: "Storey height", depth: "Room depth",
+    width: "Width, east to west", length: "Length, north to south", orientation: "Orientation", wwr: "Window share of each wall",
+    roof_exposed: "Roof exposed", u_roof: "U of the roof", floor_exposed: "Floor exposed", u_floor: "U of the floor",
+    infiltration_m3h_m2_window: "Infiltration",
+  } as Record<string, string>,
+  // The typical cases of use (ΤΟΤΕΕ 20701-1/2017 table 2.1 gives the hours a day; which hours is the app's choice).
+  schedules: { apartment: "Apartment: 6:00 to 24:00 every day", office: "Office: 8:00 to 18:00 Monday to Friday", always: "Always: every hour" } as Record<string, string>,
+  scheduleWords: { apartment: "Apartment hours", office: "Office hours", always: "Every hour" } as Record<string, string>,
+  massKinds: { iso: "ISO class", totee: "ΤΟΤΕΕ category" } as Record<string, string>,
+  massClasses: {
+    very_light: "Very light, 80 kJ/m²K", light: "Light, 110 kJ/m²K", medium: "Medium, 165 kJ/m²K", heavy: "Heavy, 260 kJ/m²K",
+    very_heavy: "Very heavy, 370 kJ/m²K",
+  } as Record<string, string>,
+  // ΤΟΤΕΕ 20701-1/2017 table 3.14 (typical_building.TOTEE_CATEGORIES): the label of each category and its construction.
+  toteeCategories: {
+    reference: "Reference building, 250 kJ/m²K", 1: "1: 80 kJ/m²K", 2: "2: 110 kJ/m²K", 3: "3: 165 kJ/m²K", 4: "4: 230 kJ/m²K", 5: "5: 280 kJ/m²K",
+    6: "6: 300 kJ/m²K",
+  } as Record<string, string>,
+  toteeCategoryDescriptions: {
+    reference: "The value ΤΟΤΕΕ 20701-1/2017 (§4.2.4, ΚΕΝΑΚ article 9) gives every zone of the reference building.",
+    1: "Light timber frame, infill of plasterboard or timber, insulation on the inside of walls, ceiling and floor.",
+    2: "Light steel frame, infill of curtain walls or light insulated panels.",
+    3: "Concrete frame, infill of lightweight concrete blocks or plasterboard, suspended ceilings.",
+    4: "Load-bearing stone or solid brick walls, timber floors.",
+    5: "Concrete frame, infill of hollow clay bricks.",
+    6: "Load-bearing stone or solid brick walls, concrete floors.",
+  } as Record<string, string>,
+  roomKinds: { average: "Average room", box: "Box" } as Record<string, string>,
+  typicalBuildingDay: "Day",
+  typicalBuildingMonth: "Month",
+  typicalBuildingSides: {
+    ne: "North-east", se: "South-east", sw: "South-west", nw: "North-west", north: "North", east: "East", south: "South", west: "West",
+  } as Record<string, string>,
+  typicalBuildingSideInitials: { ne: "NE", se: "SE", sw: "SW", nw: "NW", north: "N", east: "E", south: "S", west: "W" } as Record<string, string>,
+  typicalBuildingUnits: {
+    metres: "m", degrees: "°", uValue: "W/m²K", celsius: "°C", wattsPerSquareMetre: "W/m²", airPerFloor: "m³/h per m²", airPerWindow: "m³/h per m² of window",
+  },
   typicalBuildingNotes: {
+    schedule: "Internal gains and fresh air apply in these hours, infiltration in every hour. ΤΟΤΕΕ 20701-1/2017 table 2.1 gives the hours a day.",
+    gains_w_m2: "People, equipment and lighting, per m² of floor.",
+    fresh_air_m3h_m2: "Per m² of floor.",
+    heat_recovery: "The share of the exhaust heat the ventilation recovers, 0 to 1.",
+    g_value: "The whole window, frame included, 0 to 1.",
+    iso: "The classes of ISO 13790 (table 12), by thermal capacity per m² of floor.",
+    totee: "ΤΟΤΕΕ 20701-1/2017 table 3.14. Categories 4 to 6 hold when the insulation is missing, outside or in the core of the wall; " +
+      "with insulation on the inside the zone is category 3.",
+    shading_factor: "0 to 1 for every window; 1 lets all the sun through. Empty: no shading.",
+    shading_period: "No shading outside these dates. An end before the start runs across the new year.",
+    average: "A square room turned 45° with the same window share on its four walls (NE, SE, SW, NW), so no direction is favoured. " +
+      "Its side is 4 times the depth: the weights depend on the ratios, not on the size.",
     orientation: "Clockwise from north; 0 has the south wall facing south.",
     wwr: "The glazed share of each wall, 0 to 0.9.",
-    heat_recovery: "The share of the exhaust heat the ventilation recovers, 0 to 1.",
-    gains: "Day is 8:00 to 20:00.",
-    shading: "0 to 1; 1 lets all the sun through. Empty: no shading.",
+    roof_and_floor: "Off, no heat passes through it (adiabatic), as for a storey between others.",
+    infiltration_m3h_m2_window: "Per m² of window, in every hour.",
   },
-  massClasses: { very_light: "Very light", light: "Light", medium: "Medium", heavy: "Heavy", very_heavy: "Very heavy" } as Record<string, string>,
   // The one line of each group of the sheet while it is closed.
-  shapeSummary: (widthText: string, lengthText: string, heightText: string, orientationText: string) =>
-    `${widthText} × ${lengthText} × ${heightText} m, ${orientationText}° from north`,
-  windowsSummary: (sharesText: string, gText: string) => `${sharesText}; g ${gText}`,
-  noWindows: "No windows",
-  // *massWord*: the thermal mass in lower case, "medium".
-  wallsSummary: (wallsText: string, glassText: string, massWord: string) => `U ${wallsText} and ${glassText} W/m²K, ${massWord} mass`,
-  airSummary: (ventilationText: string, infiltrationText: string, recoveryText: string | null) =>
-    `${ventilationText} + ${infiltrationText} air changes per hour${recoveryText === null ? "" : `, recovery ${recoveryText}`}`,
-  useSummary: (heatingText: string, coolingText: string, dayText: string, nightText: string) =>
-    `${heatingText} to ${coolingText} °C, gains ${dayText} and ${nightText} W/m²`,
+  useSummary: (scheduleText: string, heatingText: string, coolingText: string, gainsText: string) =>
+    `${scheduleText}, ${heatingText} to ${coolingText} °C, gains ${gainsText} W/m²`,
+  fabricSummary: (wallText: string, windowText: string, gText: string, capacityText: string) =>
+    `U ${wallText} and ${windowText} W/m²K, g ${gText}, mass ${capacityText} kJ/m²K`,
+  shadingSummary: (factorText: string, startText: string, endText: string) => `${factorText} from ${startText} to ${endText}`,
   noShading: "None",
-  permanentShadingSummary: (factorText: string) => `permanent ${factorText}`,
-  summerShadingSummary: (factorText: string, monthsText: string) => `summer ${factorText} in ${monthsText}`,
+  averageRoomSummary: (depthText: string, heightText: string, sharesText: string) => `Average, ${depthText} m deep, ${heightText} m storey; ${sharesText}`,
+  boxRoomSummary: (widthText: string, lengthText: string, heightText: string, orientationText: string, sharesText: string) =>
+    `Box ${widthText} × ${lengthText} × ${heightText} m, ${orientationText}° from north; ${sharesText}`,
+  sameShareSummary: (shareText: string) => `windows ${shareText} on each side`,
+  noWindows: "no windows",
+  roofAndFloorSummary: (roofText: string | null, floorText: string | null) =>
+    roofText === null && floorText === null ? "Both adiabatic"
+      : roofText === null ? `Roof adiabatic, floor U ${floorText} W/m²K`
+        : floorText === null ? `Roof U ${roofText} W/m²K, floor adiabatic` : `Roof U ${roofText}, floor U ${floorText} W/m²K`,
+  airSummary: (infiltrationText: string) => `Infiltration ${infiltrationText} m³/h per m² of window`,
   monthAbbreviations: MONTH_ABBREVIATIONS,
   calculate: "Calculate",
   calculateAgain: "Calculate again",
@@ -778,15 +844,17 @@ export const messages = {
   calculateNeedsWeatherFile: "Add a weather file in Design (Inputs) to calculate the typical building",
   calculateWaitsForValues: "Fix the values marked above to calculate",
   typicalBuildingOutOfDate: "The building or the weather file changed since this was calculated.",
-  benefitChartTitle: "What each hour's sun saves in heating",
-  harmChartTitle: "What each hour's sun adds to cooling",
-  weightsChartLabel: (title: string) => `${title}, 0 to 1: day of the year across, hour of the day down`,
-  weightsChartHours: "Hour",
+  // The chart of each hour: benefit minus harm (benefit alone when the criterion does not count harm), sun-down hours grey.
+  effectChartTitle: "Effect of sunlight, by hour",
+  effectChartLabel: (countsHarm: boolean) =>
+    "Effect of sunlight, by hour: day of the year across, hour of the day down; red where the sun offsets heating" +
+    `${countsHarm ? ", blue where it adds to cooling" : ""}, grey with the sun down`,
+  effectLegend: { heating: "offsets heating", cooling: "adds to cooling", none: "no effect", sunDown: "sun down" },
   weightsChartWaits: "Reading the weights",
   heatingDemand: "Heating",
   coolingDemand: "Cooling",
   demandPerYear: (valueText: string) => `${valueText} kWh/m² a year`,
   countedHours: "Hours that count",
-  countedHoursOfYear: (count: number) => `${groupedDigits(count)} of 8 760`,
-  countedHoursNote: "Hours whose weight is above 0.01.",
+  countedHoursOfDaytime: (count: number, daytimeCount: number) => `${groupedDigits(count)} of ${groupedDigits(daytimeCount)} daytime hours`,
+  countedHoursNote: "Hours with the sun up whose weight is above 0.01.",
 };

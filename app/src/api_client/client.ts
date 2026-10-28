@@ -39,7 +39,7 @@ export type InspectedFile = Schemas["InspectedFile"];
 export type InspectReply = Schemas["InspectReply"];
 export type TypicalBuildingReply = Schemas["TypicalBuildingReply"];
 export type TypicalBuildingWeightsReply = Schemas["TypicalBuildingWeightsReply"];
-export type TypicalBuildingPreset = Schemas["TypicalBuildingPreset"];
+export type TypicalBuildingLibraryEntry = Schemas["TypicalBuildingLibraryEntry"];
 
 /** What a new study starts from: a metric (its defaults, no files), or a criterion (its metric, period, mode settings and files). */
 export type StudySource = { metric: string } | { from_criterion: string };
@@ -283,21 +283,38 @@ export const removeCriterionTestSurface = (token: string, project: string, crite
 
 // The typical building of the project, which an energy-weighted Solar usefulness criterion counts its hours by -----------------
 
-/** The types the typical building can start from, by key, in the order the app offers them. */
-export const getTypicalBuildingPresets = (token: string) => requestJson<Record<string, TypicalBuildingPreset>>(token, "/api/typical-building-presets");
+/** The library of typical buildings, apart from projects: the examples (read-only) in their order, then the user's own by name. */
+export const getTypicalBuildingLibrary = (token: string) => requestJson<TypicalBuildingLibraryEntry[]>(token, "/api/typical-building-library");
 
-/** The project's typical building (the default type before it is saved) and the state of its weights. */
+/** Saves *values* as a new own entry of the library (Save as new); 422 for a name or a value, 409 for a name in use. */
+export const addTypicalBuildingLibraryEntry = (token: string, name: string, values: Record<string, unknown>) =>
+  requestJson<TypicalBuildingLibraryEntry>(token, "/api/typical-building-library", "POST", { name, values });
+
+/** Renames an own entry, or replaces its values (Save to library); 409 for an example. */
+export const updateTypicalBuildingLibraryEntry = (token: string, entryId: string, change: { name?: string; values?: Record<string, unknown> }) =>
+  requestJson<TypicalBuildingLibraryEntry>(token, `/api/typical-building-library/${encodeURIComponent(entryId)}`, "PUT", change);
+
+/** Deletes an own entry; 409 for an example. The projects that came from it keep their copy and its name. */
+export async function deleteTypicalBuildingLibraryEntry(token: string, entryId: string): Promise<void> {
+  await send(token, `/api/typical-building-library/${encodeURIComponent(entryId)}`, "DELETE");
+}
+
+/** The project's typical building (a copy of "Apartment, zone Β" before it is saved), the library entry it came from and the state of its weights. */
 export const getTypicalBuilding = (token: string, project: string) => requestJson<TypicalBuildingReply>(token, `${projectPath(project)}/typical-building`);
 
-/** Saves the values and the type they started from; a value that is not valid is 422 with its field ("wwr.south" for a window share). */
-export const putTypicalBuilding = (token: string, project: string, values: Record<string, unknown>, startFrom: string | null) =>
-  requestJson<TypicalBuildingReply>(token, `${projectPath(project)}/typical-building`, "PUT", { values, start_from: startFrom });
+/**
+ * Saves the values; a value that is not valid is 422 with its field ("wwr.sw" for a window share). With *libraryId* (choosing an
+ * entry of the library) the building comes from that entry; without it, from the entry it came from.
+ */
+export const putTypicalBuilding = (token: string, project: string, values: Record<string, unknown>, libraryId?: string) =>
+  requestJson<TypicalBuildingReply>(token, `${projectPath(project)}/typical-building`, "PUT",
+                                    libraryId === undefined ? { values } : { values, library_id: libraryId });
 
 /** Calculates the weights of the stored building with the project's weather file (about 9 s); 404 without a weather file. */
 export const calculateTypicalBuilding = (token: string, project: string) =>
   requestJson<TypicalBuildingReply>(token, `${projectPath(project)}/typical-building/calculate`, "POST");
 
-/** The weights of the last calculation, 8,760 each, hour 0 at 1 January 0:00; 404 before the first. */
+/** The weights of the last calculation and the hours with the sun up, 8,760 each, hour 0 at 1 January 0:00; 404 before the first. */
 export const getTypicalBuildingWeights = (token: string, project: string) =>
   requestJson<TypicalBuildingWeightsReply>(token, `${projectPath(project)}/typical-building/weights`);
 

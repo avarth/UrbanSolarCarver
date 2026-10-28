@@ -213,12 +213,14 @@ test("a request to open a section (a link to a setting) opens it, once per reque
   expect(sectionOpen("settings")).toBe(false);
 });
 
-// The typical building as the workspace's hook holds it once read: the office type, not calculated yet.
-const OFFICE = { width: 5, length: 7, height: 3, orientation: 0, wwr: { north: 0, east: 0.1, south: 0.27, west: 0.1 } };
+// The typical building as the workspace's hook holds it once read: a copy of "Apartment, zone Β", not calculated yet.
+const APARTMENT = { room: "average", height: 3, depth: 6, wwr: { ne: 0.4, se: 0.4, sw: 0.4, nw: 0.4 } };
 const BUILDING: TypicalBuildingHook = {
-  stored: { values: OFFICE, start_from: "office", state: "missing" }, values: OFFICE, startFrom: "office",
-  presets: { office: { label: "Office, medium mass", values: OFFICE } }, readProblem: null, fieldErrors: {}, problem: null, calculating: false,
-  weights: null, change: () => {}, calculate: () => {}, readWeights: () => {},
+  stored: { values: APARTMENT, library_id: "kenak-apartment-b", library_name: "Apartment, zone Β", changed: false, state: "missing" },
+  values: APARTMENT, readProblem: null, fieldErrors: {}, problem: null, calculating: false, weights: null,
+  library: [{ id: "kenak-apartment-b", name: "Apartment, zone Β", group: "apartment", read_only: true, source: null, values: APARTMENT }],
+  change: () => {}, choose: () => {}, saveToLibrary: () => {}, saveAsNew: async () => null, renameEntry: async () => null, deleteEntry: async () => null,
+  calculate: () => {}, readWeights: () => {},
 };
 
 function hoursCounted(overrides: Partial<HoursCountedProps> = {}): HoursCountedProps {
@@ -241,8 +243,14 @@ test("in Solar usefulness, Settings starts with Which hours count: Cold hours sh
   rendered.rerender(<CriterionPanel {...panelProps({ form: formFor("benefit"), hoursCounted: hoursCounted({ energyWeighted: true }) })} />);
   expect(find('[data-setting="balance_temperature"]')).toBeNull();
   expect([...find(".typical-building-box")!.querySelectorAll("p")].map((line) => line.textContent))
-    .toEqual(["Typical building", "Office, medium mass", "Not calculated yet. Run analysis calculates it first."]);
+    .toEqual(["Typical building", "Apartment, zone Β", "Not calculated yet. Run analysis calculates it first."]);
   expect(rendered.container.textContent).not.toMatch(/5R1C/);
+
+  // A copy that differs from its entry, calculated: the box says what it was changed from.
+  const changed = { ...BUILDING, stored: { ...BUILDING.stored!, changed: true, state: "current" as const } };
+  rendered.rerender(<CriterionPanel {...panelProps({ form: formFor("benefit"), hoursCounted: hoursCounted({ energyWeighted: true, building: changed }) })} />);
+  expect([...find(".typical-building-box")!.querySelectorAll("p")].map((line) => line.textContent))
+    .toEqual(["Typical building", "Changed from Apartment, zone Β", "Calculated"]);
 });
 
 test("Edit building opens the typical building's sheet beside the panel; Close ends it and gives the focus back to Edit building", () => {

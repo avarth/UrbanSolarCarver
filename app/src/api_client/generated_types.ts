@@ -581,7 +581,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/typical-building-presets": {
+    "/api/typical-building-library": {
         parameters: {
             query?: never;
             header?: never;
@@ -589,13 +589,43 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Typical Building Presets
-         * @description The types the typical building can start from, by key, in the order the app offers them.
+         * Typical Building Library
+         * @description The library of typical buildings, apart from projects: the examples (apartments and offices of the KENAK reference building
+         *     by climate zone, the ASHRAE 140 test boxes; read-only), then the user's own entries by name.
          */
-        get: operations["typical_building_presets"];
+        get: operations["typical_building_library"];
         put?: never;
-        post?: never;
+        /**
+         * Add Typical Building Library Entry
+         * @description Save a new own entry (Save as new); 422 with the field for a value or the name, 409 for a name in use.
+         */
+        post: operations["add_typical_building_library_entry"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/typical-building-library/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Typical Building Library Entry
+         * @description Rename an own entry or change its values (Save to library); 409 for an example or a name in use. The projects that copied the
+         *     entry keep their copies (they read as changed when they differ).
+         */
+        put: operations["update_typical_building_library_entry"];
+        post?: never;
+        /**
+         * Delete Typical Building Library Entry
+         * @description Delete an own entry; 409 for an example. The projects that copied it keep their copies and the entry's name.
+         */
+        delete: operations["delete_typical_building_library_entry"];
         options?: never;
         head?: never;
         patch?: never;
@@ -610,13 +640,15 @@ export interface paths {
         };
         /**
          * Get Typical Building
-         * @description The project's typical building (the default type before it is saved) and the state of its weights.
+         * @description The project's typical building (a copy of the default library entry before it is saved), the entry it came from, and the
+         *     state of its weights.
          */
         get: operations["get_typical_building"];
         /**
          * Save Typical Building
-         * @description Save the typical building's values and the type it started from; a value that is not valid is 422 with its field (a window
-         *     share as "wwr.<side>"), and nothing changes then. The weights are not calculated again here.
+         * @description Save the typical building's values and, when library_id is sent, the library entry they came from (choosing an entry sends
+         *     its values and id; null: from none); a value that is not valid is 422 with its field (a window share as "wwr.<side>"), and
+         *     nothing changes then. The weights are not calculated again here.
          */
         put: operations["save_typical_building"];
         post?: never;
@@ -637,7 +669,7 @@ export interface paths {
         put?: never;
         /**
          * Calculate Typical Building
-         * @description Calculate the hourly weights of the stored typical building with the project's weather file (about 9 s); 404 without a
+         * @description Calculate the hourly weights of the stored typical building with the project's weather file (about 7 s); 404 without a
          *     weather file, 409 while a run of the project is active.
          */
         post: operations["calculate_typical_building"];
@@ -656,7 +688,8 @@ export interface paths {
         };
         /**
          * Typical Building Weights
-         * @description The hourly benefit and harm weights of the last calculation, 8,760 each; 404 before the first one.
+         * @description The hourly benefit and harm weights of the last calculation and its hours with the sun up, 8,760 each; 404 before the first
+         *     one.
          */
         get: operations["typical_building_weights"];
         put?: never;
@@ -1623,6 +1656,18 @@ export interface components {
             };
         };
         /**
+         * NewLibraryEntryRequest
+         * @description The body of Save as new: the name of the new own entry and its values.
+         */
+        NewLibraryEntryRequest: {
+            /** Name */
+            name: string;
+            /** Values */
+            values: {
+                [key: string]: unknown;
+            };
+        };
+        /**
          * ProjectDetail
          * @description Everything the browser needs when it opens a project.
          */
@@ -1977,12 +2022,23 @@ export interface components {
             version: string;
         };
         /**
-         * TypicalBuildingPreset
-         * @description A type the typical building can start from.
+         * TypicalBuildingLibraryEntry
+         * @description A building of the typical building library: a built-in example (read-only) or one of the user's own.
          */
-        TypicalBuildingPreset: {
-            /** Label */
-            label: string;
+        TypicalBuildingLibraryEntry: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Group
+             * @enum {string}
+             */
+            group: "apartment" | "office" | "test" | "own";
+            /** Read Only */
+            read_only: boolean;
+            /** Source */
+            source: string | null;
             /** Values */
             values: {
                 [key: string]: unknown;
@@ -1997,8 +2053,12 @@ export interface components {
             values: {
                 [key: string]: unknown;
             };
-            /** Start From */
-            start_from: string | null;
+            /** Library Id */
+            library_id: string | null;
+            /** Library Name */
+            library_name: string | null;
+            /** Changed */
+            changed: boolean;
             /**
              * State
              * @enum {string}
@@ -2013,15 +2073,16 @@ export interface components {
         };
         /**
          * TypicalBuildingRequest
-         * @description The body of a save of the typical building: its values and the type it started from.
+         * @description The body of a save of the project's typical building: its values and, when given, the library entry they came from (null:
+         *     from none). Left out, the entry the building came from stays.
          */
         TypicalBuildingRequest: {
             /** Values */
             values: {
                 [key: string]: unknown;
             };
-            /** Start From */
-            start_from?: string | null;
+            /** Library Id */
+            library_id?: string | null;
         };
         /**
          * TypicalBuildingWeightsReply
@@ -2032,6 +2093,8 @@ export interface components {
             benefit: number[];
             /** Harm */
             harm: number[];
+            /** Sun Up */
+            sun_up: number[];
         };
         /**
          * UpdateCriterionRequest
@@ -2050,6 +2113,18 @@ export interface components {
             } | null;
             /** Energy Weighted */
             energy_weighted?: boolean | null;
+        };
+        /**
+         * UpdateLibraryEntryRequest
+         * @description The body of a change of an own entry: a new name (rename), new values (Save to library), or both; an absent one stays.
+         */
+        UpdateLibraryEntryRequest: {
+            /** Name */
+            name?: string | null;
+            /** Values */
+            values?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * UpdateStudyRequest
@@ -3437,7 +3512,7 @@ export interface operations {
             };
         };
     };
-    typical_building_presets: {
+    typical_building_library: {
         parameters: {
             query?: never;
             header?: never;
@@ -3452,9 +3527,149 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["TypicalBuildingPreset"];
-                    };
+                    "application/json": components["schemas"]["TypicalBuildingLibraryEntry"][];
+                };
+            };
+        };
+    };
+    add_typical_building_library_entry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewLibraryEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TypicalBuildingLibraryEntry"];
+                };
+            };
+            /** @description The entry is an example (read-only), or the name is in use. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A value or the name is not valid (the fields). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigErrorReply"];
+                };
+            };
+        };
+    };
+    update_typical_building_library_entry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateLibraryEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TypicalBuildingLibraryEntry"];
+                };
+            };
+            /** @description There is no such building in the library. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The entry is an example (read-only), or the name is in use. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A value or the name is not valid (the fields). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigErrorReply"];
+                };
+            };
+        };
+    };
+    delete_typical_building_library_entry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description There is no such building in the library. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The entry is an example (read-only), or the name is in use. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

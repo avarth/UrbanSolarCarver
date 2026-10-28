@@ -617,8 +617,22 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
   box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-ink) 18%, transparent);
 }
 .typical-building-sheet p { margin: 0; }
+.typical-building-sheet .segmented-switch { align-self: flex-start; }
 .typical-building-groups { border-top: 1px solid var(--colour-line); border-bottom: 1px solid var(--colour-line); }
-.typical-building-months { display: flex; flex-wrap: wrap; gap: var(--space-unit); }
+/* The library: the entries of each group one a row, the user's own with Rename and Delete beside them; the source of the example in
+   use in small print under the section's header. */
+.typical-building-source { padding-bottom: calc(var(--space-unit) * 2); color: var(--colour-muted); font-size: 11px; }
+.typical-building-library-group { display: flex; flex-direction: column; gap: var(--space-unit); }
+.typical-building-library-group-name { color: var(--colour-muted); font-size: var(--text-secondary); font-weight: 600; }
+.typical-building-library-list { display: flex; flex-direction: column; gap: var(--space-unit); margin: 0; padding: 0; list-style: none; }
+.typical-building-library-list li { display: flex; align-items: center; gap: calc(var(--space-unit) * 2); }
+.typical-building-library-list .link-button { font-size: var(--text-secondary); }
+.typical-building-library-entry { flex: 1; min-width: 0; text-align: left; }
+.typical-building-library-actions { display: flex; flex-direction: column; gap: var(--space-unit); }
+.typical-building-library-buttons { display: flex; flex-wrap: wrap; gap: calc(var(--space-unit) * 2); }
+/* Advanced: a header as the groups' own, the three groups under it set in from the left. */
+.typical-building-advanced-toggle { font-weight: 600; }
+.typical-building-advanced > .typical-building-groups { margin-left: calc(var(--space-unit) * 3); border-bottom: 0; }
 .typical-building-calculate { display: flex; flex-direction: column; gap: var(--space-unit); }
 .typical-building-calculate .primary-button { display: inline-flex; align-items: center; justify-content: center; gap: calc(var(--space-unit) * 2); }
 .typical-building-results-area { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
@@ -647,14 +661,39 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
   line-height: 1;
   text-align: right;
 }
-.weights-chart-canvas { flex: 1; min-width: 0; height: 96px; border-radius: 2px; image-rendering: pixelated; }
+.weights-chart-canvas {
+  flex: 1;
+  box-sizing: border-box;
+  min-width: 0;
+  height: 96px;
+  border: 1px solid var(--colour-line);     /* the hours of no effect are white, as the panel */
+  border-radius: 2px;
+  image-rendering: pixelated;
+}
 .weights-chart-months, .weights-chart-legend { display: flex; margin-left: calc(16px + var(--space-unit)); color: var(--colour-muted); font-size: 10px; }
 .weights-chart-months span { flex-basis: 0; text-align: center; }
-.weights-chart-legend { align-items: center; gap: var(--space-unit); }
-.weights-chart-ramp { flex: 0 0 120px; height: 8px; border-radius: 2px; }
+.weights-chart-legend { flex-wrap: wrap; align-items: center; gap: var(--space-unit); }
+.weights-chart-ramp { flex: 0 0 100px; box-sizing: border-box; height: 8px; border: 1px solid var(--colour-line); border-radius: 2px; }
+.weights-chart-sun-down { display: inline-flex; align-items: center; gap: var(--space-unit); margin-left: calc(var(--space-unit) * 2); }
+.weights-chart-swatch { width: 8px; height: 8px; border-radius: 2px; }
+
+/* While the sheet is open, the Out of date stamp of the 3D view goes to its right (the sheet ends 340 + 8 + 360 px from the left of the
+   window) instead of under it, at the sheet's top; in a window too narrow for it and the view's toolbar, under the toolbar. */
+.workspace:has(.typical-building-sheet) .viewer-out-of-date {
+  position: fixed;
+  top: calc(48px + 12px);
+  left: calc(340px + 8px + 360px + 12px);
+  transform: none;
+  max-width: calc(100vw - 340px - 8px - 360px - 24px);
+}
+@media (max-width: 1299px) {
+  .workspace:has(.typical-building-sheet) .viewer-out-of-date { top: calc(48px + 56px); }
+}
 
 @media (max-width: 720px) {
   .typical-building-sheet { left: 8px; right: 8px; width: auto; max-width: none; }
+  /* The sheet spans the window: the stamp stays where the view puts it. */
+  .workspace:has(.typical-building-sheet) .viewer-out-of-date { position: absolute; top: var(--overlay-gap); left: 50%; transform: translateX(-50%); }
 }
 
 /* The cards in carving order, Add criterion under them, then the selected criterion's panel, set off by a line. */
