@@ -547,45 +547,85 @@ test("during a run, a study whose values are not read yet says they are shown wh
 
 /** The Sun panel under the studies panel, and its parts. */
 const sunPanel = () => container().querySelector<HTMLElement>(".sun-panel")!;
-const sunCheck = (label: string) => [...sunPanel().querySelectorAll<HTMLLabelElement>(".sun-panel-check")].find((check) => check.textContent === label)!.querySelector("input")!;
+const sunPathCheck = () => sunPanel().querySelector<HTMLInputElement>(".sun-panel-check input")!;
+const sunView = (label: string) => buttonIn(sunPanel().querySelector<HTMLElement>(".sun-panel-views")!, label);
+const sunStatus = () => sunPanel().querySelector('[role="status"]')?.textContent ?? null;
 async function clickAndSettle(target: HTMLElement) {
   await act(async () => target.click());
   await settle();
 }
-
-test("the Sun panel sets the sun at the chosen time, its shadows, the year's sun path and the hours in shade on the view", async () => {
-  // The sun's disc is drawn on a 2D canvas, which jsdom does not have; WebGL is pretended as the other tests do.
+/** Opens the project in Simulate with the sun's disc drawable (a 2D canvas, which jsdom does not have), and opens the Sun panel. */
+async function openSunPanel(prepare?: Parameters<typeof openSimulate>[1]) {
   const drawing = { fillStyle: "", beginPath() {}, arc() {}, fill() {} };
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(((kind: string) => (kind === "2d" ? drawing : kind === "webgl2" ? {} : null)) as never);
-  await openSimulate();
+  await openSimulate(undefined, prepare);
   expect(sunPanel().classList.contains("sun-panel-collapsed")).toBe(true);
   await clickAndSettle(sunPanel().querySelector<HTMLButtonElement>(".sun-panel-toggle")!);
-  expect(simulateService.requests).toContain("GET /sun-positions?from=12-21&to=12-21&start=0&end=1440&step=5");
-  expect(sunPanel().querySelector('[role="status"]')!.textContent).toBe("Sun 53° above the horizon, 180° from north");
+}
+
+test("the Sun panel shows the sun path, and either the shadows at a moment or the hours in shade over a period, never both", async () => {
+  await openSunPanel();
+  expect(simulateService.requests).toContain("GET /sun-positions?from=12-21&to=12-21&start=0&end=1440&step=5&time_basis=standard");
+  expect(sunStatus()).toBe("Sun 53° above the horizon, 180° from north");
   expect(FakeViewerScene.latest!.sunStudy).toEqual({ sun: [0, -0.6, 0.8], shadows: false, shade: null });
-  await clickAndSettle(sunCheck("Shadows at this time"));
-  expect(FakeViewerScene.latest!.sunStudy.shadows).toBe(true);
-  await clickAndSettle(sunCheck("Sun path of the year and of this day"));
-  expect(simulateService.requests).toContain("GET /sun-chart?date=12-21");
+  await clickAndSettle(sunPathCheck());
+  expect(simulateService.requests).toContain("GET /sun-chart?date=12-21&time_basis=standard");
   expect(FakeViewerScene.latest!.layers.get("sun_study")).toBeTruthy();
-  await clickAndSettle(sunCheck("Hours in shade"));
-  // 08:00 to 16:00 every 10 minutes, each time the middle of its step: 48 times of 10 minutes, the whole range in sun.
-  expect(simulateService.requests).toContain("GET /sun-positions?from=12-21&to=12-21&start=485&end=955&step=10");
-  const shade = FakeViewerScene.latest!.sunStudy.shade!;
-  expect(shade.directions).toHaveLength(48);
-  expect(shade.hoursEach * shade.directions.length).toBeCloseTo(8);
-  expect([...container().querySelectorAll(".viewer-legend h3")].map((title) => title.textContent)).toContain("Hours in shade per day, 08:00 to 16:00, 21 Dec");
-  // Night: no sun, so no shadows are cast.
-  const slider = sunPanel().querySelector<HTMLInputElement>('input[type="range"]')!;
-  await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(slider, "120"); slider.dispatchEvent(new Event("input", { bubbles: true })); });
+
+  // The moment: a day strip and a time strip, one handle each.
+  await clickAndSettle(sunView("Shadows at a time"));
+  expect(FakeViewerScene.latest!.sunStudy.shadows).toBe(true);
+  expect([...sunPanel().querySelectorAll('[role="slider"]')].map((slider) => [slider.getAttribute("aria-label"), slider.getAttribute("aria-valuetext")]))
+    .toEqual([["Day", "21 December"], ["Time", "12:00"]]);
+  const time = sunPanel().querySelector<HTMLElement>('[role="slider"][aria-label="Time"]')!;
+  await act(async () => { time.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true, cancelable: true })); });
   await settle();
-  expect(sunPanel().querySelector('[role="status"]')!.textContent).toBe("The sun is below the horizon.");
+  expect(sunStatus()).toBe("The sun is below the horizon.");
   expect(FakeViewerScene.latest!.sunStudy.sun).toBeNull();
+
+  // The period: the analysis period's control. The shadows of the moment go; the hours in shade come.
+  await clickAndSettle(sunView("Hours in shade"));
+  expect(sunPanel().querySelector(".period-control")).not.toBeNull();
+  expect(sunPanel().querySelector('[role="slider"][aria-label="Time"]')).toBeNull();
+  // 08:00 to 16:00 every 10 minutes, each time the middle of its step: 48 times of 10 minutes, the whole range in sun.
+  expect(simulateService.requests).toContain("GET /sun-positions?from=12-21&to=12-21&start=485&end=955&step=10&time_basis=standard");
+  const study = FakeViewerScene.latest!.sunStudy;
+  expect([study.sun, study.shadows]).toEqual([null, false]);
+  expect(study.shade!.directions).toHaveLength(48);
+  expect(study.shade!.hoursEach * study.shade!.directions.length).toBeCloseTo(8);
+  expect(study.shade!.palette).toBe("viridis");
+  expect([...container().querySelectorAll(".viewer-legend h3")].map((title) => title.textContent)).toContain("Hours in shade per day, 08:00 to 16:00, 21 Dec");
+  await clickAndSettle(buttonIn(sunPanel(), "Grey"));
+  expect(FakeViewerScene.latest!.sunStudy.shade!.palette).toBe("grey");
+});
+
+test("the clock of the Sun panel is local standard, local solar or local daylight saving time", async () => {
+  await openSunPanel();
+  const clock = sunPanel().querySelector<HTMLSelectElement>("select")!;
+  expect([...clock.options].map((option) => option.textContent)).toEqual(["Local standard time", "Local solar time", "Local daylight saving time"]);
+  await act(async () => { clock.value = "solar"; clock.dispatchEvent(new Event("change", { bubbles: true })); });
+  await settle();
+  expect(simulateService.requests).toContain("GET /sun-positions?from=12-21&to=12-21&start=0&end=1440&step=5&time_basis=solar");
 });
 
 test("without a weather file the Sun panel says one is needed and reads nothing", async () => {
-  await openSimulate(undefined, (service) => { service.hasWeatherFile = false; });
-  await clickAndSettle(sunPanel().querySelector<HTMLButtonElement>(".sun-panel-toggle")!);
+  await openSunPanel((service) => { service.hasWeatherFile = false; });
   expect(sunPanel().textContent).toContain("Add a weather file in Design (Inputs) to see the sun");
   expect(simulateService.requests.some((request) => request.includes("/sun-"))).toBe(false);
+});
+
+test("the switch beside Studies hides the selected study from the view and shows it again", async () => {
+  await openSimulate(undefined, (service) => {
+    service.studies = [study("1", "sun_hours", ["facades.obj"], "current")];
+    service.valuesOf = { 1: studyValuesOf({ open: [4, 4, 4], max_volume: [1, 2, 3] }) };
+  });
+  const shown = () => studiesPanel().querySelector<HTMLInputElement>('.studies-panel-shown input[role="switch"]')!;
+  expect(shown().checked).toBe(true);
+  expect(studyLayerSummary()).toBe("3 points");
+  await clickAndSettle(shown());
+  expect(studyLayerSummary()).toBeNull();
+  expect(container().querySelector(".target-legend")).toBeNull();
+  expect(container().querySelector(".result-card")).toBeNull();
+  await clickAndSettle(shown());
+  expect(studyLayerSummary()).toBe("3 points");
 });

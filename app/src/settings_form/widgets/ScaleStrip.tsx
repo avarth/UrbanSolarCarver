@@ -1,5 +1,5 @@
 // A strip with a scale and two handles (role slider), the drawing the analysis period (its year strip and hour strip) and the
-// balance temperature share. It draws the scale (cells with their labels), the range between the handles, the two handles, and
+// balance temperature share; with one handle, a single value on the same scale (the day and the time of Simulate's Sun panel). It draws the scale (cells with their labels), the range between the handles, the two handles, and
 // over each handle a bubble with its exact value, always shown. The two bubbles move apart where they would overlap and stay over
 // the strip (valueBubbleShifts).
 //
@@ -33,8 +33,8 @@ export interface ScaleStripCell {
 }
 
 interface ScaleStripProps<HandleName extends string> {
-  /** The start handle, then the end handle: their order on the page and for Tab. */
-  handles: [ScaleStripHandle<HandleName>, ScaleStripHandle<HandleName>];
+  /** The start handle, then the end handle: their order on the page and for Tab; or one handle, for a single value. */
+  handles: readonly [ScaleStripHandle<HandleName>, ScaleStripHandle<HandleName>] | readonly [ScaleStripHandle<HandleName>];
   segments: RangeSegment[];
   cells: ScaleStripCell[];
   /** The value under the pointer, *fraction* of the way along the strip. */
@@ -89,6 +89,13 @@ export function valueBubbleShifts({ centres, widths, stripWidth, gap }: BubbleLa
   return shifts;
 }
 
+/** How far the bubble of a single handle moves sideways from centred over it, in pixels, to stay over the strip. */
+export function singleBubbleShift(centre: number, width: number, stripWidth: number): [number, number] {
+  if (stripWidth <= 0) return [0, 0];
+  const centredLeft = centre - width / 2;
+  return [Math.min(Math.max(centredLeft, 0), Math.max(stripWidth - width, 0)) - centredLeft, 0];
+}
+
 /** A drag on a strip: its pointer, the handle it moves (null until the first move where the handles lie on one spot), where it began. */
 interface StripDrag<HandleName extends string> {
   pointerId: number;
@@ -98,7 +105,9 @@ interface StripDrag<HandleName extends string> {
 
 export function ScaleStrip<HandleName extends string>({ handles, segments, cells, valueAt, valueRange, invalid, describedBy, disabled, onDragMove,
                                                         onDragEnd, onKey }: ScaleStripProps<HandleName>) {
-  const [startHandle, endHandle] = handles;
+  // One handle is both the start and the end: a press anywhere moves it, and its bubble is only kept over the strip.
+  const single = handles.length === 1;
+  const [startHandle, endHandle = startHandle] = handles;
   const stripElement = useRef<HTMLDivElement>(null);
   const handleElements = useRef<Partial<Record<HandleName, HTMLDivElement | null>>>({});
   const bubbleElements = useRef<(HTMLSpanElement | null)[]>([]);
@@ -119,10 +128,11 @@ export function ScaleStrip<HandleName extends string>({ handles, segments, cells
     observer.observe(stripElement.current);
     return () => observer.disconnect();
   }, []);
-  const bubbleShifts = valueBubbleShifts({
-    centres: [startHandle.position * measured.stripWidth, endHandle.position * measured.stripWidth],
-    widths: measured.bubbleWidths, stripWidth: measured.stripWidth, gap: GAP_BETWEEN_BUBBLES_PIXELS,
-  });
+  const bubbleShifts = single ? singleBubbleShift(startHandle.position * measured.stripWidth, measured.bubbleWidths[0], measured.stripWidth)
+    : valueBubbleShifts({
+      centres: [startHandle.position * measured.stripWidth, endHandle.position * measured.stripWidth],
+      widths: measured.bubbleWidths, stripWidth: measured.stripWidth, gap: GAP_BETWEEN_BUBBLES_PIXELS,
+    });
 
   const fractionAt = (clientX: number) => {
     const bounds = stripElement.current!.getBoundingClientRect();
@@ -141,7 +151,7 @@ export function ScaleStrip<HandleName extends string>({ handles, segments, cells
     const startDistance = Math.abs(pressed - startHandle.position) * width;
     const endDistance = Math.abs(pressed - endHandle.position) * width;
     // Pressed on two handles that lie on one spot: the first move picks one. Pressed elsewhere: the nearer handle jumps there.
-    const onOneSpot = Math.abs(startHandle.position - endHandle.position) * width < HANDLES_ON_ONE_SPOT_PIXELS;
+    const onOneSpot = !single && Math.abs(startHandle.position - endHandle.position) * width < HANDLES_ON_ONE_SPOT_PIXELS;
     const pressedOnTheSpot = onOneSpot && Math.min(startDistance, endDistance) < HANDLES_ON_ONE_SPOT_PIXELS;
     const handle = pressedOnTheSpot ? null : startDistance <= endDistance ? startHandle.name : endHandle.name;
     stripDrag.current = { pointerId: event.pointerId, handle, pressedValue: valueAt(pressed) };

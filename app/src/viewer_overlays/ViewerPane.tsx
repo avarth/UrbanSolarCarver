@@ -376,7 +376,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
           highestWeight: Math.max(...skyDome.weights) }
       : undefined,
     buildingMassing: shown("building_massing") && massing ? { storeyCount: storeyCountOf(massing) } : undefined,
-    shadeHours: shade ? { title: shade.title, maxHours: shade.maxHours } : undefined,
+    shadeHours: shade ? { title: shade.title, maxHours: shade.maxHours, palette: shade.palette } : undefined,
     carvedByCriterion: shown("carved_by_criterion") && carvedByCriterion
       ? { criteria: carvedByCriterion.criterionIds.flatMap((id) => criteria.filter((entry) => entry.id === id).map(({ name, colour }) => ({ name, colour }))),
           thinningStep: carvedVoxelsOfCriteria?.thinningStep ?? 1 }

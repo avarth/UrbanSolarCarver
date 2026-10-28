@@ -2559,6 +2559,8 @@ export interface operations {
             query?: {
                 /** @description The day whose arc is drawn, MM-DD. */
                 date?: string;
+                /** @description The clock the times are read in: standard (the weather file's local standard time), daylight_saving (an hour ahead) or solar (true solar time, noon when the sun crosses the meridian). */
+                time_basis?: string;
             };
             header?: never;
             path: {
@@ -2610,6 +2612,8 @@ export interface operations {
                 end: number;
                 /** @description Minutes between two times of a day. */
                 step?: number;
+                /** @description The clock the times are read in: standard (the weather file's local standard time), daylight_saving (an hour ahead) or solar (true solar time, noon when the sun crosses the meridian). */
+                time_basis?: string;
             };
             header?: never;
             path: {

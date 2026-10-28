@@ -1,7 +1,8 @@
 // The studies panel of Simulate (simulate design, section 3): small, floating over the top left of the 3D view, collapsible to an
 // icon button. One row per study: its colour swatch, its name and a line (its test surface files while its result is current, else
 // "Out of date", "Not run yet" or why it cannot run). A press on a row selects the study for the view; its settings button opens the
-// popover beside the panel. Under the rows, Add study (AddStudyMenu) and, once there is a study, Run with its progress. While a run
+// popover beside the panel. Under the rows, Add study (AddStudyMenu) and, once there is a study, Run with its progress. Beside the
+// title a switch shows or hides the selected study on the view (its colours, the legend and the result card; user, 2026-10-28). While a run
 // of the project goes on the service refuses changes, so Add study waits, with the reason Run says.
 import { useId, useRef, useState, type ReactNode } from "react";
 import type { CriterionEntry, MetricInfo, StudySource, StudyWithState } from "../api_client/client";
@@ -39,6 +40,9 @@ export interface StudiesPanelProps {
   loadProblem?: string | null;
   /** The notice of input files changed in the project folder or missing from it, at the top of the body. */
   notice?: ReactNode;
+  /** The selected study is shown on the view; the switch beside the title turns it off and on. */
+  shownOnView: boolean;
+  onShownOnViewChange: (shown: boolean) => void;
 }
 
 /** The line under a study's name. */
@@ -98,6 +102,12 @@ export function StudiesPanel(props: StudiesPanelProps) {
           <StudiesIcon />
         </button>
         {open && <h2 id={titleId} className="studies-panel-title">{messages.studiesTitle}</h2>}
+        {open && (
+          <label className="studies-panel-shown" title={messages.studiesShownOnViewHint}>
+            <input type="checkbox" role="switch" checked={props.shownOnView} onChange={(event) => props.onShownOnViewChange(event.target.checked)} />
+            {messages.studiesShownOnView}
+          </label>
+        )}
       </div>
       {open && (
         <div id={bodyId} className="studies-panel-body">

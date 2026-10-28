@@ -65,6 +65,9 @@ export interface StudyViewHook {
   /** How the values are coloured when Change is off (kept across studies): share of the no-build value, or the value. */
   colourBy: ColourBy;
   setColourBy: (colourBy: ColourBy) => void;
+  /** The selected study is shown on the view (its values, legend and result card); off, nothing of it is drawn. */
+  shownOnView: boolean;
+  setShownOnView: (shown: boolean) => void;
   available: StudyGeometry[];
   outOfDateInDesign: StudyGeometry[];
   /** Geometries Design has built that the selected study's last result does not have: they wait for a new run of the study. */
@@ -98,6 +101,7 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
   const [chosenGeometry, setGeometry] = useState<StudyGeometry>("max_volume");
   const [chosenChange, setChange] = useState(false);
   const [colourBy, setColourBy] = useState<ColourBy>("value");
+  const [shownOnView, setShownOnView] = useState(true);
   const palette = PALETTE_OF[colourBy];
   // By share: each study's range, while the app is open.
   const [shareRanges, setShareRanges] = useState<Record<string, [number, number]>>({});
@@ -183,7 +187,7 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
 
   const unit = values?.header.unit ?? "";
   const label = studies.metrics.find((metric) => metric.name === selected?.entry.metric)?.label ?? "";
-  const drawn = values !== null && shown !== null && selected !== null;
+  const drawn = shownOnView && values !== null && shown !== null && selected !== null;
   // A saved end shows at once; it is saved once a gesture ends: TARGET_SAVE_DELAY_MILLISECONDS after the last change (a drag gives
   // one change, at its release; held or repeated keys many). The saves go one after another, so the service applies them in order.
   const latestStudies = useRef(studies);
@@ -226,7 +230,7 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
   };
 
   return {
-    geometry, setGeometry, change, setChange, colourBy, setColourBy, available, outOfDateInDesign, waitingForStudy,
+    geometry, setGeometry, change, setChange, colourBy, setColourBy, shownOnView, setShownOnView, available, outOfDateInDesign, waitingForStudy,
     setRangeEnd,
     waitingForRun: active && running && hasResult && values === null,
     studyOutOfDate: active && selected?.state === "out_of_date",

@@ -31,11 +31,14 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Added (Simulate)
 
-- **The Sun panel** in Simulate, under the studies panel: a day and a time (local standard time of the weather file), the year's sun path on the hemisphere
-  (the arcs of the equinox and the solstices, an hour line per whole hour, the chosen day and the sun), the shadows at that time
-  (three.js shadow maps, on the ground where there is no terrain), and the hours in shade over a range of hours on a day or over
-  several days, counted on the view from the shadow maps and coloured in viridis. Routes `GET /projects/{name}/sun-chart` and
-  `GET /projects/{name}/sun-positions`, from the engine's sunpath (the weather file's location, the project's North).
+- **The Sun panel** in Simulate, under the studies panel: the clock (local standard, solar or daylight saving time of the weather
+  file), the year's sun path on the hemisphere (the arcs of the equinox and the solstices, an hour line per whole hour, the day and
+  the sun), and one of two views, never both: the shadows at a moment (a day and a time on single-handle strips as the criteria
+  panel's; three.js shadow maps, on the ground where there is no terrain), or the hours in shade over a period (the analysis period
+  control; counted on the view from the shadow maps, in viridis or grey, drawn under the sun path). Routes
+  `GET /projects/{name}/sun-chart` and `GET /projects/{name}/sun-positions`, from the engine's sunpath (the weather file's
+  location, the project's North), with `time_basis`.
+- **A Show switch beside the studies panel's title** hides the selected study from the view (its colours, legend and result card).
 
 ### Added (Inspect)
 

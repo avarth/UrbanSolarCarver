@@ -60,6 +60,9 @@ const TOP_VIEW_TILT_RADIANS = 1e-3;         // a hair off straight down, so "up"
 const FIRST_VIEW_DIRECTION = new THREE.Vector3(-0.5, -0.9, 0.75).normalize();     // from the south-south-west, above
 const EMPTY_SCENE_RADIUS_METRES = 60;
 const EMPTY_SCENE_HEMISPHERE: Hemisphere = { centre: [0, 0, 0], radius: EMPTY_SCENE_RADIUS_METRES };
+// The layers drawn after the hours in shade, over them: the sun path and the sky dome (three.js layer 1; the rest is layer 0).
+const OVER_THE_COUNT_LAYERS: readonly LayerName[] = ["sun_path", "sky_dome", "sun_study"];
+const OVER_THE_COUNT = 1;
 // The layers whose meshes cast and catch the sun's shadows, and those that make up the site the shadow camera covers.
 const SHADOW_LAYERS: readonly LayerName[] = ["max_volume", "test_surfaces", "context", "terrain", "envelope", "building_massing", "inspect_surfaces"];
 const SITE_LAYERS: readonly LayerName[] = ["max_volume", "test_surfaces", "envelope", "building_massing", "inspect_surfaces"];
@@ -160,6 +163,7 @@ export class ViewerScene {
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.shadowMap.enabled = true;          // only Simulate's sun casts shadows, and only while asked to
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.autoUpdate = false;      // drawn again when the sun casts (SunShading.prepare, count)
     const canvas = this.renderer.domElement;
     canvas.style.display = "block";
     canvas.style.width = "100%";
@@ -221,6 +225,7 @@ export class ViewerScene {
     slot.object = object;
     if (object) {
       object.name = name;
+      if (OVER_THE_COUNT_LAYERS.includes(name)) object.traverse((child) => child.layers.set(OVER_THE_COUNT));
       object.userData.applyTheme?.(this.theme);
       object.userData.followCamera?.(this.camera.position);
       this.scene.add(object);
@@ -585,9 +590,20 @@ export class ViewerScene {
       this.frameRequest = null;
       if (this.cameraMove) this.stepCameraMove(now);
       if (this.pendingHover) this.updateHover();
+      // The scene, the hours in shade over it, then the sun path and the sky dome over both (tested against the scene's depth).
       this.sunShading.prepare();
+      this.camera.layers.set(0);
       this.renderer.render(this.scene, this.camera);
       this.sunShading.drawOverlay();
+      // A colour background makes three.js clear the frame whatever autoClear says: the second pass goes without it.
+      this.camera.layers.set(OVER_THE_COUNT);
+      const autoClear = this.renderer.autoClear, background = this.scene.background;
+      this.renderer.autoClear = false;
+      this.scene.background = null;
+      this.renderer.render(this.scene, this.camera);
+      this.scene.background = background;
+      this.renderer.autoClear = autoClear;
+      this.camera.layers.set(0);
       if (this.cameraMove) this.requestRender();
     });
   }

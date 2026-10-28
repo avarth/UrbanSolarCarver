@@ -29,6 +29,8 @@
 
 .studies-panel-header, .sun-panel-header { display: flex; align-items: center; gap: calc(var(--space-unit) * 2); }
 .studies-panel-title, .sun-panel-title { margin: 0; font-size: var(--text-body); font-weight: 600; }
+.studies-panel-shown { display: inline-flex; align-items: center; gap: var(--space-unit); margin-left: auto; color: var(--colour-muted);
+  font-size: var(--text-secondary); }
 
 .studies-panel-toggle, .sun-panel-toggle,
 .study-row-settings,
@@ -181,15 +183,15 @@
   .studies-panel { width: min(280px, calc(100vw - 48px)); }
 }
 
-/* The Sun panel, under the studies panel and built as it is: the day, the time, and the three parts of the sun tool. */
+/* The Sun panel, under the studies panel and built as it is, a little wider for the strips of the criteria panel: the clock, the sun
+   path, the switch between the two views, and the controls of the one shown. */
+.sun-panel { width: 340px; }
+.sun-panel-collapsed { width: auto; }
 .sun-panel-body { display: flex; flex-direction: column; gap: var(--space-unit); margin-top: calc(var(--space-unit) * 2); }
 .sun-panel-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-unit); }
-.sun-panel-label { min-width: 3.5em; color: var(--colour-muted); }
-.sun-panel-row input[type="range"] { flex: 1; min-width: 120px; }
-.sun-panel-clock { font-variant-numeric: tabular-nums; }
-.sun-panel-day { display: inline-flex; gap: var(--space-unit); }
-.sun-panel-key-days { display: flex; flex-wrap: wrap; gap: calc(var(--space-unit) * 2); }
-.sun-panel-key-days button[aria-pressed="true"] { font-weight: 600; text-decoration: none; }
+.sun-panel-label { color: var(--colour-muted); }
 .sun-panel-check { display: flex; align-items: center; gap: var(--space-unit); }
-.sun-panel-shade { display: flex; flex-direction: column; gap: var(--space-unit); padding-left: calc(var(--space-unit) * 3); }
+.sun-panel-views { align-self: flex-start; }
+.sun-panel-views button { padding: 2px var(--space-unit); font-size: var(--text-secondary); }
+.sun-panel-moment, .sun-panel-period { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-unit); }
 .sun-panel-note { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }

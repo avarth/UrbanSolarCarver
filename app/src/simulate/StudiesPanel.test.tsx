@@ -26,7 +26,7 @@ const STUDIES = [
 function panelProps(overrides: Partial<StudiesPanelProps> = {}): StudiesPanelProps {
   return {
     studies: STUDIES, selectedId: "1", criteria: [], metrics: [], runDisabledReason: null, editDisabledReason: null, popoverStudyId: null,
-    onSelect: () => {}, onToggleSettings: () => {}, onAdd: async () => null, onRun: () => {}, ...overrides,
+    onSelect: () => {}, onToggleSettings: () => {}, onAdd: async () => null, onRun: () => {}, shownOnView: true, onShownOnViewChange: () => {}, ...overrides,
   };
 }
 

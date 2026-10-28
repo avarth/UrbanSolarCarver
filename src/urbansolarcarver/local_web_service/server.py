@@ -90,6 +90,8 @@ _CONFIG_OR_MESSAGE_ERROR = {
     "description": "Settings that do not validate (the fields), or a request that cannot be served as sent (a message).",
 }
 CRITERION_QUERY_DESCRIPTION = "The id of a criterion; the first one when omitted."
+TIME_BASIS_QUERY_DESCRIPTION = ("The clock the times are read in: standard (the weather file's local standard time), daylight_saving "
+                                "(an hour ahead) or solar (true solar time, noon when the sun crosses the meridian).")
 SUN_PATH_CRITERION_QUERY_DESCRIPTION = "The id of a criterion; the first criterion that is on when omitted (the first one when none is)."
 RESULTS_CRITERION_QUERY_DESCRIPTION = "The id of a criterion; the last criterion that is on when omitted."
 
@@ -483,21 +485,22 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
             criterion = active[0].id if active else None
         return sun_path_for_config(store.load_project_config(name, criterion))
 
-    def sun_site(name: str) -> sun_study.SunSite:
+    def sun_site(name: str, time_basis: str) -> sun_study.SunSite:
         """What Simulate's sun tool reads: the project's weather file and North (shared by the criteria; the first that is on)."""
         store = folder_in_use.store
         active = active_criteria(store.criteria(name))
         weather = store.weather_file_path(name)
         north = store.load_project_config(name, active[0].id if active else None).north_deg
-        return sun_study.SunSite(str(weather) if weather is not None else None, north)
+        return sun_study.SunSite(str(weather) if weather is not None else None, north, time_basis)
 
     @router.get("/projects/{name}/sun-chart", responses={404: {"model": ErrorDetailReply, "description": sun_study.NO_WEATHER_FILE_MESSAGE},
                                                          422: {"model": ErrorDetailReply, "description": "The date is not MM-DD."}})
-    def sun_chart(name: str, date: str = Query("06-21", description="The day whose arc is drawn, MM-DD.")) -> SunChart:
+    def sun_chart(name: str, date: str = Query("06-21", description="The day whose arc is drawn, MM-DD."),
+                  time_basis: str = Query("standard", description=TIME_BASIS_QUERY_DESCRIPTION)) -> SunChart:
         """Simulate's sun path: the arcs of the March equinox and the solstices, an hour line for each whole hour through the year, and
         the arc of *date*, in the weather file's local standard time; 404 without a weather file."""
         day = sun_study.parse_date(date)
-        return sun_study.sun_chart(sun_site(name), *day)
+        return sun_study.sun_chart(sun_site(name, time_basis), *day)
 
     @router.get("/projects/{name}/sun-positions", responses={404: {"model": ErrorDetailReply, "description": sun_study.NO_WEATHER_FILE_MESSAGE},
                                                              422: {"model": ErrorDetailReply, "description": "A date or a time is out of range."}})
@@ -505,11 +508,12 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
                       to_date: str = Query(alias="to", description="The last day, MM-DD (before the first: over the new year)."),
                       start: int = Query(description="The first minute of each day, 0 to 1440."),
                       end: int = Query(description="The last minute of each day, at or after start."),
-                      step: int = Query(15, description="Minutes between two times of a day.")) -> SunPositions:
+                      step: int = Query(15, description="Minutes between two times of a day."),
+                      time_basis: str = Query("standard", description=TIME_BASIS_QUERY_DESCRIPTION)) -> SunPositions:
         """The sun above the horizon every *step* minutes from *start* to *end* on each day from *from* to *to* (local standard
         time), sampled on every n-th day when that would give more than 240 times; 404 without a weather file."""
         first, last = sun_study.parse_date(from_date), sun_study.parse_date(to_date)
-        return sun_study.sun_positions(sun_site(name), first, last, start, end, step)
+        return sun_study.sun_positions(sun_site(name, time_basis), first, last, start, end, step)
 
     @router.get("/projects/{name}/criteria/{criterion_id}/settings", responses={404: _CRITERION_RESPONSES[404]})
     def criterion_settings(name: str, criterion_id: str) -> CriterionSettingsReply:

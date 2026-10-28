@@ -44,8 +44,21 @@ def test_positions_are_the_sun_above_the_horizon_and_a_long_range_is_sampled_on_
     assert year.day_step > 1 and len(year.positions) <= sun_study.MAX_POSITIONS and year.days_sampled == len(range(0, 365, year.day_step))
     winter = sun_study.sun_positions(config(), (12, 1), (1, 31), 720, 720, 15)                    # over the new year
     assert winter.days_sampled == 62 and {position.date for position in winter.positions} >= {"12-01", "01-31"}
+    night = sun_study.sun_positions(config(), (6, 21), (6, 21), 1200, 300, 60)                   # over midnight
+    assert [position.minute for position in night.positions] == [300]          # 20:00 to 05:00: only 05:00 has sun (Golden, CO)
     with pytest.raises(ProjectError):
-        sun_study.sun_positions(config(), (6, 21), (6, 21), 900, 600, 15)
+        sun_study.sun_positions(config(), (6, 21), (6, 21), 600, 1500, 15)
+
+
+@REQUIRES_EPW
+def test_the_clock_is_standard_daylight_saving_or_solar_time():
+    standard = sun_study.sun_positions(config(), (6, 21), (6, 21), 660, 660, 15).positions[0]
+    saving = sun_study.sun_positions(sun_study.SunSite(EPW, 0.0, "daylight_saving"), (6, 21), (6, 21), 720, 720, 15).positions[0]
+    assert np.allclose(standard.vector, saving.vector)                 # 12:00 daylight saving time is 11:00 standard time
+    solar_noon = sun_study.sun_positions(sun_study.SunSite(EPW, 0.0, "solar"), (3, 21), (3, 21), 720, 720, 15).positions[0]
+    assert abs(solar_noon.azimuth - 180.0) < 1.0                        # due south at solar noon in the north
+    with pytest.raises(ProjectError):
+        sun_study.sun_chart(sun_study.SunSite(EPW, 0.0, "summer"), 6, 21)
 
 
 @REQUIRES_EPW

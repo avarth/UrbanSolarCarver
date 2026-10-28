@@ -128,6 +128,7 @@ export function SimulateView({ project, studies, criteria, storedTestSurfaces, r
                         if (popoverStudyId !== id) studies.select(id);       // the study whose settings are open is the one in the view
                         setPopoverStudyId(popoverStudyId === id ? null : id);
                       }} loadProblem={studies.loadProblem} popover={popover} notice={notice}
+                      shownOnView={studyView.shownOnView} onShownOnViewChange={studyView.setShownOnView}
                       runFeedback={<RunProgress runs={runs} project={project} origin="simulate" mode="" onGoToSetting={() => {}} studyNames={studyNames} foldWarnings />} />
         <SunPanel sunStudy={sunStudy} />
       </div>

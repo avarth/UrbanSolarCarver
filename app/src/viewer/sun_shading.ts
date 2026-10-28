@@ -3,14 +3,14 @@
 //
 // The count draws the solid meshes from the camera once for every sun position into a float target, adding the hours each position
 // stands for wherever a surface is in shade (behind something from the sun, or turned away from it), and shows the sum over the view
-// in a colour ramp: viridis, from yellow at no shade to dark at the whole range in shade. It is a picture of what the camera sees,
+// in a colour ramp, viridis or grey, from light at no shade to dark at the whole range in shade. The scene draws it under the sun
+// path and the sky dome (scene.ts, OVER_THE_COUNT_LAYERS). It is a picture of what the camera sees,
 // counted again once the camera rests and hidden while it moves, at the shadow map's resolution; Simulate's sun hours are the precise
 // count, per test point.
 import * as THREE from "three";
 import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import type { Point3 } from "./local_origin";
-import { studyPaletteColour } from "./study_palettes";
-import type { ShadeHours } from "./sun_study";
+import { shadeColour, type ShadeHours, type ShadePalette } from "./sun_study";
 
 const SHADOW_MAP_PIXELS = 4096;
 // The shadow camera covers this many site radii around the site's centre: the surroundings' shadows on the site, the site's on them.
@@ -45,12 +45,12 @@ export function isSolidMesh(object: THREE.Object3D): object is THREE.Mesh {
   return (object as THREE.Mesh).isMesh === true && !(object instanceof LineSegments2);
 }
 
-/** viridis as RGBA bytes from 0 to 1, for the overlay's lookup. */
-function viridisRamp(): THREE.DataTexture {
+/** The colours of *palette* as RGBA bytes from no shade to the whole range in shade, for the overlay's lookup. */
+function shadeRamp(palette: ShadePalette): THREE.DataTexture {
   const bytes = new Uint8Array(RAMP_ENTRIES * 4);
   const colour = new THREE.Color();
   for (let entry = 0; entry < RAMP_ENTRIES; entry++) {
-    colour.setStyle(studyPaletteColour("viridis", (entry + 0.5) / RAMP_ENTRIES), THREE.NoColorSpace);
+    colour.setStyle(shadeColour(palette, (entry + 0.5) / RAMP_ENTRIES), THREE.NoColorSpace);
     bytes.set([Math.round(colour.r * 255), Math.round(colour.g * 255), Math.round(colour.b * 255), 255], entry * 4);
   }
   const texture = new THREE.DataTexture(bytes, RAMP_ENTRIES, 1);
@@ -78,6 +78,7 @@ export class SunShading {
   private readonly overlayScene = new THREE.Scene();
   private readonly overlayCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   private readonly overlayMaterial: THREE.ShaderMaterial;
+  private readonly ramps: Record<ShadePalette, THREE.DataTexture> = { viridis: shadeRamp("viridis"), grey: shadeRamp("grey") };
 
   constructor(host: SunShadingHost) {
     this.host = host;
@@ -102,7 +103,7 @@ export class SunShading {
         `#include <opaque_fragment>\n\tgl_FragColor = vec4(vec3(dot(outgoingLight, vec3(1.0)) < ${LIT_THRESHOLD.toExponential()} ? shadeHours : 0.0), 0.0);`);
     };
     this.overlayMaterial = new THREE.ShaderMaterial({
-      uniforms: { counted: { value: null }, ramp: { value: viridisRamp() }, maxHours: { value: 1 }, opacity: { value: SHADE_OVERLAY_OPACITY } },
+      uniforms: { counted: { value: null }, ramp: { value: null }, maxHours: { value: 1 }, opacity: { value: SHADE_OVERLAY_OPACITY } },
       vertexShader: "varying vec2 vUv;\nvoid main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }",
       fragmentShader: [
         "uniform sampler2D counted; uniform sampler2D ramp; uniform float maxHours; uniform float opacity; varying vec2 vUv;",
@@ -110,7 +111,7 @@ export class SunShading {
         "  vec4 sum = texture2D(counted, vUv);",
         "  if (sum.a < 0.5) discard;",
         "  float share = clamp(sum.r / maxHours, 0.0, 1.0);",
-        "  gl_FragColor = vec4(texture2D(ramp, vec2(1.0 - share, 0.5)).rgb, opacity);",
+        "  gl_FragColor = vec4(texture2D(ramp, vec2(share, 0.5)).rgb, opacity);",
         "}",
       ].join("\n"),
       transparent: true, depthTest: false, depthWrite: false,
@@ -122,10 +123,10 @@ export class SunShading {
   set(direction: Point3 | null, shadows: boolean, shade: ShadeHours | null): void {
     this.direction = direction === null ? null : new THREE.Vector3(...direction).normalize();
     this.shadows = shadows && direction !== null;
-    if (shade !== this.shade) {
-      this.shade = shade;
-      this.invalidate();
-    }
+    // Only another palette: the count stands, the overlay is recoloured.
+    const recount = shade === null || this.shade === null || shade.directions !== this.shade.directions || shade.hoursEach !== this.shade.hoursEach;
+    this.shade = shade;
+    if (recount) this.invalidate();
   }
 
   /** The camera or the content changed: the count no longer matches the view; it is counted again once things rest. */
@@ -154,12 +155,14 @@ export class SunShading {
     }
     this.ground.visible = casting && !this.host.terrainShown() && this.placeGround();
     if (casting) this.placeLight(this.direction!);
+    this.host.renderer.shadowMap.needsUpdate = casting;       // the second pass of a frame (the layers over the count) draws no new map
   }
 
   /** After each frame: the hours in shade over the view, when counted for the camera as it is. */
   drawOverlay(): void {
     if (this.shade === null || !this.counted || this.target === null) return;
     this.overlayMaterial.uniforms.counted.value = this.target.texture;
+    this.overlayMaterial.uniforms.ramp.value = this.ramps[this.shade.palette];
     this.overlayMaterial.uniforms.maxHours.value = Math.max(this.shade.maxHours, 1e-6);
     const autoClear = this.host.renderer.autoClear;
     this.host.renderer.autoClear = false;
@@ -175,7 +178,8 @@ export class SunShading {
     (this.ground.material as THREE.Material).dispose();
     this.maskMaterial.dispose();
     this.countMaterial.dispose();
-    this.overlayMaterial.uniforms.ramp.value.dispose();
+    this.ramps.viridis.dispose();
+    this.ramps.grey.dispose();
     this.overlayMaterial.dispose();
   }
 
