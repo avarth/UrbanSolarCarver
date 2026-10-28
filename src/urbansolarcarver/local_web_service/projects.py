@@ -730,7 +730,8 @@ class ProjectStore:
                 if upload_path is not None:
                     upload_path.unlink(missing_ok=True)
             if uploaded_mesh is not None:
-                test_surfaces.original_path(project_folder, stored_name).unlink(missing_ok=True)      # the kept original is of the file replaced
+                with contextlib.suppress(OSError):          # the kept original is of the file replaced; one held open stays
+                    test_surfaces.original_path(project_folder, stored_name).unlink(missing_ok=True)
                 recorded_names[stored_name] = len(uploaded_mesh.faces)
                 stored_files.record_stored_file(project_json, test_surfaces.ROLE, stored_name, test_surfaces.stored_path(project_folder, stored_name))
             if stored_name not in entry.test_surface_files:

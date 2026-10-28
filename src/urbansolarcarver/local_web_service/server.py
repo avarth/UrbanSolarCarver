@@ -37,8 +37,8 @@ from ..stage_settings import PIPELINE_STAGES
 from . import folder_picker, inspection, simulation, user_preferences
 from .api_models import (
     CancelRunReply, ColdPeriodReply, ConfigErrorReply, ConfigReply, ConfigValuesRequest, CreateCriterionRequest, CreateProjectRequest,
-    CriterionEntry, CriterionOrderRequest, CriterionSettingsReply, ErrorDetailReply, ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, InspectedFile, InspectReply, MissingInputsReply, ModeInfo, ProjectDetail,
-    ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, SunPath, TurnSurfacesRequest,
+    CriterionEntry, CriterionOrderRequest, CriterionSettingsReply, ErrorDetailReply, ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, InspectedFile, InspectReply, MissingInputsReply, ModeInfo, ProjectDetail, RestoreOriginalRequest,
+    ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, StoredFileChangedReply, SunPath, TurnSurfacesRequest,
     UpdateCriterionRequest, AddStudyRequest, ReorderStudiesRequest, StudiesReply, StudyEntry, StudyWithState, UpdateStudyRequest,
 )
 from .carve_further import carve_further
@@ -71,6 +71,11 @@ NO_CACHE = {"Cache-Control": "no-cache"}    # a result file is rewritten by the 
 _ERROR_RESPONSES = {
     409: {"model": ErrorDetailReply, "description": "A run of this project is active."},
     422: {"model": ErrorDetailReply, "description": "The request cannot be served as sent."},
+}
+# A turn or a restore of a test surface file in Inspect: a run is active, or the stored file is not the version named.
+_STORED_FILE_CHANGED_RESPONSE = {
+    "model": Union[StoredFileChangedReply, ErrorDetailReply],
+    "description": "A run of this project is active, or the file changed in the project folder since Inspect read it (stored_file_changed).",
 }
 _CRITERION_RESPONSES = {
     404: {"model": ErrorDetailReply, "description": "There is no such criterion."},
@@ -240,6 +245,10 @@ def _add_exception_handlers(app: FastAPI) -> None:
     async def missing_inputs_handler(request: Request, error: MissingInputs) -> JSONResponse:
         reply = MissingInputsReply(detail=str(error), missing_inputs=error.roles)
         return JSONResponse(reply.model_dump(mode="json"), status_code=error.status_code)
+
+    @app.exception_handler(inspection.StoredFileChanged)
+    async def stored_file_changed_handler(request: Request, error: inspection.StoredFileChanged) -> JSONResponse:
+        return JSONResponse(StoredFileChangedReply(detail=str(error)).model_dump(mode="json"), status_code=error.status_code)
 
     @app.exception_handler(ProjectError)    # includes RunConflict (409)
     async def project_error_handler(request: Request, error: ProjectError) -> JSONResponse:
@@ -732,18 +741,24 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
 
     @router.post("/projects/{name}/inspect/test_surfaces/{file_name}/turn",
                  responses={404: {"model": ErrorDetailReply, "description": "There is no such project or file."}, **_ERROR_RESPONSES,
+                            409: _STORED_FILE_CHANGED_RESPONSE,
                             500: {"model": ErrorDetailReply, "description": "The turned file did not load as turned, so nothing was saved."}})
     def turn_test_surfaces(name: str, file_name: str, request: TurnSurfacesRequest) -> InspectedFile:
-        """Turn surfaces of a test surface file the other way and save the file, keeping its original (inspection.save_turned_surfaces)."""
+        """Turn surfaces of a test surface file the other way and save the file, keeping its original (inspection.save_turned_surfaces).
+
+        The files changed in the project folder are built in first; a stored file that is not the version named is refused (409)."""
         with writable_project(name) as store:
-            return inspection.save_turned_surfaces(store, name, file_name, request.surfaces)
+            return inspection.save_turned_surfaces(store, name, file_name, request.surfaces, version=request.version)
 
     @router.post("/projects/{name}/inspect/test_surfaces/{file_name}/restore",
-                 responses={404: {"model": ErrorDetailReply, "description": "There is no such project or file, or no original is kept."}, **_ERROR_RESPONSES})
-    def restore_test_surface_original(name: str, file_name: str) -> InspectedFile:
-        """Put the original of a test surface file back in place of the saved one (inspection.restore_original)."""
+                 responses={404: {"model": ErrorDetailReply, "description": "There is no such project or file, or no original is kept."}, **_ERROR_RESPONSES,
+                            409: _STORED_FILE_CHANGED_RESPONSE})
+    def restore_test_surface_original(name: str, file_name: str, request: RestoreOriginalRequest) -> InspectedFile:
+        """Put the original of a test surface file back in place of the saved one (inspection.restore_original).
+
+        The files changed in the project folder are built in first; a stored file that is not the version named is refused (409)."""
         with writable_project(name) as store:
-            return inspection.restore_original(store, name, file_name)
+            return inspection.restore_original(store, name, file_name, version=request.version)
 
     @router.get("/projects/{name}/run/summary")
     def run_summary(name: str) -> RunSummary:

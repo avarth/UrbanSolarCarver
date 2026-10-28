@@ -115,11 +115,21 @@ class InspectedFile(BaseModel):
     flippable: bool = False             # a test surface file that is open somewhere; False when closed as a whole and for other roles
     original_kept: bool = False         # a test surface file whose original from before a flip is kept
     problem: str | None = None          # why the file cannot be read (the counts are then zero); None for a file that is read
+    # The sha256 of the stored file's bytes as Inspect read it: a turn or a restore names it, and is refused when the file stored
+    # now is another. Empty when the file's bytes could not be read.
+    version: str = ""
 
 
 class TurnSurfacesRequest(BaseModel):
-    """The surfaces of a test surface file to turn the other way and save (their numbers in the geometry of the file)."""
+    """The surfaces of a test surface file to turn the other way and save (their numbers in the geometry of the file), and the
+    version of the file they were turned on (InspectedFile.version)."""
     surfaces: list[int] = Field(min_length=1)
+    version: str = Field(min_length=1)
+
+
+class RestoreOriginalRequest(BaseModel):
+    """The version of the stored test surface file (InspectedFile.version) that the kept original is to replace."""
+    version: str = Field(min_length=1)
 
 
 class InspectReply(BaseModel):
@@ -492,6 +502,11 @@ class CancelRunReply(BaseModel):
 class ErrorDetailReply(BaseModel):
     """The body of a request the service refuses with a message."""
     detail: str
+
+
+class StoredFileChangedReply(ErrorDetailReply):
+    """The body of a turn or a restore refused because the stored file is no longer the version Inspect read (409)."""
+    stored_file_changed: Literal[True] = True
 
 
 class MissingInputsReply(ErrorDetailReply):

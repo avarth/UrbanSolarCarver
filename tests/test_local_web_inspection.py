@@ -11,11 +11,9 @@ import pytest
 from local_web_test_support import GOLDEN_EPW, box_bytes, write_fake_chain_run
 from test_local_web_server import build_client, client_with_blocking_run, create_project, projects_folder, upload  # noqa: F401 (fixtures)
 from urbansolarcarver.io import load_mesh
-from urbansolarcarver.local_web_service import inspection
+from urbansolarcarver.local_web_service import inspection, test_surfaces
 from urbansolarcarver.local_web_service.projects import ProjectError, ProjectStore
-from urbansolarcarver.local_web_service.inspection import (
-    ORIGINALS_FOLDER, inspection_geometry, project_inspection, restore_original, save_turned_surfaces,
-)
+from urbansolarcarver.local_web_service.inspection import ORIGINALS_FOLDER, inspection_geometry, project_inspection
 from urbansolarcarver.local_web_service.stage_records import criterion_status, stage_status_reply
 
 PANEL_SIZE = 6.0
@@ -55,6 +53,22 @@ def store(tmp_path):
     store = ProjectStore(tmp_path / "projects")
     store.create("p", "daylight")
     return store
+
+
+def _version_now(store, name, file_name) -> str:
+    """The version of the stored test surface file as Inspect reads it (the sha256 of its bytes); a placeholder when not stored."""
+    path = store.open(name) / "inputs" / "test_surfaces" / file_name
+    return test_surfaces.content_digest(path) if path.is_file() else "not stored"
+
+
+def save_turned_surfaces(store, name, file_name, surfaces, version=None):
+    """inspection.save_turned_surfaces naming the version stored now, as the app names the version it read, unless *version*."""
+    return inspection.save_turned_surfaces(store, name, file_name, surfaces, version=version or _version_now(store, name, file_name))
+
+
+def restore_original(store, name, file_name, version=None):
+    """inspection.restore_original naming the version stored now, unless *version*."""
+    return inspection.restore_original(store, name, file_name, version=version or _version_now(store, name, file_name))
 
 
 @pytest.fixture
@@ -255,7 +269,7 @@ def _kept(store, file_name="facades.obj"):
 def _normals_by_surface(path):
     """The face normals of the file as the loader makes them and the surface of each face (inspected as stored)."""
     inspected = inspection.inspect_file(path, "test_surfaces")
-    return inspected.mesh.face_normals, inspected.surface_of_face
+    return inspected.mesh().face_normals, inspected.surface_of_face
 
 
 def test_turned_surfaces_are_saved_and_hold_through_the_loader(store_after_a_run):
@@ -414,24 +428,29 @@ def test_the_routes_turn_and_restore(tmp_path):
     client, _ = build_client(tmp_path / "projects")
     create_project(client)
     assert upload(client, "p", "test_surfaces", ("facades.obj", obj_panels([0, 20]))).status_code == 200
-    turned = client.post("/api/projects/p/inspect/test_surfaces/facades.obj/turn", json={"surfaces": [1]})
+    version = client.get("/api/projects/p/inspect").json()["files"][0]["version"]
+    turned = client.post("/api/projects/p/inspect/test_surfaces/facades.obj/turn", json={"surfaces": [1], "version": version})
     assert turned.status_code == 200 and turned.json()["original_kept"] is True
+    version = turned.json()["version"]
     assert client.get("/api/projects/p/inspect").json()["files"][0]["original_kept"] is True
-    for body in ({"surfaces": []}, {"surfaces": [9]}, {"surfaces": ["a"]}, {}):
+    for body in ({"surfaces": [], "version": version}, {"surfaces": [9], "version": version}, {"surfaces": ["a"], "version": version},
+                 {"surfaces": [0]}, {"surfaces": [0], "version": ""}, {}):
         assert client.post("/api/projects/p/inspect/test_surfaces/facades.obj/turn", json=body).status_code == 422
-    assert client.post("/api/projects/p/inspect/test_surfaces/nothing.obj/turn", json={"surfaces": [0]}).status_code == 404
-    restored = client.post("/api/projects/p/inspect/test_surfaces/facades.obj/restore")
+    assert client.post("/api/projects/p/inspect/test_surfaces/nothing.obj/turn", json={"surfaces": [0], "version": version}).status_code == 404
+    assert client.post("/api/projects/p/inspect/test_surfaces/facades.obj/restore").status_code == 422      # no version
+    restored = client.post("/api/projects/p/inspect/test_surfaces/facades.obj/restore", json={"version": version})
     assert restored.status_code == 200 and restored.json()["original_kept"] is False
-    assert client.post("/api/projects/p/inspect/test_surfaces/facades.obj/restore").status_code == 404
+    assert client.post("/api/projects/p/inspect/test_surfaces/facades.obj/restore", json={"version": restored.json()["version"]}).status_code == 404
 
 
 def test_turning_during_a_run_is_409(client_with_blocking_run, projects_folder):
     client, _ = client_with_blocking_run
     stored = projects_folder / "p" / "inputs" / "test_surfaces" / "surface.ply"
     before = stored.read_bytes()
-    turn = client.post("/api/projects/p/inspect/test_surfaces/surface.ply/turn", json={"surfaces": [0]})
-    assert turn.status_code == 409
-    assert client.post("/api/projects/p/inspect/test_surfaces/surface.ply/restore").status_code == 409
+    version = test_surfaces.content_digest(stored)
+    turn = client.post("/api/projects/p/inspect/test_surfaces/surface.ply/turn", json={"surfaces": [0], "version": version})
+    assert turn.status_code == 409 and "stored_file_changed" not in turn.json()
+    assert client.post("/api/projects/p/inspect/test_surfaces/surface.ply/restore", json={"version": version}).status_code == 409
     assert stored.read_bytes() == before
     assert not (projects_folder / "p" / ORIGINALS_FOLDER).exists()
 
@@ -566,3 +585,136 @@ def test_an_stl_with_odd_coordinates_is_saved(store):
     reply = save_turned_surfaces(store, "p", "site.stl", [0])
     assert reply.original_kept is True
     assert load_mesh(str(_stored(store, "site.stl"))).face_normals[:, 2] == pytest.approx(-np.ones(reply.triangle_count), abs=1e-6)
+
+
+# ---- Final fixes: the version of the file a save or a restore was made on, the cache ----
+
+CHANGED_SINCE_TURNED = "The file changed in the project folder since its surfaces were turned, so nothing was saved."
+CHANGED_SINCE_READ = "The file changed in the project folder since Inspect read it, so nothing was restored."
+
+
+def test_the_summary_names_the_version_of_each_file(store_with_files):
+    for entry in project_inspection(store_with_files, "p").files:
+        path = store_with_files.input_file_path("p", entry.role, entry.file_name)
+        assert entry.version == test_surfaces.content_digest(path)
+    _overwrite(store_with_files, "context", "town.ply", b"this is not a mesh")
+    town = project_inspection(store_with_files, "p").files[2]
+    assert town.problem and town.version == test_surfaces.content_digest(store_with_files.input_file_path("p", "context", "town.ply"))
+
+
+def test_a_save_of_turns_staged_on_a_file_replaced_by_hand_is_409_and_writes_nothing(store_after_a_run):
+    store = store_after_a_run
+    staged_on = project_inspection(store, "p").files[1].version
+    replacement = obj_panels([20, 0])        # the same counts and bounds, its surfaces numbered the other way
+    _overwrite(store, "test_surfaces", "facades.obj", replacement)
+    with pytest.raises(inspection.StoredFileChanged) as refused:
+        save_turned_surfaces(store, "p", "facades.obj", [1], version=staged_on)
+    assert refused.value.status_code == 409 and str(refused.value) == CHANGED_SINCE_TURNED
+    assert _stored(store).read_bytes() == replacement
+    assert not _kept(store).exists()
+    assert _folder_names(store) == ["facades.obj"]
+    # The replacement was built into the project (refresh_changed_inputs) and is told as a file changed in the folder.
+    assert [(notice.role, notice.file_name) for notice in store.read_project_json("p").changed_files] == [("test_surfaces", "facades.obj")]
+    assert store.refresh_changed_inputs("p") is False
+
+
+def test_a_hand_replacement_after_a_save_is_not_lost_to_a_second_save_or_a_restore(store_after_a_run):
+    """The case of the whole-branch review: save once (v1 kept), replace v2 by hand, save turns staged before: v2 stays."""
+    store = store_after_a_run
+    v1 = _stored(store).read_bytes()
+    reply = save_turned_surfaces(store, "p", "facades.obj", [0])
+    assert _kept(store).read_bytes() == v1
+    v2 = obj_panels([0, 20, 40])
+    _overwrite(store, "test_surfaces", "facades.obj", v2)
+    with pytest.raises(inspection.StoredFileChanged):
+        save_turned_surfaces(store, "p", "facades.obj", [1], version=reply.version)
+    assert _stored(store).read_bytes() == v2
+    assert not _kept(store).exists()        # the kept v1 is older than the file in the folder: dropped, as for any hand replacement
+    with pytest.raises(ProjectError) as nothing_kept:
+        restore_original(store, "p", "facades.obj")
+    assert nothing_kept.value.status_code == 404
+    assert _stored(store).read_bytes() == v2
+
+
+def test_a_restore_over_a_file_replaced_by_hand_is_409_and_writes_nothing(store_after_a_run):
+    store = store_after_a_run
+    save_turned_surfaces(store, "p", "facades.obj", [0])
+    read = next(entry for entry in project_inspection(store, "p").files if entry.file_name == "facades.obj")
+    assert read.original_kept is True
+    replacement = obj_panels([20, 0])
+    _overwrite(store, "test_surfaces", "facades.obj", replacement)
+    with pytest.raises(inspection.StoredFileChanged) as refused:
+        restore_original(store, "p", "facades.obj", version=read.version)
+    assert refused.value.status_code == 409 and str(refused.value) == CHANGED_SINCE_READ
+    assert _stored(store).read_bytes() == replacement
+    assert _folder_names(store) == ["facades.obj"]
+
+
+def test_a_save_or_restore_of_the_version_stored_after_a_refresh_goes_ahead(store_after_a_run):
+    store = store_after_a_run
+    _overwrite(store, "test_surfaces", "facades.obj", obj_panels([0, 20, 40]))
+    read = next(entry for entry in project_inspection(store, "p").files if entry.file_name == "facades.obj")
+    reply = save_turned_surfaces(store, "p", "facades.obj", [2], version=read.version)
+    assert reply.surface_count == 3 and reply.version == test_surfaces.content_digest(_stored(store))
+    restore_original(store, "p", "facades.obj", version=reply.version)
+    assert _stored(store).read_bytes() == obj_panels([0, 20, 40])
+
+
+def test_a_save_refused_by_the_refresh_writes_nothing(store_after_a_run, monkeypatch):
+    store = store_after_a_run
+    before = _stored(store).read_bytes()
+
+    def refresh_fails(name):
+        raise ProjectError("The context file 'town.ply' in the project folder could not be read: locked", status_code=422)
+
+    monkeypatch.setattr(store, "refresh_changed_inputs", refresh_fails)
+    for attempt in (lambda: save_turned_surfaces(store, "p", "facades.obj", [0]), lambda: restore_original(store, "p", "facades.obj")):
+        with pytest.raises(ProjectError) as refused:
+            attempt()
+        assert refused.value.status_code == 422 and "could not be read: locked" in str(refused.value)
+    assert _stored(store).read_bytes() == before and not _kept(store).exists()
+
+
+def test_the_routes_answer_409_with_the_reason_when_the_file_changed(tmp_path):
+    client, _ = build_client(tmp_path / "projects")
+    create_project(client)
+    assert upload(client, "p", "test_surfaces", ("facades.obj", obj_panels([0, 20]))).status_code == 200
+    version = client.get("/api/projects/p/inspect").json()["files"][0]["version"]
+    stored = tmp_path / "projects" / "p" / "inputs" / "test_surfaces" / "facades.obj"
+    old_time = stored.stat().st_mtime_ns
+    stored.write_bytes(obj_panels([20, 0]))
+    os.utime(stored, ns=(old_time + 10 ** 9, old_time + 10 ** 9))
+    turn = client.post("/api/projects/p/inspect/test_surfaces/facades.obj/turn", json={"surfaces": [1], "version": version})
+    assert turn.status_code == 409
+    assert turn.json() == {"detail": CHANGED_SINCE_TURNED, "stored_file_changed": True}
+    assert stored.read_bytes() == obj_panels([20, 0])
+    assert client.get("/api/projects/p/stage-status").json()["input_changes"][0]["file_name"] == "facades.obj"
+
+
+def test_a_context_file_keeps_only_its_summary(store_with_files):
+    import trimesh
+    project_inspection(store_with_files, "p")
+    for role, file_name in (("max_volume", "volume.ply"), ("context", "town.ply")):
+        kept = inspection.inspect_file(store_with_files.input_file_path("p", role, file_name), role)
+        assert kept.vertices is None and kept.faces is None and kept.surface_of_face is None and kept.kept_triangle_count == 0
+    facades = inspection.inspect_file(store_with_files.input_file_path("p", "test_surfaces", "facades.obj"), "test_surfaces")
+    assert facades.faces.shape == (4, 3) and facades.kept_triangle_count == 4
+    assert not facades.vertices.flags.writeable and not facades.surface_of_face.flags.writeable
+    assert not any(isinstance(value, trimesh.Trimesh) for value in vars(facades).values())     # no mesh with its derived arrays is kept
+
+
+def test_the_kept_inspections_are_bounded_by_their_triangles(tmp_path, monkeypatch):
+    monkeypatch.setattr(inspection, "_kept", type(inspection._kept)())
+    monkeypatch.setattr(inspection, "_kept_triangles", 0)
+    monkeypatch.setattr(inspection, "KEPT_TRIANGLE_COUNT", 10)
+    paths = [tmp_path / f"f{index}.obj" for index in range(3)]
+    for path in paths:
+        path.write_bytes(obj_panels([0, 20]))        # 4 triangles each
+    for path in paths[:2]:
+        inspection.inspect_file(path, "test_surfaces")
+    assert len(inspection._kept) == 2 and inspection._kept_triangles == 8
+    inspection.inspect_file(paths[2], "test_surfaces")        # 12 > 10: the least recently used leaves
+    assert [key[0] for key in inspection._kept] == [str(paths[1]), str(paths[2])] and inspection._kept_triangles == 8
+    monkeypatch.setattr(inspection, "KEPT_TRIANGLE_COUNT", 3)
+    inspection.inspect_file(paths[0], "test_surfaces")        # larger than the bound alone: it stays, as the newest
+    assert [key[0] for key in inspection._kept] == [str(paths[0])] and inspection._kept_triangles == 4

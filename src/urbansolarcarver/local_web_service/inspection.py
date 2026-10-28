@@ -7,7 +7,14 @@ Saving flips writes the file again in its own format, checks that ``load_mesh`` 
 then puts it in place of the stored file; the file as it was is kept first, so Restore original can put it back.
 
 Reading a file takes seconds for a large mesh, so a file is inspected once and the result is kept until its size or modification
-time changes. A kept mesh is shared by every reader; whoever turns faces does it on a copy.
+time changes. Only a test surface file keeps its triangles (the vertices, faces and surface of each face, without trimesh's derived
+arrays), since only its geometry is asked for; another role keeps its summary alone. The kept triangles are bounded in total
+(KEPT_TRIANGLE_COUNT) as well as the files (KEPT_FILE_COUNT). Kept arrays are shared by every reader and are read only.
+
+A save or a restore names the version of the file (the sha256 of its bytes) Inspect read. It first builds the files changed in the
+project folder into the project (stored_files.refresh_changed_inputs, which drops the kept original of a test surface file replaced
+by hand), then refuses (409, StoredFileChanged) when the stored file is not that version, so a turn is never applied to a file it was
+not staged on and Restore original never puts an older original over a file replaced by hand.
 """
 from __future__ import annotations
 
@@ -37,44 +44,81 @@ ORIGINALS_FOLDER = test_surfaces.ORIGINALS_FOLDER
 HEADER_ALIGNMENT_BYTES = 4      # the geometry header is padded so the arrays after it start aligned
 FRAME_STEP_M = 1.0              # the frame of the geometry is the minimum corner of the bounds rounded down to this
 KEPT_FILE_COUNT = 32            # inspected files kept, the least recently used leaving first
+KEPT_TRIANGLE_COUNT = 5_000_000 # triangles of the test surface files kept in all (about 100 MB per million); the newest file stays
 NORMAL_TOLERANCE = 1e-6         # how far a face normal of a saved file may be from the one expected
 POSITION_TOLERANCE_M = 1e-6     # how far a corner of a saved file may be from the one written (more for a float32 format: see _corner_tolerance)
 OBJ_DECIMALS = 10              # the decimals of a written OBJ: georeferenced coordinates keep their millimetres and more
 
 
+class StoredFileChanged(ProjectError):
+    """A turn or a restore that names a version of the stored file other than the one stored now (409); nothing was written."""
+
+    def __init__(self, message: str):
+        super().__init__(message, status_code=409)
+
+
+CHANGED_SINCE_TURNED = "The file changed in the project folder since its surfaces were turned, so nothing was saved."
+CHANGED_SINCE_READ = "The file changed in the project folder since Inspect read it, so nothing was restored."
+
+
 @dataclass(frozen=True)
 class FileInspection:
-    """The mesh of a stored file with what was worked out from it; the mesh and the arrays are shared, so not to be changed."""
-    mesh: trimesh.Trimesh
-    surface_of_face: np.ndarray     # int32 per face: its surface for a test surface file, zero for the other roles
+    """What was worked out from a stored file. A test surface file keeps its triangles as ``load_mesh`` gave them (vertices and
+    faces, without trimesh's derived arrays) and the surface of each face; the other roles keep their summary alone. The arrays
+    are shared and read only: mesh() gives a mesh of them whose derived arrays go with it."""
     summary: InspectedFile          # original_kept is not known here: project_inspection sets it from the project folder
+    vertices: np.ndarray | None = None
+    faces: np.ndarray | None = None
+    surface_of_face: np.ndarray | None = None       # int32 per face: its surface
+
+    @property
+    def kept_triangle_count(self) -> int:
+        return 0 if self.faces is None else len(self.faces)
+
+    def mesh(self) -> trimesh.Trimesh:
+        """A mesh of the kept triangles, made for the caller (its derived arrays are freed with it); a test surface file only."""
+        if self.vertices is None or self.faces is None:
+            raise ValueError(f"The inspection of '{self.summary.file_name}' keeps no triangles.")
+        return trimesh.Trimesh(vertices=self.vertices, faces=self.faces, process=False)
 
 
 _kept: OrderedDict[tuple[str, int, int], FileInspection] = OrderedDict()
+_kept_triangles = 0             # of the entries of _kept
 _kept_lock = threading.Lock()
 
 
-def inspect_file(path: Path, role: str) -> FileInspection:
-    """The inspection of the stored mesh file *path* of *role*, kept until the file changes; InputError when it cannot be read."""
+def inspect_file(path: Path, role: str, digest: str | None = None) -> FileInspection:
+    """The inspection of the stored mesh file *path* of *role*, kept until the file changes; InputError when it cannot be read.
+
+    *digest*: the sha256 of the file's bytes when the caller has just worked it out; a kept inspection of other bytes (a file
+    replaced with its size and modification time) is then read again."""
     status = Path(path).stat()
     key = (str(path), status.st_size, status.st_mtime_ns)
     with _kept_lock:
         found = _kept.get(key)
-        if found is not None:
+        if found is not None and (digest is None or found.summary.version == digest):
             _kept.move_to_end(key)
             return found
+    version = digest if digest is not None else test_surfaces.content_digest(Path(path))
     mesh = load_mesh(str(path), fix_normals=role not in OPTIONAL_MESH_ROLES)
-    inspected = _inspect_mesh(mesh, Path(path).name, role)
+    inspected = _inspect_mesh(mesh, Path(path).name, role, version)
     _keep(key, inspected)
     return inspected
 
 
 def _keep(key: tuple[str, int, int], inspected: FileInspection) -> None:
+    """Keep *inspected* as the most recent; the least recently used leave while there are more than KEPT_FILE_COUNT files or
+    KEPT_TRIANGLE_COUNT triangles (the newest stays, however large)."""
+    global _kept_triangles
     with _kept_lock:
+        replaced = _kept.pop(key, None)
+        if replaced is not None:
+            _kept_triangles -= replaced.kept_triangle_count
         _kept[key] = inspected
-        _kept.move_to_end(key)
-        while len(_kept) > KEPT_FILE_COUNT:
-            _kept.popitem(last=False)
+        _kept_triangles += inspected.kept_triangle_count
+        while len(_kept) > 1 and (len(_kept) > KEPT_FILE_COUNT or _kept_triangles > KEPT_TRIANGLE_COUNT):
+            _, left = _kept.popitem(last=False)
+            _kept_triangles -= left.kept_triangle_count
 
 
 def project_inspection(store: ProjectStore, name: str) -> InspectReply:
@@ -94,7 +138,7 @@ def project_inspection(store: ProjectStore, name: str) -> InspectReply:
             try:
                 summary = inspect_file(path, role).summary
             except (InputError, OSError) as error:
-                files.append(_unreadable_summary(role, file_name, error))
+                files.append(_unreadable_summary(role, path, error))
                 continue
             if role == test_surfaces.ROLE:
                 summary = _with_original_kept(summary, project_folder)
@@ -102,9 +146,12 @@ def project_inspection(store: ProjectStore, name: str) -> InspectReply:
     return InspectReply(files=files)
 
 
-def save_turned_surfaces(store: ProjectStore, name: str, file_name: str, surfaces: list[int]) -> InspectedFile:
+def save_turned_surfaces(store: ProjectStore, name: str, file_name: str, surfaces: list[int], *, version: str) -> InspectedFile:
     """Turn the surfaces numbered *surfaces* of the stored test surface file *file_name* the other way and save the file.
 
+    *version* is the file's version (InspectedFile.version) the surfaces were turned on. The files changed in the project folder
+    are built into the project first (refresh_changed_inputs; its error is raised), and a stored file of another version is
+    refused with StoredFileChanged (409, CHANGED_SINCE_TURNED) before anything is written.
     The file is written again in its own format with those surfaces turned (a surface is turned as a whole), read back with
     ``load_mesh``, and replaces the stored file only when it reads as the same triangles with the turned surfaces' normals
     negated and the others' unchanged, and at the same places (to 1e-6 m). Before the first save the stored file is copied to
@@ -113,14 +160,14 @@ def save_turned_surfaces(store: ProjectStore, name: str, file_name: str, surface
     studies that list the file are built again and the criteria and studies go out of date by them; there is no changed-file
     notice and inputs_revision does not change. Returns the file's summary.
 
-    ProjectError: 404 for a file that is not stored, 422 for a file that cannot be read, that is closed as a whole, or for no
-    surface or one that does not exist, 500 when the written file does not read as turned (nothing is saved then). The caller
-    refuses it during a run.
+    ProjectError: 404 for a file that is not stored, 409 for another version, 422 for a file that cannot be read, that is closed
+    as a whole, or for no surface or one that does not exist, 500 when the written file does not read as turned (nothing is saved
+    then). The caller refuses it during a run.
     """
     with store.project_lock(name):
         project_folder = store.open(name)
         path = store.input_file_path(name, test_surfaces.ROLE, file_name)
-        inspected = _inspect_or_refuse(path, test_surfaces.ROLE)
+        inspected = _inspect_version_or_refuse(store, name, path, version, CHANGED_SINCE_TURNED)
         if not inspected.summary.flippable:
             raise ProjectError("This file is closed as a whole, and the loader always turns its bodies outward, so its surfaces cannot be flipped.",
                                status_code=422)
@@ -128,9 +175,9 @@ def save_turned_surfaces(store: ProjectStore, name: str, file_name: str, surface
         turned_surfaces = sorted(set(surfaces))
         if not turned_surfaces or turned_surfaces[0] < 0 or turned_surfaces[-1] >= surface_count:
             raise ProjectError(f"Name at least one surface of the file, numbered from 0 to {surface_count - 1}; got {surfaces}.", status_code=422)
-        mesh = inspected.mesh
+        mesh = inspected.mesh()
         is_turned = np.isin(inspected.surface_of_face, turned_surfaces)
-        faces = mesh.faces.copy()       # the mesh is shared: the turned one is a mesh of its own
+        faces = mesh.faces.copy()       # the arrays are shared: the turned mesh has its own
         faces[is_turned] = faces[is_turned][:, ::-1]
         turned_mesh = trimesh.Trimesh(vertices=mesh.vertices.copy(), faces=faces, process=False)
         expected_normals = np.where(is_turned[:, None], -mesh.face_normals, mesh.face_normals)
@@ -155,14 +202,17 @@ def save_turned_surfaces(store: ProjectStore, name: str, file_name: str, surface
         return _summary_of_stored_file(store, name, project_folder, file_name)
 
 
-def restore_original(store: ProjectStore, name: str, file_name: str) -> InspectedFile:
+def restore_original(store: ProjectStore, name: str, file_name: str, *, version: str) -> InspectedFile:
     """Put the original kept before the first saved flip of the test surface file *file_name* back in place of the stored file.
 
-    It has the effects of a save (save_turned_surfaces), and the kept original is removed. ProjectError 404 for a file that is not
-    stored or has no kept original. The caller refuses it during a run."""
+    It has the effects of a save (save_turned_surfaces), and the kept original is removed. *version* is the version of the stored
+    file Inspect read: as for a save, the files changed in the project folder are built in first, and another version is refused
+    with StoredFileChanged (409, CHANGED_SINCE_READ). ProjectError 404 for a file that is not stored or has no kept original. The
+    caller refuses it during a run."""
     with store.project_lock(name):
         project_folder = store.open(name)
         path = store.input_file_path(name, test_surfaces.ROLE, file_name)
+        _refresh_and_check_version(store, name, path, version, CHANGED_SINCE_READ)
         original_path = test_surfaces.original_path(project_folder, file_name)
         if not original_path.is_file():
             raise ProjectError(f"No original is kept for the {test_surfaces.ROLE} file '{file_name}'.", status_code=404)
@@ -191,7 +241,7 @@ def inspection_geometry(store: ProjectStore, name: str, file_name: str) -> bytes
     if not path.is_file():
         raise ProjectError(f"There is no {test_surfaces.ROLE} file named '{file_name}'.", status_code=404)
     inspected = _inspect_or_refuse(path, test_surfaces.ROLE)
-    mesh = inspected.mesh
+    mesh = inspected.mesh()
     surface_numbers = inspected.surface_of_face
     frame = np.floor(mesh.bounds[0] / FRAME_STEP_M) * FRAME_STEP_M
     corners = (mesh.vertices[mesh.faces] - frame).astype("<f4")
@@ -210,6 +260,31 @@ def inspection_geometry(store: ProjectStore, name: str, file_name: str) -> bytes
     header_bytes = json.dumps(header).encode("utf-8")
     header_bytes += b" " * (-len(header_bytes) % HEADER_ALIGNMENT_BYTES)
     return b"".join([struct.pack("<I", len(header_bytes)), header_bytes, corners.tobytes(), surface_numbers.astype("<u4").tobytes()])
+
+
+def _refresh_and_check_version(store: ProjectStore, name: str, path: Path, version: str, changed_message: str) -> str:
+    """Build the files changed in the project folder into the project, then check that the stored file *path* is *version*;
+    the version. StoredFileChanged (409) with *changed_message* when it is another; 404 when the file is not in the folder."""
+    store.refresh_changed_inputs(name)
+    try:
+        stored_version = test_surfaces.content_digest(path)
+    except FileNotFoundError as error:
+        raise ProjectError(f"There is no {test_surfaces.ROLE} file named '{path.name}'.", status_code=404) from error
+    except OSError as error:
+        raise ProjectError(f"The {test_surfaces.ROLE} file '{path.name}' cannot be read: {error}", status_code=422) from error
+    if stored_version != version:
+        raise StoredFileChanged(changed_message)
+    return stored_version
+
+
+def _inspect_version_or_refuse(store: ProjectStore, name: str, path: Path, version: str, changed_message: str) -> FileInspection:
+    """The inspection of the stored test surface file *path* when it is *version* (_refresh_and_check_version), read again if the
+    one kept is of other bytes; StoredFileChanged when the file changed while it was read."""
+    stored_version = _refresh_and_check_version(store, name, path, version, changed_message)
+    inspected = _inspect_or_refuse(path, test_surfaces.ROLE, stored_version)
+    if inspected.summary.version != version:
+        raise StoredFileChanged(changed_message)
+    return inspected
 
 
 def _with_original_kept(summary: InspectedFile, project_folder: Path) -> InspectedFile:
@@ -276,7 +351,7 @@ def _write_turned_file(turned_mesh: trimesh.Trimesh, temporary_path: Path, file_
         reloaded = load_mesh(str(temporary_path))
     except InputError as error:
         raise refusal from error
-    if len(reloaded.faces) != len(before.mesh.faces):
+    if len(reloaded.faces) != before.kept_triangle_count:
         raise refusal
     if not np.all(np.abs(reloaded.face_normals - expected_normals) <= NORMAL_TOLERANCE):
         raise refusal
@@ -284,7 +359,11 @@ def _write_turned_file(turned_mesh: trimesh.Trimesh, temporary_path: Path, file_
         raise refusal
     # The surfaces may differ from the ones before: two panels that were told apart only by facing opposite ways join into one
     # surface once one is turned, and that is a turn that holds.
-    return _inspect_mesh(reloaded, file_name, test_surfaces.ROLE)
+    try:
+        version = test_surfaces.content_digest(temporary_path)
+    except OSError as error:
+        raise refusal from error
+    return _inspect_mesh(reloaded, file_name, test_surfaces.ROLE, version)
 
 
 def _corner_tolerance(path: Path, mesh: trimesh.Trimesh) -> float:
@@ -339,9 +418,9 @@ def _same_content(first: Path, second: Path) -> bool:
         return False
 
 
-def _inspect_or_refuse(path: Path, role: str) -> FileInspection:
+def _inspect_or_refuse(path: Path, role: str, digest: str | None = None) -> FileInspection:
     try:
-        return inspect_file(path, role)
+        return inspect_file(path, role, digest)
     except (InputError, OSError) as error:
         raise ProjectError(f"The {role} file '{path.name}' cannot be read: {_reason(error)}", status_code=422) from error
 
@@ -350,13 +429,19 @@ def _reason(error: Exception) -> str:
     return str(error).removeprefix("load_mesh: ")
 
 
-def _unreadable_summary(role: str, file_name: str, error: Exception) -> InspectedFile:
-    """The entry of a file that cannot be read: its problem and nothing counted."""
-    return InspectedFile(role=role, file_name=file_name, triangle_count=0, area_m2=0.0, bounds=[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
-                         body_count=0, closed_body_count=0, problem=_reason(error))
+def _unreadable_summary(role: str, path: Path, error: Exception) -> InspectedFile:
+    """The entry of a file that cannot be read: its problem and nothing counted (its version when its bytes can be read)."""
+    try:
+        version = test_surfaces.content_digest(path)
+    except OSError:
+        version = ""
+    return InspectedFile(role=role, file_name=path.name, triangle_count=0, area_m2=0.0, bounds=[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+                         body_count=0, closed_body_count=0, problem=_reason(error), version=version)
 
 
-def _inspect_mesh(mesh: trimesh.Trimesh, file_name: str, role: str) -> FileInspection:
+def _inspect_mesh(mesh: trimesh.Trimesh, file_name: str, role: str, version: str) -> FileInspection:
+    """The summary of *mesh* (the stored file *file_name* of *role*, whose bytes have the sha256 *version*); for a test surface
+    file also its vertices, faces and the surface of each face, without the derived arrays *mesh* holds."""
     face_count = len(mesh.faces)
     labels = trimesh.graph.connected_component_labels(mesh.face_adjacency, node_count=face_count)
     _, first_face, numbers = np.unique(labels, return_index=True, return_inverse=True)
@@ -364,13 +449,16 @@ def _inspect_mesh(mesh: trimesh.Trimesh, file_name: str, role: str) -> FileInspe
     body_count = int(numbers.max()) + 1
     closed_body_count = body_count - len(_open_bodies(mesh, numbers))
     is_test_surface = role == test_surfaces.ROLE
-    surface_of_face = numbers if is_test_surface else np.zeros(face_count, dtype=np.int32)
-    surface_of_face.flags.writeable = False
     summary = InspectedFile(
         role=role, file_name=file_name, triangle_count=int(face_count), area_m2=float(mesh.area), bounds=mesh.bounds.tolist(),
         body_count=body_count, closed_body_count=closed_body_count, surface_count=body_count if is_test_surface else None,
-        flippable=is_test_surface and not mesh.is_watertight, original_kept=False)
-    return FileInspection(mesh=mesh, surface_of_face=surface_of_face, summary=summary)
+        flippable=is_test_surface and not mesh.is_watertight, original_kept=False, version=version)
+    if not is_test_surface:
+        return FileInspection(summary=summary)
+    vertices, faces = np.asarray(mesh.vertices).view(np.ndarray), np.asarray(mesh.faces).view(np.ndarray)
+    for array in (vertices, faces, numbers):
+        array.flags.writeable = False
+    return FileInspection(summary=summary, vertices=vertices, faces=faces, surface_of_face=numbers)
 
 
 def _open_bodies(mesh: trimesh.Trimesh, body_of_face: np.ndarray) -> np.ndarray:
