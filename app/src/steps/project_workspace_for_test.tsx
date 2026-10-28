@@ -85,7 +85,7 @@ export class FakeService {
   inputFileContents: Record<string, string> = {};
   /** The reply of GET sun-path; null: not there (404). */
   sunPath: SunPath | null = null;
-  /** The reply of GET sun-chart (Inspect's sun tool). */
+  /** The reply of GET sun-chart (Simulate's sun tool). */
   sunChart: SunChart = { key_days: [], hour_lines: [], day: { date: "12-21", runs: [[[-0.5, -0.5, 0.71], [0, -0.6, 0.8]]] } };
   /** GET sun-positions: the sun is up from 08:00 to 16:00, toward SUN_UP, every step of the range asked for, on one day. */
   static readonly SUN_UP = [0, -0.6, 0.8];

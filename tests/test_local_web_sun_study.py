@@ -1,4 +1,4 @@
-"""Inspect's sun tool (local_web_service.sun_study): the year's sun path, the sun at chosen times, and their routes."""
+"""Simulate's sun tool (local_web_service.sun_study): the year's sun path, the sun at chosen times, and their routes."""
 import numpy as np
 import pytest
 

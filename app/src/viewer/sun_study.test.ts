@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { shadeHoursOf } from "../inspect/use_sun_study";
+import { shadeHoursOf } from "../simulate/use_sun_study";
 import { sunAt, sunStudyObjects } from "./sun_study";
 
 const CHART = {

@@ -360,7 +360,7 @@ export function isStoredFileChanged(error: unknown): boolean {
 export const getSunPath = (token: string, project: string, criterionId?: string) =>
   requestJson<SunPath>(token, forCriterion(`${projectPath(project)}/sun-path`, criterionId));
 
-/** Inspect's sun path: the arcs of the equinox and the solstices, the hour lines, and the arc of *date* ("MM-DD"); 404 without a weather file. */
+/** Simulate's sun path: the arcs of the equinox and the solstices, the hour lines, and the arc of *date* ("MM-DD"); 404 without a weather file. */
 export const getSunChart = (token: string, project: string, date: string) =>
   requestJson<SunChart>(token, `${projectPath(project)}/sun-chart?${new URLSearchParams({ date })}`);
 

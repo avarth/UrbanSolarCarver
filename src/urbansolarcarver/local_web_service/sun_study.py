@@ -1,4 +1,4 @@
-"""Inspect's sun tool: the sun path of the year and of a chosen day, and the sun at chosen times, for the project's weather file.
+"""Simulate's sun tool: the sun path of the year and of a chosen day, and the sun at chosen times, for the project's weather file.
 
 The sun is computed as the engine computes it (sun.get_sun_vectors: Ladybug's sunpath at the weather file's location, the project's
 North), from the weather file's local standard time. The vectors point from the model toward the sun, in model coordinates.

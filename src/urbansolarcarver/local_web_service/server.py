@@ -484,7 +484,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         return sun_path_for_config(store.load_project_config(name, criterion))
 
     def sun_site(name: str) -> sun_study.SunSite:
-        """What Inspect's sun tool reads: the project's weather file and North (shared by the criteria; the first that is on)."""
+        """What Simulate's sun tool reads: the project's weather file and North (shared by the criteria; the first that is on)."""
         store = folder_in_use.store
         active = active_criteria(store.criteria(name))
         weather = store.weather_file_path(name)
@@ -494,7 +494,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
     @router.get("/projects/{name}/sun-chart", responses={404: {"model": ErrorDetailReply, "description": sun_study.NO_WEATHER_FILE_MESSAGE},
                                                          422: {"model": ErrorDetailReply, "description": "The date is not MM-DD."}})
     def sun_chart(name: str, date: str = Query("06-21", description="The day whose arc is drawn, MM-DD.")) -> SunChart:
-        """Inspect's sun path: the arcs of the March equinox and the solstices, an hour line for each whole hour through the year, and
+        """Simulate's sun path: the arcs of the March equinox and the solstices, an hour line for each whole hour through the year, and
         the arc of *date*, in the weather file's local standard time; 404 without a weather file."""
         day = sun_study.parse_date(date)
         return sun_study.sun_chart(sun_site(name), *day)

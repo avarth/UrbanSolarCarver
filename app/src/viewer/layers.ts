@@ -22,7 +22,7 @@ export type LayerName = "max_volume" | "test_surfaces" | "context" | "terrain" |
   "sky_dome" | "envelope" | "building_massing" | "study_values" | "inspect_surfaces" | "sun_study";
 
 /** The layers in the order of UX 8.2, which the layers menu and the accessible name follow; then the study of Simulate, the surface
- * orientation of Inspect and the sun path of Inspect's sun tool. */
+ * orientation of Inspect and the sun path of Simulate's sun tool. */
 export const LAYER_NAMES: readonly LayerName[] = ["max_volume", "test_surfaces", "context", "terrain", "kept_voxels", "carved_voxels", "carved_by_criterion",
   "sun_path", "sky_dome", "envelope", "building_massing", "study_values", "inspect_surfaces", "sun_study"];
 
@@ -727,7 +727,7 @@ export function sunPathLayer(objects: SunPathObjects, sphere: Hemisphere): THREE
   return layer;
 }
 
-// Inspect's sun path: the chosen day's arc 3 px wide, the arcs of the equinox and the solstices dashed, the hour lines thin and
+// Simulate's sun path: the chosen day's arc 3 px wide, the arcs of the equinox and the solstices dashed, the hour lines thin and
 // faint, each labelled at its highest point, and the sun at the chosen time as a disc.
 const SUN_STUDY_DAY_PIXELS = 3;
 const SUN_STUDY_HOUR_LINE_OPACITY = 0.45;

@@ -1,4 +1,4 @@
-// Inspect's sun tool in the 3D view: a sun light at the chosen time that casts shadows (three.js shadow maps), and a quick count of
+// Simulate's sun tool in the 3D view: a sun light at the chosen time that casts shadows (three.js shadow maps), and a quick count of
 // the hours in shade over a range of times.
 //
 // The count draws the solid meshes from the camera once for every sun position into a float target, adding the hours each position

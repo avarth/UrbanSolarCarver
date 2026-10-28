@@ -6,11 +6,15 @@
   top: 12px;
   left: 12px;
   z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--space-unit) * 2);
   max-width: calc(100% - 24px);
   color: var(--colour-ink);
 }
 
-.studies-panel {
+.studies-panel, .sun-panel {
   position: relative;
   box-sizing: border-box;
   width: 280px;
@@ -21,12 +25,12 @@
   border-radius: var(--radius-large);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-ink) 12%, transparent);
 }
-.studies-panel-collapsed { width: auto; padding: var(--space-unit); }
+.studies-panel-collapsed, .sun-panel-collapsed { width: auto; padding: var(--space-unit); }
 
-.studies-panel-header { display: flex; align-items: center; gap: calc(var(--space-unit) * 2); }
-.studies-panel-title { margin: 0; font-size: var(--text-body); font-weight: 600; }
+.studies-panel-header, .sun-panel-header { display: flex; align-items: center; gap: calc(var(--space-unit) * 2); }
+.studies-panel-title, .sun-panel-title { margin: 0; font-size: var(--text-body); font-weight: 600; }
 
-.studies-panel-toggle,
+.studies-panel-toggle, .sun-panel-toggle,
 .study-row-settings,
 .study-popover-close {
   display: inline-grid;
@@ -41,7 +45,7 @@
   color: var(--colour-ink);
   cursor: pointer;
 }
-.studies-panel-toggle:hover, .study-row-settings:hover, .study-popover-close:hover,
+.studies-panel-toggle:hover, .sun-panel-toggle:hover, .study-row-settings:hover, .study-popover-close:hover,
 .study-row-settings[aria-expanded="true"] { background: var(--colour-accent-soft); }
 
 .studies-panel-body { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); margin-top: calc(var(--space-unit) * 2); }
@@ -176,3 +180,16 @@
 @media (max-width: 720px) {
   .studies-panel { width: min(280px, calc(100vw - 48px)); }
 }
+
+/* The Sun panel, under the studies panel and built as it is: the day, the time, and the three parts of the sun tool. */
+.sun-panel-body { display: flex; flex-direction: column; gap: var(--space-unit); margin-top: calc(var(--space-unit) * 2); }
+.sun-panel-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-unit); }
+.sun-panel-label { min-width: 3.5em; color: var(--colour-muted); }
+.sun-panel-row input[type="range"] { flex: 1; min-width: 120px; }
+.sun-panel-clock { font-variant-numeric: tabular-nums; }
+.sun-panel-day { display: inline-flex; gap: var(--space-unit); }
+.sun-panel-key-days { display: flex; flex-wrap: wrap; gap: calc(var(--space-unit) * 2); }
+.sun-panel-key-days button[aria-pressed="true"] { font-weight: 600; text-decoration: none; }
+.sun-panel-check { display: flex; align-items: center; gap: var(--space-unit); }
+.sun-panel-shade { display: flex; flex-direction: column; gap: var(--space-unit); padding-left: calc(var(--space-unit) * 3); }
+.sun-panel-note { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }

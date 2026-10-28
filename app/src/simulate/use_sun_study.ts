@@ -1,6 +1,6 @@
-// Inspect's sun tool (user, 2026-10-28: the traditional study of a project's massing with the sun): the day and time chosen, the
+// Simulate's sun tool (user, 2026-10-28: the traditional study of a project's massing with the sun): the day and time chosen, the
 // year's sun path with that day, the shadows at that time, and the hours in shade over a range of times, as the Sun panel sets them
-// and the 3D view draws them. It reads GET sun-chart and sun-positions while Inspect is open and the project has a weather file;
+// and the 3D view draws them. It reads GET sun-chart and sun-positions while Simulate is open and the project has a weather file;
 // the times are the weather file's local standard time.
 import { useEffect, useMemo, useState } from "react";
 import { ApiError, getSunChart, getSunPositions, serviceProblemOf, type SunChart, type SunPosition, type SunPositions } from "../api_client/client";
@@ -72,7 +72,7 @@ export function shadeHoursOf(positions: SunPositions, startMinute: number, endMi
 interface SunStudySource {
   token: string;
   project: string;
-  /** Inspect is open: the sun is read only then. */
+  /** Simulate is open: the sun is read only then. */
   active: boolean;
   hasWeatherFile: boolean;
   onServiceProblem: (error: unknown) => void;

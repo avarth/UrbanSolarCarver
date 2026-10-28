@@ -3,7 +3,7 @@
 // Orbit with the left mouse button, pan with the right, zoom with the wheel. A click (a press and release within 5 px and 400 ms)
 // goes to the listeners of onLayerClick, unless an opaque surrounding (context, terrain) is nearer along the ray. Camera moves of frameAll, frameBox and viewTop take 400 ms, and are instant under
 // prefers-reduced-motion. No React here: the overlays (viewer_overlays/) read the camera through
-// onCameraChange and call the methods below. Inspect's sun tool adds a sun that casts shadows and a count of the hours in shade
+// onCameraChange and call the methods below. Simulate's sun tool adds a sun that casts shadows and a count of the hours in shade
 // (sun_shading.ts).
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -158,7 +158,7 @@ export class ViewerScene {
     this.container = container;
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.shadowMap.enabled = true;          // only Inspect's sun casts shadows, and only while asked to
+    this.renderer.shadowMap.enabled = true;          // only Simulate's sun casts shadows, and only while asked to
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     const canvas = this.renderer.domElement;
     canvas.style.display = "block";
@@ -262,7 +262,7 @@ export class ViewerScene {
   }
 
   /**
-   * Inspect's sun tool: the sun toward *sun* (a vector toward it in model coordinates; null for none), casting shadows on the solid
+   * Simulate's sun tool: the sun toward *sun* (a vector toward it in model coordinates; null for none), casting shadows on the solid
    * layers and the ground when *shadows*, and the hours in shade over a range drawn over the view (null for none).
    */
   setSunStudy(sun: Point3 | null, shadows: boolean, shade: ShadeHours | null): void {

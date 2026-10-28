@@ -1,11 +1,11 @@
-// The Sun panel of Inspect, under the Files panel and collapsible as it is: the day and the time, the year's sun path with that day,
+// The Sun panel of Simulate, under the studies panel and collapsible as it is: the day and the time, the year's sun path with that day,
 // the shadows at that time, and the hours in shade over a range of hours on that day or over several days. Without a weather file it
 // says one is needed. The 3D view draws what it sets (use_sun_study, the sun_study layer, sun_shading).
 import { useId, useState } from "react";
 import { messages } from "../messages";
 import { formattedNumber } from "../steps/format_numbers";
 import { clockText, MINUTES_PER_DAY, TIME_STEP_MINUTES, type MonthDay, type SunStudyHook } from "./use_sun_study";
-import "./inspect.css";
+import "./simulate.css";
 
 const DAYS_OF_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 const KEY_DAYS: readonly MonthDay[] = [{ month: 3, day: 21 }, { month: 6, day: 21 }, { month: 9, day: 21 }, { month: 12, day: 21 }];
@@ -54,17 +54,17 @@ export function SunPanel({ sunStudy }: { sunStudy: SunStudyHook }) {
   const titleId = useId();
   const { settings, change, sunNow } = sunStudy;
   return (
-    <section className={`files-panel sun-panel ${open ? "files-panel-open" : "files-panel-collapsed"}`} aria-labelledby={open ? titleId : undefined}
+    <section className={`sun-panel ${open ? "sun-panel-open" : "sun-panel-collapsed"}`} aria-labelledby={open ? titleId : undefined}
              aria-label={open ? undefined : messages.sunToolTitle}>
-      <div className="files-panel-header">
-        <button type="button" className="files-panel-toggle" aria-label={messages.sunToolTitle} aria-expanded={open}
+      <div className="sun-panel-header">
+        <button type="button" className="sun-panel-toggle" aria-label={messages.sunToolTitle} aria-expanded={open}
                 aria-controls={open ? bodyId : undefined} title={messages.sunToolTitle} onClick={() => setOpen((shown) => !shown)}>
           <SunIcon />
         </button>
-        {open && <h2 id={titleId} className="files-panel-title">{messages.sunToolTitle}</h2>}
+        {open && <h2 id={titleId} className="sun-panel-title">{messages.sunToolTitle}</h2>}
       </div>
       {open && (
-        <div id={bodyId} className="files-panel-body sun-panel-body">
+        <div id={bodyId} className="sun-panel-body">
           {!sunStudy.available ? <p className="sun-panel-note">{messages.sunToolNoWeatherFile}</p> : (
             <>
               <div className="sun-panel-row">

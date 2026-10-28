@@ -53,17 +53,6 @@ async function openInspect(beforeInspect: () => Promise<void> = async () => {}, 
   return service;
 }
 
-/** The Sun panel, opened. */
-async function openSunPanel() {
-  await press(container().querySelector<HTMLButtonElement>('.sun-panel .files-panel-toggle')!);
-}
-const sunPanel = () => container().querySelector<HTMLElement>(".sun-panel")!;
-const sunCheck = (label: string) => [...sunPanel().querySelectorAll<HTMLLabelElement>(".sun-panel-check")].find((check) => check.textContent === label)!.querySelector("input")!;
-async function check(input: HTMLInputElement) {
-  await act(async () => input.click());
-  await settle();
-}
-
 /** Text with its no-break spaces (between digit groups, before a unit) read as spaces. */
 const plain = (element: Element | null | undefined) => element?.textContent?.replace(/\s/g, " ") ?? null;
 const filesPanel = () => container().querySelector<HTMLElement>(".files-panel")!;
@@ -406,48 +395,4 @@ test("a file changed in the project folder, found by the stage status when the w
   expect(service.count("GET /inspect")).toBe(reads + 1);
   expect(turnedLine("facades.obj")).toBeNull();
   expect(plain(filesPanel().querySelector(".files-panel-problem"))).toBe("The file changed, so its turns not saved were dropped.");
-});
-
-test("the Sun panel sets the sun at the chosen time, its shadows, the year's sun path and the hours in shade on the view", async () => {
-  // The sun's disc is drawn on a 2D canvas, which jsdom does not have; WebGL is pretended as the other tests do.
-  const drawing = { fillStyle: "", beginPath() {}, arc() {}, fill() {} };
-  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(((kind: string) => (kind === "2d" ? drawing : kind === "webgl2" ? {} : null)) as never);
-  const service = await openInspect();
-  expect(sunPanel().classList.contains("files-panel-collapsed")).toBe(true);
-  await openSunPanel();
-  expect(service.requests).toContain("GET /sun-positions?from=12-21&to=12-21&start=0&end=1440&step=5");
-  expect(sunPanel().querySelector('[role="status"]')!.textContent).toBe("Sun 53° above the horizon, 180° from north");
-  expect(FakeViewerScene.latest!.sunStudy).toEqual({ sun: [0, -0.6, 0.8], shadows: false, shade: null });
-  await check(sunCheck("Shadows at this time"));
-  expect(FakeViewerScene.latest!.sunStudy.shadows).toBe(true);
-  await check(sunCheck("Sun path of the year and of this day"));
-  expect(service.requests).toContain("GET /sun-chart?date=12-21");
-  expect(FakeViewerScene.latest!.layers.get("sun_study")).toBeTruthy();
-  await check(sunCheck("Hours in shade"));
-  // 08:00 to 16:00 every 10 minutes, each time the middle of its step: 48 times of 10 minutes, the whole range in sun.
-  expect(service.requests).toContain("GET /sun-positions?from=12-21&to=12-21&start=485&end=955&step=10");
-  const shade = FakeViewerScene.latest!.sunStudy.shade!;
-  expect(shade.directions).toHaveLength(48);
-  expect(shade.hoursEach * shade.directions.length).toBeCloseTo(8);
-  expect(container().querySelector(".viewer-legend h3")!.textContent).toBe("Hours in shade per day, 08:00 to 16:00, 21 Dec");
-  // Night: no sun, so no shadows are cast.
-  const slider = sunPanel().querySelector<HTMLInputElement>('input[type="range"]')!;
-  await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(slider, "120"); slider.dispatchEvent(new Event("input", { bubbles: true })); });
-  await settle();
-  expect(sunPanel().querySelector('[role="status"]')!.textContent).toBe("The sun is below the horizon.");
-  expect(FakeViewerScene.latest!.sunStudy.sun).toBeNull();
-});
-
-test("without a weather file the Sun panel says one is needed and reads nothing", async () => {
-  const service = new FakeService(NOTHING_RUN, null);
-  service.inspection = FILES;
-  service.inspectGeometries = { "facades.obj": facadesGeometry(), "box.obj": boxGeometry() };
-  const opened = project(NOTHING_RUN);
-  opened.inputs = { ...opened.inputs, weather: [] };
-  await openWorkspace(service, opened);
-  await switchMode("inspect");
-  await settle();
-  await openSunPanel();
-  expect(sunPanel().textContent).toContain("Add a weather file in Design (Inputs) to see the sun");
-  expect(service.requests.some((request) => request.includes("/sun-"))).toBe(false);
 });

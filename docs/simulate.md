@@ -125,6 +125,19 @@ Reopening the project shows the last results. The studies also use `inputs/joine
 
 The service routes are under `/projects/{name}/studies` and `POST /projects/{name}/simulate`; the engine request is `check` (see [Engine requests](api/engine-requests.md#commands)).
 
+## The Sun panel
+
+The **Sun** panel, under the studies panel and collapsed at first (the sun icon opens it), shows the site with the sun as architects study it on a sun path diagram and with shadow drawings, beside the studies. It needs the project's weather file, whose location gives the sun's course; without one it says so. The times are the weather file's local standard time, without daylight saving, and North is the project's, as in the carving.
+
+- **Day** and **Time** choose a moment: a month and a day (or 21 Mar, 21 Jun, 21 Sep, 21 Dec), and the time on a slider in 5 minute steps. The panel says how high the sun stands and its bearing from north, or that it is below the horizon.
+- **Sun path of the year and of this day** draws, on the hemisphere around the scene, the sun's arcs on the March equinox (the September one lies within a fraction of a degree of it) and the two solstices (dashed), a line for each whole hour showing where the sun stands at that hour through the year (labelled at its highest point), the chosen day's arc (bold) and the sun at the chosen time.
+- **Shadows at this time** lights the scene with the sun at that moment: the maximum volume, the envelope, the massing, the surroundings and the terrain cast shadows on each other, and on the ground where there is no terrain. The sky light is lowered meanwhile, so the shade reads.
+- **Hours in shade** counts, for every surface the view shows, how many of the hours from a start to an end hour it spends in shade on the chosen day, or as a mean per day over several days (**Over several days, until**). A surface is in shade at a time when something stands between it and the sun or it faces away from the sun. The legend's ramp runs from yellow (in sun all the range) to dark (in shade all of it).
+
+The hours in shade are a quick count, not a study. They are worked out on the graphics card from the camera: the view is drawn once for each sun position (every 10 minutes on one day, every 30 minutes over several days, on every n-th day when that would be more than 240 positions), and each draw adds the time it stands for where the surface is in shade. So the count is of what the camera sees, at the resolution of the shadow map (4096 pixels across about five times the site's radius), and it is counted again when the camera stops moving. A **Sun hours** study is the precise count, per test point, traced against the meshes.
+
+The panel reads two routes: `GET /projects/{name}/sun-chart?date=MM-DD` (the arcs of the March equinox, the solstices and `date`, every 5 minutes, and an hour line for each whole hour, a point a week) and `GET /projects/{name}/sun-positions?from=MM-DD&to=MM-DD&start=&end=&step=` (the sun above the horizon every `step` minutes from minute `start` to `end` of each day from `from` to `to`, over the new year when `to` comes first, with its altitude and azimuth; on every n-th day, `day_step`, when that would be more than 240 positions). Both answer 404 without a weather file.
+
 ## Not there yet
 
 These belong to a later milestone:

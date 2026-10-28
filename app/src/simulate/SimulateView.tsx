@@ -1,5 +1,5 @@
 // What Simulate puts over the 3D view: the studies panel (StudiesPanel) with the popover of a study's settings (StudyPopover) and
-// Run; the geometry switch at the top centre, and for the selected study the target legend along the bottom and the result card in
+// Run, and under it the Sun panel (SunPanel: the sun path, the shadows and the hours in shade of the sun tool); the geometry switch at the top centre, and for the selected study the target legend along the bottom and the result card in
 // the bottom right corner (use_study_view.ts; the view draws its values, ProjectWorkspace gives them to ViewerPane). The studies are read when Simulate opens and again whenever a run ends while it is open: a simulation's results, or a run of
 // Design that changed what the studies trace. The simulation is a run of the app's run loop (origin "simulate"), one job at a time
 // with the runs of Design: Run waits while one of those goes on, and the studies cannot be changed while a run of the project does.
@@ -15,8 +15,10 @@ import { GeometrySwitch } from "./GeometrySwitch";
 import { ResultCard } from "./ResultCard";
 import { StudiesPanel } from "./StudiesPanel";
 import { StudyPopover } from "./StudyPopover";
+import { SunPanel } from "./SunPanel";
 import type { StudiesHook } from "./use_studies";
 import type { StudyViewHook } from "./use_study_view";
+import type { SunStudyHook } from "./use_sun_study";
 import "./simulate.css";
 
 interface SimulateViewProps {
@@ -32,6 +34,8 @@ interface SimulateViewProps {
   onServiceProblem: (error: unknown) => void;
   /** The selected study on the view: the geometry switch, the target legend and the result card. */
   studyView: StudyViewHook;
+  /** The sun tool: the Sun panel sets it, the view draws it. */
+  sunStudy: SunStudyHook;
   /** The viewport theme (the legend's palettes do not depend on it). */
   theme?: ViewportTheme;
   /** The notice of input files changed in the project folder or missing from it, at the top of the studies panel. */
@@ -39,7 +43,7 @@ interface SimulateViewProps {
 }
 
 export function SimulateView({ project, studies, criteria, storedTestSurfaces, runs, onStoredFilesChange, onServiceProblem, studyView,
-                               notice }: SimulateViewProps) {
+                               sunStudy, notice }: SimulateViewProps) {
   const [popoverStudyId, setPopoverStudyId] = useState<string | null>(null);
   const view = useRef<HTMLDivElement>(null);
   const popoverId = useId();
@@ -125,6 +129,7 @@ export function SimulateView({ project, studies, criteria, storedTestSurfaces, r
                         setPopoverStudyId(popoverStudyId === id ? null : id);
                       }} loadProblem={studies.loadProblem} popover={popover} notice={notice}
                       runFeedback={<RunProgress runs={runs} project={project} origin="simulate" mode="" onGoToSetting={() => {}} studyNames={studyNames} foldWarnings />} />
+        <SunPanel sunStudy={sunStudy} />
       </div>
       <div className={`simulate-geometry-bar${shown === null ? "" : " simulate-geometry-bar-beside-popover"}`}>
         <GeometrySwitch available={studyView.available} outOfDateInDesign={studyView.outOfDateInDesign} waitingForStudy={studyView.waitingForStudy}

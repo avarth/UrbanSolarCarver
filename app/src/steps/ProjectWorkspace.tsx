@@ -24,7 +24,6 @@ import { useWorkspaceCriteria } from "../criteria/use_workspace_criteria";
 import { InspectView } from "../inspect/InspectView";
 import type { InspectTurns } from "../inspect/UnsavedTurnsDialog";
 import { useInspection, useInspectView } from "../inspect/use_inspection";
-import { useSunStudy } from "../inspect/use_sun_study";
 import { listedWithAnd, messages } from "../messages";
 import { hemisphereOfLatitude } from "../settings_form/analysis_period";
 import { shownValue, useSettingsForm, type FormStart, type SaveOutcome, type SettingsSend } from "../settings_form/form_state";
@@ -36,6 +35,7 @@ import { SimulateView } from "../simulate/SimulateView";
 import type { StudyGeometry } from "../simulate/study_values";
 import { useStudies } from "../simulate/use_studies";
 import { useStudyView } from "../simulate/use_study_view";
+import { useSunStudy } from "../simulate/use_sun_study";
 import { NO_VIEWER_RESULTS, ViewerPane } from "../viewer_overlays/ViewerPane";
 import { useColdPeriod } from "./cold_period_request";
 import { boundsOf } from "./input_meshes";
@@ -271,7 +271,6 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     },
   });
   const inspectView = useInspectView(inspection, origin, inspecting);
-  const sunStudy = useSunStudy({ token, project: project.name, active: inspecting, hasWeatherFile, onServiceProblem });
   const latestInspection = useRef(inspection);
   latestInspection.current = inspection;
   reloadInspection.current = inspection.reload;
@@ -438,19 +437,19 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     token, project: project.name, studies, active: simulating, runs, envelopeBuilt: designResults?.envelope != null, massingBuilt: designResults?.massing != null,
     envelopeStage: shownStages.exporting, massingStage: shownStages.massing, editDisabled: runActive, onServiceProblem,
   });
+  const sunStudy = useSunStudy({ token, project: project.name, active: simulating, hasWeatherFile, onServiceProblem });
   const simulateView = (theme: ViewportTheme) => (
     <SimulateView project={project.name} studies={studies} criteria={criteria.criteria} storedTestSurfaces={files.test_surfaces} runs={runs}
-                  onStoredFilesChange={() => { void testSurfaceCalls.reloadStoredFiles(); refreshStageStatus(); }} onServiceProblem={onServiceProblem} studyView={studyView}
+                  onStoredFilesChange={() => { void testSurfaceCalls.reloadStoredFiles(); refreshStageStatus(); }} onServiceProblem={onServiceProblem} studyView={studyView} sunStudy={sunStudy}
                   theme={theme} notice={inputChangesNotice} />
   );
   const simulateViewer = { overlayContent: simulateView, study: studyView.view, studyOutOfDate: studyView.studyOutOfDate,
                            envelopeSeeThrough: studyView.geometry === "envelope",
                            results: { ...(designResults ?? NO_VIEWER_RESULTS), skyDome: studyView.skyDome }, skyDomeTitle: studyView.skyDomeTitle,
-                           dimmedLayers: studyView.studyOutOfDate ? ["sky_dome" as const] : [] };
+                           dimmedLayers: studyView.studyOutOfDate ? ["sky_dome" as const] : [], sunStudy: sunStudy.view };
   // Inspect draws the inputs as Design does, the orientation of the test surfaces in place of the test surfaces, and no results.
   const inspectViewer = {
-    overlayContent: <InspectView inspection={inspection} sunStudy={sunStudy} origin={origin} saveDisabledReason={inputsDisabledReason} notice={inputChangesNotice} />,
-    sunStudy: sunStudy.view,
+    overlayContent: <InspectView inspection={inspection} origin={origin} saveDisabledReason={inputsDisabledReason} notice={inputChangesNotice} />,
     dimmedLayers: [],
   };
   const shownByDefault = simulating ? LAYERS_SHOWN_IN_SIMULATE[studyView.geometry] : inspecting ? LAYERS_SHOWN_IN_INSPECT : LAYERS_SHOWN_IN_STEP[viewStep];

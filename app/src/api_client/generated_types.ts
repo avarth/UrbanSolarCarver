@@ -300,7 +300,7 @@ export interface paths {
         };
         /**
          * Sun Chart
-         * @description Inspect's sun path: the arcs of the March equinox and the solstices, an hour line for each whole hour through the year, and
+         * @description Simulate's sun path: the arcs of the March equinox and the solstices, an hour line for each whole hour through the year, and
          *     the arc of *date*, in the weather file's local standard time; 404 without a weather file.
          */
         get: operations["sun_chart"];
@@ -1783,7 +1783,7 @@ export interface components {
         };
         /**
          * SunChart
-         * @description Inspect's sun path: the arcs of the equinox and the solstices, the hour lines, and the arc of the chosen day.
+         * @description Simulate's sun path: the arcs of the equinox and the solstices, the hour lines, and the arc of the chosen day.
          */
         SunChart: {
             /** Key Days */
@@ -1794,7 +1794,7 @@ export interface components {
         };
         /**
          * SunChartDay
-         * @description The sun's arc over one day of Inspect's sun path, above the horizon.
+         * @description The sun's arc over one day of Simulate's sun path, above the horizon.
          */
         SunChartDay: {
             /** Date */

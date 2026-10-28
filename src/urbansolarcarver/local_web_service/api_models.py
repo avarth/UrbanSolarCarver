@@ -317,7 +317,7 @@ class SunPath(BaseModel):
 
 
 class SunChartDay(BaseModel):
-    """The sun's arc over one day of Inspect's sun path, above the horizon."""
+    """The sun's arc over one day of Simulate's sun path, above the horizon."""
     date: str                           # "06-21": month and day
     runs: list[list[list[float]]]       # unbroken stretches of unit vectors toward the sun, every 5 minutes
 
@@ -329,7 +329,7 @@ class SunHourLine(BaseModel):
 
 
 class SunChart(BaseModel):
-    """Inspect's sun path: the arcs of the equinox and the solstices, the hour lines, and the arc of the chosen day."""
+    """Simulate's sun path: the arcs of the equinox and the solstices, the hour lines, and the arc of the chosen day."""
     key_days: list[SunChartDay]
     hour_lines: list[SunHourLine]
     day: SunChartDay

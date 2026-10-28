@@ -5,7 +5,7 @@
 // of the view says so ("Out of date", or "Updating" during a run); a thin bar along the top shows a run's progress. In Simulate
 // the selected study's values are one more layer, dimmed when the study is out of date, and the stamp shows while it is.
 // In Inspect the orientation of the test surfaces is one more layer, which replaces the test surfaces in the view; a click on a surface
-// is reported, and a request to frame a box moves the camera. Inspect's sun tool draws the year's sun path with the chosen day and
+// is reported, and a request to frame a box moves the camera. Simulate's sun tool draws the year's sun path with the chosen day and
 // the sun (the sun_study layer), the shadows at that time and the hours in shade over a range (the scene's setSunStudy).
 // Without WebGL (a remote desktop, a blocked graphics card) the scene cannot start: the view says so, and the steps go on working.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -27,7 +27,7 @@ import { voxelCentres, type ScorePoints } from "../viewer/score_points_decoder";
 import type { Hemisphere } from "../viewer/sky_dome";
 import { sunPathLegend, sunPathObjects, type SunPathWithNorth } from "../viewer/sun_path";
 import { sunStudyObjects } from "../viewer/sun_study";
-import type { SunStudyView } from "../inspect/use_sun_study";
+import type { SunStudyView } from "../simulate/use_sun_study";
 import { AxisGizmo } from "./AxisGizmo";
 import { Compass } from "./Compass";
 import { LayersMenu, type LayersMenuEntry } from "./LayersMenu";
@@ -127,7 +127,7 @@ export interface ViewerPaneProps {
   envelopeSeeThrough?: boolean;
   /** Inspect: while set, the test surfaces are hidden and the surface orientation layer is shown in their place. */
   inspect?: InspectView | null;
-  /** Inspect's sun tool: the sun path, the sun, its shadows and the hours in shade; null: none. */
+  /** Simulate's sun tool: the sun path, the sun, its shadows and the hours in shade; null: none. */
   sunStudy?: SunStudyView | null;
 }
 
@@ -296,7 +296,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
     if (inspectFrame) scene?.frameBox(inspectFrame.min, inspectFrame.max);
   }, [scene, inspectFrame?.request]);
 
-  // Inspect's sun tool: its layer is made again when the day, the time or the hemisphere changes (a few hundred line points).
+  // Simulate's sun tool: its layer is made again when the day, the time or the hemisphere changes (a few hundred line points).
   const sunChart = sunStudy?.chart ?? null;
   const sunVector = sunStudy?.sun ?? null;
   const sunKey = sunVector?.join(",") ?? "";

@@ -1,4 +1,4 @@
-// Inspect's sun tool on the 3D view: what the sun_study layer draws of the year's sun path (GET sun-chart) and of the sun at the
+// Simulate's sun tool on the 3D view: what the sun_study layer draws of the year's sun path (GET sun-chart) and of the sun at the
 // chosen time, placed on the hemisphere around the scene, and the numbers the shadows and the hours in shade are worked out from.
 import type { SunChart } from "../api_client/client";
 import { messages } from "../messages";
@@ -21,7 +21,7 @@ export interface SunStudyObjects {
   sun: Point3 | null;
 }
 
-/** The sun, *the shadows* it casts at that time, and the hours in shade over a range, as Inspect's sun tool asks for them. */
+/** The sun, *the shadows* it casts at that time, and the hours in shade over a range, as Simulate's sun tool asks for them. */
 export interface ShadeHours {
   /** Unit vectors toward the sun at the times of the range (above the horizon). */
   directions: Point3[];

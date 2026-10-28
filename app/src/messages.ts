@@ -645,7 +645,7 @@ export const messages = {
     building_massing: "Building massing",
     study_values: "Study values",
     inspect_surfaces: "Surface orientation",
-    sun_study: "Sun path (Inspect)",
+    sun_study: "Sun path of the year",
   },
   // The entry of a criterion under "Test surfaces" in the layers menu (two or more criteria): its name, marked when it is switched off.
   testSurfacesOfCriterion: (criterionName: string, off: boolean) => (off ? `${criterionName} (off)` : criterionName),
@@ -689,7 +689,7 @@ export const messages = {
   buildingMassingLegend: "Building massing, by storey",
   carvedByCriterionLegend: "Carved voxels, by the criterion that removed them",
   legend: "Legend",
-  // Inspect's sun tool (the Sun panel) and the hours in shade on the view.
+  // Simulate's sun tool (the Sun panel) and the hours in shade on the view.
   sunToolTitle: "Sun",
   sunToolNoWeatherFile: "Add a weather file in Design (Inputs) to see the sun: its location gives the sun's path.",
   sunToolDay: "Day",
