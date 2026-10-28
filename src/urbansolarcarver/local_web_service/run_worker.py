@@ -1,9 +1,11 @@
 """The run worker: one job at a time, a pipeline run or a simulation, on a background thread, with an event log the browser reads.
 
 ``RunWorker.start`` chooses the stages (see ``stage_records``), removes their records, and starts a thread that
-calls the engine. ``RunWorker.start_simulation`` starts a thread that runs the studies that can run (simulation.py); it never
-reads or writes a stage record. Either thread appends events to the job's ``RunState``; the WebSocket handler reads them with
-``RunState.wait_for_events``, which also serves a reader that connects after the run began or finished.
+calls the engine, after it calculates the typical building's weights when a criterion it preprocesses needs them and they are
+missing or out of date (``typical_building.py``). ``RunWorker.start_simulation`` starts a thread that runs the studies that can
+run (simulation.py); it never reads or writes a stage record. Either thread appends events to the job's ``RunState``; the
+WebSocket handler reads them with ``RunState.wait_for_events``, which also serves a reader that connects after the run began or
+finished.
 Importing this module does not import torch: the engine and the compute session are imported when the first run starts.
 """
 from __future__ import annotations
@@ -19,7 +21,7 @@ from typing import Callable
 from ..errors import ConfigError, InputError, RunCancelled, StageChainError
 from ..run_context import RunContext
 from ..stage_settings import PIPELINE_STAGES
-from . import simulation, stored_files, test_surfaces
+from . import simulation, stored_files, test_surfaces, typical_building
 from .api_models import StartRunReply
 from .projects import RUN_FOLDER, ProjectError, ProjectStore, naming_criterion
 from .stage_records import ANALYSIS_STAGES, RunSettings, StageChoice, choose_stages, forget_stages, missing_inputs, record_stages, run_settings
@@ -252,6 +254,7 @@ class RunWorker:
     def _final_event_of_run(self, state: RunState, context: RunContext, choice: StageChoice, settings: RunSettings) -> dict:
         """Run the engine and give the event that ends the run, whether it finished, was cancelled or failed."""
         try:
+            self._calculate_typical_building(state, context, choice, settings)
             self._call_engine(state, context, choice)
             record_stages(self._store, state.project, choice, settings)
             return {"type": "run_finished", "stages": state.stages,
@@ -292,6 +295,19 @@ class RunWorker:
         except Exception as error:
             _log.exception("A simulation failed")
             return _run_failed_event(type(error).__name__, str(error))
+
+    def _calculate_typical_building(self, state: RunState, context: RunContext, choice: StageChoice, settings: RunSettings) -> None:
+        """Calculate the typical building's weights, as they were when the run started, when a criterion the run preprocesses uses them
+        and the weights file is missing or was calculated for another key; the progress is the stage typical_building, of no
+        criterion. The engine reads the file only in preprocessing. An error of the calculation ends the run as any error does."""
+        keys = {settings.weights_keys[criterion_id] for criterion_id, stages in choice.criterion_stages.items()
+                if "preprocessing" in stages and criterion_id in settings.weights_keys}
+        if not keys or not typical_building.needs_calculation(self._store, state.project, next(iter(keys))):
+            return
+        state.emit({"type": "stage_progress", "stage": typical_building.STAGE, "criterion": None, "done": 0, "total": 1})
+        typical_building.calculate(self._store, state.project, settings.typical_building_values)
+        state.emit({"type": "stage_progress", "stage": typical_building.STAGE, "criterion": None, "done": 1, "total": 1})
+        context.raise_if_cancelled()
 
     def _release_session_memory(self) -> None:
         """Free unused compute memory; a failure (a CUDA fault, say) is logged and does not change how the run ended."""

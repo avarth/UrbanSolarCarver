@@ -34,12 +34,13 @@ from ..errors import ConfigError
 from ..mode_registry import MODES
 from ..pydantic_schemas import UserConfig
 from ..stage_settings import PIPELINE_STAGES
-from . import folder_picker, inspection, simulation, sun_study, user_preferences
+from . import folder_picker, inspection, simulation, sun_study, typical_building, user_preferences
 from .api_models import (
     CancelRunReply, ColdPeriodReply, ConfigErrorReply, ConfigReply, ConfigValuesRequest, CreateCriterionRequest, CreateProjectRequest,
     CriterionEntry, CriterionOrderRequest, CriterionSettingsReply, ErrorDetailReply, ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, InspectedFile, InspectReply, MissingInputsReply, ModeInfo, ProjectDetail, RestoreOriginalRequest,
     ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, StoredFileChangedReply, SunChart, SunPath, SunPositions, TurnSurfacesRequest,
     UpdateCriterionRequest, AddStudyRequest, ReorderStudiesRequest, StudiesReply, StudyEntry, StudyWithState, UpdateStudyRequest,
+    TypicalBuildingPreset, TypicalBuildingReply, TypicalBuildingRequest, TypicalBuildingWeightsReply,
 )
 from .carve_further import carve_further
 from .criteria import active_criteria, find_criterion
@@ -589,7 +590,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
 
     @router.patch("/projects/{name}/criteria/{criterion_id}", responses={**_CRITERION_RESPONSES, 422: _CONFIG_OR_MESSAGE_ERROR})
     def update_criterion(name: str, criterion_id: str, request: UpdateCriterionRequest) -> CriterionEntry:
-        """Change the name, colour, bypass or settings of a criterion; what is not sent stays.
+        """Change the name, colour, bypass, settings or Which hours count (energy_weighted) of a criterion; what is not sent stays.
 
         *values* replace the criterion's settings on top of the starting values of their mode. The shared settings
         among them are ignored: they are saved with PUT /projects/{name}/shared-settings. A bad name or colour is 422 with a
@@ -597,7 +598,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         """
         with writable_project(name) as store:
             return store.update_criterion(name, criterion_id, name=request.name, colour=request.colour,
-                                          bypassed=request.bypassed, values=request.values)
+                                          bypassed=request.bypassed, values=request.values, energy_weighted=request.energy_weighted)
 
     @router.delete("/projects/{name}/criteria/{criterion_id}", status_code=204, response_class=Response,
                    responses=_CRITERION_RESPONSES)
@@ -620,6 +621,40 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         with writable_project(name) as store:
             store.reorder_criteria(name, request.ids)
             return store.criteria(name)
+
+    @router.get("/typical-building-presets")
+    def typical_building_presets() -> dict[str, TypicalBuildingPreset]:
+        """The types the typical building can start from, by key, in the order the app offers them."""
+        return {key: TypicalBuildingPreset(label=preset.label, values=preset.values) for key, preset in typical_building.PRESETS.items()}
+
+    @router.get("/projects/{name}/typical-building", responses={404: {"model": ErrorDetailReply, "description": "There is no such project."}})
+    def get_typical_building(name: str) -> TypicalBuildingReply:
+        """The project's typical building (the default type before it is saved) and the state of its weights."""
+        return typical_building.reply(folder_in_use.store, name)
+
+    @router.put("/projects/{name}/typical-building", responses={409: _ERROR_RESPONSES[409], 422: _CONFIG_OR_MESSAGE_ERROR})
+    def save_typical_building(name: str, request: TypicalBuildingRequest) -> TypicalBuildingReply:
+        """Save the typical building's values and the type it started from; a value that is not valid is 422 with its field (a window
+        share as "wwr.<side>"), and nothing changes then. The weights are not calculated again here."""
+        with writable_project(name) as store:
+            return typical_building.save(store, name, request.values, request.start_from)
+
+    @router.post("/projects/{name}/typical-building/calculate",
+                 responses={404: {"model": ErrorDetailReply, "description": sun_study.NO_WEATHER_FILE_MESSAGE}, **_ERROR_RESPONSES})
+    def calculate_typical_building(name: str) -> TypicalBuildingReply:
+        """Calculate the hourly weights of the stored typical building with the project's weather file (about 9 s); 404 without a
+        weather file, 409 while a run of the project is active."""
+        store = folder_in_use.store
+        with store.project_lock(name):      # not held while the weights are calculated: calculate takes it to put them in place
+            refuse_while_running(name)
+        typical_building.calculate(store, name)
+        return typical_building.reply(store, name)
+
+    @router.get("/projects/{name}/typical-building/weights",
+                responses={404: {"model": ErrorDetailReply, "description": "The typical building has not been calculated."}})
+    def typical_building_weights(name: str) -> TypicalBuildingWeightsReply:
+        """The hourly benefit and harm weights of the last calculation, 8,760 each; 404 before the first one."""
+        return typical_building.weights_reply(folder_in_use.store, name)
 
     @router.get("/projects/{name}/studies", responses={404: _STUDY_RESPONSES[404]})
     def list_studies(name: str) -> StudiesReply:

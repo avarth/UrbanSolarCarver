@@ -11,22 +11,24 @@ compares settings only and does not know whether a stage ever ran, so this modul
 What goes out of date: the maximum volume, context, terrain, weather file or a shared setting change every criterion's
 settings or the inputs revision, so everything; a criterion's own settings or test surfaces (its fingerprint) date its
 preprocessing, and through it the thresholding of every criterion after it; a change of order, a bypass or a deletion
-gives a criterion another previous one than its thresholding was decided after, which dates it and every one after it.
+gives a criterion another previous one than its thresholding was decided after, which dates it and every one after it. The
+preprocessing record of an energy-weighted criterion keeps the typical building's key it ran with (typical_building.py): a change
+of the building dates the preprocessing of those criteria only.
 """
 from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..errors import ConfigError
 from ..mode_registry import MODES
 from ..pydantic_schemas import UserConfig, resolve_grid_step
 from ..stage_settings import PIPELINE_STAGES, stage_folder, stages_needed_for, stages_to_rerun
-from . import stored_files, test_surfaces
+from . import stored_files, test_surfaces, typical_building
 from .api_models import ProjectJson, StageRecord, StageState, StageStatusReply
-from .criteria import active_criteria, criterion_run_folder, reads_weather_file
+from .criteria import active_criteria, criterion_run_folder, reads_weather_file, uses_typical_building
 from .projects import INPUTS_FOLDER, JOINED_FOLDER, REQUIRED_MESH_ROLES, RUN_FOLDER, WEATHER_FILE_NAME, WEATHER_ROLE, ProjectStore
 
 MANIFEST_FILE_NAME = "manifest.json"
@@ -69,6 +71,9 @@ class RunSettings:
     criteria: dict[str, dict]                       # criterion id -> its settings as one flat mapping (read_stored_config)
     test_surfaces_fingerprints: dict[str, str | None]   # criterion id -> fingerprint of its joined test surface file
     leaf_settings: dict                             # the settings of the last criterion that is on: exporting and massing run with them
+    # criterion id -> the typical building's key, for the criteria that are on and use it (criteria.uses_typical_building)
+    weights_keys: dict[str, str] = field(default_factory=dict)
+    typical_building_values: dict | None = None     # the typical building's values, when a criterion that is on uses it
 
 
 @dataclass(frozen=True)
@@ -133,12 +138,16 @@ def _project_status(store: ProjectStore, name: str) -> _ProjectStatus:
     criteria: dict[str, dict[str, StageState]] = {}
     last_config = None
     previous_thresholding: tuple[StageState, StageRecord | None] | None = None   # of the previous criterion that is on
-    for criterion_id in [criterion.id for criterion in active_criteria(project_json.criteria)]:
+    active = active_criteria(project_json.criteria)
+    building_key = (typical_building.current_key(store, name, project_json)
+                    if any(uses_typical_building(criterion) for criterion in active) else None)
+    for criterion in active:
+        criterion_id = criterion.id
         last_config = _criterion_config(store, name, criterion_id)
         records = project_json.criterion_records.get(criterion_id, {})
         preprocessing = _preprocessing_state(
             store, name, project_json, records.get("preprocessing"), _read_criterion_manifest(run_folder, criterion_id, "preprocessing"),
-            last_config, test_surfaces.fingerprint(project_folder, criterion_id))
+            last_config, test_surfaces.fingerprint(project_folder, criterion_id), building_key if uses_typical_building(criterion) else None)
         thresholding = _thresholding_state(
             store, name, project_json, records.get("thresholding"), _read_criterion_manifest(run_folder, criterion_id, "thresholding"),
             last_config, (preprocessing, records.get("preprocessing")), previous_thresholding)
@@ -180,12 +189,15 @@ def _state_from_record(store: ProjectStore, name: str, project_json: ProjectJson
 
 
 def _preprocessing_state(store: ProjectStore, name: str, project_json: ProjectJson, record: StageRecord | None, manifest: dict | None,
-                         current_config: UserConfig | None, fingerprint: str | None) -> StageState:
-    """The state of a criterion's preprocessing; *fingerprint* is the one of its joined test surface file now."""
+                         current_config: UserConfig | None, fingerprint: str | None, weights_key: str | None = None) -> StageState:
+    """The state of a criterion's preprocessing; *fingerprint* is the one of its joined test surface file now, *weights_key* the
+    typical building's key now for a criterion that uses it (None for another)."""
     state = _state_from_record(store, name, project_json, "preprocessing", record, manifest, current_config)
     if state is not None:
         return state
     if record.test_surfaces_fingerprint != fingerprint:
+        return "out_of_date"
+    if weights_key is not None and record.weights_key != weights_key:
         return "out_of_date"
     if any(manifest.get(field) is None for field in MAX_VOLUME_HEIGHT_FIELDS):
         return "out_of_date"
@@ -373,22 +385,28 @@ def forget_stages(store: ProjectStore, name: str, stages, criterion_stages: dict
 
 
 def run_settings(store: ProjectStore, name: str) -> RunSettings:
-    """The settings, inputs revision and test surface fingerprints a run starting now runs with, for record_stages."""
+    """The settings, inputs revision, test surface fingerprints and typical building a run starting now runs with, for record_stages."""
     with store.project_lock(name):
         project_json = store.read_project_json(name)
         project_folder = store.open(name)
-        active_ids = [criterion.id for criterion in active_criteria(project_json.criteria)]
+        active = active_criteria(project_json.criteria)
+        active_ids = [criterion.id for criterion in active]
         criteria = {criterion_id: store.read_stored_config(name, criterion_id) for criterion_id in active_ids}
+        building_users = [criterion.id for criterion in active if uses_typical_building(criterion)]
+        building_key = typical_building.current_key(store, name, project_json) if building_users else None
         return RunSettings(
             inputs_revision=project_json.inputs_revision, criteria=criteria,
             test_surfaces_fingerprints={criterion_id: test_surfaces.fingerprint(project_folder, criterion_id) for criterion_id in active_ids},
-            leaf_settings=criteria[active_ids[-1]] if active_ids else store.read_stored_config(name))
+            leaf_settings=criteria[active_ids[-1]] if active_ids else store.read_stored_config(name),
+            weights_keys={criterion_id: building_key for criterion_id in building_users},
+            typical_building_values=typical_building.building_of(project_json).values if building_users else None)
 
 
 def record_stages(store: ProjectStore, name: str, choice: StageChoice, settings: RunSettings) -> None:
     """Record the stages of *choice* as completed with *settings* (taken when the run started) and the manifest each wrote:
-    each criterion's preprocessing and thresholding that ran, with its settings and test surface fingerprint, and exporting and
-    massing, with the settings of the last criterion."""
+    each criterion's preprocessing and thresholding that ran, with its settings and test surface fingerprint (and the typical
+    building's key in the preprocessing of a criterion that uses it), and exporting and massing, with the settings of the last
+    criterion."""
     run_folder = store.open(name) / RUN_FOLDER
     with store.project_lock(name):
         project_json = store.read_project_json(name)
@@ -397,7 +415,8 @@ def record_stages(store: ProjectStore, name: str, choice: StageChoice, settings:
                 project_json.criterion_records.setdefault(criterion_id, {})[stage] = StageRecord(
                     config=settings.criteria[criterion_id], inputs_revision=settings.inputs_revision,
                     manifest_run_id=_read_criterion_manifest(run_folder, criterion_id, stage)["run_id"],
-                    test_surfaces_fingerprint=settings.test_surfaces_fingerprints[criterion_id])
+                    test_surfaces_fingerprint=settings.test_surfaces_fingerprints[criterion_id],
+                    weights_key=settings.weights_keys.get(criterion_id) if stage == "preprocessing" else None)
         for stage in choice.stages:
             if stage in LEAF_STAGES:
                 project_json.stage_records[stage] = StageRecord(

@@ -60,8 +60,8 @@ WEATHER_FILE_NAME = "weather.epw"
 INPUTS_FOLDER = "inputs"
 JOINED_FOLDER = "inputs/joined"
 EARLIER_MAX_VOLUMES_FOLDER = "inputs/earlier_max_volumes"   # the max volume files each "carve further" replaced, by step
-# Settings the service decides, whatever the browser sends: every file location (the service takes no path from
-# the browser; simulated_weights_path is never set) and the compute device.
+# Settings the service decides, whatever the browser sends: every file location (the service takes no path from the browser;
+# simulated_weights_path is set for an energy-weighted criterion, see criteria.engine_settings) and the compute device.
 SERVICE_OWNED_SETTINGS = ("max_volume_path", "test_surface_path", "context_path", "terrain_path", "epw_path", "out_dir", "device",
                           "simulated_weights_path")
 # Settings the browser does not set, left to the engine's own value: the sample spacing on the test surfaces (half the voxel
@@ -471,12 +471,13 @@ class ProjectStore:
             return entry
 
     def update_criterion(self, project: str, criterion_id: str, /, *, name: str | None = None, colour: str | None = None,
-                         bypassed: bool | None = None, values: dict | None = None) -> CriterionEntry:
+                         bypassed: bool | None = None, values: dict | None = None, energy_weighted: bool | None = None) -> CriterionEntry:
         """Change a criterion of the project *project*; what is not given stays.
 
         *name* names it (it then keeps the name when its mode changes), *colour* is "#RRGGBB", *bypassed* leaves it out of the
-        chain, *values* are its settings from the browser, validated as write_config_from_values does: they replace its
-        settings, on top of the starting values of their mode (the current mode when they name none). Shared settings in
+        chain, *energy_weighted* makes a Solar usefulness criterion count its hours by the typical building (criteria.engine_settings;
+        other modes keep the flag and ignore it), *values* are its settings from the browser, validated as write_config_from_values
+        does: they replace its settings, on top of the starting values of their mode (the current mode when they name none). Shared settings in
         *values* are ignored. A criterion that is not named by the user is named after its new mode when the mode changes.
         ProjectError 404 for an unknown criterion and 422 for a bad name or colour; CriterionConfigError (a ConfigError that names
         the criterion) for settings that do not validate, or that make a chain that does not load. Nothing changes then.
@@ -491,6 +492,8 @@ class ProjectStore:
                 entry.colour = checked_colour(colour)
             if bypassed is not None:
                 entry.bypassed = bypassed
+            if energy_weighted is not None:
+                entry.energy_weighted = energy_weighted
             with naming_criterion(entry.id):
                 if values is not None:
                     settings = self._validated_criterion_settings(
@@ -536,6 +539,7 @@ class ProjectStore:
             source = find_criterion(project_json, criterion_id)
             copied = append_criterion(project_json, copy.deepcopy(source.settings), f"{source.name} copy")
             copied.test_surface_files = list(source.test_surface_files)
+            copied.energy_weighted = source.energy_weighted
             self._rewrite_chain(name, project_folder, project_json)
             source_joined_path = project_folder / joined_test_surfaces_path(source.id)
             if source_joined_path.is_file():
@@ -824,7 +828,7 @@ class ProjectStore:
             raise ProjectError("The project has no criterion for these test surfaces: add a criterion first.", status_code=422)
         return criteria[0]
 
-    def read_stored_config(self, name: str, criterion_id: str | None = None) -> dict:
+    def read_stored_config(self, name: str, criterion_id: str | None = None, *, for_engine: bool = True) -> dict:
         """The settings of one criterion as one flat mapping, service paths and device included (the single-criterion form of
         config.yaml that the app and the stage records work with), without the settings left to the engine
         (SETTINGS_LEFT_TO_THE_ENGINE): the next save writes the file without them.
@@ -832,6 +836,8 @@ class ProjectStore:
         It is the shared settings at the top of config.yaml plus the criterion's settings from project.json and its own
         test_surface_path; *criterion_id* defaults to the first criterion (404 for an unknown one). A config.yaml that is not
         a chain file (an earlier version's, or a hand edit that is not valid) is returned as it is, with no criterion.
+        The criterion's settings are those config.yaml gives the engine (an energy-weighted criterion's weights file in place of
+        its balance temperature, criteria.engine_settings), or with *for_engine* false those project.json stores.
         """
         with self.project_lock(name):
             project_json = self.read_project_json(name)
@@ -839,12 +845,13 @@ class ProjectStore:
             if "criteria" in stored_config:
                 shared_and_paths = {key: value for key, value in stored_config.items() if key != "criteria"}
                 entry = None if not project_json.criteria else find_criterion(project_json, criterion_id)
-                stored_config = flat_settings(shared_and_paths, entry)
+                stored_config = flat_settings(shared_and_paths, entry, for_engine)
             return {key: value for key, value in stored_config.items() if key not in SETTINGS_LEFT_TO_THE_ENGINE}
 
     def read_settings(self, name: str, criterion_id: str | None = None) -> dict:
-        """The stored settings of a criterion (default: the first) with the shared ones, without the paths and device the service owns."""
-        return self._without_service_owned(self.read_stored_config(name, criterion_id))
+        """The stored settings of a criterion (default: the first) with the shared ones, without the paths and device the service owns.
+        An energy-weighted criterion keeps its balance temperature here, so the browser sends it back with its other settings."""
+        return self._without_service_owned(self.read_stored_config(name, criterion_id, for_engine=False))
 
     def config_from_settings(self, name: str, settings: dict) -> UserConfig:
         """The engine's validated config for a stored settings dict, with its paths resolved inside the project folder.

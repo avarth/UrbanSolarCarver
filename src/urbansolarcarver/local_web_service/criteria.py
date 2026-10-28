@@ -16,6 +16,7 @@ from ..chain_config import CRITERION_KEYS
 from ..mode_registry import MODES, canonical_mode_name
 from .api_models import CriterionEntry, ProjectJson
 from .project_names import ProjectError
+from .typical_building import WEIGHTS_PATH
 
 # Colours of the criteria in the 3D view, given in order to the criteria of a project and cycling after the eighth.
 CRITERION_COLOURS = ("#7F77DD", "#D85A30", "#1D9E75", "#D4537E", "#BA7517", "#378ADD", "#639922", "#888780")
@@ -39,6 +40,9 @@ JOINED_TEST_SURFACES_PATH = "inputs/joined/test_surfaces_{id}.ply"     # the joi
 # The folder of the criteria's stage folders in a run folder: run/criteria/<id>/<stage>, the layout of the engine's run_chain
 # (api_core/chain.py, which the service does not import: it pulls in torch).
 CRITERIA_FOLDER = "criteria"
+# The settings an energy-weighted criterion leaves out of config.yaml: its weights replace the balance temperature, and the engine
+# warns when both are given.
+BALANCE_POINT_KEYS = ("balance_temperature", "balance_offset")
 # The names the app shows for the modes (app/src/steps/mode_tiles.json, which a test compares with this table): a criterion that
 # the user did not name is named after them.
 MODE_LABELS = {
@@ -77,6 +81,21 @@ def reads_weather_file(mode) -> bool:
     so its error is reported by the engine's own validation)."""
     mode_settings = MODES.get(canonical_mode_name(mode))
     return mode_settings is None or mode_settings.needs_epw
+
+
+def uses_typical_building(entry: CriterionEntry) -> bool:
+    """Whether a criterion counts its hours by the typical building: energy-weighted and of the mode benefit (Solar usefulness)."""
+    return entry.energy_weighted and canonical_mode_name(entry.settings.get("mode")) == "benefit"
+
+
+def engine_settings(entry: CriterionEntry) -> dict:
+    """A criterion's settings as config.yaml gives them to the engine: for one that uses the typical building, the weights file as
+    simulated_weights_path and no balance temperature or offset (its stored settings keep them, so switching back restores them)."""
+    if not uses_typical_building(entry):
+        return dict(entry.settings)
+    settings = {key: value for key, value in entry.settings.items() if key not in BALANCE_POINT_KEYS}
+    settings["simulated_weights_path"] = WEIGHTS_PATH
+    return settings
 
 
 def mode_label(mode) -> str:
@@ -140,14 +159,15 @@ def set_criterion_settings(entry: CriterionEntry, settings: dict) -> None:
         entry.name = default_criterion_name(settings.get("mode"), entry.test_surface_files)
 
 
-def flat_settings(shared_and_paths: dict, entry: CriterionEntry | None) -> dict:
+def flat_settings(shared_and_paths: dict, entry: CriterionEntry | None, for_engine: bool = True) -> dict:
     """The top of a chain config.yaml and one criterion as the flat mapping of a single-criterion config.
 
-    The weather file is in it exactly when the criterion's mode reads one, as the engine's chain loader does.
+    The weather file is in it exactly when the criterion's mode reads one, as the engine's chain loader does. The criterion's settings
+    are those config.yaml gives the engine (engine_settings), or with *for_engine* false those it stores (the browser's).
     """
     flat = dict(shared_and_paths)
     if entry is not None:
-        flat.update(entry.settings)
+        flat.update(engine_settings(entry) if for_engine else entry.settings)
         flat["test_surface_path"] = joined_test_surfaces_path(entry.id)
         if reads_weather_file(entry.settings.get("mode")):
             flat.setdefault("epw_path", SERVICE_PATHS["epw_path"])
@@ -171,7 +191,8 @@ def chain_config_document(shared: dict, criteria: list[CriterionEntry], project_
 
     *shared* holds the shared settings (and the device); the paths are the service's, so any path in it is replaced. The
     weather file is named at the top when a criterion that is on reads one, and an optional mesh path when its joined file
-    exists in *project_folder*. A criterion entry is its id, name and settings, and the joined file of its test surfaces.
+    exists in *project_folder*. A criterion entry is its id, name and settings (engine_settings), and the joined file of its test
+    surfaces.
     """
     active = active_criteria(criteria)
     paths = {key: path for key, path in SERVICE_PATHS.items()
@@ -180,7 +201,7 @@ def chain_config_document(shared: dict, criteria: list[CriterionEntry], project_
     path_keys = {*SERVICE_PATHS, *(key for key, _path in OPTIONAL_SERVICE_PATHS.values())}
     document = {**paths, **{key: value for key, value in shared.items() if key not in path_keys}}
     document["criteria"] = [
-        {"id": criterion.id, "name": criterion.name, **criterion.settings,
+        {"id": criterion.id, "name": criterion.name, **engine_settings(criterion),
          "test_surface_path": joined_test_surfaces_path(criterion.id)} for criterion in active]
     return document
 

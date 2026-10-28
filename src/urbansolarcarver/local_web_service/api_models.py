@@ -16,6 +16,7 @@ class StageRecord(BaseModel):
     inputs_revision: int        # ProjectJson.inputs_revision at the time of the run
     manifest_run_id: str        # run_id of the manifest the stage wrote
     test_surfaces_fingerprint: str | None = None     # of the criterion's joined test surface file at the time of the run
+    weights_key: str | None = None      # preprocessing of an energy-weighted criterion: the typical building's key at the start of the run
 
 
 class CarvingChainStep(BaseModel):
@@ -42,6 +43,16 @@ class CriterionEntry(BaseModel):
     bypassed: bool = False              # left out of config.yaml, and so of every run, but kept in the list
     test_surface_files: list[str] = Field(default_factory=list)     # file names in inputs/test_surfaces/
     settings: dict = Field(default_factory=dict)    # the criterion's own settings as stored, without the paths the service owns
+    # Solar usefulness only (other modes ignore it): the hours count by the typical building's weights, not by the cold hours rule.
+    # config.yaml then names the weights file and leaves out the balance temperature, which settings keep (criteria.engine_settings).
+    energy_weighted: bool = False
+
+
+class TypicalBuildingEntry(BaseModel):
+    """The typical building of a project, which the energy-weighted criteria share (typical_building.py)."""
+    values: dict                        # the form's values, the shoebox archetype keys (typical_building.VALUE_KEYS)
+    start_from: str | None = None       # the type it started from (a key of typical_building.PRESETS); None for none
+    calculated_key: str | None = None   # the key of the weights in inputs/typical_building/weights.json; None before a calculation
 
 
 class StudyEntry(BaseModel):
@@ -90,6 +101,7 @@ class ProjectJson(BaseModel):
     criterion_records: dict[str, dict[str, StageRecord]] = Field(default_factory=dict)
     studies: list[StudyEntry] = Field(default_factory=list)     # the studies of the Simulate workspace, in the order shown
     next_study_id: int = 1      # the id the next study gets
+    typical_building: TypicalBuildingEntry | None = None    # None: the default type (typical_building.DEFAULT_PRESET), not calculated
 
 
 StageState = Literal["current", "out_of_date", "missing"]
@@ -448,6 +460,7 @@ class UpdateCriterionRequest(BaseModel):
     colour: str | None = None           # "#RRGGBB"
     bypassed: bool | None = None
     values: dict | None = None          # the criterion's settings as the browser holds them
+    energy_weighted: bool | None = None     # Solar usefulness: count the hours by the typical building (CriterionEntry.energy_weighted)
 
 
 class CriterionOrderRequest(BaseModel):
@@ -535,6 +548,35 @@ class ProjectDetail(BaseModel):
 class CancelRunReply(BaseModel):
     """Whether the run was stopped by this request; False when it had already ended."""
     cancelled: bool
+
+
+class TypicalBuildingPreset(BaseModel):
+    """A type the typical building can start from."""
+    label: str
+    values: dict
+
+
+class TypicalBuildingRequest(BaseModel):
+    """The body of a save of the typical building: its values and the type it started from."""
+    values: dict
+    start_from: str | None = None
+
+
+class TypicalBuildingReply(BaseModel):
+    """The typical building and the state of its weights; the numbers come from the weights file and are None without one."""
+    values: dict
+    start_from: str | None
+    # current: calculated for these values and weather file; out_of_date: for others; missing: never calculated
+    state: StageState
+    heating_kwh_m2: float | None = None     # the building's heating demand in a year, kWh per m² of floor
+    cooling_kwh_m2: float | None = None     # its cooling demand
+    counted_hours: int | None = None        # the hours whose benefit weight is above 0.01
+
+
+class TypicalBuildingWeightsReply(BaseModel):
+    """The hourly weights of the typical building, 8,760 each from 1 January 0:00, to 3 decimals."""
+    benefit: list[float]                # the share of an hour's sun that saves heating, 0 to 1
+    harm: list[float]                   # the share that becomes cooling load, 0 to 1
 
 
 class ErrorDetailReply(BaseModel):
