@@ -96,6 +96,15 @@ export function applyLayerAppearance(object: THREE.Object3D, opacityFactor: numb
   }
 }
 
+/**
+ * How a dimmed (out of date) layer is drawn: [opacity factor, desaturation]. Most layers fade to a grey at 35 %. A study's values
+ * keep their colours, muted part of the way to grey, and stay opaque, so the test surfaces under them do not show through (user,
+ * 2026-10-28: an out-of-date study drawn grey at 35 % read as colours that had not followed the range).
+ */
+export function dimmedAppearance(name: LayerName): [number, number] {
+  return name === "study_values" ? [1, 0.4] : [0.35, 1];
+}
+
 export function disposeLayer(object: THREE.Object3D): void {
   object.traverse((child) => {
     (child as THREE.Mesh).geometry?.dispose();

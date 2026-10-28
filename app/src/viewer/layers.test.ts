@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import * as THREE from "three";
 import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import {
-  applyLayerAppearance, buildingMassingLayer, carvedByCriterionLayer, carvedOutlineSegments, contextLayer, inspectSurfacesLayer, LAYER_NAMES, maxVolumeLayer, terrainLayer,
+  applyLayerAppearance, buildingMassingLayer, dimmedAppearance, carvedByCriterionLayer, carvedOutlineSegments, contextLayer, inspectSurfacesLayer, LAYER_NAMES, maxVolumeLayer, terrainLayer,
   keptColumnTops, pointSizeForVoxel, splitScorePoints, type InspectLayerFile,
   storeyOfPart, studyValuesLayer, testSurfacesLayer, volumeOutline,
 } from "./layers";
@@ -372,6 +372,12 @@ test("a file that is not selected is drawn at 35 % strength, a selected one at f
   applyLayerAppearance(layer, 0.35, 1);
   expect(opacities(0)[0]).toBeCloseTo(0.35);
   expect(opacities(1)[0]).toBeCloseTo(0.35 * 0.35);
+});
+
+test("a dimmed study keeps its colours, muted and opaque; other dimmed layers fade to a grey at 35 %", () => {
+  expect(dimmedAppearance("study_values")).toEqual([1, 0.4]);
+  expect(dimmedAppearance("kept_voxels")).toEqual([0.35, 1]);
+  expect(dimmedAppearance("envelope")).toEqual([0.35, 1]);
 });
 
 test("there is one arrow per surface, and none without arrows", () => {

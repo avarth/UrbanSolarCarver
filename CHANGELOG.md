@@ -17,6 +17,8 @@ versioning follows [Semantic Versioning](https://semver.org/).
   whose grey middle hid the facades' gains, and of Change's grey-to-accent ramp. The result card leads with what the geometry
   keeps of the no-build value ("keeps 99 % of the no-build value (78)"). On Allatini's Solar energy study the maximum volume keeps
   78 % and the envelope 99 %; on the old value scale the gain looked slight.
+- **An out-of-date study keeps its colours**, muted and opaque, instead of the faint grey of other out-of-date layers, which read
+  as colours that had not followed the range.
 - **A study is on the view without a press**: the first study with a result when none is selected, so a finished run shows its values.
 - **"Useful solar energy" is now "Useful solar gains"** (the energy received in the hours that need heating); studies named by
   default take the new name. The metric's key `useful_solar_energy` is unchanged.

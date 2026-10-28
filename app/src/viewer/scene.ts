@@ -13,7 +13,7 @@ import { northDirection } from "./compass";
 import { compassRing } from "./compass_ring";
 import { groundGrid, groundGridSpacing } from "./ground_grid";
 import type { Point3 } from "./local_origin";
-import { LAYER_NAMES, SURROUNDING_LAYERS, applyLayerAppearance, disposeLayer, type LayerName } from "./layers";
+import { LAYER_NAMES, SURROUNDING_LAYERS, applyLayerAppearance, dimmedAppearance, disposeLayer, type LayerName } from "./layers";
 import type { Hemisphere } from "./sky_dome";
 import { fitTextSpritesToView } from "./text_sprite";
 
@@ -44,8 +44,6 @@ export interface LayerDescription {
 }
 
 const CAMERA_MOVE_MILLISECONDS = 400;
-const DIMMED_OPACITY = 0.35;
-const DIMMED_DESATURATION = 1;
 export const DEFAULT_SKY_DOME_OPACITY = 0.6;
 const FIELD_OF_VIEW_DEGREES = 35;
 const FRAME_MARGIN = 1.1;
@@ -345,8 +343,8 @@ export class ViewerScene {
     for (const [name, slot] of this.slots) {
       if (!slot.object) continue;
       slot.object.visible = slot.visible;
-      const opacityFactor = (slot.dimmed ? DIMMED_OPACITY : 1) * (name === "sky_dome" ? this.skyDomeOpacity : 1);
-      applyLayerAppearance(slot.object, opacityFactor, slot.dimmed ? DIMMED_DESATURATION : 0);
+      const [dimmedOpacity, desaturation] = slot.dimmed ? dimmedAppearance(name) : [1, 0];
+      applyLayerAppearance(slot.object, dimmedOpacity * (name === "sky_dome" ? this.skyDomeOpacity : 1), desaturation);
     }
     this.fitPixelSizedObjects();
     this.renderer.domElement.setAttribute("aria-label", this.describe());
