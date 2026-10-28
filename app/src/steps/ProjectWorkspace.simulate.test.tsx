@@ -291,6 +291,25 @@ function pointerOnTargetBar(type: "pointerdown" | "pointermove" | "pointerup", c
   act(() => { targetBar().dispatchEvent(new PointerEvent(type, { bubbles: true, clientX, pointerId: 1, button: 0 })); });
 }
 
+test("the sky dome is the selected study's: another study draws its own, one without a dome draws none", async () => {
+  const dome = (count: number) => ({ directions: Array.from({ length: count }, () => [0, 0, 1]), solid_angles: Array(count).fill(0.1),
+                                    weights: Array.from({ length: count }, (_, index) => index + 1) });
+  await openSimulate(undefined, (service) => {
+    service.studies = [study("1", "sky_view", ["facades.obj"], "current"), study("2", "sky_component", ["facades.obj"], "current"),
+                       study("3", "sun_hours", ["facades.obj"], "current")];
+    service.valuesOf = { 1: studyValuesOf({ open: [90, 90], max_volume: [40, 60] }, "%"), 2: studyValuesOf({ open: [90, 90], max_volume: [40, 60] }, "%"),
+                         3: studyValuesOf({ open: [4, 4], max_volume: [1, 2] }) };
+    service.skyDomeOf = { 1: dome(3), 2: dome(5) };
+  });
+  const skyDomeSummary = () => scene().layers.get("sky_dome")?.userData.summary ?? null;
+  expect(skyDomeSummary()).toBe("3 patches");
+  await selectStudy("Overcast sky component");
+  expect(simulateService.requests).toContain("GET /studies/2/sky-patches");
+  expect(skyDomeSummary()).toBe("5 patches");
+  await selectStudy("Sun hours, 21 Dec");
+  expect(skyDomeSummary()).toBeNull();               // sun hours have no patches; Design's dome is not drawn instead
+});
+
 test("selecting another study draws its values; only one study is drawn", async () => {
   await openSimulate(undefined, (service) => {
     service.studies = [study("1", "sun_hours", ["facades.obj"], "current"), study("2", "sky_view", ["facades.obj"], "current")];

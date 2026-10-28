@@ -675,6 +675,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/studies/{study_id}/sky-patches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Study Sky Patches
+         * @description The sky patches of the study's last result with the value each carried for its metric; 404 for an unknown study, one
+         *     without a result, a sun hours study (its directions are sun positions) or a result from before the values were kept.
+         */
+        get: operations["study_sky_patches"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}/simulate": {
         parameters: {
             query?: never;
@@ -3479,6 +3500,47 @@ export interface operations {
                 };
                 content: {
                     "application/octet-stream": unknown;
+                };
+            };
+            /** @description There is no such study. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    study_sky_patches: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                study_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkyDome"];
                 };
             };
             /** @description There is no such study. */

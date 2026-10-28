@@ -114,6 +114,8 @@ export interface ViewerPaneProps {
   mode?: string | null;
   /** The analysis (preprocessing) is current: it was made in the mode the form shows. */
   analysisCurrent?: boolean;
+  /** The sky dome legend's title for a dome that is not Design's (Simulate's study dome); Design's names the mode it was made in. */
+  skyDomeTitle?: string;
   /** The study Simulate shows, drawn as the study_values layer (dimmed when out of date); null for none. */
   study?: StudyView | null;
   /** The study selected in Simulate is out of date: the stamp shows, whether or not its values are drawn. */
@@ -157,7 +159,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
                              maxVolumeAppearance, shownByDefault,
                              northDegrees, framingRequest, centreContent, results = NO_VIEWER_RESULTS, localOrigin = NO_SHIFT, dimmedLayers = NO_LAYERS,
                              missingLayers = NO_LAYERS, runProgress = null, overlayContent, mode = null,
-                             analysisCurrent = false, study = null, studyOutOfDate = false, envelopeSeeThrough = false, inspect = null }: ViewerPaneProps) {
+                             analysisCurrent = false, skyDomeTitle, study = null, studyOutOfDate = false, envelopeSeeThrough = false, inspect = null }: ViewerPaneProps) {
   const container = useRef<HTMLDivElement>(null);
   const [scene, setScene] = useState<ViewerScene | null>(null);
   const [sceneUnavailable, setSceneUnavailable] = useState(false);
@@ -353,7 +355,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
           unit: scorePoints.header.score_unit || undefined, thinningStep: scorePoints.header.thinning_step }
       : undefined,
     skyDome: shown("sky_dome") && skyDome
-      ? { title: messages.skyDomeLegend(analysedSkyDomeMode(scorePoints?.header.mode ?? null, mode, analysisCurrent)),
+      ? { title: skyDomeTitle ?? messages.skyDomeLegend(analysedSkyDomeMode(scorePoints?.header.mode ?? null, mode, analysisCurrent)),
           lowestWeight: Math.min(...skyDome.weights),
           highestWeight: Math.max(...skyDome.weights) }
       : undefined,

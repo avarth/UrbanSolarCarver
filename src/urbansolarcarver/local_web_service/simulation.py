@@ -16,12 +16,12 @@ from pathlib import Path
 
 import numpy as np
 
-from ..check_files import POINTS_FILE, SUMMARY_FILE, VALUES_FILE, run_geometry_files
+from ..check_files import POINTS_FILE, SKY_FILE, SUMMARY_FILE, VALUES_FILE, run_geometry_files
 from ..check_settings import CHECK_METRICS, CheckSettings, build_check_settings, settings_digest
 from ..engine_requests import CheckRequest
 from ..errors import ConfigError
 from ..pydantic_schemas import UserConfig, resolve_grid_step
-from .api_models import StudyEntry, StudyState
+from .api_models import SkyDome, StudyEntry, StudyState
 from .criteria import OPTIONAL_SERVICE_PATHS, SERVICE_PATHS, active_criteria
 from .projects import RUN_FOLDER, ProjectStore
 from .stage_records import envelope_voxel_size
@@ -242,6 +242,23 @@ def study_values(folder: Path) -> bytes | None:
     header_bytes = json.dumps(header).encode("utf-8")
     header_bytes += b" " * (-len(header_bytes) % HEADER_ALIGNMENT_BYTES)
     return b"".join([struct.pack("<I", len(header_bytes)), header_bytes, quads.tobytes(), *(array.tobytes() for array in arrays)])
+
+
+def study_sky_patches(folder: Path) -> SkyDome | None:
+    """The 145 Tregenza patches with the value each carried in the result in *folder* (its check_sky.json), drawn as Design's
+    sky dome is; None without a result, for a sun hours study, or for a result written before the patch values were kept."""
+    if read_summary(folder) is None:
+        return None
+    try:
+        weights = json.loads((folder / SKY_FILE).read_text(encoding="utf-8"))["weights"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    import torch
+    from ..sky_patches import fetch_tregenza_patch_directions, tregenza_solid_angles
+    directions = fetch_tregenza_patch_directions(torch.device("cpu")).numpy().tolist()
+    if not isinstance(weights, list) or len(weights) != len(directions):
+        return None
+    return SkyDome(directions=directions, solid_angles=tregenza_solid_angles().tolist(), weights=[float(weight) for weight in weights])
 
 
 def no_study_can_run_message(refusals: list[tuple[StudyEntry, str]]) -> str:

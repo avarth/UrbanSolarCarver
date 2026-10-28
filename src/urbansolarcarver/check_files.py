@@ -15,6 +15,8 @@ from .stage_settings import stage_folder
 POINTS_FILE = "check_points.npz"
 VALUES_FILE = "check_values.npz"
 SUMMARY_FILE = "check_summary.json"
+# The value of each Tregenza sky patch for the study's metric (JSON {"weights": [145 numbers]}); none for sun hours.
+SKY_FILE = "check_sky.json"
 MANIFEST_FILE = "manifest.json"
 # The geometries a run builds: name, label, and the stage whose manifest names the mesh.
 RUN_GEOMETRY_STAGES = (("envelope", "Carved envelope", "exporting"), ("massing", "Building massing", "massing"))

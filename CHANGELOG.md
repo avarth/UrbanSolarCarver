@@ -9,6 +9,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed (Simulate and Inspect, after use on Allatini)
 
+- **Simulate's sky dome is the selected study's**: a study keeps the value of each sky patch for its metric (`check_sky.json`,
+  route `GET /projects/{name}/studies/{id}/sky-patches`), and the Sky dome layer draws it, changing with the study; before,
+  Simulate showed Design's dome of the criterion selected there. Sun hours studies have none; earlier results get theirs on
+  their next run.
 - **Simulate colours by value or by share of the no-build value.** The legend colours by the value in the study's unit (the
   default) or by each point's share of its **no-build value**, its value with nothing built on the plot (the surroundings and terrain
   still block), 0 to 100 % on one scale for every geometry. A **colour range** with a low and a high end, both draggable, spreads the

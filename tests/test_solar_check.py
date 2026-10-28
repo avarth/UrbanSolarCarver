@@ -373,6 +373,23 @@ def _study_files(tmp_path):
     return tmp_path / "test_surface.ply", tmp_path / "max_volume.ply", tmp_path / "context.ply"
 
 
+@pytest.mark.parametrize("rays", [1, 4])
+def test_each_sky_patch_carries_the_sum_of_its_slots(rays):
+    from urbansolarcarver.sky_patches import tregenza_solid_angles
+    from urbansolarcarver.solar_check import check_directions, sky_patch_values
+    patch_values = sky_patch_values(check_directions(_settings("sky_view", rays_per_patch=rays)))
+    assert np.allclose(patch_values, tregenza_solid_angles() / np.pi)      # sky view: each patch's solid angle over pi
+
+
+SUN_PERIOD = dict(start_month=12, start_day=21, start_hour=8, end_month=12, end_day=21, end_hour=16)
+
+
+@REQUIRES_EPW
+def test_sun_hours_have_no_sky_patches():
+    from urbansolarcarver.solar_check import check_directions, sky_patch_values
+    assert sky_patch_values(check_directions(_settings("sun_hours", epw_path=EPW, **SUN_PERIOD))) is None
+
+
 @REQUIRES_WARP_CPU
 def test_simulate_study_without_a_run_has_only_the_maximum_volume(tmp_path):
     from urbansolarcarver.solar_check import SUMMARY_FILE, simulate_study
@@ -385,6 +402,20 @@ def test_simulate_study_without_a_run_has_only_the_maximum_volume(tmp_path):
     # The wall faces away from the cube: the cube hides nothing of its sky.
     assert result.values["max_volume"].mean() <= result.values["open"].mean() + 1e-6
     assert (tmp_path / "study" / SUMMARY_FILE).is_file()
+    sky = json.loads((tmp_path / "study" / "check_sky.json").read_text(encoding="utf-8"))
+    assert len(sky["weights"]) == 145
+
+
+@REQUIRES_WARP_CPU
+@REQUIRES_EPW
+def test_a_sun_hours_study_removes_an_earlier_sky_file(tmp_path):
+    from urbansolarcarver.solar_check import simulate_study
+    surface, max_volume, _context = _study_files(tmp_path)
+    (tmp_path / "study").mkdir()
+    (tmp_path / "study" / "check_sky.json").write_text('{"weights": []}', encoding="utf-8")
+    simulate_study(surface, max_volume, _settings("sun_hours", epw_path=EPW, sample_spacing=2.0, **SUN_PERIOD),
+                   out_dir=tmp_path / "study", device="cpu")
+    assert not (tmp_path / "study" / "check_sky.json").exists()       # its directions are sun positions
 
 
 @REQUIRES_WARP_CPU

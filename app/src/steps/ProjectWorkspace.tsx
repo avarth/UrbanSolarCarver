@@ -35,7 +35,7 @@ import { SimulateView } from "../simulate/SimulateView";
 import type { StudyGeometry } from "../simulate/study_values";
 import { useStudies } from "../simulate/use_studies";
 import { useStudyView } from "../simulate/use_study_view";
-import { ViewerPane } from "../viewer_overlays/ViewerPane";
+import { NO_VIEWER_RESULTS, ViewerPane } from "../viewer_overlays/ViewerPane";
 import { useColdPeriod } from "./cold_period_request";
 import { boundsOf } from "./input_meshes";
 import { carvedByNote, InputBox, InputsStep, type InputRole } from "./InputsStep";
@@ -427,8 +427,9 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   );
 
   // Simulate draws the selected study's values on the geometry it shows, with Design's layers of that geometry and its own choice of
-  // them: the maximum volume solid, the envelope see-through; the criteria's test surfaces off, the surroundings on. A study out of
-  // date is dimmed with the stamp; Design's out of date parts are not (the geometry switch marks them).
+  // them: the maximum volume solid, the envelope see-through; the criteria's test surfaces off, the surroundings on. The sky dome is
+  // the selected study's, not Design's (none for sun hours). A study out of date is dimmed with the stamp, and its dome with it;
+  // Design's out of date parts are not (the geometry switch marks them).
   const simulating = props.mode === "simulate";
   const designResults = resultSteps.viewer.results;
   const studyView = useStudyView({
@@ -441,7 +442,9 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                   theme={theme} notice={inputChangesNotice} />
   );
   const simulateViewer = { overlayContent: simulateView, study: studyView.view, studyOutOfDate: studyView.studyOutOfDate,
-                           envelopeSeeThrough: studyView.geometry === "envelope", dimmedLayers: [] };
+                           envelopeSeeThrough: studyView.geometry === "envelope",
+                           results: { ...(designResults ?? NO_VIEWER_RESULTS), skyDome: studyView.skyDome }, skyDomeTitle: studyView.skyDomeTitle,
+                           dimmedLayers: studyView.studyOutOfDate ? ["sky_dome" as const] : [] };
   // Inspect draws the inputs as Design does, the orientation of the test surfaces in place of the test surfaces, and no results.
   const inspectViewer = {
     overlayContent: <InspectView inspection={inspection} origin={origin} saveDisabledReason={inputsDisabledReason} notice={inputChangesNotice} />,

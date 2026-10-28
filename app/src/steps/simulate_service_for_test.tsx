@@ -2,7 +2,7 @@
 // queries of the studies panel: shared by ProjectWorkspace.simulate.test.tsx. Each test file mocks ../viewer/scene with
 // FakeViewerScene itself and calls startWorkspaceTest and endWorkspaceTest.
 import { act } from "react";
-import type { CriterionEntry, MetricInfo, StudyEntry, StudyWithState } from "../api_client/client";
+import type { CriterionEntry, MetricInfo, SkyDome, StudyEntry, StudyWithState } from "../api_client/client";
 import { ChainService, CURRENT, FACADES, OUT_OF_DATE, openChainWith, type CriterionStages } from "./chain_service_for_test";
 import { buttonIn, container, json, settle, switchMode } from "./project_workspace_for_test";
 import type { PipelineStage, StageState } from "./step_summaries";
@@ -58,6 +58,8 @@ export class SimulateService extends ChainService {
   uploadRefusal: string | null = null;
   /** GET studies/{id}/values: the packed values of each study's last result; a study without them has none (404). */
   valuesOf: Record<string, ArrayBuffer> = {};
+  /** GET studies/{id}/sky-patches: the sky dome of each study's last result; a study without one has none (404). */
+  skyDomeOf: Record<string, SkyDome> = {};
 
   constructor(entries: CriterionEntry[], criterionStages: Record<string, CriterionStages>) {
     super(entries, criterionStages);
@@ -102,6 +104,10 @@ export class SimulateService extends ChainService {
     if (method === "GET" && part === "values") {
       const values = this.valuesOf[id];
       return values === undefined ? json({ detail: `The study '${id}' has no result yet.` }, 404) : new Response(values);
+    }
+    if (method === "GET" && part === "sky-patches") {
+      const dome = this.skyDomeOf[id];
+      return dome === undefined ? json({ detail: `The study '${id}' has no sky patches.` }, 404) : json(dome);
     }
     if (method === "PATCH" && part === undefined && Object.keys(body).length === 1 && "target" in body) {
       this.studyPatches.push({ id, body });

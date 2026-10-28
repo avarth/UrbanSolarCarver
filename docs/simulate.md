@@ -8,6 +8,8 @@ Simulate is a workspace beside the pipeline. It changes no criterion, no shared 
 
 The switch **Design | Simulate** in the header, next to the project name, changes the workspace. Simulate hides the steps and gives the 3D view the whole window. Design shows the step you left, with its folds and scroll position. The Layers menu and the viewer tools are the same in both. The context and the terrain are drawn in Simulate; the test surfaces of criteria and of other studies are not, only those of the selected study.
 
+The **Sky dome** layer (Layers menu, off at first) is the selected study's, not Design's: each of the 145 sky patches coloured by the value it carried in the study's last run, the solar energy of the period from that patch for Solar energy and Useful solar gains (kWh/m²), its weight of the overcast sky, the night sky cooling or the sky for the three sky metrics. It changes with the study selected and is dimmed with it when the study is out of date. A sun hours study traces sun positions, not patches, so it has no dome; nor has a result run before the patch values were kept, until it is run again.
+
 ## Studies
 
 A study is a metric on test surface files over a period. The **Studies** panel floats over the top left of the 3D view and collapses to an icon. Each row has a colour swatch, the study's name and one line: its test surface files while its result is current, otherwise **Out of date**, **Not run yet** or the reason it cannot run (for example **Add test surfaces**). Pressing a row selects the study for the view: **one study is on the view at a time**, and its test surfaces are the ones coloured. When none is selected, the first study with a result is (or the first study), so a finished run shows its values without a press. The settings button of a row opens its popover.
@@ -115,6 +117,7 @@ Each study's results are in `<project>/simulate/<study number>/`:
 |---|---|
 | `check_points.npz` | The test points, their normals, the corners of the square patch each draws and the frame the coordinates are relative to |
 | `check_values.npz` | One value per point for each geometry (`open` with no geometry, `max_volume`, then `envelope` and `massing` when traced) |
+| `check_sky.json` | The value of each of the 145 sky patches for the study's metric, drawn as the study's sky dome; none for sun hours |
 | `check_summary.json` | The metric, unit, settings, and for each geometry its mesh, triangle count, surface tolerance and statistics, and what the result was computed from. It is written last, so a folder without it has no result |
 | `refusal.json` | Only for a study the engine refused: the message and the inputs it was refused with |
 

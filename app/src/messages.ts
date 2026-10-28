@@ -20,6 +20,15 @@ const SKY_PATCH_WEIGHT_OF_MODE: Record<string, string> = {
   radiative_cooling: "Share of the night sky cooling in each patch",
 };
 
+// What a study's sky dome shows for each metric (Simulate's Layers menu): the value each patch carried in its last result.
+const STUDY_SKY_PATCH_VALUE_OF_METRIC: Record<string, string> = {
+  solar_energy: "Solar energy from each sky patch, kWh/m²",
+  useful_solar_energy: "Useful solar gains from each sky patch, kWh/m²",
+  sky_component: "Share of the overcast sky in each patch",
+  cooling_sky: "Share of the night sky cooling in each patch",
+  sky_view: "Share of the sky in each patch",
+};
+
 // What the score of a voxel measures in each mode, for the histogram axis and the kept voxels legend (UX 5.5, 8.1). The unit is
 // the engine's (mode_registry score_unit, in the score points): m²·h, kWh, or m² of fully hidden sky.
 const SCORE_OF_MODE: Record<string, string> = {
@@ -674,6 +683,8 @@ export const messages = {
   sunPathLegend: (days: string, hours: string) => `Sun path, ${days}; sun at ${hours}\u00a0h`,
   skyDomeLegend: (mode: string | null) => (mode !== null && Object.hasOwn(SKY_PATCH_WEIGHT_OF_MODE, mode)
     ? SKY_PATCH_WEIGHT_OF_MODE[mode] : "Sky patch weight"),
+  studySkyDomeLegend: (metric: string | undefined) => (metric !== undefined && Object.hasOwn(STUDY_SKY_PATCH_VALUE_OF_METRIC, metric)
+    ? STUDY_SKY_PATCH_VALUE_OF_METRIC[metric] : "Sky patch weight"),
   buildingMassingLegend: "Building massing, by storey",
   carvedByCriterionLegend: "Carved voxels, by the criterion that removed them",
   legend: "Legend",

@@ -44,7 +44,7 @@ from typing import Dict, NamedTuple, Optional, Union
 
 import numpy as np
 
-from .check_files import POINTS_FILE, SUMMARY_FILE, VALUES_FILE, file_fingerprint, run_geometry_files
+from .check_files import POINTS_FILE, SKY_FILE, SUMMARY_FILE, VALUES_FILE, file_fingerprint, run_geometry_files
 from .check_settings import CHECK_METRICS, CheckSettings, settings_digest
 from .compute_device import resolve_compute_device, warp_device_name
 from .run_context import active_context, report_issue, report_progress
@@ -149,6 +149,14 @@ def check_directions(settings: CheckSettings) -> CheckDirections:
     horizontal_cosine = sin_alt if side == 1 else (cells[:, 0] + cells[:, 1]) / 2.0
     horizontal = float(np.sum(values * horizontal_cosine))
     return slots(values, 100.0 / horizontal)
+
+
+def sky_patch_values(directions: CheckDirections) -> Optional[np.ndarray]:
+    """The value each sky patch carries (the sum of its slots' values), in the order of Ladybug's Tregenza patches; None when
+    the directions are sun positions (sun_hours)."""
+    if directions.patch_ids is None:
+        return None
+    return np.bincount(directions.patch_ids, weights=directions.values, minlength=int(directions.patch_ids.max()) + 1)
 
 
 def _patch_radiation(settings: CheckSettings) -> np.ndarray:
@@ -438,7 +446,9 @@ def solar_check(
 
     With *out_dir*, writes there ``check_points.npz`` (the points, normals
     and the corner quads of their patches, float32 relative to ``frame``),
-    ``check_values.npz`` (one float32 array per column) and last
+    ``check_values.npz`` (one float32 array per column), for a sky
+    metric ``check_sky.json`` (the value of each sky patch,
+    :func:`sky_patch_values`; removed for sun hours) and last
     ``check_summary.json``: the metric, its unit, the settings, the columns
     with their meshes, times and statistics, and the size and time of every
     file read.
@@ -531,6 +541,11 @@ def solar_check(
             normals=check_points.normals.astype(np.float32),
             quads=(check_points.quads - frame).astype(np.float32))
         np.savez_compressed(folder / VALUES_FILE, **{name: array.astype(np.float32) for name, array in values.items()})
+        patch_values = sky_patch_values(directions)
+        if patch_values is None:
+            (folder / SKY_FILE).unlink(missing_ok=True)
+        else:
+            (folder / SKY_FILE).write_text(json.dumps({"weights": patch_values.tolist()}), encoding="utf-8")
         summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     return SolarCheckResult(settings, directions.unit, check_points, values, summary, folder)
 

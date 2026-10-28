@@ -667,6 +667,19 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
             raise ProjectError(f"The study '{study_id}' has no result yet.", status_code=404)
         return Response(values, media_type="application/octet-stream", headers=NO_CACHE)
 
+    @router.get("/projects/{name}/studies/{study_id}/sky-patches", responses={404: _STUDY_RESPONSES[404]})
+    def study_sky_patches(name: str, study_id: str) -> SkyDome:
+        """The sky patches of the study's last result with the value each carried for its metric; 404 for an unknown study, one
+        without a result, a sun hours study (its directions are sun positions) or a result from before the values were kept."""
+        store = folder_in_use.store
+        with store.project_lock(name):
+            find_study(store.read_project_json(name), study_id)
+            dome = simulation.study_sky_patches(study_folder(store.open(name), study_id))
+        if dome is None:
+            raise ProjectError(f"The study '{study_id}' has no sky patches: it has no result, measures sun hours, or was run before "
+                               "they were kept.", status_code=404)
+        return dome
+
     @router.post("/projects/{name}/simulate", responses={404: {"model": ErrorDetailReply, "description": "There is no such project."}, **_ERROR_RESPONSES})
     def simulate(name: str) -> StartRunReply:
         """Run every study that can run, one job of the run worker (stage "simulate"); its events are read as a run's. 409 while any

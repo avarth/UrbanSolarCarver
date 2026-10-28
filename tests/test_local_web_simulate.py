@@ -432,6 +432,22 @@ def test_values_route_packs_the_header_quads_and_columns(service):
     assert client.get("/api/projects/p/studies/99/values").status_code == 404
 
 
+def test_sky_patches_route_gives_each_patch_its_value_and_404_without_them(service):
+    client, worker, _engine = service
+    store = worker.store
+    study = add_study(store, "p")
+    assert client.get(f"/api/projects/p/studies/{study}/sky-patches").status_code == 404     # no result yet
+    simulate_and_wait(worker)
+    reply = client.get(f"/api/projects/p/studies/{study}/sky-patches")
+    assert reply.status_code == 200
+    dome = reply.json()
+    stored = json.loads((store.open("p") / "simulate" / study / "check_sky.json").read_text(encoding="utf-8"))
+    assert len(dome["directions"]) == len(dome["solid_angles"]) == 145 and dome["weights"] == stored["weights"]
+    (store.open("p") / "simulate" / study / "check_sky.json").unlink()                         # a result from before
+    assert client.get(f"/api/projects/p/studies/{study}/sky-patches").status_code == 404
+    assert client.get("/api/projects/p/studies/99/sky-patches").status_code == 404
+
+
 def test_simulate_with_no_study_that_can_run_is_422(service):
     client, worker, engine = service
     reply = client.post("/api/projects/p/simulate")

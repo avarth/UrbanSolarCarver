@@ -319,6 +319,11 @@ export async function getStudyValues(token: string, project: string, studyId: st
   return (await send(token, `${studyPath(project, studyId)}/values`)).arrayBuffer();
 }
 
+/** The sky patches of a study's last result with the value each carried; 404 for a sun hours study or a result without them. */
+export async function getStudySkyPatches(token: string, project: string, studyId: string): Promise<SkyDome> {
+  return requestJson<SkyDome>(token, `${studyPath(project, studyId)}/sky-patches`);
+}
+
 // Inspect: what each input file holds, and the orientation of the test surfaces (turn a surface, restore the original).
 function testSurfaceInspectPath(project: string, fileName: string): string {
   return `${projectPath(project)}/inspect/test_surfaces/${encodeURIComponent(fileName)}`;
