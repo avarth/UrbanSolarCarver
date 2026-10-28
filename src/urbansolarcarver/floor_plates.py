@@ -902,7 +902,7 @@ def bay_column_counts(bay, n_bays, column_share=None):
 
 
 def build_floors(cells_ij, bay, occupancy, kept, z_grid0, voxel_size, levels,
-                 tolerance, stacking, min_dimension, counted_layers=None, column_share=None):
+                 tolerance, stacking, min_dimension, counted_layers=None, column_share=None, ground=None):
     """Decide, floor by floor, which bays are built.
 
     A bay is built on a floor when every one of its columns is filled by
@@ -929,11 +929,24 @@ def build_floors(cells_ij, bay, occupancy, kept, z_grid0, voxel_size, levels,
     of an earlier carving, voxelized again on another grid, does), and one
     such column, empty above the lowest floors, would otherwise fail the
     whole module.
+
+    *ground* ((nx, ny, nz) bool, the cells below the terrain; None: no
+    terrain) lets a floor reach into sloped ground (user, 2026-10-28: "partly
+    buried floor plates should be ok"): a cell below the ground counts as
+    filled and as inside the envelope, so a module is built when its part
+    above the ground stays in the maximum volume; a module wholly below the
+    ground over the floor's height is not built; and a module whose columns
+    reach the ground within the floor or just under it stands on the ground,
+    which supports it as a built bay below does.
     """
     n_bays = int(bay.max()) + 1 if bay.size else 0
     column_share = np.ones(len(bay)) if column_share is None else np.asarray(column_share, dtype=np.float64)
     occ_cols = occupancy[cells_ij[:, 0], cells_ij[:, 1], :].astype(np.float64)
     kept_cols = (kept & occupancy)[cells_ij[:, 0], cells_ij[:, 1], :].astype(np.float64)
+    ground_cols = None if ground is None else ground[cells_ij[:, 0], cells_ij[:, 1], :].astype(np.float64)
+    if ground_cols is not None:
+        occ_cols = np.maximum(occ_cols, ground_cols)
+        kept_cols = np.maximum(kept_cols, ground_cols)
     bay_columns = np.maximum(bay_column_counts(bay, n_bays, column_share), 1e-9)
     mostly_inside = column_share >= 0.5
     grid_shape = occupancy.shape[:2]
@@ -950,8 +963,16 @@ def build_floors(cells_ij, bay, occupancy, kept, z_grid0, voxel_size, levels,
         outside = (np.bincount(bay, weights=(height - kept_cols @ overlap) * column_share, minlength=n_bays)
                    / (bay_columns * height))
         keep = in_max & (outside <= tolerance + 1e-9)
+        on_ground = np.zeros(n_bays, dtype=bool)
+        if ground_cols is not None:
+            in_floor = ground_cols @ overlap
+            buried = in_floor >= height - 1e-6
+            keep &= np.bincount(bay, weights=(~buried).astype(np.float64), minlength=n_bays) > 0
+            layer_under = int(np.floor((zb - z_grid0) / voxel_size + 1e-6)) - 1
+            under = ground_cols[:, layer_under] > 0 if 0 <= layer_under < n_layers else np.zeros(len(bay), dtype=bool)
+            on_ground = np.bincount(bay, weights=((in_floor > 1e-6) | under).astype(np.float64), minlength=n_bays) > 0
         if stacking == "supported" and below is not None:
-            keep &= below
+            keep &= below | on_ground
         keep = _drop_narrow_bays(keep, bay, cells_ij, grid_shape, side, column_share, bay_columns)
         floors.append(Floor(zb=zb, zt=zt, kept_bays=keep, outside_share=outside,
                             plate=_label_plates(keep[bay], cells_ij, grid_shape)))

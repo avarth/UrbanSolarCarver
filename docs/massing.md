@@ -146,12 +146,16 @@ The run report gets a Massing section.
 
 ## Limits
 
-- Floors count from the lowest point of the maximum volume; a part that starts
-  higher gets a warning (sloped ground is not supported yet). With a terrain
-  that cuts the maximum volume (its lowest point lies below the ground the
-  carving keeps), a warning says how far below: floors that reach into the
-  ground are not built, so on sloped ground the massing may have few floors
-  or none (a 1 in 6 slope under the "New building" example gave none).
+- Floors count from the lowest point of the maximum volume, at one level
+  across the whole building. Without a terrain, a part that starts higher gets
+  a warning. With a terrain, a floor may reach into sloped ground: the cells
+  below the ground count as filled, so a module is built when its part above
+  the ground stays in the maximum volume (a partly buried storey, with its
+  whole plate area); a module wholly below the ground over the floor's height
+  is not built; and the ground supports the floor above a module that reaches
+  it, as a built plate does with stacked plates. On a 1 in 6 slope under the
+  "New building" example this gives 5 plates and 1,023 m2, where floors
+  counted only above the ground gave none.
 - If the maximum volume's footprint cannot be read from the mesh, or does not
   match the voxel grid (more than 5% of the occupied voxel columns more than
   one voxel outside it, for example when the file was replaced after

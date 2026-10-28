@@ -169,6 +169,27 @@ def _warn_raised_parts(polygons, cells_ij, xy, occ, z0, origin_z, voxel_size):
             )
 
 
+def _ground_cells(chain, shape):
+    """The cells of the grid below the terrain the preprocessing run used ((nx, ny, nz) bool), as preprocessing removed them from
+    the maximum volume; None without a terrain.  A floor may reach into the ground (floor_plates.build_floors)."""
+    terrain_path = chain.pre.manifest.terrain_path
+    if terrain_path is None:
+        return None
+    import torch
+    from ..context_geometry import below_ground_cells, ground_heights
+    from ..io import load_mesh
+    path = Path(terrain_path)
+    if not path.is_absolute() and not path.is_file():
+        path = chain.pre.folder / path
+    terrain = load_mesh(str(path), fix_normals=False)
+    origin = np.asarray(chain.origin, dtype=np.float64)
+    resolution = shape[0]
+    # The heights in the grid's own frame: the terrain shifted by the grid origin, so float32 keeps its precision far from zero.
+    heights = ground_heights(np.asarray(terrain.vertices, dtype=np.float64) - origin, terrain.faces, np.zeros(3), chain.voxel_size,
+                             resolution, torch.device("cpu"))
+    return below_ground_cells(heights, np.zeros(3), chain.voxel_size, resolution)[:shape[0], :shape[1], :shape[2]]
+
+
 def massing(threshold_manifest, cfg: Union[user_config, str, Path],
             out_dir: Union[str, Path]) -> MassingResult:
     """Fourth stage: floor plates that follow the footprint, from the carved envelope.
@@ -272,7 +293,9 @@ def _run_massing(settings: MassingSettings, options: RunOptions, upstream: Thres
     layers = np.flatnonzero(occ.any(axis=(0, 1)))
     lowest_layer_bottom = origin[2] + layers.min() * vs
     highest_layer_top = origin[2] + (layers.max() + 1) * vs
-    _warn_raised_parts(polygons, cells_ij, xy, occ, lowest_layer_bottom, origin[2], vs)
+    ground = _ground_cells(chain, occ.shape)
+    if ground is None:      # with a terrain a part starts higher where the ground does, which the floors follow
+        _warn_raised_parts(polygons, cells_ij, xy, occ, lowest_layer_bottom, origin[2], vs)
     # Floors stand between the maximum volume's lowest and highest points,
     # which the occupied voxel layers can overrun by up to one voxel at each
     # end.  A preprocessing run from before the manifest recorded them gives
@@ -282,22 +305,11 @@ def _run_massing(settings: MassingSettings, options: RunOptions, upstream: Thres
         z0 = lowest_layer_bottom
     if z_top is None:
         z_top = highest_layer_top
-    # The terrain took the voxels below the ground: floors still count from the maximum volume's lowest point, under the ground,
-    # so on sloped ground the ground floor seldom fits and, stacked, nothing above it (user, 2026-10-28: a volume on a 1 in 6
-    # slope gave no plates, with only the general no-plates warning).
-    under_ground = lowest_layer_bottom - z0
-    if chain.pre.manifest.terrain_path is not None and under_ground > 0.5 * vs:
-        report_issue(
-            "under_ground",
-            f"massing: the terrain cuts the maximum volume, whose lowest point lies {under_ground:.2f} m below the lowest ground "
-            f"it keeps; floors count from that lowest point, so floors that reach into the ground are not built "
-            f"(sloped ground is not supported yet)",
-        )
     levels = mg.floor_levels(z0, z_top, settings.ground_floor_height, settings.floor_height)
     counted_layers = mg.layers_centred_within(origin[2], vs, occ.shape[2], z0, z_top)
     floors = mg.build_floors(cells_ij, bay, occ, kept, origin[2], vs, levels,
                              settings.plate_tolerance, settings.plate_stacking, settings.min_plate_dimension,
-                             counted_layers=counted_layers, column_share=column_share)
+                             counted_layers=counted_layers, column_share=column_share, ground=ground)
 
     plates, meshes, floor_areas = [], [], []
     for n, floor in enumerate(floors):

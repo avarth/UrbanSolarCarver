@@ -91,9 +91,11 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed (massing on sloped ground)
 
-- **A warning when the terrain cuts the maximum volume.** Floors count from the maximum volume's lowest point; when that lies
-  below the ground the carving keeps, the massing now says how far below, and that floors reaching into the ground are not built.
-  Before, a volume reaching under a 1 in 6 slope gave no plates with only the general "no floor plates fit" warning.
+- **Floors may reach into sloped ground** (user: "partly buried floor plates should be ok because logically this happens").
+  With a terrain, the cells below the ground count as filled when a module is tested, so a partly buried storey is built with its
+  whole plate; a module wholly below the ground is not built; and the ground supports the floor above, as a built plate does.
+  Before, every module reaching into the ground was refused and, stacked, nothing above it: a volume on a 1 in 6 slope gave no
+  plates (now 5 plates, 1,023 m2). The "raised part" warning is left out with a terrain, whose ground explains the higher start.
 
 ### Fixed (input files replaced in the project folder)
 

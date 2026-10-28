@@ -176,16 +176,37 @@ def test_raised_part_warns_and_follows_stacking(tmp_path):
     assert any(np.array(p["outline"])[:, 0].min() > 0 for p in plates)    # high block too
 
 
-def test_a_volume_cut_by_sloped_terrain_says_why_floors_reaching_into_the_ground_are_not_built(tmp_path):
-    # The volume reaches 3 m under a terrain rising 1 in 4 northward across its 12 m depth (0 m at its south edge, 3 m at its north).
-    terrain = trimesh.Trimesh([[-40, -6, 0], [40, -6, 0], [40, 6, 3], [-40, 6, 3]], [[0, 1, 2], [0, 2, 3]])
+def _sloped_terrain(tmp_path, rise):
+    """A terrain rising *rise* m northward across the 12 m depth of a volume centred on y = 0 (0 m at its south edge)."""
+    terrain = trimesh.Trimesh([[-40, -6, 0], [40, -6, 0], [40, 6, rise], [-40, 6, rise]], [[0, 1, 2], [0, 2, 3]])
     terrain_path = tmp_path / "terrain.ply"
     terrain.export(terrain_path)
-    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 23], z0=-3.0), terrain_path=str(terrain_path))
-    _set_mask(thr, lambda occ: occ)
-    with pytest.warns(UserWarning, match=r"terrain cuts the maximum volume, whose lowest point lies 3\.00 m below"):
-        _massing(cfg, thr, tmp_path / "m")
+    return str(terrain_path)
 
+
+def test_on_sloped_ground_a_partly_buried_ground_floor_is_built_with_its_whole_plate(tmp_path):
+    # User, 2026-10-28: "partly buried floor plates should be ok because logically this happens". The ground rises 3 m under the
+    # 5 m ground floor: before, no module reaching into the ground was built, and stacked, nothing above: no plates at all.
+    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20]), terrain_path=_sloped_terrain(tmp_path, 3.0))
+    _set_mask(thr, lambda occ: occ)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")          # no "no floor plates fit", no "raised part"
+        res = _massing(cfg, thr, tmp_path / "m")
+    assert len(res.floor_areas) == 6
+    assert res.floor_areas[0] == pytest.approx(30 * 12, rel=1e-6)          # the whole footprint, partly buried
+    assert res.total_floor_area == pytest.approx(6 * 30 * 12, rel=1e-6)
+
+
+def test_a_module_wholly_below_the_ground_is_not_built_and_the_ground_supports_the_floor_above(tmp_path):
+    # The ground rises 9 m: the north part of the 0 to 5 m ground floor lies wholly below it, and the floors above stand on it.
+    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20]), terrain_path=_sloped_terrain(tmp_path, 9.0))
+    _set_mask(thr, lambda occ: occ)
+    res = _massing(cfg, thr, tmp_path / "m")
+    plates = json.loads(res.plates_path.read_text())["plates"]
+    northmost = lambda floor: max(np.array(p["outline"])[:, 1].max() for p in plates if p["floor"] == floor)
+    assert 0 < res.floor_areas[0] < 30 * 12                 # the buried north part is not built
+    assert northmost(0) < northmost(2)
+    assert res.floor_areas[2] == pytest.approx(30 * 12, rel=1e-6)       # supported by the ground, not by a plate below
 
 def test_nothing_buildable_gives_valid_empty_outputs(tmp_path):
     cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20]))
