@@ -82,6 +82,8 @@ export interface StudyViewHook {
    * hours study, or for a result from before the patch values were kept. Design's dome is not shown in Simulate. */
   skyDome: SkyDome | null;
   skyDomeTitle: string;
+  /** The selected study measures the sky but its result has no sky patches (run before they were kept): its dome needs a run. */
+  skyDomeMissing: boolean;
   /** The legend and the result card; null when the view draws nothing. */
   legend: StudyLegend | null;
   card: { geometry: StudyGeometry; unit: string; statistics: StudyStatistics; baseline: StudyStatistics | null } | null;
@@ -233,8 +235,9 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
     geometry, setGeometry, change, setChange, colourBy, setColourBy, shownOnView, setShownOnView, available, outOfDateInDesign, waitingForStudy,
     setRangeEnd,
     waitingForRun: active && running && hasResult && values === null,
-    studyOutOfDate: active && selected?.state === "out_of_date",
+    studyOutOfDate: active && shownOnView && selected?.state === "out_of_date",       // a hidden study shows no stamp
     skyDome: drawn && loadedSky?.id === selectedId ? loadedSky.dome : null,
+    skyDomeMissing: drawn && loadedSky?.id === selectedId && loadedSky.dome === null && selected?.entry.metric !== "sun_hours",
     skyDomeTitle: messages.studySkyDomeLegend(selected?.entry.metric),
     view: drawn ? { values, geometry, change, colourBy, range: [low, high], palette, unit, dimmed: selected.state === "out_of_date" } : null,
     legend: drawn ? {

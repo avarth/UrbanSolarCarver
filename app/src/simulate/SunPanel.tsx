@@ -1,11 +1,11 @@
-// The Sun panel of Simulate, under the studies panel and collapsible as it is (user, 2026-10-28). At the top the clock the times are
-// read in and the year's sun path; then one of two views, never both, chosen on a switch, each with its own controls:
+// The Sun panel of Simulate, under the studies panel and collapsible as it is (user, 2026-10-28). Open, it shows the year's sun path
+// on the view, collapsed nothing of the sun tool; then one of two views, never both, chosen on a switch, each with its own controls:
 // - Shadows at a time: a moment, one day on a year strip (with the equinox and the solstices as presets) and one time on a day strip,
 //   each strip with a single handle, and where the sun stands then;
 // - Hours in shade: a period, the analysis period's control (a date range and an hour range, with its presets), and the colours of
 //   the count, viridis or grey.
-// The strips are the criteria panel's (ScaleStrip, AnalysisPeriod). Without a weather file the panel says one is needed. The 3D view
-// draws what it sets (use_sun_study, the sun_study layer, sun_shading).
+// and at the end the clock the times are read in. The strips are the criteria panel's (ScaleStrip, AnalysisPeriod). Without a weather
+// file the panel says one is needed. The 3D view draws what it sets (use_sun_study, the sun_study layer, sun_shading).
 import { useId, useRef, useState } from "react";
 import { messages } from "../messages";
 import { formattedNumber } from "../steps/format_numbers";
@@ -83,7 +83,7 @@ function SingleStrip({ name, label, value, position, bubble, spoken, cells, valu
 }
 
 export function SunPanel({ sunStudy }: { sunStudy: SunStudyHook }) {
-  const [open, setOpen] = useState(false);
+  const { open } = sunStudy.settings;
   const bodyId = useId();
   const titleId = useId();
   const periodLabelId = useId();
@@ -95,7 +95,7 @@ export function SunPanel({ sunStudy }: { sunStudy: SunStudyHook }) {
              aria-label={open ? undefined : messages.sunToolTitle}>
       <div className="sun-panel-header">
         <button type="button" className="sun-panel-toggle" aria-label={messages.sunToolTitle} aria-expanded={open}
-                aria-controls={open ? bodyId : undefined} title={messages.sunToolTitle} onClick={() => setOpen((shown) => !shown)}>
+                aria-controls={open ? bodyId : undefined} title={messages.sunToolTitle} onClick={() => sunStudy.change({ open: !open })}>
           <SunIcon />
         </button>
         {open && <h2 id={titleId} className="sun-panel-title">{messages.sunToolTitle}</h2>}
@@ -104,16 +104,6 @@ export function SunPanel({ sunStudy }: { sunStudy: SunStudyHook }) {
         <div id={bodyId} className="sun-panel-body">
           {!sunStudy.available ? <p className="sun-panel-note">{messages.sunToolNoWeatherFile}</p> : (
             <>
-              <label className="sun-panel-row">
-                <span className="sun-panel-label">{messages.sunToolClock}</span>
-                <select value={settings.timeBasis} onChange={(event) => change({ timeBasis: event.target.value as typeof settings.timeBasis })}>
-                  {TIME_BASES.map((basis) => <option key={basis} value={basis}>{messages.sunToolTimeBases[basis]}</option>)}
-                </select>
-              </label>
-              <label className="sun-panel-check">
-                <input type="checkbox" checked={settings.showPath} onChange={(event) => change({ showPath: event.target.checked })} />
-                {messages.sunToolPath}
-              </label>
               <div className="segmented-switch sun-panel-views" role="group" aria-label={messages.sunToolShow}>
                 {SUN_VIEWS.map((view) => (
                   <button key={view} type="button" aria-pressed={settings.view === view} onClick={() => change({ view })}>{messages.sunToolViews[view]}</button>
@@ -162,6 +152,12 @@ export function SunPanel({ sunStudy }: { sunStudy: SunStudyHook }) {
                   <p className="sun-panel-note">{messages.sunToolShadeNote}</p>
                 </div>
               )}
+              <label className="sun-panel-row sun-panel-clock">
+                <span className="sun-panel-label">{messages.sunToolClock}</span>
+                <select value={settings.timeBasis} onChange={(event) => change({ timeBasis: event.target.value as typeof settings.timeBasis })}>
+                  {TIME_BASES.map((basis) => <option key={basis} value={basis}>{messages.sunToolTimeBases[basis]}</option>)}
+                </select>
+              </label>
             </>
           )}
         </div>

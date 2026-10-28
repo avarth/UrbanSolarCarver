@@ -1,7 +1,8 @@
-// Simulate's sun tool (user, 2026-10-28: the traditional study of a project's massing with the sun): the clock the times are read in,
-// the year's sun path with a day, and one of two views, never both: the shadows at a moment (a day and a time), or the hours in shade
-// over a period (days and hours, as the analysis period gives them). The Sun panel sets them and the 3D view draws them. It reads
-// GET sun-chart and sun-positions while Simulate is open and the project has a weather file.
+// Simulate's sun tool (user, 2026-10-28: the traditional study of a project's massing with the sun): while the Sun panel is open, the
+// year's sun path with a day, and one of two views, never both: the shadows at a moment (a day and a time), or the hours in shade
+// over a period (days and hours, as the analysis period gives them), the times read in the clock chosen. The Sun panel sets them and
+// the 3D view draws them; a collapsed panel draws nothing. It reads GET sun-chart and sun-positions while Simulate and the panel are
+// open and the project has a weather file.
 import { useEffect, useMemo, useState } from "react";
 import { ApiError, getSunChart, getSunPositions, serviceProblemOf, type SunChart, type SunPosition, type SunPositions } from "../api_client/client";
 import { dayAndMonth, messages } from "../messages";
@@ -34,7 +35,8 @@ export type ShadePeriod = Record<AnalysisPeriodField, number>;
 
 export interface SunStudySettings {
   timeBasis: TimeBasis;
-  showPath: boolean;
+  /** The Sun panel is open: the sun path and the view are drawn (user, 2026-10-28: opening the panel shows them). */
+  open: boolean;
   view: SunView;
   /** The moment: the day of the sun path and of the shadows, and the time (minute of the day). */
   date: MonthDay;
@@ -63,7 +65,7 @@ export interface SunStudyHook {
 }
 
 export const INITIAL_SUN_STUDY: SunStudySettings = {
-  timeBasis: "standard", showPath: false, view: "none", date: { month: 12, day: 21 }, minute: 12 * 60,
+  timeBasis: "standard", open: false, view: "none", date: { month: 12, day: 21 }, minute: 12 * 60,
   period: { start_month: 12, start_day: 21, start_hour: 8, end_month: 12, end_day: 21, end_hour: 15 }, palette: "viridis",
 };
 
@@ -105,7 +107,7 @@ export function useSunStudy({ token, project, active, hasWeatherFile, onServiceP
   const [chart, setChart] = useState<{ key: string; chart: SunChart } | null>(null);
   const [day, setDay] = useState<{ key: string; positions: SunPosition[] } | null>(null);
   const [shadePositions, setShadePositions] = useState<{ key: string; positions: SunPositions } | null>(null);
-  const reads = active && hasWeatherFile;
+  const reads = active && hasWeatherFile && settings.open;
   const { timeBasis, view, period } = settings;
   const report = (error: unknown) => {
     if (!(error instanceof ApiError && error.status === NOT_FOUND) && serviceProblemOf(error) !== "other") onServiceProblem(error);
@@ -115,11 +117,11 @@ export function useSunStudy({ token, project, active, hasWeatherFile, onServiceP
   const date = monthDayText(view === "shade" ? { month: period.start_month, day: period.start_day } : settings.date);
   const chartKey = `${date} ${timeBasis}`;
   useEffect(() => {
-    if (!reads || !settings.showPath) return;
+    if (!reads) return;
     let wanted = true;
     getSunChart(token, project, date, timeBasis).then((reply) => { if (wanted) setChart({ key: chartKey, chart: reply }); }).catch(report);
     return () => { wanted = false; };
-  }, [reads, settings.showPath, chartKey]);
+  }, [reads, chartKey]);
 
   const momentDate = monthDayText(settings.date);
   const dayKey = `${momentDate} ${timeBasis}`;
@@ -156,11 +158,11 @@ export function useSunStudy({ token, project, active, hasWeatherFile, onServiceP
   const sunVector = view === "shade" || sunNow === null ? null : (sunNow.vector as Point3);
   const sunKey = sunVector?.join(",") ?? "";
   const shownView = useMemo<SunStudyView>(() => ({
-    chart: reads && settings.showPath && chart?.key === chartKey ? chart.chart : null,
+    chart: reads && chart?.key === chartKey ? chart.chart : null,
     sun: reads ? sunVector : null,
     shadows: reads && view === "shadows",
     shade: reads && view === "shade" ? shadeView : null,
-  }), [reads, settings.showPath, view, chart, chartKey, sunKey, shadeView]);
+  }), [reads, view, chart, chartKey, sunKey, shadeView]);
 
   return { settings, change, available: hasWeatherFile, sunNow, view: shownView };
 }

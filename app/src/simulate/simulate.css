@@ -183,14 +183,15 @@
   .studies-panel { width: min(280px, calc(100vw - 48px)); }
 }
 
-/* The Sun panel, under the studies panel and built as it is, a little wider for the strips of the criteria panel: the clock, the sun
-   path, the switch between the two views, and the controls of the one shown. */
-.sun-panel { width: 340px; }
-.sun-panel-collapsed { width: auto; }
+/* The Sun panel, under the studies panel and built as it is: the switch between the views, the controls of the one shown, and the
+   clock at the end. */
+/* The studies panel and its popover stack over the Sun panel; the Sun panel is as wide as it, so the popover beside it leaves the
+   Sun panel's strips clear. */
+.studies-panel { z-index: 1; }
 .sun-panel-body { display: flex; flex-direction: column; gap: var(--space-unit); margin-top: calc(var(--space-unit) * 2); }
 .sun-panel-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-unit); }
 .sun-panel-label { color: var(--colour-muted); }
-.sun-panel-check { display: flex; align-items: center; gap: var(--space-unit); }
+.sun-panel-clock { margin-top: var(--space-unit); }
 .sun-panel-views { align-self: flex-start; }
 .sun-panel-views button { padding: 2px var(--space-unit); font-size: var(--text-secondary); }
 .sun-panel-moment, .sun-panel-period { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-unit); }

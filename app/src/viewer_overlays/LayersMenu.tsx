@@ -14,6 +14,8 @@ export interface LayersMenuEntry {
   partlyVisible?: boolean;
   /** Entries under this one, each with its own check box and swatch (the test surfaces of each criterion). */
   parts?: LayersMenuPart[];
+  /** What a layer without data says, in place of the stage's note. */
+  note?: string;
 }
 
 export interface LayersMenuPart {
@@ -67,7 +69,11 @@ export function LayersMenu({ entries, skyDomeOpacity, theme, onVisibleChange, on
                   ))}
                 </ul>
               )}
-              {!entry.available && <p className="viewer-layer-note viewer-muted">{entry.name === "carved_by_criterion" ? messages.carvedByCriterionMissing : messages.noResultForStage}</p>}
+              {!entry.available && (
+                <p className="viewer-layer-note viewer-muted">
+                  {entry.note ?? (entry.name === "carved_by_criterion" ? messages.carvedByCriterionMissing : messages.noResultForStage)}
+                </p>
+              )}
               {entry.available && entry.name === "sky_dome" && (
                 <label className="viewer-sky-dome-slider">
                   {messages.skyDomeTransparency}

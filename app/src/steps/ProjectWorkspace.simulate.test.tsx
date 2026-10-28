@@ -547,7 +547,6 @@ test("during a run, a study whose values are not read yet says they are shown wh
 
 /** The Sun panel under the studies panel, and its parts. */
 const sunPanel = () => container().querySelector<HTMLElement>(".sun-panel")!;
-const sunPathCheck = () => sunPanel().querySelector<HTMLInputElement>(".sun-panel-check input")!;
 const sunView = (label: string) => buttonIn(sunPanel().querySelector<HTMLElement>(".sun-panel-views")!, label);
 const sunStatus = () => sunPanel().querySelector('[role="status"]')?.textContent ?? null;
 async function clickAndSettle(target: HTMLElement) {
@@ -563,13 +562,12 @@ async function openSunPanel(prepare?: Parameters<typeof openSimulate>[1]) {
   await clickAndSettle(sunPanel().querySelector<HTMLButtonElement>(".sun-panel-toggle")!);
 }
 
-test("the Sun panel shows the sun path, and either the shadows at a moment or the hours in shade over a period, never both", async () => {
+test("the open Sun panel shows the sun path, and either the shadows at a moment or the hours in shade over a period, never both", async () => {
   await openSunPanel();
   expect(simulateService.requests).toContain("GET /sun-positions?from=12-21&to=12-21&start=0&end=1440&step=5&time_basis=standard");
   expect(sunStatus()).toBe("Sun 53° above the horizon, 180° from north");
   expect(FakeViewerScene.latest!.sunStudy).toEqual({ sun: [0, -0.6, 0.8], shadows: false, shade: null });
-  await clickAndSettle(sunPathCheck());
-  expect(simulateService.requests).toContain("GET /sun-chart?date=12-21&time_basis=standard");
+  expect(simulateService.requests).toContain("GET /sun-chart?date=12-21&time_basis=standard");      // opening the panel shows the sun path
   expect(FakeViewerScene.latest!.layers.get("sun_study")).toBeTruthy();
 
   // The moment: a day strip and a time strip, one handle each.
@@ -597,11 +595,16 @@ test("the Sun panel shows the sun path, and either the shadows at a moment or th
   expect([...container().querySelectorAll(".viewer-legend h3")].map((title) => title.textContent)).toContain("Hours in shade per day, 08:00 to 16:00, 21 Dec");
   await clickAndSettle(buttonIn(sunPanel(), "Grey"));
   expect(FakeViewerScene.latest!.sunStudy.shade!.palette).toBe("grey");
+  // Collapsed, the panel draws nothing of the sun.
+  await clickAndSettle(sunPanel().querySelector<HTMLButtonElement>(".sun-panel-toggle")!);
+  expect(FakeViewerScene.latest!.sunStudy).toEqual({ sun: null, shadows: false, shade: null });
+  expect(FakeViewerScene.latest!.layers.get("sun_study") ?? null).toBeNull();
 });
 
 test("the clock of the Sun panel is local standard, local solar or local daylight saving time", async () => {
   await openSunPanel();
-  const clock = sunPanel().querySelector<HTMLSelectElement>("select")!;
+  const clock = sunPanel().querySelector<HTMLSelectElement>(".sun-panel-clock select")!;
+  expect(sunPanel().querySelector(".sun-panel-body")!.lastElementChild!.classList.contains("sun-panel-clock")).toBe(true);     // at the end
   expect([...clock.options].map((option) => option.textContent)).toEqual(["Local standard time", "Local solar time", "Local daylight saving time"]);
   await act(async () => { clock.value = "solar"; clock.dispatchEvent(new Event("change", { bubbles: true })); });
   await settle();
@@ -612,6 +615,17 @@ test("without a weather file the Sun panel says one is needed and reads nothing"
   await openSunPanel((service) => { service.hasWeatherFile = false; });
   expect(sunPanel().textContent).toContain("Add a weather file in Design (Inputs) to see the sun");
   expect(simulateService.requests.some((request) => request.includes("/sun-"))).toBe(false);
+});
+
+test("a study run before its sky patches were kept lists the Sky dome as missing, saying to run it again", async () => {
+  await openSimulate(undefined, (service) => {
+    service.studies = [study("1", "sky_view", ["facades.obj"], "current")];
+    service.valuesOf = { 1: studyValuesOf({ open: [90, 90], max_volume: [40, 60] }, "%") };       // no skyDomeOf: 404
+  });
+  await act(async () => buttonIn(container(), "Layers").click());
+  const entry = [...container().querySelectorAll("li")].find((item) => item.textContent?.startsWith("Sky dome"))!;
+  expect(entry.querySelector("input")!.disabled).toBe(true);
+  expect(entry.textContent).toContain("Run the study again to see its sky dome");
 });
 
 test("the switch beside Studies hides the selected study from the view and shows it again", async () => {

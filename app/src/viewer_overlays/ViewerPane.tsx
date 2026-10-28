@@ -109,6 +109,8 @@ export interface ViewerPaneProps {
   dimmedLayers?: readonly LayerName[];
   /** Result layers listed in the layers menu without data: the last run stopped before their stage. */
   missingLayers?: readonly LayerName[];
+  /** What the layers menu says under a missing layer, where it is not the run stopping before its stage (Simulate's sky dome). */
+  missingLayerNotes?: Partial<Record<LayerName, string>>;
   /** How far the run under way is, 0 to 1; null without a run. */
   runProgress?: number | null;
   /** Shown over the view (the run report). A function is given the viewport theme (Simulate's legend colours follow it). */
@@ -163,7 +165,7 @@ function storeyCountOf(massing: THREE.BufferGeometry): number {
 export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange, criteria = NO_CRITERIA, context = null, terrain = null, sunPath, hemisphere,
                              maxVolumeAppearance, shownByDefault,
                              northDegrees, framingRequest, centreContent, results = NO_VIEWER_RESULTS, localOrigin = NO_SHIFT, dimmedLayers = NO_LAYERS,
-                             missingLayers = NO_LAYERS, runProgress = null, overlayContent, mode = null,
+                             missingLayers = NO_LAYERS, missingLayerNotes, runProgress = null, overlayContent, mode = null,
                              analysisCurrent = false, skyDomeTitle, study = null, studyOutOfDate = false, envelopeSeeThrough = false, inspect = null, sunStudy = null }: ViewerPaneProps) {
   const container = useRef<HTMLDivElement>(null);
   const [scene, setScene] = useState<ViewerScene | null>(null);
@@ -348,7 +350,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
       ? { name, available: true, visible: testSurfaceParts.some((part) => part.visible), partlyVisible: testSurfaceParts.some((part) => part.visible)
           && !testSurfaceParts.every((part) => part.visible), parts: testSurfaceParts }
       : { name, available: true, visible: isVisible(name) })),
-    ...missingLayers.filter((name) => !present.includes(name)).map((name) => ({ name, available: false, visible: false })),
+    ...missingLayers.filter((name) => !present.includes(name)).map((name) => ({ name, available: false, visible: false, note: missingLayerNotes?.[name] })),
   ];
   const changeVisible = (name: LayerName, visible: boolean) => {
     setVisibleByChoice((choices) => ({ ...choices, [name]: visible }));

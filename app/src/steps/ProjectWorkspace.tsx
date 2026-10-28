@@ -446,7 +446,9 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const simulateViewer = { overlayContent: simulateView, study: studyView.view, studyOutOfDate: studyView.studyOutOfDate,
                            envelopeSeeThrough: studyView.geometry === "envelope",
                            results: { ...(designResults ?? NO_VIEWER_RESULTS), skyDome: studyView.skyDome }, skyDomeTitle: studyView.skyDomeTitle,
-                           dimmedLayers: studyView.studyOutOfDate ? ["sky_dome" as const] : [], sunStudy: sunStudy.view };
+                           dimmedLayers: studyView.studyOutOfDate ? ["sky_dome" as const] : [], sunStudy: sunStudy.view,
+                           missingLayers: studyView.skyDomeMissing ? ["sky_dome" as const] : [],
+                           missingLayerNotes: { sky_dome: messages.studySkyDomeNeedsRun } };
   // Inspect draws the inputs as Design does, the orientation of the test surfaces in place of the test surfaces, and no results.
   const inspectViewer = {
     overlayContent: <InspectView inspection={inspection} origin={origin} saveDisabledReason={inputsDisabledReason} notice={inputChangesNotice} />,

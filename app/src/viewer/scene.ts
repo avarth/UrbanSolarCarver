@@ -60,7 +60,8 @@ const TOP_VIEW_TILT_RADIANS = 1e-3;         // a hair off straight down, so "up"
 const FIRST_VIEW_DIRECTION = new THREE.Vector3(-0.5, -0.9, 0.75).normalize();     // from the south-south-west, above
 const EMPTY_SCENE_RADIUS_METRES = 60;
 const EMPTY_SCENE_HEMISPHERE: Hemisphere = { centre: [0, 0, 0], radius: EMPTY_SCENE_RADIUS_METRES };
-// The layers drawn after the hours in shade, over them: the sun path and the sky dome (three.js layer 1; the rest is layer 0).
+// The layers drawn after the hours in shade, over them: the sun path and the sky dome, and the compass ring (three.js layer 1; the
+// rest is layer 0).
 const OVER_THE_COUNT_LAYERS: readonly LayerName[] = ["sun_path", "sky_dome", "sun_study"];
 const OVER_THE_COUNT = 1;
 // The layers whose meshes cast and catch the sun's shadows, and those that make up the site the shadow camera covers.
@@ -413,6 +414,7 @@ export class ViewerScene {
     this.grid = groundGrid(groundGridSpacing(longestSide || EMPTY_SCENE_RADIUS_METRES), [centre.x, centre.y]);
     this.grid.userData.applyTheme(this.theme);
     this.ring = compassRing(this.sceneHemisphere ?? EMPTY_SCENE_HEMISPHERE, this.northDegrees, this.theme);
+    this.ring.traverse((child) => child.layers.set(OVER_THE_COUNT));
     this.scene.add(this.grid, this.ring);
     this.showChosenGroundAid();
     this.fitPixelSizedObjects();
