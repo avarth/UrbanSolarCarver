@@ -41,7 +41,11 @@ from .criteria import (
 from .example_catalog import read_examples
 from .project_names import PROJECT_JSON_FILE_NAME, ProjectError, check_not_a_windows_device_name, validate_project_name
 from .project_removal import ProjectRemovalRefused, check_project_folder_can_be_removed, discard_file, discard_folder, move_to_recycle_bin
-from .studies import NOT_SENT, append_study, change_study, checked_metric, default_study_settings, find_study, joined_study_surfaces_path, study_folder, study_from_criterion
+from ..check_settings import CHECK_METRICS
+from .studies import (
+    NOT_SENT, append_study, change_study, checked_metric, default_study_name, default_study_settings, find_study, joined_study_surfaces_path,
+    study_folder, study_from_criterion,
+)
 
 CONFIG_FILE_NAME = "config.yaml"
 INPUT_ROLE_FOLDERS = ("inputs/max_volume", "inputs/test_surfaces", "inputs/context", "inputs/terrain", "inputs/joined")
@@ -550,8 +554,13 @@ class ProjectStore:
             self._rewrite_chain(name, project_folder, project_json)
 
     def studies(self, name: str) -> list[StudyEntry]:
-        """The studies of a project in the order shown."""
-        return self.read_project_json(name).studies
+        """The studies of a project in the order shown. A study the user did not name is given its default name as the metric's
+        label reads now, so a renamed metric ("Useful solar energy" became "Useful solar gains") renames it too."""
+        studies = self.read_project_json(name).studies
+        for study in studies:
+            if not study.named_by_user and study.metric in CHECK_METRICS:
+                study.name = default_study_name(study.metric, study.settings)
+        return studies
 
     def add_study(self, name: str, *, metric: str | None = None, from_criterion: str | None = None) -> StudyEntry:
         """Add a study at the end of the list: of *metric* with its default period and settings and no test surface files, or like
@@ -577,14 +586,14 @@ class ProjectStore:
             return entry
 
     def update_study(self, project: str, study_id: str, /, *, name: str | None = None, metric: str | None = None,
-                     values: dict | None = None, target: object = NOT_SENT) -> StudyEntry:
+                     values: dict | None = None, target: object = NOT_SENT, target_max: object = NOT_SENT) -> StudyEntry:
         """Change a study of the project *project*; what is not given stays (change_study says how). ProjectError 404 for an
         unknown study, 422 for a name that is empty, an unknown metric, or settings that are not valid for the metric; nothing
         changes then."""
         with self.project_lock(project):
             project_json = self.read_project_json(project)
             entry = find_study(project_json, study_id)
-            change_study(entry, name=name, metric=metric, values=values, target=target)
+            change_study(entry, name=name, metric=metric, values=values, target=target, target_max=target_max)
             self.write_project_json(project, project_json)
             return entry
 

@@ -112,7 +112,7 @@ test("Add study lists the criteria first as Like <name>, then the metrics, Sun h
     { label: "Like Winter sun on facades", disabled: false },
     { label: "Sun hours", disabled: true },
     { label: "Solar energy", disabled: true },
-    { label: "Useful solar energy", disabled: true },
+    { label: "Useful solar gains", disabled: true },
     { label: "Overcast sky component", disabled: false },
     { label: "Cooling sky", disabled: false },
     { label: "Sky view factor", disabled: false },
@@ -146,10 +146,12 @@ test("Run posts /simulate, shows progress, and refreshes the studies when it fin
   simulation.send({ type: "stage_progress", stage: "simulate", criterion: null, study: "1", done: 2, total: 5 });
   expect(studiesPanel().querySelector(".run-progress")!.textContent).toContain("Sun hours, 21 Dec2 of 5 batches");
   simulateService.studies = [study("1", "sun_hours", ["facades.obj"], "current")];
+  simulateService.valuesOf = { 1: studyValuesOf({ open: [4, 4, 4], max_volume: [1, 2, 3] }) };
   simulation.send({ type: "run_finished", stages: ["simulate"], files: [] });
   await settle();
   expect(simulateService.count("GET /studies")).toBe(studiesReads + 1);
   expect(studyLine("Sun hours, 21 Dec")).toBe("facades.obj");
+  expect(studyLayerSummary()).toBe("3 points");      // the result is on the view without pressing the study
   expect(simulateService.runsStarted).toEqual([]);       // no pipeline run
 });
 
@@ -265,8 +267,10 @@ const scene = () => FakeViewerScene.latest!;
 const studyLayerSummary = () => scene().layers.get("study_values")?.userData.summary ?? null;
 const geometrySegment = (label: string) => [...container().querySelectorAll<HTMLButtonElement>(".geometry-switch-segment")]
   .find((button) => button.textContent === label)!;
-const targetMark = () => container().querySelector<HTMLElement>('.target-legend [role="slider"]')!;
+const targetMark = () => container().querySelector<HTMLElement>('.target-legend [role="slider"][data-end="low"]')!;
 const targetBar = () => container().querySelector<HTMLElement>(".target-legend-bar")!;
+/** Colours by the value in the study's unit, where the target is moved (the default is the share of the open-site value). */
+const colourByValue = () => act(() => container().querySelector<HTMLButtonElement>(".target-legend-colour-by button:last-child")!.click());
 const cardLines = () => [...container().querySelectorAll(".result-card-line")].map((line) => line.textContent);
 const stamp = () => container().querySelector(".viewer-out-of-date");
 const BUILT_ENVELOPE = { carving: CARVING, envelope: { ...ENVELOPE, mesh_file: "export.obj" }, massing: null };
@@ -290,15 +294,18 @@ test("selecting another study draws its values; only one study is drawn", async 
     service.studies = [study("1", "sun_hours", ["facades.obj"], "current"), study("2", "sky_view", ["facades.obj"], "current")];
     service.valuesOf = { 1: studyValuesOf({ open: [4, 4, 4], max_volume: [1, 2, 3] }), 2: studyValuesOf({ open: [90, 90], max_volume: [40, 60] }, "%") };
   });
-  expect(studyLayerSummary()).toBeNull();          // no study selected yet
+  expect(studyLayerSummary()).toBe("3 points");    // the first study with a result is on the view at once
+  await selectStudy("Sky view factor");
   await selectStudy("Sun hours, 21 Dec");
   expect(simulateService.requests).toContain("GET /studies/1/values");
   expect(studyLayerSummary()).toBe("3 points");
   expect(scene().visibleLayers.has("study_values")).toBe(true);
-  expect(cardLines()).toEqual(["mean 2 h", "lowest tenth 1.2 h"]);
+  expect(cardLines()).toEqual(["keeps 50 % of the open-site value", "mean 2 h", "lowest tenth 1.2 h"]);
   await selectStudy("Sky view factor");
   expect(simulateService.requests).toContain("GET /studies/2/values");
   expect(studyLayerSummary()).toBe("2 points");      // the one layer now holds the second study's values
+  expect(container().querySelector(".target-legend-title")!.textContent).toBe("Sky view factor, share of the open-site value");
+  colourByValue();
   expect(container().querySelector(".target-legend-title")!.textContent).toBe("Sky view factor (%)");
   expect(stamp()).toBeNull();
   // A study that has not run has nothing to draw.
@@ -342,7 +349,7 @@ test("the geometry shown uses Design's layers, without the criteria's test surfa
   await settle();
   expect([...scene().visibleLayers].sort()).toEqual(["envelope", "study_values"]);
   expect(scene().envelopeSeeThrough).toBe(true);
-  expect(cardLines()).toEqual(["mean 3.5 h (1.5)", "lowest tenth 3.1 h (1.1)"]);
+  expect(cardLines()).toEqual(["keeps 88 % of the open-site value (38)", "mean 3.5 h (1.5)", "lowest tenth 3.1 h (1.1)"]);
   expect(stamp()).toBeNull();
 
   // Back in Design the steps' layers and the envelope's own look come back, without the study.
@@ -365,6 +372,7 @@ test("dragging the target mark or pressing arrow keys moves the target and saves
     service.valuesOf = { 1: studyValuesOf({ open: [8, 8, 8, 8], max_volume: [0, 2, 6, 8] }) };
   });
   await selectStudy("Sun hours, 21 Dec");
+  colourByValue();
   const layer = scene().layers.get("study_values")!;
   const colours = (layer as THREE.Mesh).geometry.getAttribute("color") as THREE.BufferAttribute;
   const coloursVersion = colours.version, redraws = scene().redraws;
@@ -378,7 +386,7 @@ test("dragging the target mark or pressing arrow keys moves the target and saves
   await settle();
   // Shown at once: the mark, the card, and the same layer recoloured in place (points below the target muted).
   expect(targetMark().getAttribute("aria-valuenow")).toBe("5");
-  expect(cardLines()).toEqual(["mean 4 h", "lowest tenth 0.6 h", "at target 50 %"]);
+  expect(cardLines()).toEqual(["keeps 50 % of the open-site value", "mean 4 h", "lowest tenth 0.6 h", "at target 50 %"]);
   expect(scene().layers.get("study_values")).toBe(layer);
   expect(colours.version).toBeGreaterThan(coloursVersion);
   expect(scene().redraws).toBeGreaterThan(redraws);
@@ -402,8 +410,8 @@ test("dragging the target mark or pressing arrow keys moves the target and saves
   await waitForTargetSave();
   expect(simulateService.studyPatches.at(-1)).toEqual({ id: "1", body: { target: null } });
   expect(simulateService.studyPatches).toHaveLength(3);
-  expect(targetMark().getAttribute("aria-valuetext")).toBe("No target");
-  expect(cardLines()).toHaveLength(2);
+  expect(targetMark().getAttribute("aria-valuetext")).toBe("0 h");          // no target: the low end is back at 0
+  expect(cardLines()).toHaveLength(3);
 });
 
 test("a study run before the envelope was built waits on Envelope with the reason, shows the maximum volume, and keeps the stamp", async () => {
@@ -427,12 +435,35 @@ test("a study run before the envelope was built waits on Envelope with the reaso
   expect(studyLayerSummary()).toBe("3 points");
   expect(scene().dimmed.has("study_values")).toBe(true);
   expect(stamp()!.textContent).toContain("Out of date");
-  expect(cardLines()).toEqual(["mean 50 %", "lowest tenth 42 %"]);
+  expect(cardLines()).toEqual(["keeps 56 % of the open-site value", "mean 50 %", "lowest tenth 42 %"]);
 
   // The first study has the envelope: the choice comes back.
   await selectStudy("Sun hours, 21 Dec");
   expect(geometrySegment("Envelope").getAttribute("aria-pressed")).toBe("true");
   expect(stamp()).toBeNull();
+});
+
+test("by share the two ends are percentages kept for the study while the app is open, not saved; the value button names the unit", async () => {
+  await openSimulate(undefined, (service) => {
+    service.studies = [study("1", "sun_hours", ["facades.obj"], "current")];
+    service.valuesOf = { 1: studyValuesOf({ open: [4, 4], max_volume: [1, 4] }) };
+  });
+  const legend = () => container().querySelector(".target-legend")!;
+  expect([...legend().querySelectorAll(".target-legend-colour-by button")].map((button) => button.textContent)).toEqual(["% of open site", "Value (h)"]);
+  expect(targetMark().getAttribute("aria-valuetext")).toBe("0\u00a0%");
+  const layer = scene().layers.get("study_values")!;
+  const colours = (layer as THREE.Mesh).geometry.getAttribute("color") as THREE.BufferAttribute;
+  const version = colours.version;
+  act(() => targetMark().focus());
+  act(() => { targetMark().dispatchEvent(new KeyboardEvent("keydown", { key: "PageUp", bubbles: true, cancelable: true })); });
+  expect(targetMark().getAttribute("aria-valuetext")).toBe("10\u00a0%");
+  expect(colours.version).toBeGreaterThan(version);                  // the same layer recoloured
+  await waitForTargetSave();
+  expect(simulateService.studyPatches).toEqual([]);                  // by share nothing is saved
+  colourByValue();
+  expect(targetMark().getAttribute("aria-valuetext")).toBe("0\u00a0h");   // by value the ends are the study's own
+  act(() => legend().querySelector<HTMLButtonElement>(".target-legend-colour-by button")!.click());
+  expect(targetMark().getAttribute("aria-valuetext")).toBe("10\u00a0%");  // the share range is kept
 });
 
 test("the stamp shows while the selected study is out of date, even before its values are drawn", async () => {
@@ -452,24 +483,23 @@ test("while a study's popover is open the geometry switch moves to the right of 
   expect(bar().classList.contains("simulate-geometry-bar-beside-popover")).toBe(false);
 });
 
-test("the part of the legend below the target takes the colour the view gives those points on the viewport's theme", async () => {
-  const [lightColour, darkColour] = ["#8e7b88", "#6e5f6a"];
-  document.documentElement.style.setProperty("--colour-below-target", lightColour);        // jsdom has no theme tokens
-  document.documentElement.style.setProperty("--colour-below-target-on-dark", darkColour);
+test("the palette is magma at first, can be chosen on the legend, and is kept in the browser", async () => {
+  window.localStorage.clear();
   try {
     await openSimulate(undefined, (service) => {
-      service.studies = [{ ...study("1", "sun_hours", ["facades.obj"], "current"), entry: { ...study("1", "sun_hours", ["facades.obj"]).entry, target: 2 } }];
+      service.studies = [study("1", "sun_hours", ["facades.obj"], "current")];
       service.valuesOf = { 1: studyValuesOf({ open: [4, 4, 4], max_volume: [1, 2, 3] }) };
     });
-    await selectStudy("Sun hours, 21 Dec");
-    const below = () => container().querySelector<HTMLElement>(".target-legend-below")!;
-    const swatch = (hex: string) => { const probe = document.createElement("span"); probe.style.background = hex; return probe.style.background; };
-    expect(below().style.background).toBe(swatch(lightColour));
-    act(() => container().querySelector<HTMLButtonElement>('button[aria-label="Dark viewport"]')!.click());
-    expect(below().style.background).toBe(swatch(darkColour));
+    const select = () => container().querySelector<HTMLSelectElement>(".target-legend-palette")!;
+    expect(select().value).toBe("magma");
+    const layer = scene().layers.get("study_values")!;
+    const colours = (layer as THREE.Mesh).geometry.getAttribute("color") as THREE.BufferAttribute;
+    const version = colours.version;
+    act(() => { select().value = "viridis"; select().dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(select().value).toBe("viridis");
+    expect(colours.version).toBeGreaterThan(version);
+    expect(window.localStorage.getItem("usc.studyPalette")).toBe("viridis");
   } finally {
-    document.documentElement.style.removeProperty("--colour-below-target");
-    document.documentElement.style.removeProperty("--colour-below-target-on-dark");
     window.localStorage.clear();
   }
 });

@@ -81,7 +81,6 @@
 .inspect-file-actions,
 .inspect-file > .run-button-reason { margin: 0 calc(var(--space-unit) * 2); }
 .inspect-summary { display: flex; flex-direction: column; gap: 2px; font-size: var(--text-secondary); font-variant-numeric: tabular-nums; }
-.inspect-summary-warning { color: var(--colour-error); }
 .inspect-file-actions { display: flex; flex-wrap: wrap; gap: var(--space-unit); }
 .inspect-flip-mode[aria-pressed="true"] { background: var(--colour-accent); color: var(--colour-panel); }
 

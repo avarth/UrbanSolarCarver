@@ -19,16 +19,17 @@ The **Files** panel floats over the top left of the 3D view and collapses to an 
 Pressing a row selects the file. The view frames it and draws the other test surface files faint, so you see what the selected one faces. The selected row also opens the file's summary:
 
 - **Bounds**: the minimum and maximum corner in the file's own coordinates. When a corner is more than 10 km from zero, a note says the coordinates look georeferenced and how far they are. Under the list, the panel says which point the view is drawn around, since the view uses a local origin.
-- **Closed bodies**: how many of the file's bodies are closed, of how many. A body is the triangles joined by shared edges. For the maximum volume an open body is shown as a warning, because the voxelizer needs closed volumes. For the surroundings and the test surfaces it is information only.
 - **Surfaces**, for a test surface file: how many surfaces it has (below).
+
+An earlier version also counted closed bodies. It was dropped: CAD exports (Rhino's OBJ, for one) keep a corner per face, with that face's normal, so faces share no edges and every face counted as an open body (Allatini's maximum volume: 0 of 24). The voxelizer does not depend on it either: it fills by ray crossings along three axes with a two-of-three vote, so a missing floor or a T-junction does not change the voxels.
 
 The summary is worked out when Inspect asks for it, not at upload, and it is kept until the file changes. The test surface and maximum volume files are read as the engine's loader reads them, with their normals made consistent, so the triangles you see are the ones the engine uses. The surroundings and terrain files are read as stored, without that step, as the engine reads them too: nothing reads their orientation, and fixing it takes seconds on a large mesh.
 
-## What the colours and arrows mean
+## What the colours and face normals mean
 
 Test surfaces are drawn two-sided. The side the normal points to has the test surface colour of the viewport theme. The back side is orange. A surface that is the wrong way round therefore shows orange when you look at it from outside, whichever side of it the camera is on.
 
-The **Arrows** box in the panel draws one arrow per surface, from its centre along its normal, 0.3 times the square root of its area long, between 1 m and 10 m. One arrow per surface rather than per triangle keeps a large file readable. Arrows do not take clicks. A surface you have turned and not saved is drawn, and its arrow points, the new way.
+The **Face normals** box in the panel draws one normal per surface, an arrow from its centre along its normal, 0.3 times the square root of its area long, between 1 m and 10 m. One per surface rather than per triangle keeps a large file readable. The normals do not take clicks. A surface you have turned and not saved is drawn, and its normal points, the new way.
 
 The maximum volume is drawn see-through, and the surroundings and the terrain grey, as in Design. Their orientation is not drawn: nothing reads the orientation of the surroundings and terrain, and the loader turns the closed bodies of the maximum volume outward by itself.
 

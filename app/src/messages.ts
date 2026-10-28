@@ -98,13 +98,23 @@ export const messages = {
   changeToggle: "Change",
   changeToggleHint: "Colours each point by its change from the maximum volume",
   changeNeedsGeometry: "Choose Envelope or Massing",
-  target: "Target",
-  noTarget: "No target",
-  targetHint: "Drag to set the target. Delete clears it.",
   changeLegend: (unit: string) => `Change from max volume (${unit})`,
   changeLoss: "Loss",
+  // Colouring by each point's share of what it receives with nothing built (the default), or by the value, between the two ends of
+  // the colour range, in a palette of the viewer's choice.
+  shareLegend: (label: string) => `${label}, share of the open-site value`,
+  colourBy: "Colour by",
+  colourByShare: "% of open site",
+  colourByValue: (unit: string) => `Value (${unit})`,
+  palette: "Palette",
+  paletteNames: { magma: "Magma", inferno: "Inferno", plasma: "Plasma", viridis: "Viridis" } as Record<string, string>,
+  rangeLow: "Low end of the colours (target)",
+  rangeHigh: "High end of the colours",
+  rangeEndHint: "Drag to move. Values beyond an end take its colour. Delete puts it back.",
+  rangeText: (low: string, high: string) => `colours ${low} to ${high}`,
   resultCard: "Result",
   studyShownWhenRunEnds: "Shown when the run ends",
+  resultKept: (percent: string) => `keeps ${percent} of the open-site value`,
   resultMean: (value: string) => `mean ${value}`,
   resultLowestTenth: (value: string) => `lowest tenth ${value}`,
   resultAtTarget: (value: string) => `at target ${value}`,
@@ -112,7 +122,7 @@ export const messages = {
   // Inspect: the Files panel over the 3D view, a file's summary, flipping its surfaces (inspect design, sections 3, 5 and 6). The
   // titles of the roles are the layers' (layerNames).
   inspectFilesTitle: "Files",
-  inspectArrows: "Arrows",
+  inspectArrows: "Face normals",
   inspectFileLine: (triangles: number, areaSquareMetres: number) =>
     `${groupedDigits(triangles)} triangles, ${withUnit(formattedNumber(areaSquareMetres), "m²")}`,
   surfacesTurnedNotSaved: (count: number) =>
@@ -121,7 +131,6 @@ export const messages = {
   inspectBounds: (xMin: string, xMax: string, yMin: string, yMax: string, zMin: string, zMax: string) =>
     `Bounds: x ${xMin} to ${xMax}, y ${yMin} to ${yMax}, z ${zMin} to ${withUnit(zMax, "m")}`,
   georeferencedCoordinates: (kilometres: number) => `Georeferenced coordinates, about ${withUnit(groupedDigits(Math.round(kilometres)), "km")} from 0.`,
-  inspectClosedBodies: (closed: number, bodies: number) => `Closed bodies: ${groupedDigits(closed)} of ${groupedDigits(bodies)}`,
   inspectSurfaces: (count: number) => `Surfaces: ${groupedDigits(count)}`,
   inspectViewOrigin: (x: string, y: string, z: string) => `The view is drawn around x ${x}, y ${y}, z ${z}.`,
   flipMode: "Flip mode",

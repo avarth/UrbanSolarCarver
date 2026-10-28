@@ -1697,6 +1697,8 @@ export interface components {
             };
             /** Target */
             target?: number | null;
+            /** Target Max */
+            target_max?: number | null;
             /** Test Surface Files */
             test_surface_files?: string[];
         };
@@ -1777,7 +1779,7 @@ export interface components {
         };
         /**
          * UpdateStudyRequest
-         * @description The body of a study change: what is not sent stays as it is; target null means no target.
+         * @description The body of a study change: what is not sent stays as it is; target (or target_max) null means none.
          */
         UpdateStudyRequest: {
             /** Name */
@@ -1790,6 +1792,8 @@ export interface components {
             } | null;
             /** Target */
             target?: number | null;
+            /** Target Max */
+            target_max?: number | null;
         };
         /** ValidationError */
         ValidationError: {

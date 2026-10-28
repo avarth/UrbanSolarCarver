@@ -1,10 +1,10 @@
 // The Files panel of Inspect (inspect design, sections 3, 5 and 6): small, floating over the top left of the 3D view as Simulate's
 // studies panel, collapsible to an icon button. The input mesh files by role (maximum volume, test surfaces, existing surroundings,
 // terrain), each row with its triangle count and area; a file that cannot be read shows why, with nothing to select. A press on a row
-// selects the file (the view frames it) and opens its summary: its bounds, a note when they are far from zero, its closed bodies and,
+// selects the file (the view frames it) and opens its summary: its bounds, a note when they are far from zero and,
 // for a test surface file, its surfaces. The selected test surface file's row has Flip mode and Flip all; a file with turns not saved
 // says how many, with Save and Discard; a file whose original is kept offers Restore original. Save and Restore wait while a run of
-// the project goes on, as uploads do. Arrows, at the top, draws one arrow per surface.
+// the project goes on, as uploads do. Face normals, at the top, draws one normal per surface.
 import { useId, useState, type ReactNode } from "react";
 import type { InspectedFile } from "../api_client/client";
 import { messages } from "../messages";
@@ -47,12 +47,12 @@ const number = formattedNumber;
 function FileSummary({ file }: { file: InspectedFile }) {
   const [min, max] = file.bounds;
   const distance = furthestCornerDistance(file.bounds);
-  const openMaxVolume = file.role === "max_volume" && file.closed_body_count < file.body_count;
+  // No closed-bodies line: CAD exports keep a corner per face, so faces share no edges and every body counted open, while the
+  // voxelizer's three-axis vote fills such volumes as closed ones (user, 2026-10-28: "0 everywhere").
   return (
     <div className="inspect-summary">
       <p>{messages.inspectBounds(number(min[0]), number(max[0]), number(min[1]), number(max[1]), number(min[2]), number(max[2]))}</p>
       {distance > FAR_FROM_ZERO_METRES && <p>{messages.georeferencedCoordinates(distance / 1000)}</p>}
-      <p className={openMaxVolume ? "inspect-summary-warning" : undefined}>{messages.inspectClosedBodies(file.closed_body_count, file.body_count)}</p>
       {file.surface_count != null && <p>{messages.inspectSurfaces(file.surface_count)}</p>}
     </div>
   );

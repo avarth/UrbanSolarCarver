@@ -106,13 +106,12 @@ test("opening Inspect lists the files by role with triangles and area; a row sel
 
   await selectFile("facades.obj");
   expect(fileRow("facades.obj").getAttribute("aria-current")).toBe("true");
-  expect(summaryLines()).toEqual(["Bounds: x 0 to 7, y 0 to 1, z 0 to 2 m", "Closed bodies: 0 of 2", "Surfaces: 2"]);
+  expect(summaryLines()).toEqual(["Bounds: x 0 to 7, y 0 to 1, z 0 to 2 m", "Surfaces: 2"]);
   expect(scene.framedBoxes.at(-1)).toEqual({ min: [0, 0, 0], max: [7, 1, 2] });
 
   await selectFile("ground.obj");
   expect(fileRow("facades.obj").getAttribute("aria-current")).toBeNull();
-  expect(summaryLines()).toEqual(["Bounds: x 4 500 000 to 4 500 100, y 0 to 100, z 0 to 0 m", "Georeferenced coordinates, about 4 500 km from 0.",
-                                  "Closed bodies: 0 of 1"]);
+  expect(summaryLines()).toEqual(["Bounds: x 4 500 000 to 4 500 100, y 0 to 100, z 0 to 0 m", "Georeferenced coordinates, about 4 500 km from 0."]);
   expect(scene.framedBoxes.at(-1)).toEqual({ min: [4500000, 0, 0], max: [4500100, 100, 0] });
 });
 

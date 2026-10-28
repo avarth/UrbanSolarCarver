@@ -623,8 +623,10 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         """Change the name, metric, settings or target of a study; what is not sent stays. A new metric resets the settings to its
         defaults (the keys both have keep their values); *values* then change settings. A target of null removes the target."""
         target = request.target if "target" in request.model_fields_set else NOT_SENT
+        target_max = request.target_max if "target_max" in request.model_fields_set else NOT_SENT
         with writable_project(name) as store:
-            return store.update_study(name, study_id, name=request.name, metric=request.metric, values=request.values, target=target)
+            return store.update_study(name, study_id, name=request.name, metric=request.metric, values=request.values, target=target,
+                                      target_max=target_max)
 
     @router.delete("/projects/{name}/studies/{study_id}", status_code=204, response_class=Response, responses=_STUDY_RESPONSES)
     def delete_study(name: str, study_id: str) -> Response:

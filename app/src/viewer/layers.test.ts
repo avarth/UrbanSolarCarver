@@ -8,7 +8,8 @@ import {
 } from "./layers";
 import { decodeStudyValues, patchCorners } from "../simulate/study_values_decoder";
 import { studyValuesOf } from "../simulate/study_values_for_test";
-import { changeRamp, cividis, colourToken } from "./colour_scales";
+import { changeRamp, colourToken } from "./colour_scales";
+import { studyPaletteColour, type StudyPalette } from "./study_palettes";
 import type { ScorePoints } from "./score_points_decoder";
 
 function scorePoints(indices: number[], scores: number[], kept: number[] | null): ScorePoints {
@@ -172,16 +173,14 @@ test("test surfaces are drawn in front of a context or maximum volume face they 
 
 // The study values of Simulate --------------------------------------------------------------------------------------------------
 
-function studyView(change: boolean, target: number | null) {
+function studyView(change: boolean, range: [number, number], colourBy: "share" | "value" = "value", palette: StudyPalette = "magma") {
   const values = decodeStudyValues(studyValuesOf({ open: [4, 4, 4, 4], max_volume: [1, 1, 1, 1], envelope: [0, 2, 4, 1.0005] }));
-  return { view: { values, geometry: "envelope" as const, change, target, unit: "h", dimmed: false }, corners: patchCorners(values, [0, 0, 0]) };
+  return { view: { values, geometry: "envelope" as const, change, colourBy, range, palette, unit: "h", dimmed: false }, corners: patchCorners(values, [0, 0, 0]) };
 }
 
-const BELOW_TARGET = "#8e7b88", BELOW_TARGET_ON_DARK = "#6e5f6a", CONTEXT = "#b9c1c4", TERRAIN = "#cfc8b8", PANEL = "#ffffff";
-
 function setColourTokens() {
-  for (const [name, colour] of [["context", CONTEXT], ["terrain", TERRAIN], ["panel", PANEL], ["carved", "#c8553d"], ["storey-low", "#dfe6ea"],
-                                ["accent", "#2f5d7c"], ["below-target", BELOW_TARGET], ["below-target-on-dark", BELOW_TARGET_ON_DARK]]) {
+  for (const [name, colour] of [["context", "#b9c1c4"], ["terrain", "#cfc8b8"], ["panel", "#ffffff"], ["carved", "#c8553d"], ["storey-low", "#dfe6ea"],
+                                ["accent", "#2f5d7c"]]) {
     document.documentElement.style.setProperty(`--colour-${name}`, colour);       // jsdom has no theme tokens
   }
 }
@@ -197,39 +196,51 @@ function patchColours(layer: THREE.Object3D): string[] {
 }
 
 const hexOf = (colour: string) => new THREE.Color(colour).getHexString();
+const magma = (t: number) => hexOf(studyPaletteColour("magma", t));
 
-test("the study values layer colours each point's patch by its value, cividis from 0 to the highest, below the target muted", () => {
+test("the study values layer colours each point's patch by its value, the palette between the two ends of the range", () => {
   setColourTokens();
-  const { view, corners } = studyView(false, 1.5);
+  const { view, corners } = studyView(false, [0, 4]);
   const layer = studyValuesLayer(view, corners);
   expect(LAYER_NAMES).toContain("study_values");
   const geometry = (layer as THREE.Mesh).geometry;
   expect(geometry.getAttribute("position").count).toBe(4 * 4);
   expect(Array.from(geometry.index!.array.slice(0, 6))).toEqual([0, 1, 2, 0, 2, 3]);
-  expect(patchColours(layer)).toEqual([hexOf(BELOW_TARGET), hexOf(cividis(0.5)), hexOf(cividis(1)), hexOf(BELOW_TARGET)]);
-  expect(patchColours(studyValuesLayer({ ...view, target: null }, corners))[0]).toBe(hexOf(cividis(0)));
+  expect(patchColours(layer)).toEqual([magma(0), magma(0.5), magma(1), magma(1.0005 / 4)]);
   expect(layer.userData.summary).toBe("4 points");
 });
 
-test("points below the target are in a muted colour of their own, not the grey of the surroundings, terrain or volumes", () => {
+test("values beyond an end of the range take that end's colour, not a colour of their own", () => {
   setColourTokens();
-  expect([CONTEXT, TERRAIN, PANEL]).not.toContain(BELOW_TARGET);
-  const { view, corners } = studyView(false, 1.5);
-  const layer = studyValuesLayer(view, corners);
-  layer.userData.applyTheme("dark");           // as the scene does on the dark viewport
-  expect(patchColours(layer)[0]).toBe(hexOf(BELOW_TARGET_ON_DARK));
-  expect([CONTEXT, TERRAIN, PANEL]).not.toContain(BELOW_TARGET_ON_DARK);
+  // Range 1 to 3: 0 is below the low end, 4 above the high end, 1.0005 just above the low end.
+  const { view, corners } = studyView(false, [1, 3]);
+  expect(patchColours(studyValuesLayer(view, corners))).toEqual([magma(0), magma(0.5), magma(1), magma(0)]);
 });
 
-test("a new target or Change recolours the same layer in place", () => {
+test("by share each point is coloured by its value over its open-site value in percent; no open-site value counts as 100 %", () => {
   setColourTokens();
-  const { view, corners } = studyView(false, 1.5);
+  // Open 4, 8, 4, 0 and envelope 0, 4, 4, 0: shares 0, 50 and 100 % (the second point's value is the highest of the envelope, yet
+  // half of its own open-site value), and 100 % for a point the open site gives nothing (it loses nothing).
+  const values = decodeStudyValues(studyValuesOf({ open: [4, 8, 4, 0], max_volume: [1, 1, 1, 0], envelope: [0, 4, 4, 0] }));
+  const view = { values, geometry: "envelope" as const, change: false, colourBy: "share" as const, range: [0, 100] as [number, number],
+                 palette: "magma" as const, unit: "h", dimmed: false };
+  const layer = studyValuesLayer(view, patchCorners(values, [0, 0, 0]));
+  expect(patchColours(layer)).toEqual([magma(0), magma(0.5), magma(1), magma(1)]);
+  layer.userData.recolour({ ...view, range: [50, 100] });        // the range in percent: 50 % and below take the low end's colour
+  expect(patchColours(layer)).toEqual([magma(0), magma(0), magma(1), magma(1)]);
+});
+
+test("a new range, palette or Change recolours the same layer in place", () => {
+  setColourTokens();
+  const { view, corners } = studyView(false, [0, 4]);
   const layer = studyValuesLayer(view, corners);
   const colours = (layer as THREE.Mesh).geometry.getAttribute("color") as THREE.BufferAttribute;
   const version = colours.version;
-  layer.userData.recolour({ ...view, target: 3 });
-  expect(patchColours(layer)).toEqual([hexOf(BELOW_TARGET), hexOf(BELOW_TARGET), hexOf(cividis(1)), hexOf(BELOW_TARGET)]);
+  layer.userData.recolour({ ...view, range: [2, 4] });
+  expect(patchColours(layer)).toEqual([magma(0), magma(0), magma(1), magma(0)]);
   expect(colours.version).toBeGreaterThan(version);          // uploaded again
+  layer.userData.recolour({ ...view, palette: "viridis" });
+  expect(patchColours(layer)[2]).toBe(hexOf(studyPaletteColour("viridis", 1)));
   layer.userData.recolour({ ...view, change: true });
   expect(patchColours(layer)[0]).toBe(hexOf("#c8553d"));
 });
@@ -246,7 +257,7 @@ test("changeTolerance on 527,633 points takes under 1 s: the Change view of that
   const values = decodeStudyValues(studyValuesOf({ open, max_volume: open.map((value) => value * 0.8), envelope: open.map((value) => value * 0.9) }));
   const corners = patchCorners(values, [0, 0, 0]);
   const started = performance.now();
-  const layer = studyValuesLayer({ values, geometry: "envelope", change: true, target: null, unit: "h", dimmed: false }, corners);
+  const layer = studyValuesLayer({ values, geometry: "envelope", change: true, colourBy: "share", range: [0, 100], palette: "magma", unit: "h", dimmed: false }, corners);
   const elapsed = performance.now() - started;
   expect(layer.userData.summary).toBe("527 633 points");
   expect(elapsed).toBeLessThan(1000);
@@ -254,14 +265,14 @@ test("changeTolerance on 527,633 points takes under 1 s: the Change view of that
 
 test("with Change the layer colours the change from the maximum volume on the change ramp, losses in the carved colour", () => {
   setColourTokens();
-  const { view, corners } = studyView(true, 3);
+  const { view, corners } = studyView(true, [0, 4]);
   // Changes -1, 1, 3 and 0.0005: a loss, a third of the largest gain, the largest gain, and less than the tolerance (0.004), none.
   expect(patchColours(studyValuesLayer(view, corners))).toEqual([hexOf("#c8553d"), hexOf(changeRamp(1 / 3)), hexOf("#2f5d7c"), hexOf("#dfe6ea")]);
 });
 
 test("study values are drawn in front of the test surfaces they lie on, unlit, and leave the corners they are given as they are", () => {
   setColourTokens();
-  const { view, corners } = studyView(false, null);
+  const { view, corners } = studyView(false, [0, 4]);
   const before = Float32Array.from(corners);
   const layer = studyValuesLayer(view, corners) as THREE.Mesh;
   const material = layer.material as THREE.MeshBasicMaterial;

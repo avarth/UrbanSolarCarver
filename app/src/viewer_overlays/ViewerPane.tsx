@@ -261,7 +261,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
     if (drawnStudy === null || studyLayer.current === null) return;
     studyLayer.current.userData.recolour(drawnStudy);
     scene?.redraw();
-  }, [drawnStudy?.change, drawnStudy?.target]);
+  }, [drawnStudy?.change, drawnStudy?.colourBy, drawnStudy?.range[0], drawnStudy?.range[1], drawnStudy?.palette]);
   const studyDimmed = drawnStudy?.dimmed ?? false;
   useEffect(() => scene?.setLayerDimmed("study_values", studyDimmed), [scene, studyDimmed]);
 

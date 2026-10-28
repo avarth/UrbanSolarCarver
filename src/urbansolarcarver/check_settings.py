@@ -66,9 +66,9 @@ CHECK_METRICS: Dict[str, CheckMetric] = {
         "file, cosine of incidence included, no ground reflection).",
     ),
     "useful_solar_energy": CheckMetric(
-        "useful_solar_energy", "Useful solar energy", "kWh/m²", True, True, "benefit",
-        "Solar energy the surface receives in the hours that need heating, with the balance temperature, "
-        "dead band and weights of Solar usefulness.",
+        "useful_solar_energy", "Useful solar gains", "kWh/m²", True, True, "benefit",
+        "Solar energy the surface receives in the hours that need heating (the gains that heat the building), "
+        "with the balance temperature, dead band and weights of Solar usefulness.",
     ),
     "sky_component": CheckMetric(
         "sky_component", "Overcast sky component", "%", False, False, None,

@@ -1,6 +1,7 @@
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
-import { TargetLegend } from "./TargetLegend";
+import { studyPaletteColour } from "../viewer/study_palettes";
+import { TargetLegend, type TargetLegendProps } from "./TargetLegend";
 import { renderForTest, type RenderedOverlay } from "./render_for_test";
 
 let rendered: RenderedOverlay | null = null;
@@ -12,14 +13,15 @@ afterEach(() => {
 
 const container = () => rendered!.container;
 const bar = () => container().querySelector<HTMLElement>(".target-legend-bar")!;
-const mark = () => container().querySelector<HTMLElement>('[role="slider"]');
+const mark = (end: "low" | "high") => container().querySelector<HTMLElement>(`[role="slider"][data-end="${end}"]`);
 
-function renderLegend(target: number | null, mode: "value" | "change" = "value", disabled = false) {
-  const onTargetChange = vi.fn();
-  rendered = renderForTest(<TargetLegend label="Sun hours" unit="h" range={[0, 8]} target={target} onTargetChange={onTargetChange} mode={mode} disabled={disabled} />);
+function renderLegend(props: Partial<TargetLegendProps> = {}) {
+  const onRangeEndChange = vi.fn();
+  rendered = renderForTest(<TargetLegend label="Sun hours" unit="h" mode="value" scale={[0, 8]} low={2} high={6} palette="magma"
+                                         onRangeEndChange={onRangeEndChange} {...props} />);
   // jsdom lays nothing out: the bar is 200 px wide, 25 px an hour.
   bar().getBoundingClientRect = () => ({ left: 0, width: 200, top: 0, height: 12, right: 200, bottom: 12, x: 0, y: 0, toJSON: () => ({}) });
-  return onTargetChange;
+  return onRangeEndChange;
 }
 
 function pointer(type: "pointerdown" | "pointermove" | "pointerup", clientX: number) {
@@ -33,86 +35,87 @@ function keyDown(element: HTMLElement, key: string): boolean {
   return event.defaultPrevented;
 }
 
-test("the legend shows the scale in the study's unit and the target as a slider", () => {
-  renderLegend(3);
+const cssColour = (hex: string) => { const probe = document.createElement("span"); probe.style.color = hex; return probe.style.color; };
+
+test("the legend shows the scale, the two ends of the colour range as sliders, and the range between them", () => {
+  renderLegend();
   expect(container().querySelector(".target-legend-title")!.textContent).toBe("Sun hours (h)");
-  expect([...container().querySelectorAll(".target-legend-ends span")].map((end) => end.textContent)).toEqual(["0", "8"]);
-  expect(mark()!.getAttribute("aria-label")).toBe("Target");
-  expect(mark()!.getAttribute("aria-valuemin")).toBe("0");
-  expect(mark()!.getAttribute("aria-valuemax")).toBe("8");
-  expect(mark()!.getAttribute("aria-valuenow")).toBe("3");
-  expect(mark()!.getAttribute("aria-valuetext")).toBe("3 h");
-  expect(mark()!.style.left).toBe("37.5%");
-  expect(container().querySelector(".target-legend-below")!.getAttribute("style")).toContain("width: 37.5%");
+  expect([...container().querySelectorAll(".target-legend-ends > span")].map((end) => end.textContent)).toEqual(["0", "colours 2 to 6", "8"]);
+  expect(mark("low")!.getAttribute("aria-label")).toBe("Low end of the colours (target)");
+  expect([mark("low")!.getAttribute("aria-valuemin"), mark("low")!.getAttribute("aria-valuemax")]).toEqual(["0", "6"]);   // not past the high end
+  expect([mark("high")!.getAttribute("aria-valuemin"), mark("high")!.getAttribute("aria-valuemax")]).toEqual(["2", "8"]);
+  expect(mark("low")!.getAttribute("aria-valuetext")).toBe("2 h");
+  expect([mark("low")!.style.left, mark("high")!.style.left]).toEqual(["25%", "75%"]);
 });
 
-test("dragging the target mark moves it while dragging and gives the target once, at the release", () => {
-  const onTargetChange = renderLegend(3);
-  pointer("pointerdown", 100);
-  expect(document.activeElement).toBe(mark());
-  pointer("pointermove", 150);
-  expect(mark()!.getAttribute("aria-valuenow")).toBe("6");
-  expect(onTargetChange).not.toHaveBeenCalled();
-  pointer("pointermove", 260);            // past the end: the top of the range
-  expect(mark()!.getAttribute("aria-valuenow")).toBe("8");
-  pointer("pointerup", 50);
-  expect(onTargetChange).toHaveBeenCalledTimes(1);
-  expect(onTargetChange).toHaveBeenCalledWith(8);
+test("the bar is coloured as the view is: the low end's colour below it, the high end's above it, the palette between", () => {
+  renderLegend();
+  const background = bar().style.background;
+  const first = cssColour(studyPaletteColour("magma", 0)), last = cssColour(studyPaletteColour("magma", 1));
+  // 21 stops over 0 to 8: the first five (0 to 1.6 h) are below the low end, the last five (6.4 to 8 h) above the high end.
+  const stops = background.slice(background.indexOf("(") + 1, -1).split(/,\s*(?=rgb)/).slice(1);
+  expect(stops.slice(0, 5).every((stop) => stop.trim() === first)).toBe(true);
+  expect(stops.slice(-5).every((stop) => stop.trim() === last)).toBe(true);
+  expect(stops[10].trim()).toBe(cssColour(studyPaletteColour("magma", 0.5)));     // 4 h, the middle of 2 to 6
 });
 
-test("arrow keys move the target by 1 % of the range, Home and End to its ends, Delete clears it", () => {
-  const onTargetChange = renderLegend(3);
-  expect(keyDown(mark()!, "ArrowRight")).toBe(true);
-  expect(onTargetChange).toHaveBeenLastCalledWith(3.08);
-  keyDown(mark()!, "ArrowDown");
-  expect(onTargetChange).toHaveBeenLastCalledWith(2.92);
-  keyDown(mark()!, "End");
-  expect(onTargetChange).toHaveBeenLastCalledWith(8);
-  keyDown(mark()!, "Delete");
-  expect(onTargetChange).toHaveBeenLastCalledWith(null);
-  expect(keyDown(mark()!, "a")).toBe(false);
+test("a press moves the nearer end; the drag gives its value once, at the release, and an end does not pass the other", () => {
+  const onRangeEndChange = renderLegend();
+  pointer("pointerdown", 150);                   // 6 h: the high end
+  expect(document.activeElement).toBe(mark("high"));
+  pointer("pointermove", 175);
+  expect(mark("high")!.getAttribute("aria-valuenow")).toBe("7");
+  expect(onRangeEndChange).not.toHaveBeenCalled();
+  pointer("pointerup", 175);
+  expect(onRangeEndChange).toHaveBeenCalledWith("high", 7);
+  pointer("pointerdown", 40);                    // 1.6 h: the low end
+  pointer("pointermove", 190);                   // past the high end (6): stops there
+  pointer("pointerup", 190);
+  expect(onRangeEndChange).toHaveBeenLastCalledWith("low", 6);
 });
 
-test("without a target the slider says so, and a press on the scale sets one", () => {
-  const onTargetChange = renderLegend(null);
-  expect(mark()!.getAttribute("aria-valuenow")).toBeNull();
-  expect(mark()!.getAttribute("aria-valuetext")).toBe("No target");
-  expect(container().querySelector(".target-legend-below")).toBeNull();
-  keyDown(mark()!, "ArrowUp");
-  expect(onTargetChange).toHaveBeenLastCalledWith(0.08);
-  pointer("pointerdown", 50);
-  pointer("pointerup", 50);
-  expect(onTargetChange).toHaveBeenLastCalledWith(2);
+test("arrow keys move an end by 1 % of the bar, Home and End to its limits, Delete puts it back to its default", () => {
+  const onRangeEndChange = renderLegend();
+  expect(keyDown(mark("low")!, "ArrowRight")).toBe(true);
+  expect(onRangeEndChange).toHaveBeenLastCalledWith("low", 2.08);
+  keyDown(mark("high")!, "PageUp");
+  expect(onRangeEndChange).toHaveBeenLastCalledWith("high", 6.8);
+  keyDown(mark("low")!, "End");
+  expect(onRangeEndChange).toHaveBeenLastCalledWith("low", 6);          // up to the high end
+  keyDown(mark("high")!, "Delete");
+  expect(onRangeEndChange).toHaveBeenLastCalledWith("high", null);
+  expect(keyDown(mark("low")!, "a")).toBe(false);
 });
 
-test("while disabled the target does not move", () => {
-  const onTargetChange = renderLegend(3, "value", true);
-  expect(mark()!.getAttribute("aria-disabled")).toBe("true");
+test("by share the scale is 0 to 100 %, and the switch and the palette are offered", () => {
+  const onColourByChange = vi.fn(), onPaletteChange = vi.fn();
+  renderLegend({ mode: "share", scale: [0, 100], low: 20, high: 100, onColourByChange, onPaletteChange });
+  expect(container().querySelector(".target-legend-title")!.textContent).toBe("Sun hours, share of the open-site value");
+  expect([...container().querySelectorAll(".target-legend-ends > span")].map((end) => end.textContent))
+    .toEqual(["0 %", "colours 20 % to 100 %", "100 %"]);
+  const buttons = [...container().querySelectorAll<HTMLButtonElement>(".target-legend-colour-by button")];
+  expect(buttons.map((button) => [button.textContent, button.getAttribute("aria-pressed")])).toEqual([["% of open site", "true"], ["Value (h)", "false"]]);
+  act(() => buttons[1].click());
+  expect(onColourByChange).toHaveBeenCalledWith("value");
+  const select = container().querySelector<HTMLSelectElement>(".target-legend-palette")!;
+  expect([...select.options].map((option) => option.textContent)).toEqual(["Magma", "Inferno", "Plasma", "Viridis"]);
+  act(() => { select.value = "viridis"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+  expect(onPaletteChange).toHaveBeenCalledWith("viridis");
+});
+
+test("while disabled the ends do not move", () => {
+  const onRangeEndChange = renderLegend({ disabled: true });
+  expect(mark("low")!.getAttribute("aria-disabled")).toBe("true");
   pointer("pointerdown", 100);
   pointer("pointerup", 100);
-  keyDown(mark()!, "ArrowRight");
-  expect(onTargetChange).not.toHaveBeenCalled();
+  keyDown(mark("low")!, "ArrowRight");
+  expect(onRangeEndChange).not.toHaveBeenCalled();
 });
 
-test("the change scale has no target, and names losses when there are some", () => {
-  rendered = renderForTest(<TargetLegend label="Sun hours" unit="h" range={[0, 2]} target={3} onTargetChange={() => {}} mode="change" hasLoss />);
+test("the change scale has no ends, and names losses when there are some", () => {
+  renderLegend({ mode: "change", scale: [0, 2], hasLoss: true });
   expect(container().querySelector(".target-legend-title")!.textContent).toBe("Change from max volume (h)");
-  expect(mark()).toBeNull();
+  expect(mark("low")).toBeNull();
+  expect(container().querySelector(".target-legend-palette")).toBeNull();
   expect(container().querySelector(".target-legend-loss")!.textContent).toBe("Loss");
-});
-
-test("the part below the target takes the colour the view gives those points on the viewport's theme", () => {
-  document.documentElement.style.setProperty("--colour-below-target", "#8e7b88");        // jsdom has no theme tokens
-  document.documentElement.style.setProperty("--colour-below-target-on-dark", "#6e5f6a");
-  try {
-    const colourOf = (hex: string) => { const probe = document.createElement("span"); probe.style.background = hex; return probe.style.background; };
-    const below = () => container().querySelector<HTMLElement>(".target-legend-below")!;
-    rendered = renderForTest(<TargetLegend label="Sun hours" unit="h" range={[0, 8]} target={3} onTargetChange={() => {}} mode="value" />);
-    expect(below().style.background).toBe(colourOf("#8e7b88"));
-    rendered.rerender(<TargetLegend label="Sun hours" unit="h" range={[0, 8]} target={3} onTargetChange={() => {}} mode="value" theme="dark" />);
-    expect(below().style.background).toBe(colourOf("#6e5f6a"));
-  } finally {
-    document.documentElement.style.removeProperty("--colour-below-target");
-    document.documentElement.style.removeProperty("--colour-below-target-on-dark");
-  }
 });

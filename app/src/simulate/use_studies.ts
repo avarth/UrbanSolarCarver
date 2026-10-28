@@ -61,8 +61,12 @@ export function useStudies(token: string, project: string, onServiceProblem: (er
       const reply = await getStudies(token, project);
       if (read !== readsAskedFor.current) return;
       const { selectedId } = latest.current;
+      // A study is always on the view when there is one: the selected one, else the first with a result, else the first (user,
+      // 2026-10-28: a run showed nothing until a study was pressed).
+      const kept = reply.studies.some((study) => study.entry.id === selectedId) ? selectedId : null;
+      const withResult = reply.studies.find((study) => study.state === "current" || study.state === "out_of_date");
       commit({ studies: reply.studies, metrics: reply.metrics, loadProblem: null,
-               selectedId: reply.studies.some((study) => study.entry.id === selectedId) ? selectedId : null });
+               selectedId: kept ?? withResult?.entry.id ?? reply.studies[0]?.entry.id ?? null });
     } catch (error) {
       if (read !== readsAskedFor.current) return;
       if (serviceProblemOf(error) !== "other") onServiceProblem(error);

@@ -7,8 +7,9 @@ import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
 import type { SkyDome } from "../api_client/client";
 import { messages } from "../messages";
-import { changeOf, changeTolerance, highestOf, OPEN_COLUMN, type StudyView } from "../simulate/study_values";
+import { changeOf, changeTolerance, highestOf, OPEN_COLUMN, shareOfOpen, type StudyView } from "../simulate/study_values";
 import { changeRamp, changeRampStops, cividis, colourToken, storeyColour, sunRamp, type ViewportTheme } from "./colour_scales";
+import { studyPaletteColour, type StudyPalette } from "./study_palettes";
 import type { CarvedVoxels } from "./carved_by_criterion_decoder";
 import type { Point3 } from "./local_origin";
 import type { ScorePoints } from "./score_points_decoder";
@@ -446,8 +447,8 @@ export function carvedByCriterionLayer({ voxels, colours, voxelSize }: CarvedByC
 const CHANGE_RAMP_STEPS = 256;
 
 /** Writes each point's colour into its four corners of *colours*, as studyValuesLayer describes. */
-function paintStudyValues(colours: Float32Array, view: StudyView, theme: ViewportTheme): void {
-  const { values: studyValues, geometry: shownGeometry, change, target } = view;
+function paintStudyValues(colours: Float32Array, view: StudyView): void {
+  const { values: studyValues, geometry: shownGeometry, change } = view;
   const shown = studyValues.values[shownGeometry];
   const count = shown.length;
   const paint = (point: number, colour: THREE.Color) => {
@@ -469,29 +470,47 @@ function paintStudyValues(colours: Float32Array, view: StudyView, theme: Viewpor
       paint(point, value < -tolerance ? loss : ramp[Math.round(Math.min(1, share) * (CHANGE_RAMP_STEPS - 1))]);
     }
   } else {
-    const highest = highestOf(shown);
-    const span = highest > 0 ? highest : 1;
-    const belowTarget = new THREE.Color(colourToken(theme === "dark" ? "below-target-on-dark" : "below-target"));
-    for (let point = 0; point < count; point++) {
-      const value = shown[point];
-      paint(point, target !== null && value < target ? belowTarget : CIVIDIS_COLOURS[Math.min(255, Math.max(0, Math.floor((value / span) * 256)))]);
+    // The palette between the two ends of the range; a value beyond an end takes that end's colour.
+    const ramp = paletteColours(view.palette);
+    const [low, high] = view.range;
+    const span = high > low ? high - low : 1;
+    const rampAt = (x: number) => ramp[Math.min(255, Math.max(0, Math.floor(((x - low) / span) * 256)))];
+    if (view.colourBy === "share") {
+      // Each point by its share of its own open-site value, in percent (a point the open site gives nothing loses nothing: 100 %).
+      const open = studyValues.values[OPEN_COLUMN];
+      const tolerance = changeTolerance(open, studyValues.values.max_volume);
+      for (let point = 0; point < count; point++) paint(point, rampAt(open === undefined ? 100 : 100 * shareOfOpen(shown[point], open[point], tolerance)));
+    } else {
+      for (let point = 0; point < count; point++) paint(point, rampAt(shown[point]));
     }
   }
 }
 
+const PALETTE_COLOURS = new Map<StudyPalette, THREE.Color[]>();
+
+/** The 256 colours of a study palette as THREE colours, made once per palette. */
+function paletteColours(palette: StudyPalette): THREE.Color[] {
+  let colours = PALETTE_COLOURS.get(palette);
+  if (colours === undefined) {
+    colours = Array.from({ length: 256 }, (_, index) => new THREE.Color(studyPaletteColour(palette, (index + 0.5) / 256)));
+    PALETTE_COLOURS.set(palette, colours);
+  }
+  return colours;
+}
+
 /**
  * The selected study's test point patches on the geometry shown (*corners*: study_values_decoder.patchCorners), unlit so the colours
- * read as the legend's. By value: cividis from 0 to the highest value of the geometry shown, the points below the target in one
- * muted mauve (apart from the greys of the surroundings and volumes; a darker one on the dark viewport). By change from the maximum
+ * read as the legend's. By share (the default) or by value: the chosen palette (magma by default) between the two ends of the colour
+ * range, in percent of each point's open-site value or in the study's unit; a value beyond an end takes that end's colour. By change from the maximum
  * volume: the change ramp from no change to the largest gain, a loss in the carved colour, a change within the tolerance none. The
- * patches lie on test surfaces, so they are pulled forward in depth as those are. A new target or Change of the same values and
- * geometry recolours the patches in place (userData.recolour), as the viewport theme does (userData.applyTheme).
+ * patches lie on test surfaces, so they are pulled forward in depth as those are. A new range, palette, colouring or Change of the same
+ * values and geometry recolours the patches in place (userData.recolour); the palettes do not depend on the viewport theme.
  */
 export function studyValuesLayer(view: StudyView, corners: Float32Array): THREE.Object3D {
   const count = view.values.values[view.geometry].length;
   const colours = new Float32Array(count * 4 * 3);
-  const drawn = { view, theme: "light" as ViewportTheme };
-  paintStudyValues(colours, view, drawn.theme);
+  const drawn = { view };
+  paintStudyValues(colours, view);
   // Two triangles per patch, around its corners in order: 0 1 2 and 0 2 3.
   const index = new Uint32Array(count * 6);
   for (let point = 0, at = 0; point < count; point++, at += 6) {
@@ -516,17 +535,12 @@ export function studyValuesLayer(view: StudyView, corners: Float32Array): THREE.
   }));
   const patches = new THREE.Mesh(geometry, material);
   const repaint = () => {
-    paintStudyValues(colours, drawn.view, drawn.theme);
+    paintStudyValues(colours, drawn.view);
     colourAttribute.needsUpdate = true;
   };
   /** *next* has the same values and geometry as the view the layer was made for: its target or Change differ. */
   patches.userData.recolour = (next: StudyView) => {
     drawn.view = next;
-    repaint();
-  };
-  patches.userData.applyTheme = (theme: ViewportTheme) => {
-    if (theme === drawn.theme) return;
-    drawn.theme = theme;
     repaint();
   };
   patches.userData.summary = messages.studyPointCount(count);

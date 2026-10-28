@@ -10,7 +10,7 @@ The switch **Design | Simulate** in the header, next to the project name, change
 
 ## Studies
 
-A study is a metric on test surface files over a period. The **Studies** panel floats over the top left of the 3D view and collapses to an icon. Each row has a colour swatch, the study's name and one line: its test surface files while its result is current, otherwise **Out of date**, **Not run yet** or the reason it cannot run (for example **Add test surfaces**). Pressing a row selects the study for the view: **one study is on the view at a time**, and its test surfaces are the ones coloured. The settings button of a row opens its popover.
+A study is a metric on test surface files over a period. The **Studies** panel floats over the top left of the 3D view and collapses to an icon. Each row has a colour swatch, the study's name and one line: its test surface files while its result is current, otherwise **Out of date**, **Not run yet** or the reason it cannot run (for example **Add test surfaces**). Pressing a row selects the study for the view: **one study is on the view at a time**, and its test surfaces are the ones coloured. When none is selected, the first study with a result is (or the first study), so a finished run shows its values without a press. The settings button of a row opens its popover.
 
 **Add study** offers two kinds of entries in one menu:
 
@@ -21,10 +21,10 @@ The popover of a study holds:
 
 | Control | Meaning |
 |---|---|
-| Name | A study is named from its metric and period, for example "Sun hours, 21 Dec" or "Useful solar energy, 15 Oct to 15 Apr". Typing a name keeps it from then on |
+| Name | A study is named from its metric and period, for example "Sun hours, 21 Dec" or "Useful solar gains, 15 Oct to 15 Apr". Typing a name keeps it from then on |
 | Metric | One of the metrics below. Changing it resets the settings to those of the new metric and keeps the values both metrics have |
 | Analysis period | The same control as in the Criteria step. Shown for the metrics that sum over a period |
-| More settings | The few settings the metric reads: balance temperature, dead band and harm for useful solar energy; dew point and Bliss coefficient for the cooling sky; the time basis (standard, daylight saving or solar time) for sun hours |
+| More settings | The few settings the metric reads: balance temperature, dead band and harm for useful solar gains; dew point and Bliss coefficient for the cooling sky; the time basis (standard, daylight saving or solar time) for sun hours |
 | Test surfaces | The files the study uses. You can add new files (button or drop) or use a file the project stores already, for example a criterion's. A stored file is kept while a criterion or a study lists it and goes to the recycle bin when none does |
 | Delete study | Removes the study and moves its results to the recycle bin. Its number is not used again |
 
@@ -38,13 +38,13 @@ Each carving mode has a metric of the same quantity, which "Like *criterion*" ta
 |---|---|---|---|
 | Sun hours | h | Solar time-based | needed |
 | Solar energy | kWh/m² | Solar energy | needed |
-| Useful solar energy | kWh/m² | Solar usefulness | needed |
+| Useful solar gains | kWh/m² | Solar usefulness | needed |
 | Overcast sky component | % | Daylight | not needed |
 | Cooling sky | % | Night cooling | not needed |
 | Sky view factor | % | Angle rule | not needed |
 
 - **Sun hours**: hours of direct sun in the period. Each hour counts the sun position of that hour, and a position counts 1 h when it is above 5° altitude and in front of the test surface (no cosine of incidence). The 5° is the same for every study: "Like *criterion*" does not copy the minimum altitude of a time-based criterion, so a study counts the sun above 5° whatever the criterion's minimum altitude. The time basis says which clock the hours are read in; it is a setting of sun hours only. A new study starts at 21 December, 10 to 14 h.
-- **Solar energy** and **Useful solar energy**: direct and diffuse energy that reaches the surface in the period, from the weather file's Perez sky and the cosine of incidence. Useful solar energy counts the hours that need heating, with the balance temperature, dead band and weights of Solar usefulness. Ground reflection is left out. A new study starts with the whole year (solar energy) or 15 October to 15 April, 7 to 19 h (useful solar energy).
+- **Solar energy** and **Useful solar gains**: direct and diffuse energy that reaches the surface in the period, from the weather file's Perez sky and the cosine of incidence. Useful solar gains count only the hours that need heating (the gains that heat the building; it was called useful solar energy before), with the balance temperature, dead band and weights of Solar usefulness. Ground reflection is left out. A new study starts with the whole year (solar energy) or 15 October to 15 April, 7 to 19 h (useful solar gains).
 - **Overcast sky component**: light from a CIE overcast sky. On a vertical facade this is the vertical sky component, at most 39.6 %.
 - **Cooling sky**: the long-wave cooling potential toward the clear night sky that the surface sees, from the dew point and the Bliss coefficient.
 - **Sky view factor**: the cosine-weighted share of the view taken by the sky. An unobstructed horizontal surface has 100 %, an unobstructed wall 50 %.
@@ -81,17 +81,25 @@ The context and the terrain block in all three. With several criteria the envelo
 
 There is one job at a time. While a Design run is going, Run shows "A Design run is in progress" and waits; while a simulation is going, Design's run buttons say so. Nothing is queued. The progress shows under Run with a Cancel button.
 
-## The legend, the target and the result card
+## The legend, the colour range and the result card
 
-The legend along the bottom of the view shows the selected study's scale in its unit: cividis from 0 to the highest value of the geometry shown. In the Change view it shows the change ramp, and the loss colour when some point lost.
+The legend along the bottom of the view shows the scale the values are coloured by, with a switch between two:
 
-The **target** is a mark on the legend. Drag it, or focus it and use the arrow keys (1 % of the range), Page Up and Page Down (10 %) and Home and End; Delete clears it. The target is saved with the study, once per drag. Points below the target are drawn in one muted colour of their own, apart from the scale. The target does not apply to the Change view.
+- **% of open site** (the default): each point coloured by its share of its open-site value, its value with nothing built (the context and terrain still block). The scale runs from 0 to 100 %, the same for every geometry, so Max volume, Envelope and Massing compare directly. A point the open site gives nothing (a facade that sees no sun in the period, say) loses nothing, so it counts as 100 %.
+- **Value** in the study's unit (for example kWh/m²): each point coloured by its value.
+
+Colouring by share is the default because a study's values spread mostly with the way each surface faces: on Allatini's Solar energy study the roofs reach about 1,550 kWh/m² while the facades lie between 200 and 800, so on a value scale the facades' gains are small steps in the middle of the scale. By share, the maximum volume keeps 78 % of the open-site value there and the envelope 99 %.
+
+**The colour range.** Two marks on the legend set the low and the high end of the colours. The palette runs between them, and a value beyond an end takes that end's colour, so the colours can spread over the values that matter (the facades between 200 and 800 kWh/m², say, rather than 0 to the roofs' 1,550). Drag a mark, or press on the bar to move the nearer one; or focus a mark and use the arrow keys (1 % of the bar), Page Up and Page Down (10 %) and Home and End; Delete puts it back to its default. The ends cannot pass each other. By value the low end is the study's **target** and the high end its upper end, both saved with the study (by default 0 and the highest value of the geometry shown); the result card's "at target" counts the points at or above the low end. By share the ends are percentages, 0 and 100 by default, kept for each study while the app is open.
+
+**The palette** is chosen on the legend: Magma (the default), Inferno, Plasma or Viridis, matplotlib's perceptually even palettes, each from dark to light without a grey middle (Viridis is the one most readable with the common colour vision deficiencies). The choice is kept in the browser. In the Change view the legend shows the change ramp instead, without ends, and the loss colour when some point lost.
 
 The **result card** in the bottom right corner is for the selected study on the geometry shown. It gives:
 
+- what the geometry keeps of the open-site value: the sum of its values over the sum with nothing built, for example "keeps 99 % of the open-site value (78)",
 - the mean,
 - the lowest tenth (10th percentile),
-- with a target, the share of points at or above it.
+- with a target (the low end by value), the share of points at or above it.
 
 On Envelope and Massing each line has the maximum volume's value in brackets, for example "mean 3.6 h (4.1)".
 
