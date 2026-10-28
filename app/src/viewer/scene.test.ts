@@ -148,6 +148,47 @@ test("a click that hits nothing of the layer, a layer that is hidden, and a list
   expect(listener).toHaveBeenCalledTimes(1);
 });
 
+/** A 2 m square test surface facing up at height *z*, centred on the origin, as the only mesh of a layer. */
+function squareAt(z: number): THREE.Mesh {
+  const square = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+  square.position.set(0, 0, z);
+  return square;
+}
+
+/** A scene seen from straight above with a 4 m context box from z 0 to 4 under the middle of the view and *surface* as the test surfaces. */
+function viewerWithAContextBox(surface: THREE.Mesh): { scene: ViewerScene; canvas: HTMLCanvasElement } {
+  const { scene, canvas } = viewerWithACube();
+  scene.setLayer("inspect_surfaces", surface);
+  const box = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 4), new THREE.MeshBasicMaterial());
+  box.position.set(0, 0, 2);
+  scene.setLayer("context", box);
+  scene.frameBox([-5, -5, 0], [5, 5, 5]);
+  scene.viewTop();
+  return { scene, canvas };
+}
+
+test("a click on a context building does not reach a test surface behind it", () => {
+  const { scene, canvas } = viewerWithAContextBox(squareAt(1));         // inside the box, under its roof
+  const listener = vi.fn();
+  scene.onLayerClick("inspect_surfaces", listener);
+  pointer(canvas, "pointerdown", 400, 300);
+  pointer(canvas, "pointerup", 400, 300);
+  expect(listener).not.toHaveBeenCalled();
+  scene.setLayerVisible("context", false);                              // a hidden layer hides nothing
+  pointer(canvas, "pointerdown", 400, 300);
+  pointer(canvas, "pointerup", 400, 300);
+  expect(listener).toHaveBeenCalledTimes(1);
+});
+
+test("a click on a test surface lying on a face of a context building reaches it", () => {
+  const { scene, canvas } = viewerWithAContextBox(squareAt(4));         // on the roof of the box
+  const listener = vi.fn();
+  scene.onLayerClick("inspect_surfaces", listener);
+  pointer(canvas, "pointerdown", 400, 300);
+  pointer(canvas, "pointerup", 400, 300);
+  expect(listener).toHaveBeenCalledTimes(1);
+});
+
 test("frameBox puts the camera where frameAll would for a layer of that box: a box a tenth the size is seen from a tenth the distance", () => {
   const { scene } = viewerWithACube();
   const metresPerPixel: number[] = [];

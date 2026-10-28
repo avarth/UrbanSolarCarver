@@ -103,12 +103,17 @@ export class FakeService {
   storedTestSurfaces: InputFileInfo[] = [{ name: "surfaces.obj", triangle_count: 1 }];
   /** The input files changed in the project folder or missing from it, as the stage status lists them; DELETE input-changes drops the changed ones. */
   inputChanges: InputFileChange[] = [];
-  /** The input mesh files as GET inspect summarises them (Inspect); POST turn and restore change whether a file's original is kept. */
+  /**
+   * The input mesh files as GET inspect summarises them (Inspect); POST turn and restore change whether a file's original is kept,
+   * and its version (a "*" more). A turn or restore that names another version than the file's here is refused with a 409.
+   */
   inspection: InspectedFile[] = [];
   /** The packed geometry of each test surface file (GET inspect/test_surfaces/{file}/geometry; packedInspectGeometry). */
   inspectGeometries: Record<string, ArrayBuffer> = {};
   /** The file and the body of every POST inspect/test_surfaces/{file}/turn. */
   readonly turnRequests: { fileName: string; body: unknown }[] = [];
+  /** The file and the body of every POST inspect/test_surfaces/{file}/restore. */
+  readonly restoreRequests: { fileName: string; body: unknown }[] = [];
   /** While set, a POST inspect/test_surfaces/{file}/turn gets its reply only once this promise resolves. */
   turnsAnswerWhen: Promise<void> | null = null;
 
@@ -196,7 +201,10 @@ export class FakeService {
     return json({ detail: "Not found" }, 404);
   };
 
-  /** The routes of one test surface file in Inspect: its geometry, a turn of its surfaces (refused while saves are), its restore. */
+  /**
+   * The routes of one test surface file in Inspect: its geometry, a turn of its surfaces (refused while saves are), its restore. A
+   * turn or restore of a version that is not the file's is refused (409), as the service refuses a file changed in the folder.
+   */
   private async answerInspect(method: string, fileName: string, route: string, init?: RequestInit): Promise<Response> {
     const fileNow = () => this.inspection.find((candidate) => candidate.role === "test_surfaces" && candidate.file_name === fileName);
     const file = fileNow();
@@ -204,15 +212,20 @@ export class FakeService {
     if (method === "GET" && route === "geometry") return new Response(this.inspectGeometries[fileName].slice(0));
     if (method !== "POST") return json({ detail: "Not found" }, 404);
     if (this.refuseSavesWith !== null) return json({ detail: "A run of this project is in progress." }, this.refuseSavesWith);
+    const body = JSON.parse(String(init?.body ?? "{}")) as { version?: string };
     if (route === "turn") {
       if (!file.flippable) return json({ detail: `The test surfaces file '${fileName}' is closed as a whole.` }, 422);
-      this.turnRequests.push({ fileName, body: JSON.parse(String(init!.body)) });
+      this.turnRequests.push({ fileName, body });
       await this.turnsAnswerWhen;
-    } else if (!file.original_kept) {
-      return json({ detail: "No original is kept." }, 404);
+    } else {
+      this.restoreRequests.push({ fileName, body });
     }
     // The file as it is now: a test may change it while the reply is held.
-    const changed = { ...fileNow()!, original_kept: route === "turn" };
+    if (body.version !== fileNow()!.version) {
+      return json({ detail: route === "turn" ? FILE_CHANGED_SINCE_TURNED : FILE_CHANGED_SINCE_READ, stored_file_changed: true }, 409);
+    }
+    if (route === "restore" && !file.original_kept) return json({ detail: "No original is kept." }, 404);
+    const changed = { ...fileNow()!, original_kept: route === "turn", version: `${fileNow()!.version}*` };
     this.inspection = this.inspection.map((candidate) => (candidate.role === "test_surfaces" && candidate.file_name === fileName ? changed : candidate));
     return json(changed);
   }
@@ -221,6 +234,10 @@ export class FakeService {
     return this.requests.filter((made) => made === request).length;
   }
 }
+
+/** The service's reasons for a turn and a restore refused because the file changed in the project folder. */
+export const FILE_CHANGED_SINCE_TURNED = "The file changed in the project folder since its surfaces were turned, so nothing was saved.";
+export const FILE_CHANGED_SINCE_READ = "The file changed in the project folder since Inspect read it, so nothing was restored.";
 
 /** Criterion 1 of the project "p", with *settings* (the mode and its settings), as the service replies with it. */
 export function criterionEntry(settings: Record<string, unknown>, testSurfaceFiles: string[] = ["surfaces.obj"]): CriterionEntry {

@@ -1,7 +1,8 @@
 // Inspect (inspect design, sections 3, 5 and 6): the Files panel over the 3D view lists the input files by role; a row selects its
 // file, frames it and opens its summary. In flip mode a click on a surface of the selected test surface file turns it, and a second
 // click turns it back; the turns are staged until Save, which sends one request for the file, or Discard. Leaving Inspect with turns
-// not saved asks to save or discard them (UnsavedTurnsDialog, as the app's switch uses it).
+// not saved, or while a save is under way, asks to save or discard them (UnsavedTurnsDialog, as the app's switch uses it). Turns are
+// sent with the version of the file they were staged on; a file changed in the project folder meanwhile drops them.
 import { act } from "react";
 import * as THREE from "three";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -9,8 +10,8 @@ import type { InspectedFile } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
 import {
-  NOTHING_RUN, FakeService, buttonIn, container, endWorkspaceTest, openStep, openWorkspace, packedInspectGeometry, pressRunAnalysis, project, reasonOf,
-  settle, startWorkspaceTest, switchMode,
+  FILE_CHANGED_SINCE_READ, FILE_CHANGED_SINCE_TURNED, NOTHING_RUN, FakeService, buttonIn, container, endWorkspaceTest, openStep, openWorkspace,
+  packedInspectGeometry, pressRunAnalysis, project, reasonOf, settle, startWorkspaceTest, switchMode,
 } from "./project_workspace_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
@@ -22,7 +23,7 @@ afterEach(endWorkspaceTest);
 
 const summary = (role: string, fileName: string, overrides: Partial<InspectedFile> = {}): InspectedFile => ({
   role, file_name: fileName, triangle_count: 1, area_m2: 1, bounds: [[0, 0, 0], [1, 1, 1]], body_count: 1, closed_body_count: 0, surface_count: null,
-  flippable: false, original_kept: false, problem: null, ...overrides,
+  flippable: false, original_kept: false, problem: null, version: `${fileName}@1`, ...overrides,
 });
 
 const FILES: InspectedFile[] = [
@@ -152,7 +153,7 @@ test("Save sends the turned surfaces once, then asks for the stage status, the s
   });
   const before = counts();
   await press(button("Save"));
-  expect(service.turnRequests).toEqual([{ fileName: "facades.obj", body: { surfaces: [1] } }]);
+  expect(service.turnRequests).toEqual([{ fileName: "facades.obj", body: { surfaces: [1], version: "facades.obj@1" } }]);
   expect(counts()).toEqual({ stages: before.stages + 1, stored: before.stored + 1, inspection: before.inspection + 1, geometry: before.geometry + 1 });
   expect(turnedLine("facades.obj")).toBeNull();
   expect(button("Save")).toBeUndefined();
@@ -160,7 +161,7 @@ test("Save sends the turned surfaces once, then asks for the stage status, the s
 
   const saved = counts();
   await press(button("Restore original"));
-  expect(service.count("POST /inspect/test_surfaces/facades.obj/restore")).toBe(1);
+  expect(service.restoreRequests).toEqual([{ fileName: "facades.obj", body: { version: "facades.obj@1*" } }]);      // the version read after the save
   expect(counts()).toEqual({ stages: saved.stages + 1, stored: saved.stored + 1, inspection: saved.inspection + 1, geometry: saved.geometry + 1 });
   expect(button("Restore original")).toBeUndefined();
   expect(service.turnRequests).toHaveLength(1);
@@ -177,7 +178,7 @@ function holdTurnReplies(service: FakeService): () => Promise<void> {
   };
 }
 
-test("leaving Inspect while a save is under way sends it once and asks nothing: its turns are no longer turns not saved", async () => {
+test("leaving Inspect while a save is under way asks, says the save is under way, and leaves once it is written; the save is sent once", async () => {
   const service = await openInspect();
   const release = holdTurnReplies(service);
   await selectFile("facades.obj");
@@ -190,10 +191,34 @@ test("leaving Inspect while a save is under way sends it once and asks nothing: 
   expect(button("Restore original")).toBeUndefined();
 
   await switchMode("design");
+  expect(dialog()!.querySelector("h2")!.textContent).toBe("Save the turned surfaces before leaving Inspect?");
+  expect(dialog()!.textContent).toContain("A save is under way.");
+  expect(stepsPanel().hidden).toBe(true);
+  await release();
   expect(dialog()).toBeNull();
   expect(stepsPanel().hidden).toBe(false);
+  expect(service.turnRequests).toEqual([{ fileName: "facades.obj", body: { surfaces: [1], version: "facades.obj@1" } }]);
+});
+
+test("a save under way that is refused after the mode switch was pressed keeps the dialog open with the reason", async () => {
+  const service = await openInspect();
+  const release = holdTurnReplies(service);
+  await selectFile("facades.obj");
+  await press(button("Flip mode"));
+  clickTriangle("facades.obj", 2);
+  await press(button("Save"));
+  await switchMode("design");
+  expect(dialog()!.textContent).toContain("A save is under way.");
+  // The file is replaced in the project folder while the save waits: the service refuses it.
+  service.inspection = service.inspection.map((file) => (file.file_name === "facades.obj" ? { ...file, version: "facades.obj@by hand" } : file));
   await release();
-  expect(service.turnRequests).toEqual([{ fileName: "facades.obj", body: { surfaces: [1] } }]);
+  expect(dialog()).not.toBeNull();
+  expect(dialog()!.textContent).toContain(FILE_CHANGED_SINCE_TURNED);
+  expect(dialog()!.textContent).not.toContain("A save is under way.");
+  expect(stepsPanel().hidden).toBe(true);
+  expect(service.turnRequests).toHaveLength(1);
+  await press(buttonIn(dialog()!, "Stay"));
+  expect(turnedLine("facades.obj")).toBeNull();          // its turns were made on the old file: dropped
 });
 
 test("a surface turned while a save is under way stays staged after it; leaving then sends only that one", async () => {
@@ -212,7 +237,8 @@ test("a surface turned while a save is under way stays staged after it; leaving 
   expect(drawnIndex("facades.obj")).toEqual([0, 2, 1, 3, 5, 4, 6, 7, 8]);     // the same geometry here, with surface 0 staged
   await switchMode("design");
   await press(buttonIn(dialog()!, "Save"));
-  expect(service.turnRequests).toEqual([{ fileName: "facades.obj", body: { surfaces: [1] } }, { fileName: "facades.obj", body: { surfaces: [0] } }]);
+  expect(service.turnRequests).toEqual([{ fileName: "facades.obj", body: { surfaces: [1], version: "facades.obj@1" } },
+                                        { fileName: "facades.obj", body: { surfaces: [0], version: "facades.obj@1*" } }]);
   expect(stepsPanel().hidden).toBe(false);
 });
 
@@ -228,7 +254,8 @@ test("the dialog's Save waits for a save of the file under way, then sends the t
   await press(buttonIn(dialog()!, "Save"));
   expect(service.turnRequests).toHaveLength(1);           // the first save's reply is held: the dialog's waits for it
   await release();
-  expect(service.turnRequests).toEqual([{ fileName: "facades.obj", body: { surfaces: [1] } }, { fileName: "facades.obj", body: { surfaces: [0] } }]);
+  expect(service.turnRequests).toEqual([{ fileName: "facades.obj", body: { surfaces: [1], version: "facades.obj@1" } },
+                                        { fileName: "facades.obj", body: { surfaces: [0], version: "facades.obj@1*" } }]);
   expect(dialog()).toBeNull();
   expect(stepsPanel().hidden).toBe(false);
 });
@@ -242,11 +269,12 @@ test("turns staged on a file that has changed when the inspection is read again 
   await selectFile("roofs.obj");
   await press(button("Flip mode"));
   clickTriangle("roofs.obj", 0);
-  // facades.obj is replaced by hand: the service builds it again, and its surface numbers mean other surfaces.
-  service.inspection = service.inspection.map((file) => (file.file_name === "facades.obj" ? { ...file, triangle_count: 4 } : file));
+  // facades.obj is replaced by hand with as many triangles and surfaces and the same bounds: only its version tells it apart, and
+  // its surface numbers may mean other surfaces.
+  service.inspection = service.inspection.map((file) => (file.file_name === "facades.obj" ? { ...file, version: "facades.obj@by hand" } : file));
 
   await press(buttonIn(fileRow("roofs.obj"), "Save"));
-  expect(service.turnRequests).toEqual([{ fileName: "roofs.obj", body: { surfaces: [0] } }]);
+  expect(service.turnRequests).toEqual([{ fileName: "roofs.obj", body: { surfaces: [0], version: "roofs.obj@1" } }]);
   expect(turnedLine("facades.obj")).toBeNull();
   expect(plain(filesPanel().querySelector(".files-panel-problem"))).toBe("The file changed, so its turns not saved were dropped.");
   await switchMode("design");
@@ -311,7 +339,7 @@ test("leaving Inspect with turns not saved asks first: Stay keeps Inspect, Disca
   clickTriangle("facades.obj", 0);
   await switchMode("design");
   await press(buttonIn(dialog()!, "Save"));
-  expect(service.turnRequests).toEqual([{ fileName: "facades.obj", body: { surfaces: [0] } }]);
+  expect(service.turnRequests).toEqual([{ fileName: "facades.obj", body: { surfaces: [0], version: "facades.obj@1" } }]);
   expect(dialog()).toBeNull();
   expect(stepsPanel().hidden).toBe(false);
 
@@ -320,4 +348,52 @@ test("leaving Inspect with turns not saved asks first: Stay keeps Inspect, Disca
   await switchMode("design");
   expect(dialog()).toBeNull();
   expect(stepsPanel().hidden).toBe(false);
+});
+
+test("a save refused because the file changed in the project folder drops the file's turns, says why and reads the inspection again", async () => {
+  const service = await openInspect();
+  await selectFile("facades.obj");
+  await press(button("Flip mode"));
+  clickTriangle("facades.obj", 2);
+  service.inspection = service.inspection.map((file) => (file.file_name === "facades.obj" ? { ...file, version: "facades.obj@by hand" } : file));
+  const reads = service.count("GET /inspect");
+  await press(button("Save"));
+  expect(service.turnRequests).toEqual([{ fileName: "facades.obj", body: { surfaces: [1], version: "facades.obj@1" } }]);
+  expect(turnedLine("facades.obj")).toBeNull();
+  expect(drawnIndex("facades.obj")).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+  expect(plain(filesPanel().querySelector(".files-panel-problem"))).toBe(FILE_CHANGED_SINCE_TURNED);
+  expect(service.count("GET /inspect")).toBe(reads + 1);
+  // The file as read again is the one turned from now on.
+  clickTriangle("facades.obj", 0);
+  await press(button("Save"));
+  expect(service.turnRequests.at(-1)).toEqual({ fileName: "facades.obj", body: { surfaces: [0], version: "facades.obj@by hand" } });
+  expect(turnedLine("facades.obj")).toBeNull();
+});
+
+test("a restore refused because the file changed in the project folder says why and reads the inspection again", async () => {
+  const files = FILES.map((file) => (file.file_name === "facades.obj" ? { ...file, original_kept: true } : file));
+  const service = await openInspect(undefined, files);
+  await selectFile("facades.obj");
+  service.inspection = service.inspection.map((file) => (file.file_name === "facades.obj" ? { ...file, version: "facades.obj@by hand" } : file));
+  const reads = service.count("GET /inspect");
+  await press(button("Restore original"));
+  expect(service.restoreRequests).toEqual([{ fileName: "facades.obj", body: { version: "facades.obj@1" } }]);
+  expect(plain(filesPanel().querySelector(".files-panel-problem"))).toBe(FILE_CHANGED_SINCE_READ);
+  expect(service.count("GET /inspect")).toBe(reads + 1);
+});
+
+test("a file changed in the project folder, found by the stage status when the window comes back, reads the inspection again", async () => {
+  const service = await openInspect();
+  await selectFile("facades.obj");
+  await press(button("Flip mode"));
+  clickTriangle("facades.obj", 2);
+  service.inspection = service.inspection.map((file) => (file.file_name === "facades.obj" ? { ...file, version: "facades.obj@by hand" } : file));
+  service.inputChanges = [{ role: "test_surfaces", file_name: "facades.obj", state: "changed", noticed: "2026-10-27T15:20:00+00:00" }];
+  const reads = service.count("GET /inspect");
+  act(() => { window.dispatchEvent(new Event("focus")); });
+  await settle();
+  await settle();
+  expect(service.count("GET /inspect")).toBe(reads + 1);
+  expect(turnedLine("facades.obj")).toBeNull();
+  expect(plain(filesPanel().querySelector(".files-panel-problem"))).toBe("The file changed, so its turns not saved were dropped.");
 });

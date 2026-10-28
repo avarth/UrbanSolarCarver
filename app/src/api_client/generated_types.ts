@@ -826,6 +826,8 @@ export interface paths {
         /**
          * Turn Test Surfaces
          * @description Turn surfaces of a test surface file the other way and save the file, keeping its original (inspection.save_turned_surfaces).
+         *
+         *     The files changed in the project folder are built in first; a stored file that is not the version named is refused (409).
          */
         post: operations["turn_test_surfaces"];
         delete?: never;
@@ -846,6 +848,8 @@ export interface paths {
         /**
          * Restore Test Surface Original
          * @description Put the original of a test surface file back in place of the saved one (inspection.restore_original).
+         *
+         *     The files changed in the project folder are built in first; a stored file that is not the version named is refused (409).
          */
         post: operations["restore_test_surface_original"];
         delete?: never;
@@ -1385,6 +1389,11 @@ export interface components {
             original_kept: boolean;
             /** Problem */
             problem?: string | null;
+            /**
+             * Version
+             * @default
+             */
+            version: string;
         };
         /**
          * MassingSummary
@@ -1562,6 +1571,14 @@ export interface components {
             ids: string[];
         };
         /**
+         * RestoreOriginalRequest
+         * @description The version of the stored test surface file (InspectedFile.version) that the kept original is to replace.
+         */
+        RestoreOriginalRequest: {
+            /** Version */
+            version: string;
+        };
+        /**
          * RunSummary
          * @description What the finished stages of a run report; a part is None when its stage has no output.
          *
@@ -1631,6 +1648,20 @@ export interface components {
         StartRunRequest: {
             /** Produce */
             produce?: string[];
+        };
+        /**
+         * StoredFileChangedReply
+         * @description The body of a turn or a restore refused because the stored file is no longer the version Inspect read (409).
+         */
+        StoredFileChangedReply: {
+            /** Detail */
+            detail: string;
+            /**
+             * Stored File Changed
+             * @default true
+             * @constant
+             */
+            stored_file_changed: true;
         };
         /**
          * StudiesReply
@@ -1719,11 +1750,14 @@ export interface components {
         };
         /**
          * TurnSurfacesRequest
-         * @description The surfaces of a test surface file to turn the other way and save (their numbers in the geometry of the file).
+         * @description The surfaces of a test surface file to turn the other way and save (their numbers in the geometry of the file), and the
+         *     version of the file they were turned on (InspectedFile.version).
          */
         TurnSurfacesRequest: {
             /** Surfaces */
             surfaces: number[];
+            /** Version */
+            version: string;
         };
         /**
          * UpdateCriterionRequest
@@ -3858,13 +3892,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDetailReply"];
                 };
             };
-            /** @description A run of this project is active. */
+            /** @description A run of this project is active, or the file changed in the project folder since Inspect read it (stored_file_changed). */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ErrorDetailReply"];
+                    "application/json": components["schemas"]["StoredFileChangedReply"] | components["schemas"]["ErrorDetailReply"];
                 };
             };
             /** @description The request cannot be served as sent. */
@@ -3897,7 +3931,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreOriginalRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -3917,13 +3955,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDetailReply"];
                 };
             };
-            /** @description A run of this project is active. */
+            /** @description A run of this project is active, or the file changed in the project folder since Inspect read it (stored_file_changed). */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ErrorDetailReply"];
+                    "application/json": components["schemas"]["StoredFileChangedReply"] | components["schemas"]["ErrorDetailReply"];
                 };
             };
             /** @description The request cannot be served as sent. */

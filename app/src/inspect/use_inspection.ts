@@ -6,13 +6,17 @@
 // turns not saved. They stay drawn until the file's new geometry is in, so the view does not show the old orientation in between,
 // and a surface turned while they are written is staged on top of them. A second save of a file waits for the one under way, so no
 // turn is sent twice. A refused request puts its turns back with those staged and says why (problem).
-// Staged turns hold for the file they were made on: a file read again with other triangles, surfaces or bounds (replaced by hand)
-// has its surfaces numbered anew, so its staged turns are dropped, and the panel says so.
+// Staged turns hold for the version of the file they were made on (InspectedFile.version, the digest of its bytes), which a save
+// sends: a file read again as another version (replaced by hand) has its surfaces numbered anew, so its staged turns are dropped, and
+// the panel says so. A save or restore the service refuses because the file changed in the project folder (409, isStoredFileChanged)
+// drops the file's turns, says why and reads the inspection again; so does a change found by the stage status (reload). A save of the
+// app's own carries the turns staged while it ran to the version it wrote, when that has the same triangles and surfaces.
 // useInspectView gives the view what it draws, kept the same between renders that change none of it (the view draws the layer again
 // whenever its files change).
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  failureTextOf, getInspection, getInspectionGeometry, restoreOriginal, serviceProblemOf, turnSurfaces, type InspectedFile, type InspectReply,
+  failureTextOf, getInspection, getInspectionGeometry, isStoredFileChanged, restoreOriginal, serviceProblemOf, turnSurfaces, type InspectedFile,
+  type InspectReply,
 } from "../api_client/client";
 import { messages } from "../messages";
 import type { InspectLayerFile } from "../viewer/layers";
@@ -21,8 +25,6 @@ import type { InspectView } from "../viewer_overlays/ViewerPane";
 import { decodeInspectGeometry, localCorners, localSurfaces, type InspectGeometry } from "./inspect_geometry_decoder";
 
 export const TEST_SURFACES_ROLE = "test_surfaces";
-// Bounds read again that differ by more than this (relative to the coordinate, at least 1 m) belong to another file.
-const SAME_BOUNDS_TOLERANCE = 1e-6;
 
 /** A file of the inspection: its role and its name (a name may be used in two roles). */
 interface FileKey {
@@ -67,6 +69,13 @@ export interface InspectionHook {
   saveAll: () => Promise<string | null>;
   /** Puts the file's kept original back, dropping its staged turns; resolves with why it could not, or null. */
   restore: (fileName: string) => Promise<string | null>;
+  /** Resolves once no save or restore is under way: with why the first that ended meanwhile was refused, or null. */
+  waitForUnderWay: () => Promise<string | null>;
+  /** Whether a save or restore is under way, and whether some file has turns staged and not sent, now (for a caller that waited). */
+  underWayNow: () => boolean;
+  unsavedNow: () => boolean;
+  /** Reads the inspection again while Inspect is shown (a file changed in the project folder); nothing otherwise. */
+  reload: () => void;
   /** Some file has turns staged and not sent. */
   unsaved: boolean;
   /** A save or restore is under way: the panel's buttons that send one wait. */
@@ -74,9 +83,6 @@ export interface InspectionHook {
   /** Why the inspection could not be read, the last save or restore failed, or staged turns were dropped; null otherwise. */
   problem: string | null;
 }
-
-/** What staged turns were made on: a file read again without the same is another file. */
-type FileShape = Pick<InspectedFile, "triangle_count" | "surface_count" | "bounds">;
 
 interface InspectionState {
   reply: InspectReply | null;
@@ -86,8 +92,8 @@ interface InspectionState {
   flipMode: boolean;
   arrows: boolean;
   turned: Turns;
-  /** The shape of each file with staged turns, as it was when its first turn was staged. */
-  stagedOn: ReadonlyMap<string, FileShape>;
+  /** The version of each file with staged turns that they were made on (InspectedFile.version). */
+  stagedOn: ReadonlyMap<string, string>;
   /** The turns being written, by file (a restore under way: none); a file is listed while its request and the read after it go on. */
   sending: Turns;
   problem: string | null;
@@ -97,12 +103,6 @@ const NO_GEOMETRIES: ReadonlyMap<string, InspectGeometry> = new Map();
 const NO_TURNS: Turns = new Map();
 
 const isKeyOf = (key: FileKey | null, file: InspectedFile) => key !== null && key.role === file.role && key.fileName === file.file_name;
-
-function sameShape(file: FileShape, other: FileShape): boolean {
-  const near = (first: number, second: number) => Math.abs(first - second) <= SAME_BOUNDS_TOLERANCE * Math.max(1, Math.abs(first));
-  return file.triangle_count === other.triangle_count && (file.surface_count ?? null) === (other.surface_count ?? null)
-    && file.bounds.every((corner, index) => corner.every((value, axis) => near(value, other.bounds[index][axis])));
-}
 
 /** The surfaces of *surfaces* turned once more by each of *by*. */
 function toggledBy(surfaces: ReadonlySet<number>, by: Iterable<number>): Set<number> {
@@ -147,6 +147,8 @@ export function useInspection({ token, project, active, onSaved, onServiceProble
   const readsAskedFor = useRef(0);
   // The save or restore under way of each file, which a later save of the file waits for.
   const underWay = useRef(new Map<string, Promise<string | null>>());
+  const shown = useRef(active);
+  shown.current = active;
 
   const fileOf = (key: FileKey | null) => latest.current.reply?.files.find((file) => isKeyOf(key, file)) ?? null;
   const testSurfaceFile = (fileName: string) => fileOf({ role: TEST_SURFACES_ROLE, fileName });
@@ -169,7 +171,7 @@ export function useInspection({ token, project, active, onSaved, onServiceProble
       // Turns of a file gone or changed are dropped; only a change is said (a file gone leaves its row, which says enough).
       const changed = [...turned.keys()].filter((fileName) => {
         const now = readableNow.get(fileName), before = stagedOn.get(fileName);
-        return now !== undefined && before !== undefined && !sameShape(now, before);
+        return now !== undefined && before !== undefined && now.version !== before;
       });
       const keptTurns = [...turned].filter(([fileName]) => readableNow.has(fileName) && !changed.includes(fileName));
       commit({
@@ -190,12 +192,12 @@ export function useInspection({ token, project, active, onSaved, onServiceProble
     else if (latest.current.flipMode) commit({ flipMode: false });
   }, [active]);
 
-  /** The staged turns of the file become *surfaces*; the file's shape is noted with its first turn and forgotten with its last. */
+  /** The staged turns of the file become *surfaces*; the file's version is noted with its first turn and forgotten with its last. */
   const stagedTurns = (fileName: string, surfaces: ReadonlySet<number>): Partial<InspectionState> => {
     const stagedOn = new Map(latest.current.stagedOn);
     const file = testSurfaceFile(fileName);
     if (surfaces.size === 0) stagedOn.delete(fileName);
-    else if (!stagedOn.has(fileName) && file !== null) stagedOn.set(fileName, file);
+    else if (!stagedOn.has(fileName) && file !== null) stagedOn.set(fileName, file.version);
     return { turned: withTurns(latest.current.turned, fileName, surfaces), stagedOn };
   };
   const setTurns = (fileName: string, surfaces: ReadonlySet<number>) => commit(stagedTurns(fileName, surfaces));
@@ -224,18 +226,33 @@ export function useInspection({ token, project, active, onSaved, onServiceProble
   /**
    * Sends *request* for the file: *sent* (the turns it writes) leave the staged turns, which become *stagedNow*, and are drawn as
    * being written. Once it is answered the inspection is read again, and the file's new geometry comes in with *sent* no longer drawn
-   * on top. A refusal puts *sent* back on top of the turns staged since.
+   * on top. A refusal puts *sent* back on top of the turns staged since; a refusal because the file changed in the project folder
+   * drops the file's turns instead and reads the inspection again. *carriesTurns*: a save, whose reply is the version the turns
+   * staged meanwhile now hold for, when it has the same triangles and surfaces as the file sent.
    */
-  const change = (fileName: string, sent: ReadonlySet<number>, stagedNow: ReadonlySet<number>, request: () => Promise<InspectedFile>) => {
+  const change = (fileName: string, sent: ReadonlySet<number>, stagedNow: ReadonlySet<number>, request: () => Promise<InspectedFile>,
+                  carriesTurns: boolean) => {
+    const before = testSurfaceFile(fileName);
     commit({ ...stagedTurns(fileName, stagedNow), sending: new Map(latest.current.sending).set(fileName, sent), problem: null });
     const notSending = () => ({ sending: withTurns(latest.current.sending, fileName, null) });
     const running = (async (): Promise<string | null> => {
+      let written: InspectedFile;
       try {
-        await request();
+        written = await request();
       } catch (error) {
         const problem = failed(error);
-        commit({ ...stagedTurns(fileName, toggledBy(latest.current.turned.get(fileName) ?? new Set(), sent)), ...notSending(), problem });
+        if (isStoredFileChanged(error)) {
+          commit(stagedTurns(fileName, new Set()));
+          await refresh(() => ({ ...notSending(), problem }));
+        } else {
+          commit({ ...stagedTurns(fileName, toggledBy(latest.current.turned.get(fileName) ?? new Set(), sent)), ...notSending(), problem });
+        }
         return problem;
+      }
+      const stagedOn = latest.current.stagedOn.get(fileName);
+      if (carriesTurns && before !== null && stagedOn === before.version && written.triangle_count === before.triangle_count
+          && written.surface_count === before.surface_count) {
+        commit({ stagedOn: new Map(latest.current.stagedOn).set(fileName, written.version) });
       }
       onSaved();
       await refresh(notSending);
@@ -253,7 +270,19 @@ export function useInspection({ token, project, active, onSaved, onServiceProble
     const sent = latest.current.turned.get(fileName) ?? new Set<number>();
     if (sent.size === 0) return null;
     const surfaces = [...sent].sort((first, second) => first - second);
-    return change(fileName, sent, new Set(), () => turnSurfaces(token, project, fileName, surfaces));
+    const version = latest.current.stagedOn.get(fileName) ?? testSurfaceFile(fileName)?.version ?? "";
+    return change(fileName, sent, new Set(), () => turnSurfaces(token, project, fileName, surfaces, version), true);
+  };
+  const waitForUnderWay = async (): Promise<string | null> => {
+    const waited = new Set<Promise<string | null>>();
+    let reason: string | null = null;
+    for (let running = [...underWay.current.values()].filter((each) => !waited.has(each)); running.length > 0;
+         running = [...underWay.current.values()].filter((each) => !waited.has(each))) {
+      for (const each of running) waited.add(each);
+      const reasons = await Promise.all(running);
+      reason = reason ?? reasons.find((each) => each !== null) ?? null;
+    }
+    return reason;
   };
 
   const { reply, geometries, selectedKey, frameRequest, flipMode, arrows, turned, sending, problem } = state;
@@ -294,7 +323,14 @@ export function useInspection({ token, project, active, onSaved, onServiceProble
     restore: async (fileName) => {
       const reason = await waitForFile(fileName);
       if (reason !== null) return reason;
-      return change(fileName, new Set(), new Set(), () => restoreOriginal(token, project, fileName));
+      const version = testSurfaceFile(fileName)?.version ?? "";
+      return change(fileName, new Set(), new Set(), () => restoreOriginal(token, project, fileName, version), false);
+    },
+    waitForUnderWay,
+    underWayNow: () => underWay.current.size > 0,
+    unsavedNow: () => latest.current.turned.size > 0,
+    reload: () => {
+      if (shown.current) void refresh();
     },
     unsaved: turned.size > 0,
   };

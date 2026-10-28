@@ -1,7 +1,7 @@
 // The 3D view (UX 8): a three.js scene with Z up in local coordinates, one ground aid (the ground grid, the compass ring or
 // neither, R2 2), and one slot per layer.
 // Orbit with the left mouse button, pan with the right, zoom with the wheel. A click (a press and release within 5 px and 400 ms)
-// goes to the listeners of onLayerClick. Camera moves of frameAll, frameBox and viewTop take 400 ms, and are instant under
+// goes to the listeners of onLayerClick, unless an opaque surrounding (context, terrain) is nearer along the ray. Camera moves of frameAll, frameBox and viewTop take 400 ms, and are instant under
 // prefers-reduced-motion. No React here: the overlays (viewer_overlays/) read the camera through
 // onCameraChange and call the methods below.
 import * as THREE from "three";
@@ -51,6 +51,10 @@ const FIELD_OF_VIEW_DEGREES = 35;
 const FRAME_MARGIN = 1.1;
 const CLICK_MAX_PIXELS = 5;                 // a press that moved further is an orbit drag
 const CLICK_MAX_MILLISECONDS = 400;
+// The layers drawn opaque that a click does not pass through to the layer listened to (the maximum volume is see-through in Inspect).
+const CLICK_OCCLUDING_LAYERS: readonly LayerName[] = SURROUNDING_LAYERS;
+// How much farther than the nearest occluding hit a layer's hit may be and still take the click: test surfaces lie on context faces.
+const CLICK_OCCLUSION_TOLERANCE_METRES = 0.05;
 const TOP_VIEW_TILT_RADIANS = 1e-3;         // a hair off straight down, so "up" on the screen is defined and points north
 const FIRST_VIEW_DIRECTION = new THREE.Vector3(-0.5, -0.9, 0.75).normalize();     // from the south-south-west, above
 const EMPTY_SCENE_RADIUS_METRES = 60;
@@ -296,7 +300,8 @@ export class ViewerScene {
 
   /**
    * Calls *listener* with the nearest mesh hit in the layer *name* whenever the view is clicked: the left button pressed and released
-   * within 5 px and 400 ms, which an orbit drag is not. A click that hits nothing of the layer, or a hidden layer, calls nothing.
+   * within 5 px and 400 ms, which an orbit drag is not. A click that hits nothing of the layer, or a hidden layer, calls nothing, and
+   * so does one whose hit lies behind a visible context or terrain mesh (by more than 5 cm, so a surface lying on one takes it).
    * Returns the function that stops the calls.
    */
   onLayerClick(name: LayerName, listener: (intersection: THREE.Intersection) => void): () => void {
@@ -521,12 +526,20 @@ export class ViewerScene {
     this.camera.updateMatrixWorld();          // the camera may have moved since the last frame
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(((event.clientX - bounds.left) / bounds.width) * 2 - 1, -((event.clientY - bounds.top) / bounds.height) * 2 + 1), this.camera);
-    for (const [name, listeners] of this.clickListeners) {
+    const nearestMeshHit = (name: LayerName): THREE.Intersection | undefined => {
       const slot = this.slots.get(name)!;
-      if (!slot.object || !slot.visible || listeners.size === 0) continue;
+      if (!slot.object || !slot.visible) return undefined;
       slot.object.updateMatrixWorld(true);
-      const hit = raycaster.intersectObject(slot.object, true).find((intersection) => intersection.object instanceof THREE.Mesh);
-      if (hit) for (const listener of [...listeners]) listener(hit);
+      return raycaster.intersectObject(slot.object, true).find((intersection) => intersection.object instanceof THREE.Mesh);
+    };
+    for (const [name, listeners] of this.clickListeners) {
+      if (listeners.size === 0) continue;
+      const hit = nearestMeshHit(name);
+      if (!hit) continue;
+      const occluders = CLICK_OCCLUDING_LAYERS.filter((occluding) => occluding !== name).map(nearestMeshHit);
+      const nearestOccluder = Math.min(...occluders.map((occluder) => occluder?.distance ?? Infinity));
+      if (hit.distance > nearestOccluder + CLICK_OCCLUSION_TOLERANCE_METRES) continue;
+      for (const listener of [...listeners]) listener(hit);
     }
   }
 

@@ -133,6 +133,7 @@ export const messages = {
   stagedTurnsDropped: "The file changed, so its turns not saved were dropped.",
   saveTurnsBeforeLeaving: "Save the turned surfaces before leaving Inspect?",
   stayInInspect: "Stay",
+  inspectSaveUnderWay: "A save is under way.",
   newProject: "New project",
   projectNameLabel: "Project name",
   projectNameHint: "Up to 64 letters, numbers, spaces, hyphens or underscores.",

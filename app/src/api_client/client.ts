@@ -32,10 +32,10 @@ export type StudiesReply = Schemas["StudiesReply"];
 export type StudyWithState = Schemas["StudyWithState"];
 export type StudyEntry = Schemas["StudyEntry"];
 export type MetricInfo = Schemas["MetricInfo"];
-/** What a new study starts from: a metric (its defaults, no files), or a criterion (its metric, period, mode settings and files). */
 export type InspectedFile = Schemas["InspectedFile"];
 export type InspectReply = Schemas["InspectReply"];
 
+/** What a new study starts from: a metric (its defaults, no files), or a criterion (its metric, period, mode settings and files). */
 export type StudySource = { metric: string } | { from_criterion: string };
 /** A change of a study: what is not given stays; a target of null removes the target. */
 export type StudyChange = Schemas["UpdateStudyRequest"];
@@ -331,13 +331,23 @@ export async function getInspectionGeometry(token: string, project: string, file
   return (await send(token, `${testSurfaceInspectPath(project, fileName)}/geometry`)).arrayBuffer();
 }
 
-/** Turns the given surfaces of a test surfaces file over (the service keeps the original on the first turn). */
-export const turnSurfaces = (token: string, project: string, fileName: string, surfaces: number[]) =>
-  requestJson<InspectedFile>(token, `${testSurfaceInspectPath(project, fileName)}/turn`, "POST", { surfaces });
+/**
+ * Turns the given surfaces of a test surfaces file over (the service keeps the original on the first turn). *version* is the
+ * version of the file they were turned on (InspectedFile.version): the service refuses the turn when the file stored now is another
+ * (isStoredFileChanged).
+ */
+export const turnSurfaces = (token: string, project: string, fileName: string, surfaces: number[], version: string) =>
+  requestJson<InspectedFile>(token, `${testSurfaceInspectPath(project, fileName)}/turn`, "POST", { surfaces, version });
 
-/** Puts the kept original of a test surfaces file back. */
-export const restoreOriginal = (token: string, project: string, fileName: string) =>
-  requestJson<InspectedFile>(token, `${testSurfaceInspectPath(project, fileName)}/restore`, "POST");
+/** Puts the kept original of a test surfaces file back, in place of the *version* Inspect read (refused when another is stored). */
+export const restoreOriginal = (token: string, project: string, fileName: string, version: string) =>
+  requestJson<InspectedFile>(token, `${testSurfaceInspectPath(project, fileName)}/restore`, "POST", { version });
+
+/** A turn or a restore refused because the file changed in the project folder since Inspect read it (409, stored_file_changed). */
+export function isStoredFileChanged(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 409 && typeof error.body === "object" && error.body !== null
+    && (error.body as { stored_file_changed?: unknown }).stored_file_changed === true;
+}
 
 export const getSunPath = (token: string, project: string, criterionId?: string) =>
   requestJson<SunPath>(token, forCriterion(`${projectPath(project)}/sun-path`, criterionId));

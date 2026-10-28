@@ -101,9 +101,12 @@ interface ProjectWorkspaceProps {
   startSteps?: WorkspaceSteps;
   /** Told the open step and the step the view shows whenever either changes. */
   onStepsChange?: (steps: WorkspaceSteps) => void;
-  /** Told whether Inspect holds turned surfaces not saved, whenever that changes (false once the workspace closes). */
+  /**
+   * Told whether Inspect holds turned surfaces not saved or has a save or restore under way, whenever that changes (false once the
+   * workspace closes).
+   */
   onInspectUnsavedChange?: (unsaved: boolean) => void;
-  /** Given what saves or drops the turns not saved once the workspace is open, and null when it closes. */
+  /** Given what saves, drops and waits for the turns not saved once the workspace is open, and null when it closes. */
   onInspectTurnsReady?: (turns: InspectTurns | null) => void;
 }
 
@@ -166,10 +169,13 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   // Files changed in the project folder, found by a stage status read: their lists and meshes are asked for again (the input files'
   // hook, set below), and so are the studies, which may now be out of date.
   const reloadInputRoles = useRef<(roles: string[]) => void>(() => {});
+  // The inspection is read again too while Inspect is shown: turns staged on a file replaced by hand are then dropped at once.
+  const reloadInspection = useRef<() => void>(() => {});
   const { criterionStages, refreshStageStatus, shownAs, shownStages, everyCriterionCarved, inputChanges, dismissChanges } = useStageStatus({
     token, project, criteria: criteria.criteria, form, runs, onServiceProblem,
     onInputFilesChanged: (roles) => {
       reloadInputRoles.current(roles);
+      reloadInspection.current();
       void studies.refresh();
     },
   });
@@ -266,9 +272,16 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const inspectView = useInspectView(inspection, origin, inspecting);
   const latestInspection = useRef(inspection);
   latestInspection.current = inspection;
-  useEffect(() => props.onInspectUnsavedChange?.(inspection.unsaved), [inspection.unsaved]);
+  reloadInspection.current = inspection.reload;
+  // Leaving Inspect asks while turns are not saved and while a save or restore is under way (its refusal is then shown, not lost).
+  const inspectUnsavedOrUnderWay = inspection.unsaved || inspection.busy;
+  useEffect(() => props.onInspectUnsavedChange?.(inspectUnsavedOrUnderWay), [inspectUnsavedOrUnderWay]);
   useEffect(() => {
-    props.onInspectTurnsReady?.({ saveAll: () => latestInspection.current.saveAll(), discardAll: () => latestInspection.current.discardAll() });
+    props.onInspectTurnsReady?.({
+      saveAll: () => latestInspection.current.saveAll(), discardAll: () => latestInspection.current.discardAll(),
+      waitForUnderWay: () => latestInspection.current.waitForUnderWay(), underWay: () => latestInspection.current.underWayNow(),
+      unsaved: () => latestInspection.current.unsavedNow(),
+    });
     return () => {
       props.onInspectTurnsReady?.(null);
       props.onInspectUnsavedChange?.(false);
