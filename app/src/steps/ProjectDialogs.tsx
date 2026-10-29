@@ -2,7 +2,8 @@
 // project and its folder and waits for the project name to be typed; Reset to the example, after a confirmation; and the reason
 // Open folder failed. Each is modal: the focus moves into it and stays there with Tab, and Escape or Cancel closes it (not while
 // its request is out). A refusal of the service is shown in the dialog in the service's words, and the dialog stays open. The frame,
-// buttons and request of a dialog are the criterion dialogs' too (criteria/CriterionDialogs.tsx).
+// buttons and request of a dialog are the criterion dialogs' too (criteria/CriterionDialogs.tsx), and the frame is the typical
+// building's window (criteria/TypicalBuildingSheet.tsx), which asks it for a wide dialog with a × and the title in focus.
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { messages } from "../messages";
 import "./steps.css";
@@ -52,15 +53,29 @@ export interface DialogFrameProps {
   onClose: () => void;
   /** The ids of the text that explains the dialog, read out with its title. */
   describedBy?: string;
+  /** A window for a larger piece of work (the typical building): wider, and as tall as the browser window lets it be. */
+  wide?: boolean;
+  /** The name of an × button in the title row that calls *onClose*; without it the dialog has no ×. */
+  closeLabel?: string;
+  /** The title (not the first control) takes the focus when the dialog opens, so a long window is read from its top. */
+  titleTakesFocus?: boolean;
   children: ReactNode;
 }
 
-/** A modal dialog: the element marked data-autofocus (else the first control) takes the focus, which Tab keeps inside. */
-export function DialogFrame({ title, busy, onClose, describedBy, children }: DialogFrameProps) {
+/**
+ * A modal dialog: the element marked data-autofocus (else the first control) takes the focus, which Tab keeps inside. Escape inside a
+ * dialog open within another closes only the inner one.
+ */
+export function DialogFrame({ title, busy, onClose, describedBy, wide = false, closeLabel, titleTakesFocus = false, children }: DialogFrameProps) {
   const dialog = useRef<HTMLDivElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
   const titleId = useId();
 
   useEffect(() => {
+    if (titleTakesFocus) {
+      heading.current?.focus();
+      return;
+    }
     const first = dialog.current!.querySelector<HTMLElement>("[data-autofocus]") ?? focusableControls(dialog.current!)[0];
     first?.focus();
     if (first instanceof HTMLInputElement) first.select();
@@ -75,8 +90,10 @@ export function DialogFrame({ title, busy, onClose, describedBy, children }: Dia
     if (event.key !== "Tab") return;
     const focusable = focusableControls(dialog.current!);
     if (focusable.length === 0) return;
+    // Tab is settled here: a dialog open within another keeps it to itself.
+    event.stopPropagation();
     const first = focusable[0], last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
+    if (event.shiftKey && (document.activeElement === first || document.activeElement === heading.current)) {
       event.preventDefault();
       last.focus();
     } else if (!event.shiftKey && document.activeElement === last) {
@@ -85,11 +102,19 @@ export function DialogFrame({ title, busy, onClose, describedBy, children }: Dia
     }
   };
 
+  const titleElement = <h2 id={titleId} ref={heading} tabIndex={titleTakesFocus ? -1 : undefined}>{title}</h2>;
   return (
     <div className="project-dialog-backdrop">
-      <div ref={dialog} className="project-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}
-           aria-describedby={describedBy} onKeyDown={keepFocusInside}>
-        <h2 id={titleId}>{title}</h2>
+      <div ref={dialog} className={wide ? "project-dialog project-dialog-wide" : "project-dialog"} role="dialog" aria-modal="true"
+           aria-labelledby={titleId} aria-describedby={describedBy} onKeyDown={keepFocusInside}>
+        {closeLabel === undefined ? titleElement : (
+          <div className="project-dialog-title-row">
+            {titleElement}
+            <button type="button" className="project-dialog-close" aria-label={closeLabel} title={closeLabel} onClick={onClose}>
+              <span aria-hidden="true">×</span>
+            </button>
+          </div>
+        )}
         {children}
       </div>
     </div>

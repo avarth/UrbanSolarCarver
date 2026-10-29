@@ -731,7 +731,7 @@ export const messages = {
   shadeHoursLegend: (start: string, end: string, days: string) => `Hours in shade per day, ${start} to ${end}, ${days}`,
 
   // Which hours count in Solar usefulness, and the typical building an energy-weighted criterion counts them by: the switch and
-  // the box in the criterion's Settings, and the sheet beside the panel where the building is edited and calculated.
+  // the box in the criterion's Settings, and the window where the building is edited and calculated.
   whichHoursCount: "Which hours count",
   whichHoursCountChoices: { cold_hours: "Cold hours", energy_weighted: "Energy-weighted" },
   energyWeightedSummary: (summary: string) => `Energy-weighted, ${summary}`,
@@ -748,6 +748,7 @@ export const messages = {
   chooseBuilding: "Choose building",
   chooseBuildingToRun: "Choose one from the library to run the analysis.",
   closeTypicalBuilding: "Close",
+  done: "Done",
   // The library of typical buildings, at the top of the sheet: the examples in the groups the service names, then the user's own.
   typicalBuildingLibrary: "Library",
   ownBuildings: "Your buildings",

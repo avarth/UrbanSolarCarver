@@ -10,7 +10,7 @@ import { DEFAULT_OPEN_SECTIONS, type PanelSectionId } from "./section_summaries"
 import "../steps/steps.css";
 
 interface PanelSectionProps {
-  /** A section of the panel (PanelSectionId), or a group of the typical building's sheet (TypicalBuildingSheet). */
+  /** A section of the panel (PanelSectionId), or a group of the typical building's window (TypicalBuildingSheet). */
   id: string;
   title: string;
   summary: string;

@@ -267,19 +267,19 @@ test("in Solar usefulness, Settings starts with Which hours count: Cold hours sh
   expect(find(".typical-building-box button")!.textContent).toBe("Choose building");
 });
 
-test("Edit building opens the typical building's sheet beside the panel; Close ends it and gives the focus back to Edit building", () => {
+test("Edit building opens the typical building's window; Close ends it and gives the focus back to Edit building", () => {
   rendered = renderForTest(<CriterionPanel {...panelProps({ form: formFor("benefit"), hoursCounted: hoursCounted({ energyWeighted: true }) })} />);
   const edit = [...rendered.container.querySelectorAll<HTMLButtonElement>(".typical-building-box button")].find((button) => button.textContent === "Edit building")!;
   expect(edit.getAttribute("aria-expanded")).toBe("false");
   expect(find(".typical-building-sheet")).toBeNull();
   click(edit);
   const sheet = find(".typical-building-sheet")!;
-  expect(sheet.getAttribute("role")).toBe("dialog");
+  expect(sheet.closest('[role="dialog"][aria-modal="true"]')).not.toBeNull();
   expect(edit.getAttribute("aria-expanded")).toBe("true");
   expect(edit.getAttribute("aria-controls")).toBe(sheet.id);
   // The sheet is outside the folded sections, so it stays open when Settings is closed.
   expect(sheet.closest(".panel-section")).toBeNull();
-  click(sheet.querySelector<HTMLButtonElement>(".study-popover-close")!);
+  click(document.querySelector<HTMLButtonElement>('[role="dialog"] button[aria-label="Close"]')!);
   expect(find(".typical-building-sheet")).toBeNull();
   expect(document.activeElement).toBe(edit);
 });

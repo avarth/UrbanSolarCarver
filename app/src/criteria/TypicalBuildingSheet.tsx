@@ -1,20 +1,21 @@
 // The typical building of the project (one per project, shared by its energy-weighted Solar usefulness criteria): the box in a
-// criterion's Settings that names the library entry it came from and the state of its weights, and the sheet beside the criterion
-// panel where it is edited and calculated, as Simulate's study popover sits beside its list. The sheet has the library at the top
-// (the examples by the groups the service names, then the user's own entries; choosing one replaces the project's copy; Save to
-// library, Save as new, rename and delete of own entries), the values in folded groups with a line each (Use, Fabric, Summer
-// shading, and under Advanced: Room, Roof and floor, Air), Calculate, then the effect of each hour's sun as a day-by-hour chart and
-// three numbers. A new project has no building: the box asks to choose one, and the sheet shows only the library, open. Each change is
+// criterion's Settings that names the library entry it came from and the state of its weights, and the window over the page where it
+// is edited and calculated (a modal dialog, the frame of the project dialogs). The window has, in a left column, the library at the
+// top (the examples by the groups the service names, then the user's own entries; choosing one replaces the project's copy; Save to
+// library, Save as new, rename and delete of own entries) and the values in folded groups with a line each (Use, Fabric, Summer
+// shading, and under Advanced: Room, Roof and floor, Air); in a right column, Calculate, then the effect of each hour's sun as a
+// day-by-hour chart and three numbers; and Done under both. In a window narrower than 900 px the columns are one under the other. A new project has no building: the box asks to choose one, and the window shows only the library, open. Each change is
 // saved at once (use_typical_building.ts): a number when its field is left or Enter is pressed, the other controls on the change; a
 // refused value shows its error at its field, and its group opens. While the building or the weather file differs from the one
-// calculated, the chart is dimmed and Calculate reads Calculate again. The sheet is a non-modal dialog: Escape and Close end it,
+// calculated, the chart is dimmed and Calculate reads Calculate again. The window opens with the focus on its title; Escape, × and Done end it,
 // and the focus goes back to Edit building.
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { TypicalBuildingLibraryEntry, TypicalBuildingReply, TypicalBuildingWeightsReply } from "../api_client/client";
 import { dayAndMonth, messages } from "../messages";
 import { WarningIcon } from "../settings_form/SettingField";
 import { SettingTooltip } from "../settings_form/SettingTooltip";
 import { formatNumber, formattedNumber, groupedDigits } from "../steps/format_numbers";
+import { DialogFrame } from "../steps/ProjectDialogs";
 import { useAppTheme, type AppTheme } from "../theme/app_theme";
 import { PanelSection } from "./PanelSection";
 import { DeleteLibraryEntryDialog, LibraryNameDialog } from "./TypicalBuildingDialogs";
@@ -482,12 +483,10 @@ interface TypicalBuildingSheetProps {
 
 export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFile, disabledReason, onClose }: TypicalBuildingSheetProps) {
   const { values, stored, library, fieldErrors, weights } = building;
-  const titleId = useId();
   const sharesLabelId = useId();
   const sharesErrorId = useId();
   const reasonId = useId();
   const sheet = useRef<HTMLDivElement>(null);
-  const closeButton = useRef<HTMLButtonElement>(null);
   const [openGroups, setOpenGroups] = useState<ReadonlySet<BuildingGroupId | "library">>(new Set());
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [dialog, setDialog] = useState<LibraryDialog | null>(null);
@@ -497,15 +496,6 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
   const read = stored !== null && library !== null;
   const notChosen = stored?.state === "not_chosen";
 
-  // The focus goes to the library's header once the building is read, else to Close.
-  const focused = useRef(false);
-  useEffect(() => {
-    if (focused.current) return;
-    const libraryHeader = sheet.current?.querySelector<HTMLButtonElement>('[data-section="library"] .panel-section-header') ?? null;
-    if (read && libraryHeader !== null) libraryHeader.focus();
-    else closeButton.current?.focus();
-    focused.current = read;
-  }, [read]);
   // Without a building the library opens, to choose one from.
   useLayoutEffect(() => {
     if (notChosen) setOpenGroups((open) => new Set([...open, "library"]));
@@ -521,11 +511,6 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
     if (stored !== null && stored.state !== "missing" && stored.state !== "not_chosen" && weights === null) building.readWeights();
   }, [stored?.state, weights]);
 
-  const closeOnEscape = (event: KeyboardEvent) => {
-    if (event.key !== "Escape") return;
-    event.preventDefault();
-    onClose();
-  };
   const toggleGroup = (group: BuildingGroupId | "library") => setOpenGroups((open) => {
     const next = new Set(open);
     if (!next.delete(group)) next.add(group);
@@ -544,22 +529,15 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
     });
   };
 
-  const header = (
-    <div className="study-popover-header">
-      <h3 id={titleId}>{messages.typicalBuilding}</h3>
-      <button ref={closeButton} type="button" className="study-popover-close" aria-label={messages.closeTypicalBuilding} title={messages.closeTypicalBuilding}
-              onClick={onClose}>
-        <span aria-hidden="true">×</span>
-      </button>
-    </div>
+  // The window: the frame of the project dialogs, wide, with × and its title in focus. Each of the three states below is one, so the
+  // window stays open (and keeps the focus) while the building is read.
+  const windowOf = (content: ReactNode) => (
+    <DialogFrame title={messages.typicalBuilding} busy={false} onClose={onClose} wide closeLabel={messages.closeTypicalBuilding} titleTakesFocus>
+      <div ref={sheet} id={id} className="typical-building-sheet">{content}</div>
+    </DialogFrame>
   );
   if (!read) {
-    return (
-      <div ref={sheet} id={id} className="typical-building-sheet" role="dialog" aria-labelledby={titleId} onKeyDown={closeOnEscape}>
-        {header}
-        {building.readProblem === null ? <p className="step-reason">{messages.typicalBuildingReading}</p> : <FieldError message={building.readProblem} />}
-      </div>
-    );
+    return windowOf(building.readProblem === null ? <p className="step-reason">{messages.typicalBuildingReading}</p> : <FieldError message={building.readProblem} />);
   }
   const dialogs = (
     <>
@@ -582,14 +560,13 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
     </div>
   );
   if (notChosen || values === null) {
-    return (
-      <div ref={sheet} id={id} className="typical-building-sheet" role="dialog" aria-labelledby={titleId} onKeyDown={closeOnEscape}>
-        {header}
+    return windowOf(
+      <>
         {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
         {librarySection}
         {building.problem !== null && <p className="setting-error" role="alert"><WarningIcon /><span>{building.problem}</span></p>}
         {dialogs}
-      </div>
+      </>,
     );
   }
 
@@ -698,62 +675,70 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
   const oneDecimal = (value: number | null | undefined) => (value === null || value === undefined ? "?" : formatNumber(value, undefined, 1));
   const daytimeHours = weights === null ? null : weights.sun_up.reduce((count, up) => count + (up === 0 ? 0 : 1), 0);
 
-  return (
-    <div ref={sheet} id={id} className="typical-building-sheet" role="dialog" aria-labelledby={titleId} onKeyDown={closeOnEscape}>
-      {header}
+  return windowOf(
+    <>
       {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
-      {librarySection}
-      <div className="typical-building-library-actions">
-        <div className="typical-building-library-buttons">
-          <button type="button" className="secondary-button" disabled={disabled || hasErrors || !ownEntry || !stored.changed} onClick={building.saveToLibrary}>
-            {messages.saveToLibrary}
-          </button>
-          <button type="button" className="secondary-button" disabled={disabled || hasErrors} onClick={() => openDialog({ kind: "save_as_new" })}>
-            {messages.saveAsNew}
-          </button>
-        </div>
-        {entry !== null && entry.read_only && stored.changed && <p className="setting-note">{messages.exampleCannotChange(entry.name)}</p>}
-      </div>
-      {otherErrors.map((error) => <FieldError key={error} message={error} />)}
-      <div className="typical-building-groups">
-        {BASIC_GROUPS.map(group)}
-      </div>
-      <div className="typical-building-advanced">
-        <button type="button" className="panel-section-header typical-building-advanced-toggle" aria-expanded={advancedOpen} onClick={() => setAdvancedOpen((open) => !open)}>
-          {messages.typicalBuildingAdvanced}
-          {!advancedOpen && groupsWithErrors.some((each) => ADVANCED_GROUPS.includes(each)) && (
-            <span className="panel-section-summary-problem"><WarningIcon /><span className="visually-hidden">{messages.sectionNeedsAttention}</span></span>
-          )}
-        </button>
-        {advancedOpen && <div className="typical-building-groups">{ADVANCED_GROUPS.map(group)}</div>}
-      </div>
-      <div className="typical-building-calculate">
-        <button type="button" className="primary-button" disabled={building.calculating || calculateBlocker !== null} aria-busy={building.calculating || undefined}
-                aria-describedby={calculateBlocker === null ? undefined : reasonId} onClick={building.calculate}>
-          {building.calculating ? <><span className="spinner" aria-hidden="true" />{messages.calculating}</>
-            : outOfDate ? messages.calculateAgain : messages.calculate}
-        </button>
-        {calculateBlocker !== null && <p id={reasonId} className="run-button-reason">{calculateBlocker}</p>}
-        {building.problem !== null && <p className="setting-error" role="alert"><WarningIcon /><span>{building.problem}</span></p>}
-      </div>
-      {stored.state !== "missing" && (
-        <div className="typical-building-results-area">
-          {outOfDate && <p className="typical-building-out-of-date">{messages.typicalBuildingOutOfDate}</p>}
-          <div className={outOfDate ? "typical-building-results typical-building-results-out-of-date" : "typical-building-results"}>
-            <EffectChart weights={weights} countsHarm={includesHarm} />
-            <dl className="typical-building-numbers">
-              <div><dt>{messages.heatingDemand}</dt><dd>{messages.demandPerYear(oneDecimal(stored.heating_kwh_m2))}</dd></div>
-              <div><dt>{messages.coolingDemand}</dt><dd>{messages.demandPerYear(oneDecimal(stored.cooling_kwh_m2))}</dd></div>
-              <div>
-                <dt>{messages.countedHours}<SettingTooltip settingLabel={messages.countedHours} help={messages.countedHoursNote} /></dt>
-                <dd>{stored.counted_hours == null ? "?" : daytimeHours === null ? groupedDigits(stored.counted_hours)
-                  : messages.countedHoursOfDaytime(stored.counted_hours, daytimeHours)}</dd>
-              </div>
-            </dl>
+      <div className="typical-building-window-columns">
+        <div className="typical-building-window-values">
+          {librarySection}
+          <div className="typical-building-library-actions">
+            <div className="typical-building-library-buttons">
+              <button type="button" className="secondary-button" disabled={disabled || hasErrors || !ownEntry || !stored.changed} onClick={building.saveToLibrary}>
+                {messages.saveToLibrary}
+              </button>
+              <button type="button" className="secondary-button" disabled={disabled || hasErrors} onClick={() => openDialog({ kind: "save_as_new" })}>
+                {messages.saveAsNew}
+              </button>
+            </div>
+            {entry !== null && entry.read_only && stored.changed && <p className="setting-note">{messages.exampleCannotChange(entry.name)}</p>}
+          </div>
+          {otherErrors.map((error) => <FieldError key={error} message={error} />)}
+          <div className="typical-building-groups">
+            {BASIC_GROUPS.map(group)}
+          </div>
+          <div className="typical-building-advanced">
+            <button type="button" className="panel-section-header typical-building-advanced-toggle" aria-expanded={advancedOpen} onClick={() => setAdvancedOpen((open) => !open)}>
+              {messages.typicalBuildingAdvanced}
+              {!advancedOpen && groupsWithErrors.some((each) => ADVANCED_GROUPS.includes(each)) && (
+                <span className="panel-section-summary-problem"><WarningIcon /><span className="visually-hidden">{messages.sectionNeedsAttention}</span></span>
+              )}
+            </button>
+            {advancedOpen && <div className="typical-building-groups">{ADVANCED_GROUPS.map(group)}</div>}
           </div>
         </div>
-      )}
+        <div className="typical-building-window-results">
+          <div className="typical-building-calculate">
+            <button type="button" className="primary-button" disabled={building.calculating || calculateBlocker !== null} aria-busy={building.calculating || undefined}
+                    aria-describedby={calculateBlocker === null ? undefined : reasonId} onClick={building.calculate}>
+              {building.calculating ? <><span className="spinner" aria-hidden="true" />{messages.calculating}</>
+                : outOfDate ? messages.calculateAgain : messages.calculate}
+            </button>
+            {calculateBlocker !== null && <p id={reasonId} className="run-button-reason">{calculateBlocker}</p>}
+            {building.problem !== null && <p className="setting-error" role="alert"><WarningIcon /><span>{building.problem}</span></p>}
+          </div>
+          {stored.state !== "missing" && (
+            <div className="typical-building-results-area">
+              {outOfDate && <p className="typical-building-out-of-date">{messages.typicalBuildingOutOfDate}</p>}
+              <div className={outOfDate ? "typical-building-results typical-building-results-out-of-date" : "typical-building-results"}>
+                <EffectChart weights={weights} countsHarm={includesHarm} />
+                <dl className="typical-building-numbers">
+                  <div><dt>{messages.heatingDemand}</dt><dd>{messages.demandPerYear(oneDecimal(stored.heating_kwh_m2))}</dd></div>
+                  <div><dt>{messages.coolingDemand}</dt><dd>{messages.demandPerYear(oneDecimal(stored.cooling_kwh_m2))}</dd></div>
+                  <div>
+                    <dt>{messages.countedHours}<SettingTooltip settingLabel={messages.countedHours} help={messages.countedHoursNote} /></dt>
+                    <dd>{stored.counted_hours == null ? "?" : daytimeHours === null ? groupedDigits(stored.counted_hours)
+                      : messages.countedHoursOfDaytime(stored.counted_hours, daytimeHours)}</dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="project-dialog-buttons">
+        <button type="button" className="primary-button" onClick={onClose}>{messages.done}</button>
+      </div>
       {dialogs}
-    </div>
+    </>,
   );
 }

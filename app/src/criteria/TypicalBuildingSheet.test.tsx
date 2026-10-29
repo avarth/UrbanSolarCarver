@@ -193,8 +193,11 @@ function choose(select: HTMLSelectElement, value: string) {
   });
 }
 
+/** The library's dialog (Save as new, Rename, Delete) over the window, or null. */
+const libraryDialog = () => document.querySelector<HTMLElement>(".project-dialog:not(.project-dialog-wide)");
+
 async function submitDialog(name?: string) {
-  const dialog = document.querySelector<HTMLElement>(".project-dialog")!;
+  const dialog = libraryDialog()!;
   if (name !== undefined) {
     const field = dialog.querySelector<HTMLInputElement>("input")!;
     act(() => {
@@ -208,7 +211,7 @@ async function submitDialog(name?: string) {
 
 test("the sheet names the library entry and its source, says each basic group in one line, keeps Room, Roof and floor and Air under Advanced", async () => {
   await openSheet();
-  expect(document.activeElement).toBe(group("library").querySelector(".panel-section-header"));
+  expect(document.activeElement).toBe(find("h2"));
   expect(summaryOf("library")).toBe("Apartment, zone Β");
   expect(find(".typical-building-source")!.textContent).toBe(SOURCE_B);
   expect([...find(".typical-building-groups + .typical-building-library-actions + .typical-building-groups")!.querySelectorAll(".panel-section-title")]
@@ -254,12 +257,12 @@ test("a changed value is saved without the entry; the library says Changed from 
     .toBe("Apartment, zone Β is an example: Save as new keeps these values in the library.");
 
   click(buttonNamed("Save as new"));
-  expect(document.querySelector(".project-dialog h2")!.textContent).toBe("Save as new");
+  expect(libraryDialog()!.querySelector("h2")!.textContent).toBe("Save as new");
   await submitDialog("Apartment, zone β");     // the name of an example, another letter case
-  expect(document.querySelector(".project-dialog [role=alert]")!.textContent)
+  expect(libraryDialog()!.querySelector("[role=alert]")!.textContent)
     .toBe("A building named 'Apartment, zone β' is already in the library: choose another name.");
   await submitDialog("My flat");
-  expect(document.querySelector(".project-dialog")).toBeNull();
+  expect(libraryDialog()).toBeNull();
   expect(service.own.map((entry) => [entry.name, entry.values])).toEqual([["My flat", { ...ZONE_B, t_set_heating: 19 }]]);
   expect(lastSaved().library_id).toBe("own-1");
   expect(summaryOf("library")).toBe("My flat");
@@ -286,15 +289,15 @@ test("an own entry takes the changed values with Save to library, and is renamed
 
   openGroup("library");
   click(group("library").querySelector<HTMLButtonElement>('[aria-label="Rename My flat"]')!);
-  expect(document.querySelector(".project-dialog h2")!.textContent).toBe("Rename My flat");
+  expect(libraryDialog()!.querySelector("h2")!.textContent).toBe("Rename My flat");
   await submitDialog("   ");
-  expect(document.querySelector(".project-dialog [role=alert]")!.textContent).toBe("Give the building a name.");
+  expect(libraryDialog()!.querySelector("[role=alert]")!.textContent).toBe("Give the building a name.");
   await submitDialog("Top floor");
   expect(service.own[0].name).toBe("Top floor");
   expect(entryButton("own-1").textContent).toBe("Top floor");
 
   click(group("library").querySelector<HTMLButtonElement>('[aria-label="Delete Top floor"]')!);
-  expect(document.querySelector(".project-dialog p")!.textContent).toBe("Top floor leaves the library. Projects that use it keep their own copy.");
+  expect(libraryDialog()!.querySelector("p")!.textContent).toBe("Top floor leaves the library. Projects that use it keep their own copy.");
   await submitDialog();
   expect(service.own).toEqual([]);
   expect(group("library").querySelector('[data-library-entry="own-1"]')).toBeNull();
@@ -340,7 +343,7 @@ test("a project without a building shows only the library, open, and choosing an
   expect(find('[data-section="use"]')).toBeNull();
   expect(find(".typical-building-calculate")).toBeNull();
   expect(buttonNamed("Save as new")).toBeUndefined();
-  expect(document.activeElement).toBe(group("library").querySelector(".panel-section-header"));
+  expect(document.activeElement).toBe(find("h2"));
   openGroup("library");
   expect(summaryOf("library")).toBe("None chosen");
   openGroup("library");
@@ -488,9 +491,93 @@ test("the colours run from white to red and to blue; a project from no entry, or
   expect(libraryGroupsOf([own, ...EXAMPLES]).map(({ name, entries }) => [name, entries.length])).toEqual([[KENAK_GROUP, 3], [ASHRAE_GROUP, 1], ["Your buildings", 1]]);
 });
 
-test("while the sheet is open the 3D view's Out of date stamp goes to its right, not under it", () => {
+test("the typical building opens as a modal window: aria-modal, its title takes the focus, × and Done close it", async () => {
+  await openSheet();
+  const window = find('[role="dialog"][aria-modal="true"]')!;
+  expect(window.classList.contains("project-dialog-wide")).toBe(true);
+  expect(window.contains(find("#sheet"))).toBe(true);
+  const title = find("h2")!;
+  expect(title.textContent).toBe("Typical building");
+  expect(window.getAttribute("aria-labelledby")).toBe(title.id);
+  expect(document.activeElement).toBe(title);
+  click(find<HTMLButtonElement>('button[aria-label="Close"]')!);
+  expect(closed).toBe(1);
+  click(buttonNamed("Done"));
+  expect(closed).toBe(2);
+});
+
+test("the short windows (reading, no building chosen) are the same modal window, closed by ×, without Done", async () => {
+  service.values = null;
+  service.libraryId = null;
+  service.libraryName = null;
+  await openSheet();
+  expect(find('[role="dialog"][aria-modal="true"].project-dialog-wide')).not.toBeNull();
+  expect(document.activeElement).toBe(find("h2"));
+  expect(find(".typical-building-window-columns")).toBeNull();
+  expect(buttonNamed("Done")).toBeUndefined();
+  click(find<HTMLButtonElement>('button[aria-label="Close"]')!);
+  expect(closed).toBe(1);
+});
+
+test("Escape closes the window; in a library dialog over it, Escape closes only that dialog", async () => {
+  await openSheet();
+  click(buttonNamed("Save as new"));
+  const inner = libraryDialog()!;
+  act(() => inner.querySelector("input")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  expect(closed).toBe(0);
+  expect([...document.querySelectorAll(".project-dialog h2")].map((title) => title.textContent)).toEqual(["Typical building"]);
+  act(() => find("h2")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  expect(closed).toBe(1);
+});
+
+test("Tab stays inside the window, and inside a library dialog over it", async () => {
+  await openSheet();
+  const window = find<HTMLElement>('[role="dialog"]')!;
+  const controls = () => [...window.querySelectorAll<HTMLElement>("button, input, select")].filter((control) => !(control as HTMLButtonElement).disabled);
+  const tab = (shiftKey = false) => act(() => document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey, bubbles: true, cancelable: true })));
+  // Shift+Tab from the title (which has the focus) goes to the last control; Tab from the last goes to the first.
+  tab(true);
+  expect(document.activeElement).toBe(buttonNamed("Done"));
+  tab();
+  expect(document.activeElement).toBe(controls()[0]);
+  tab(true);
+  expect(document.activeElement).toBe(buttonNamed("Done"));
+  // Over a library dialog the innermost one keeps it.
+  click(buttonNamed("Save as new"));
+  const inner = libraryDialog()!;
+  const innerControls = [...inner.querySelectorAll<HTMLElement>("button, input")];
+  innerControls[innerControls.length - 1].focus();
+  tab();
+  expect(document.activeElement).toBe(innerControls[0]);
+  tab(true);
+  expect(document.activeElement).toBe(innerControls[innerControls.length - 1]);
+});
+
+test("the values are in the left column and Calculate, the chart and the numbers in the right one", async () => {
+  await openSheet();
+  await act(async () => { calculateButton().click(); });
+  await settle();
+  const values = find(".typical-building-window-columns > .typical-building-window-values")!;
+  const results = find(".typical-building-window-columns > .typical-building-window-results")!;
+  expect(values.querySelector(".typical-building-groups")).not.toBeNull();
+  expect(values.querySelector(".typical-building-library-actions")).not.toBeNull();
+  expect(values.querySelector(".typical-building-advanced")).not.toBeNull();
+  expect(values.querySelector(".typical-building-calculate")).toBeNull();
+  expect(results.querySelector(".typical-building-calculate")).not.toBeNull();
+  expect(results.querySelector(".weights-chart")).not.toBeNull();
+  expect(results.querySelector(".typical-building-numbers")).not.toBeNull();
+  expect(results.querySelector(".typical-building-groups")).toBeNull();
+  // Done ends the window, under both columns.
+  expect(find(".project-dialog-buttons")!.previousElementSibling).toBe(find(".typical-building-window-columns"));
+});
+
+test("the window is a modal frame in two columns from 900 px: no fixed sheet beside the panel, no stamp moved aside for it", () => {
   const css = readFileSync("src/steps/steps.css", "utf8").replace(/\r\n/g, "\n");
-  expect(css).toMatch(/\.workspace:has\(\.typical-building-sheet\) \.viewer-out-of-date \{\n {2}position: fixed;\n {2}top: calc\(48px \+ 12px\);\n {2}left: calc\(340px \+ 8px \+ 360px \+ 12px\);/);
-  expect(css).toMatch(/\.typical-building-sheet \{\n {2}position: fixed;\n {2}top: calc\(48px \+ 12px\);\n {2}left: calc\(340px \+ 8px\);/);
-  expect(css).toMatch(/\.typical-building-sheet \{[^}]*\n {2}width: 360px;/);
+  const wide = css.match(/@media \(min-width: 900px\) \{[\s\S]*?\n\}/)![0];
+  expect(wide).toMatch(/\.typical-building-window-columns \{[^}]*display: grid;[^}]*grid-template-columns: minmax\(0, 440px\) minmax\(0, 1fr\)/);
+  expect(wide).toMatch(/\.project-dialog-wide \{[^}]*width: min\(880px, 100%\)/);
+  expect(wide).toMatch(/\.typical-building-window-values \{[^}]*overflow-y: auto/);
+  expect(css).toMatch(/\.project-dialog-wide \{[^}]*max-height: calc\(100vh - 64px\)/);
+  expect(css).not.toMatch(/\.typical-building-sheet \{[^}]*position: fixed/);
+  expect(css).not.toContain("viewer-out-of-date");
 });

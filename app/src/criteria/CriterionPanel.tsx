@@ -7,7 +7,7 @@
 // that is off needs neither test surfaces nor a weather file, and its closed Carving rule reads Off. The notice of a new weather file
 // is under the Settings header, open or closed. In Solar usefulness, Settings starts with Which hours count: Cold hours (the balance
 // temperature rule) or Energy-weighted, which hides the balance temperature and shows the typical building's box, whose Edit
-// building opens its sheet beside the panel (TypicalBuildingSheet).
+// building opens its window (TypicalBuildingSheet).
 import { useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { InputFileInfo } from "../api_client/client";
 import { messages } from "../messages";
