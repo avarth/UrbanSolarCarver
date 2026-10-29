@@ -117,6 +117,36 @@ test("Add criterion and Duplicate open the new criterion's editor; Delete return
   expect(document.activeElement).toBe(step().querySelector('.criterion-card[aria-current="true"] .criterion-card-select'));
 });
 
+test("All criteria gives the focus to the selected card once the list shows; a later change of the selection on the list does not move it", () => {
+  const criteria = [entry("1", "A"), entry("2", "B")];
+  const onShowsChange = vi.fn();
+  const view = (shows: "list" | "editor", selectedId: string) =>
+    <CriteriaStep panel={PANEL} shows={shows} onShowsChange={onShowsChange} list={listProps(criteria, { selectedId })} />;
+  rendered = renderForTest(view("editor", "2"));
+  click(buttonNamed("All criteria")!);
+  expect(onShowsChange).toHaveBeenLastCalledWith("list");
+  rendered.rerender(view("list", "2"));
+  expect(document.activeElement).toBe(step().querySelectorAll(".criterion-card-select")[1]);
+  buttonNamed("Add criterion")!.focus();
+  rendered.rerender(view("list", "1"));
+  expect(document.activeElement).toBe(buttonNamed("Add criterion"));
+});
+
+test("after a Delete, a later change of the selection on the list does not move the focus", async () => {
+  const criteria = [entry("1", "A"), entry("2", "B"), entry("3", "C")], left = [criteria[0], criteria[2]];
+  const view = (selectedId: string, shown = criteria, onDelete?: () => Promise<string | null>) =>
+    <CriteriaStep panel={PANEL} shows="list" onShowsChange={() => {}} list={listProps(shown, { selectedId, onDelete })} />;
+  // The parent has the next criterion selected when the request is answered.
+  rendered = renderForTest(view("2", criteria, async () => { rendered!.rerender(view("3", left)); return null; }));
+  await act(async () => click(step().querySelectorAll(".action-menu-button")[1]));
+  await act(async () => click([...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "Delete")!));
+  await act(async () => click([...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((button) => button.textContent === "Delete")!));
+  expect(document.activeElement).toBe(step().querySelectorAll(".criterion-card-select")[1]);
+  buttonNamed("Add criterion")!.focus();
+  rendered.rerender(view("1", left));
+  expect(document.activeElement).toBe(buttonNamed("Add criterion"));
+});
+
 test("a refusal of the header's switch is said under the header", async () => {
   rendered = renderForTest(<CriteriaStep panel={PANEL} shows="editor" onShowsChange={() => {}}
                                          list={listProps([entry("1", "A")], { onSetBypassed: async () => "A run is in progress." })} />);

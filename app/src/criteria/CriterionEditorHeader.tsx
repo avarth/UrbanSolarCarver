@@ -12,6 +12,7 @@ import type { CriterionMenuItem } from "./CriterionCard";
 import "../steps/steps.css";
 
 export interface CriterionEditorHeaderProps {
+  /** The criterion the editor shows: its colour, name, mode, and whether the chain uses it. */
   entry: CriterionEntry;
   /** Its result while current, else the words of its status. */
   line: string;
@@ -21,15 +22,17 @@ export interface CriterionEditorHeaderProps {
   count: number;
   /** Back to the list of the criteria. */
   onShowList: () => void;
-  /** Open the criterion before or after this one. */
+  /** Open the criterion before this one in carving order. */
   onPrevious: () => void;
+  /** Open the criterion after this one in carving order. */
   onNext: () => void;
   /** Why the criterion cannot be changed now (a run is in progress); null when it can. */
   disabledReason: string | null;
   /** Why Delete waits (the only criterion); null when it can be chosen. */
   deleteDisabledReason: string | null;
-  /** The switch was turned: *on* true skips the criterion in the chain (the switch was turned off). */
+  /** The switch was turned: *on* true means the chain skips the criterion (the switch was turned off), false that it uses it again. */
   onSetBypassed: (on: boolean) => void;
+  /** An item of the menu was chosen: Rename, Duplicate or Delete. */
   onChoose: (item: CriterionMenuItem) => void;
 }
 
