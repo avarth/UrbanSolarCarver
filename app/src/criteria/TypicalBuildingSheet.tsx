@@ -1,9 +1,10 @@
 // The typical building of the project (one per project, shared by its energy-weighted Solar usefulness criteria): the box in a
 // criterion's Settings that names the library entry it came from and the state of its weights, and the sheet beside the criterion
 // panel where it is edited and calculated, as Simulate's study popover sits beside its list. The sheet has the library at the top
-// (the examples by group, then the user's own entries; choosing one replaces the project's copy; Save to library, Save as new,
-// rename and delete of own entries), the values in folded groups with a line each (Use, Fabric, Summer shading, and under Advanced:
-// Room, Roof and floor, Air), Calculate, then the effect of each hour's sun as a day-by-hour chart and three numbers. Each change is
+// (the examples by the groups the service names, then the user's own entries; choosing one replaces the project's copy; Save to
+// library, Save as new, rename and delete of own entries), the values in folded groups with a line each (Use, Fabric, Summer
+// shading, and under Advanced: Room, Roof and floor, Air), Calculate, then the effect of each hour's sun as a day-by-hour chart and
+// three numbers. A new project has no building: the box asks to choose one, and the sheet shows only the library, open. Each change is
 // saved at once (use_typical_building.ts): a number when its field is left or Enter is pressed, the other controls on the change; a
 // refused value shows its error at its field, and its group opens. While the building or the weather file differs from the one
 // calculated, the chart is dimmed and Calculate reads Calculate again. The sheet is a non-modal dialog: Escape and Close end it,
@@ -28,25 +29,18 @@ const BUILDING_GROUPS = [...BASIC_GROUPS, ...ADVANCED_GROUPS];
 // The values each group holds, as the service names their fields ("wwr.sw" is in Room by "wwr").
 const VALUES_OF_GROUP: Record<BuildingGroupId, readonly string[]> = {
   use: ["schedule", "t_set_heating", "t_set_cooling", "gains_w_m2", "fresh_air_m3h_m2", "heat_recovery"],
-  fabric: ["u_wall", "u_window", "g_value", "mass_kind", "mass_class", "totee_category"],
+  fabric: ["u_wall", "u_window", "g_value", "mass_capacity_kj_m2k"],
   shading: ["shading_factor", "shading_start", "shading_end"],
   room: ["room", "height", "depth", "width", "length", "orientation", "wwr"],
   roof_and_floor: ["roof_exposed", "u_roof", "floor_exposed", "u_floor"],
-  air: ["infiltration_m3h_m2_window"],
+  air: ["ach_infiltration"],
 };
-const LIBRARY_GROUPS = ["apartment", "office", "test", "own"] as const;
-const SCHEDULES = ["apartment", "office", "always"];
-const MASS_KINDS = ["iso", "totee"];
+const SCHEDULES = ["residential", "office", "always"];
 const ROOMS = ["average", "box"];
 // The sides of each room (typical_building.WWR_SIDES): the average room is turned 45°, its walls face NE, SE, SW and NW.
 const SIDES_OF_ROOM: Record<string, readonly string[]> = { average: ["ne", "se", "sw", "nw"], box: ["north", "east", "south", "west"] };
 // The keys of the two rooms that are not shared (the window shares name the room's sides).
 const ROOM_KEYS = ["depth", "width", "length", "orientation", "wwr"];
-// Thermal capacity per m² of floor, kJ/m²K: the ISO 13790 classes (simulated_weights.MASS_CLASSES) and the ΤΟΤΕΕ 20701-1/2017
-// categories of table 3.14 with the reference building's value (typical_building.TOTEE_CATEGORIES).
-const ISO_CAPACITY: Record<string, number> = { very_light: 80, light: 110, medium: 165, heavy: 260, very_heavy: 370 };
-const TOTEE_CAPACITY: Record<string, number> = { reference: 250, 1: 80, 2: 110, 3: 165, 4: 230, 5: 280, 6: 300 };
-const TOTEE_CATEGORIES = ["reference", "1", "2", "3", "4", "5", "6"];
 const DAYS_IN_YEAR = 365;
 const HOURS_IN_DAY = 24;
 const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -63,11 +57,6 @@ const roomOf = (values: TypicalBuildingValues) => (values.room === "box" ? "box"
 const sharesOf = (values: TypicalBuildingValues) => (typeof values.wwr === "object" && values.wwr !== null ? values.wwr as Record<string, unknown> : {});
 const shareOf = (shares: Record<string, unknown>, side: string) => (typeof shares[side] === "number" ? (shares[side] as number) : 0);
 const roundedTo = (value: number, decimals: number) => Math.round(value * 10 ** decimals) / 10 ** decimals;
-
-/** The thermal capacity the values give, kJ/m²K: of the ISO class or of the ΤΟΤΕΕ category, as mass_kind says; null when unknown. */
-export function capacityOf(values: TypicalBuildingValues): number | null {
-  return (values.mass_kind === "totee" ? TOTEE_CAPACITY[String(values.totee_category)] : ISO_CAPACITY[String(values.mass_class)]) ?? null;
-}
 
 /**
  * The values with the other kind of room: the average room of depth d is the box 4d × 4d turned 45° whose north, east, south and
@@ -101,14 +90,14 @@ function sharesSummary(values: TypicalBuildingValues): string {
   return sides.filter((side) => shareOf(shares, side) > 0).map((side) => `${messages.typicalBuildingSideInitials[side]} ${formattedNumber(shareOf(shares, side))}`).join(", ");
 }
 
-/** The line a closed group says: "Apartment hours, 20 to 26 °C, gains 6 W/m²", "U 0.5 and 3 W/m²K, g 0.55, mass 250 kJ/m²K", ... */
+/** The line a closed group says: "Residential hours, 20 to 26 °C, gains 6 W/m²", "U 0.5 and 3 W/m²K, g 0.55, mass 250 kJ/m²K", ... */
 export function buildingGroupSummary(group: BuildingGroupId, values: TypicalBuildingValues): string {
   const text = (key: string) => numberText(numberOf(values, key));
   switch (group) {
     case "use":
       return messages.useSummary(messages.scheduleWords[String(values.schedule)] ?? String(values.schedule), text("t_set_heating"), text("t_set_cooling"),
                                  text("gains_w_m2"));
-    case "fabric": return messages.fabricSummary(text("u_wall"), text("u_window"), text("g_value"), numberText(capacityOf(values)));
+    case "fabric": return messages.fabricSummary(text("u_wall"), text("u_window"), text("g_value"), text("mass_capacity_kj_m2k"));
     case "shading": {
       const factor = numberOf(values, "shading_factor");
       if (factor === null) return messages.noShading;
@@ -119,12 +108,13 @@ export function buildingGroupSummary(group: BuildingGroupId, values: TypicalBuil
         : messages.boxRoomSummary(text("width"), text("length"), text("height"), text("orientation"), sharesSummary(values));
     case "roof_and_floor":
       return messages.roofAndFloorSummary(values.roof_exposed === true ? text("u_roof") : null, values.floor_exposed === true ? text("u_floor") : null);
-    case "air": return messages.airSummary(text("infiltration_m3h_m2_window"));
+    case "air": return messages.airSummary(text("ach_infiltration"));
   }
 }
 
-/** What the building is, by its library entry: its name, "Changed from" it, or that it is gone from the library. */
+/** What the building is, by its library entry: none chosen, its name, "Changed from" it, or that it is gone from the library. */
 export function libraryLineOf(stored: TypicalBuildingReply, library: readonly TypicalBuildingLibraryEntry[] | null): string {
+  if (stored.state === "not_chosen") return messages.noBuildingChosen;
   const name = stored.library_name;
   if (name === null) return messages.notFromLibrary;
   if (library !== null && !library.some((entry) => entry.id === stored.library_id)) return messages.goneFromLibrary(name);
@@ -142,7 +132,8 @@ interface TypicalBuildingBoxProps {
 
 /**
  * In a criterion's Settings: the library entry of the building as stored ("Changed from" it when it differs), the state of its
- * weights, and Edit building. A value refused in the sheet is not in it: the run uses the stored building.
+ * weights, and Edit building; without a building, that none is chosen and Choose building. A value refused in the sheet is not in
+ * it: the run uses the stored building.
  */
 export function TypicalBuildingBox({ building, sheetOpen, sheetId, onToggleSheet, editButton }: TypicalBuildingBoxProps) {
   const titleId = useId();
@@ -157,14 +148,15 @@ export function TypicalBuildingBox({ building, sheetOpen, sheetId, onToggleSheet
         <>
           <p className="typical-building-box-type">{libraryLineOf(stored, building.library)}</p>
           <p className="typical-building-box-state">
-            {stored.state === "current" ? messages.typicalBuildingStates.current
-              : `${messages.typicalBuildingStates[stored.state]}. ${messages.typicalBuildingRunCalculates}`}
+            {stored.state === "not_chosen" ? messages.chooseBuildingToRun
+              : stored.state === "current" ? messages.typicalBuildingStates.current
+                : `${messages.typicalBuildingStates[stored.state]}. ${messages.typicalBuildingRunCalculates}`}
           </p>
         </>
       )}
       <button ref={editButton} type="button" className="secondary-button" aria-expanded={sheetOpen} aria-controls={sheetOpen ? sheetId : undefined}
               onClick={onToggleSheet}>
-        {messages.editBuilding}
+        {stored?.state === "not_chosen" ? messages.chooseBuilding : messages.editBuilding}
       </button>
     </div>
   );
@@ -411,19 +403,27 @@ interface LibraryProps {
   onDialog: (dialog: LibraryDialog) => void;
 }
 
+/**
+ * The groups of the library in order: the examples' groups as the service names them, in the order of their first entry, then the
+ * user's own entries (group null) as Your buildings; a group without entries is left out.
+ */
+export function libraryGroupsOf(library: readonly TypicalBuildingLibraryEntry[]): { name: string; entries: TypicalBuildingLibraryEntry[] }[] {
+  const exampleGroups = [...new Set(library.flatMap((entry) => (entry.group === null ? [] : [entry.group])))];
+  return [...exampleGroups.map((name) => ({ name, entries: library.filter((entry) => entry.group === name) })),
+          { name: messages.ownBuildings, entries: library.filter((entry) => entry.group === null) }].filter((group) => group.entries.length > 0);
+}
+
 /** The library section: the entry the building is (or came from) in its line; open, the entries by group to choose from. */
 function Library({ building, stored, library, open, onToggle, disabled, onDialog }: LibraryProps) {
   const source = library.find((entry) => entry.id === stored.library_id)?.source ?? null;
   return (
     <PanelSection id="library" title={messages.typicalBuildingLibrary} summary={libraryLineOf(stored, library)} open={open} onToggle={onToggle} problem={false}
                   alwaysShown={source !== null && <p className="typical-building-source">{source}</p>}>
-      <p className="setting-note">{messages.libraryChooseNote}</p>
-      {LIBRARY_GROUPS.map((group) => {
-        const entries = library.filter((entry) => entry.group === group);
-        if (entries.length === 0) return null;
+      <p className="setting-note">{stored.state === "not_chosen" ? messages.libraryChooseFirst : messages.libraryChooseNote}</p>
+      {libraryGroupsOf(library).map(({ name, entries }) => {
         return (
-          <div key={group} className="typical-building-library-group">
-            <p className="typical-building-library-group-name">{messages.libraryGroups[group]}</p>
+          <div key={name} className="typical-building-library-group">
+            <p className="typical-building-library-group-name">{name}</p>
             <ul className="typical-building-library-list">
               {entries.map((entry) => {
                 const inUse = entry.id === stored.library_id && !stored.changed;
@@ -481,7 +481,8 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
   // The control that opened a dialog, which the focus goes back to (or the library's header, when it went with an entry).
   const dialogOpener = useRef<HTMLElement | null>(null);
   const disabled = disabledReason !== null;
-  const read = values !== null && stored !== null && library !== null;
+  const read = stored !== null && library !== null;
+  const notChosen = stored?.state === "not_chosen";
 
   // The focus goes to the library's header once the building is read, else to Close.
   const focused = useRef(false);
@@ -492,6 +493,10 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
     else closeButton.current?.focus();
     focused.current = read;
   }, [read]);
+  // Without a building the library opens, to choose one from.
+  useLayoutEffect(() => {
+    if (notChosen) setOpenGroups((open) => new Set([...open, "library"]));
+  }, [notChosen]);
   // A group with a field the last save refused opens, before the page is drawn, and Advanced with it when it is one of its groups.
   const groupsWithErrors = BUILDING_GROUPS.filter((group) => Object.keys(fieldErrors).some((field) => groupOfField(field) === group));
   useLayoutEffect(() => {
@@ -500,7 +505,7 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
   }, [groupsWithErrors.join(" ")]);
   // The weights of the last calculation, read while the sheet is open.
   useEffect(() => {
-    if (stored !== null && stored.state !== "missing" && weights === null) building.readWeights();
+    if (stored !== null && stored.state !== "missing" && stored.state !== "not_chosen" && weights === null) building.readWeights();
   }, [stored?.state, weights]);
 
   const closeOnEscape = (event: KeyboardEvent) => {
@@ -543,6 +548,37 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
       </div>
     );
   }
+  const dialogs = (
+    <>
+      {dialog?.kind === "save_as_new" && (
+        <LibraryNameDialog title={messages.saveAsNew} name="" confirmLabel={messages.save} onSave={building.saveAsNew} onClose={closeDialog} />
+      )}
+      {dialog?.kind === "rename" && (
+        <LibraryNameDialog title={messages.renameLibraryEntry(dialog.entry.name)} name={dialog.entry.name} confirmLabel={messages.rename}
+                           onSave={(name) => building.renameEntry(dialog.entry.id, name)} onClose={closeDialog} />
+      )}
+      {dialog?.kind === "delete" && (
+        <DeleteLibraryEntryDialog name={dialog.entry.name} onDelete={() => building.deleteEntry(dialog.entry.id)} onClose={closeDialog} />
+      )}
+    </>
+  );
+  const librarySection = (
+    <div className="typical-building-groups">
+      <Library building={building} stored={stored} library={library} open={openGroups.has("library")} onToggle={() => toggleGroup("library")}
+               disabled={disabled} onDialog={openDialog} />
+    </div>
+  );
+  if (notChosen || values === null) {
+    return (
+      <div ref={sheet} id={id} className="typical-building-sheet" role="dialog" aria-labelledby={titleId} onKeyDown={closeOnEscape}>
+        {header}
+        {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
+        {librarySection}
+        {building.problem !== null && <p className="setting-error" role="alert"><WarningIcon /><span>{building.problem}</span></p>}
+        {dialogs}
+      </div>
+    );
+  }
 
   const change = (key: string, value: unknown) => building.change({ ...values, [key]: value });
   const number = (key: string) => numberOf(values, key);
@@ -563,8 +599,6 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
     const error = fieldErrors[`wwr.${side}`];
     return error === undefined ? [] : [`${messages.typicalBuildingSides[side]}: ${error}`];
   })].filter((error) => error !== undefined);
-  const massKind = values.mass_kind === "totee" ? "totee" : "iso";
-  const toteeCategory = String(values.totee_category);
   const content: Record<BuildingGroupId, ReactNode> = {
     use: (
       <>
@@ -577,13 +611,7 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
     fabric: (
       <>
         {field("u_wall", units.uValue)}{field("u_window", units.uValue)}{field("g_value", undefined, notes.g_value)}
-        <BuildingSwitch name="mass_kind" value={massKind} options={MASS_KINDS} optionNames={messages.massKinds} error={fieldErrors.mass_kind} disabled={disabled}
-                        onChoose={(kind) => change("mass_kind", kind)} />
-        {massKind === "iso" ? choice("mass_class", Object.keys(ISO_CAPACITY), messages.massClasses, notes.iso) : (
-          <BuildingChoice name="totee_category" value={toteeCategory} options={TOTEE_CATEGORIES} optionNames={messages.toteeCategories}
-                          note={`${messages.toteeCategoryDescriptions[toteeCategory] ?? ""} ${notes.totee}`.trim()} error={fieldErrors.totee_category}
-                          disabled={disabled} onChoose={(category) => change("totee_category", category === "reference" ? category : Number(category))} />
-        )}
+        {field("mass_capacity_kj_m2k", units.capacity, notes.mass_capacity_kj_m2k)}
       </>
     ),
     shading: (
@@ -637,7 +665,7 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
         <p className="setting-note">{notes.roof_and_floor}</p>
       </>
     ),
-    air: field("infiltration_m3h_m2_window", units.airPerWindow, notes.infiltration_m3h_m2_window),
+    air: field("ach_infiltration", units.airChanges, notes.ach_infiltration),
   };
   const group = (id: BuildingGroupId) => (
     <PanelSection key={id} id={id} title={messages.typicalBuildingGroups[id]} summary={buildingGroupSummary(id, values)} open={openGroups.has(id)}
@@ -661,10 +689,7 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
     <div ref={sheet} id={id} className="typical-building-sheet" role="dialog" aria-labelledby={titleId} onKeyDown={closeOnEscape}>
       {header}
       {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
-      <div className="typical-building-groups">
-        <Library building={building} stored={stored} library={library} open={openGroups.has("library")} onToggle={() => toggleGroup("library")}
-                 disabled={disabled} onDialog={openDialog} />
-      </div>
+      {librarySection}
       <div className="typical-building-library-actions">
         <div className="typical-building-library-buttons">
           <button type="button" className="secondary-button" disabled={disabled || hasErrors || !ownEntry || !stored.changed} onClick={building.saveToLibrary}>
@@ -715,16 +740,7 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
           </div>
         </div>
       )}
-      {dialog?.kind === "save_as_new" && (
-        <LibraryNameDialog title={messages.saveAsNew} name="" confirmLabel={messages.save} onSave={building.saveAsNew} onClose={closeDialog} />
-      )}
-      {dialog?.kind === "rename" && (
-        <LibraryNameDialog title={messages.renameLibraryEntry(dialog.entry.name)} name={dialog.entry.name} confirmLabel={messages.rename}
-                           onSave={(name) => building.renameEntry(dialog.entry.id, name)} onClose={closeDialog} />
-      )}
-      {dialog?.kind === "delete" && (
-        <DeleteLibraryEntryDialog name={dialog.entry.name} onDelete={() => building.deleteEntry(dialog.entry.id)} onClose={closeDialog} />
-      )}
+      {dialogs}
     </div>
   );
 }

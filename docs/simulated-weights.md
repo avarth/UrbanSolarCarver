@@ -77,7 +77,7 @@ In Grasshopper, **USC_Archetype** assembles the archetype from five family feede
 
 ## In the app
 
-In the browser app a Solar usefulness criterion offers the weights as **Which hours count**: **Energy-weighted** (the other choice, **Cold hours**, is the balance temperature rule). The app describes the model as a simple hourly model of one room (ISO 13790) and does not use the name 5R1C, which stays the engine's. A project has one **typical building**, the archetype of every energy-weighted criterion, chosen from a library and edited in a sheet beside the criterion's panel ([Browser UI: the typical building](ui.md#the-typical-building)).
+In the browser app a Solar usefulness criterion offers the weights as **Which hours count**: **Energy-weighted** (the other choice, **Cold hours**, is the balance temperature rule). The app describes the model as a simple hourly model of one room, names no standard in its labels and help, and does not use the name 5R1C, which stays the engine's. A project has one **typical building**, the archetype of every energy-weighted criterion, chosen from a library and edited in a sheet beside the criterion's panel ([Browser UI: the typical building](ui.md#the-typical-building)).
 
 ISO 13790:2008 has been withdrawn and replaced by EN ISO 52016-1:2017, whose hourly method gives each building element several nodes instead of one lumped mass. The engine keeps the 13790 method, the one validated against RC_BuildingSimulator.
 
@@ -87,16 +87,18 @@ The sheet's values (`local_web_service/typical_building.py`, `archetype_of`) bec
 
 | Sheet | Archetype |
 |-------|-----------|
-| Hours in use: Apartment (6:00 to 24:00 every day), Office (8:00 to 18:00 Monday to Friday) or Always | the hours in which the internal gains and the fresh air apply, as 8,760-value `internal_gains_w_m2` and `ach_vent` (0 outside them); Always gives one value each. The weekday of 1 January is the weather file's (its DATA PERIODS line; Monday when it gives none) |
+| Hours in use: Residential (6:00 to 24:00 every day), Office (8:00 to 18:00, Monday to Friday) or Always | the hours in which the internal gains and the fresh air apply, as 8,760-value `internal_gains_w_m2` and `ach_vent` (0 outside them); Always gives one value each. The weekday of 1 January is the weather file's (its DATA PERIODS line; Monday when it gives none) |
 | Set points, heat recovery | `t_set_heating`, `t_set_cooling`, `heat_recovery` |
 | Internal gains while in use, W/m² | `internal_gains_w_m2` in the hours in use |
 | Fresh air while in use, m³/h per m² of floor | `ach_vent` = fresh air / storey height in the hours in use |
-| Infiltration, m³/h per m² of window | `ach_infiltration` = infiltration × window area / volume, in every hour |
+| Infiltration, air changes per hour | `ach_infiltration`, in every hour |
 | U of the walls, of the windows; whole-window g | `u_wall`, `u_window`, `g_value` |
-| Thermal mass: an ISO 13790 class, or a ΤΟΤΕΕ category or the reference building's value | `mass_class`, or `mass_capacity_kj_m2k` with the effective mass area of the ISO class nearest in capacity |
+| Thermal capacity, kJ/m²K of floor | `mass_capacity_kj_m2k`; the effective mass area is that of the ISO 13790 class nearest in capacity |
 | Summer shading: one factor and a period of dates | `shading_hot` with `shading_hot_period` (days of the year); none outside it |
 | Room | the shoebox `width`, `length`, `height`, `orientation`, `wwr` |
 | Roof and floor, exposed or not, each with its U | `roof_exposed`, `u_roof`, `floor_exposed`, `u_floor` |
+
+The three cases of use are examples of hours, not an editor: gains and fresh air are on in the hours of the case and off outside them, with no holidays. The project's values (project.json, the library's YAML files) use the keys of `typical_building.VALUE_KEYS`: `schedule` (`residential`, `office`, `always`), `t_set_heating`, `t_set_cooling`, `gains_w_m2`, `fresh_air_m3h_m2`, `heat_recovery`, `u_wall`, `u_window`, `g_value`, `mass_capacity_kj_m2k`, `shading_factor` (null for none), `shading_start`, `shading_end` ("MM-DD"), `room` (`average` with `depth`, or `box` with `width`, `length`, `orientation`), `height`, `wwr`, `roof_exposed`, `u_roof`, `floor_exposed`, `u_floor`, `ach_infiltration`.
 
 **The default room.** The weights do not depend on the size of the room, only on its ratios: facade and window per m² of floor, volume per m² of floor. The default room ("average") is a square plan turned 45° with all four walls exposed and the same window share on each, so its windows face NE, SE, SW and NW and no direction is favoured. Its side is four times the room depth, which gives it the facade per m² of floor of a room that deep with one facade: 6 m deep is a 24 × 24 m square. An average room of depth d is the box of width and length 4d at orientation 45° whose north, east, south and west shares are the NE, SE, SW and NW ones. The explicit box (width, length, orientation, a share per wall) is the other kind of room, used by the ASHRAE 140 boxes.
 
@@ -106,9 +108,15 @@ The weights describe one room with the mean exposure of the building's facades. 
 
 ### The library
 
-The library is apart from projects: the built-in examples, read-only, and the user's own entries, one YAML file each in `~/.urbansolarcarver/typical_buildings/` (beside the user preferences file), so an own entry serves every projects folder. A project keeps its own copy of the values and the name of the entry it came from; changing or deleting the entry does not change the project, and the sheet says "Changed from" the entry once the copy differs. A new project's building is "Apartment, zone Β".
+The library is apart from projects: the built-in examples, read-only, and the user's own entries, one YAML file each in `~/.urbansolarcarver/typical_buildings/` (beside the user preferences file), so an own entry serves every projects folder. A project keeps its own copy of the values and the name of the entry it came from; changing or deleting the entry does not change the project, and the sheet says "Changed from" the entry once the copy differs.
 
-**KENAK reference building.** The eight examples "Apartment, zone Α" to "Office, zone Δ" take every value from the reference building of ΤΟΤΕΕ 20701-1/2017 (ΦΕΚ Β' 4003/17.11.2017, [PDF](https://web.tee.gr/wp-content/uploads/%CE%95%CE%93%CE%9A%CE%A1%CE%99%CE%A3%CE%97-TOTEE-1.pdf)):
+A new project has **no typical building** until one is chosen from the library: the box in the criterion's Settings says "None chosen", and a run with an energy-weighted criterion that is on is refused as a missing input (`missing_inputs` names `typical_building`) until one is chosen. A building stored with the keys of an earlier form of the values (before 2026-10-29) reads as none chosen, and an own entry with such keys is left out of the library.
+
+The examples are grouped by the source of their values; the values come only from these examples, and the form offers no lists of standard values.
+
+### The library examples
+
+**Greece, KENAK reference building.** The eight examples "Apartment, zone Α" to "Office, zone Δ" take every value from the reference building of ΤΟΤΕΕ 20701-1/2017 (ΦΕΚ Β' 4003/17.11.2017, [PDF](https://web.tee.gr/wp-content/uploads/%CE%95%CE%93%CE%9A%CE%A1%CE%99%CE%A3%CE%97-TOTEE-1.pdf)); each example's source text names the tables:
 
 | Value | Zone Α | Zone Β | Zone Γ | Zone Δ | ΤΟΤΕΕ 20701-1/2017 |
 |-------|--------|--------|--------|--------|--------------------|
@@ -119,7 +127,7 @@ The library is apart from projects: the built-in examples, read-only, and the us
 
 | Value | Apartment | Office | ΤΟΤΕΕ 20701-1/2017 |
 |-------|-----------|--------|--------------------|
-| Hours in use | 18 h, every day (6:00 to 24:00) | 10 h, weekdays (8:00 to 18:00) | table 2.1 (hours a day and days a week; which hours is the app's choice) |
+| Hours in use | Residential, 18 h every day (6:00 to 24:00) | Office, 10 h on weekdays (8:00 to 18:00) | table 2.1 (hours a day and days a week; which hours is the app's choice) |
 | Set points | 20 / 26 °C | 20 / 26 °C | table 2.2 |
 | Fresh air while in use | 0.75 m³/h per m² | 3.0 m³/h per m² | table 2.3 |
 | Heat recovery | none (natural ventilation) | 0.5 | §4.4.1, reference ventilation |
@@ -127,28 +135,26 @@ The library is apart from projects: the built-in examples, read-only, and the us
 | Equipment × diversity | 4 × 0.5 = 2 W/m² | 15 × 0.3 = 4.5 W/m² | table 2.8 |
 | Lighting | none (not counted for homes) | 16 W/m² (500 lx) | tables 2.4 and 2.4α |
 | Internal gains while in use | 6 W/m² | 28.5 W/m² | the sum |
-| Thermal mass | 250 kJ/m²K | 250 kJ/m²K | §4.2.4 (ΚΕΝΑΚ article 9) |
+| Thermal capacity | 250 kJ/m²K | 250 kJ/m²K | §4.2.4 (ΚΕΝΑΚ article 9) |
 
-The same for all eight: whole-window g 0.55 (glass 0.76 at normal incidence, × 0.9 for the mean over the angles, × 0.8 for a 20 % frame, §4.2.7); infiltration 5.5 m³/h per m² of window (§4.4.1); summer shading 0.77, the mean of the reference building's factors for NE, SE, SW and NW windows (0.80, 0.73, 0.73, 0.80, §4.3.1), over the zone's cooling period and none outside it; the average room 6 m deep with a 3 m storey, 40 % window share on each side, roof and floor adiabatic (their U values are the zone's, so turning them on gives the KENAK values). The 250 kJ/m²K is not one of the categories of table 3.14; it takes the effective mass area of the ISO class nearest in capacity (heavy, 260).
+The same for all eight: whole-window g 0.55 (glass 0.76 at normal incidence, × 0.9 for the mean over the angles, × 0.8 for a 20 % frame, §4.2.7); infiltration 5.5 m³/h per m² of window (§4.4.1), which in the examples' room is 115.2 m² of window × 5.5 / 1,728 m³ = 0.37 air changes per hour (the value the examples carry, to 2 decimals; a room of another depth or window share has another value); summer shading 0.77, the mean of the reference building's factors for NE, SE, SW and NW windows (0.80, 0.73, 0.73, 0.80, §4.3.1), over the zone's cooling period and none outside it; the average room 6 m deep with a 3 m storey, 40 % window share on each side, roof and floor adiabatic (their U values are the zone's, so turning them on gives the KENAK values). The 250 kJ/m²K takes the effective mass area of the ISO 13790 class nearest in capacity (heavy, 260).
 
 The office lighting gain counts the reference building's full installed power, 16 W/m², in every hour of use. Daylight would lower it in a real office, so the office examples overstate the internal gains of sunny hours, and so the cooling and the harm.
 
-The thermal mass may also be given as a category of ΤΟΤΕΕ 20701-1/2017 table 3.14 (the sheet shows the construction of each): 1: 80 kJ/m²K, light timber frame with insulation on the inside; 2: 110, light steel frame with curtain walls or light insulated panels; 3: 165, concrete frame with lightweight blocks or plasterboard and suspended ceilings; 4: 230, load-bearing stone or solid brick walls with timber floors; 5: 280, concrete frame with hollow clay bricks; 6: 300, load-bearing stone or solid brick walls with concrete floors. The table holds categories 4 to 6 for insulation that is missing, outside or in the core of the wall; insulation on the inside puts the zone in category 3.
-
-**ASHRAE 140 boxes.** "ASHRAE 140 case 600 (light)" and "ASHRAE 140 case 900 (heavy)" are the test boxes of ANSI/ASHRAE Standard 140 (BESTEST): a free-standing box 8 × 6 × 2.7 m, walls and roof exposed, 12 m² of glass on the south wall (window share 0.556), the floor over outdoor air, 200 W of constant gains (4.17 W/m², every hour), infiltration 0.5 air changes per hour (5.4 m³/h per m² of window), set points 20 / 27 °C, no fresh air, no shading. The layers are those of the Modelica Buildings library's BESTEST data (LBNL); the U values were computed from them: walls 0.514 (600) and 0.512 (900), roof 0.318, floor 0.039 W/m²K. Case 600 is ISO class very light (its layers inside the insulation hold about 40 kJ/m²K), case 900 heavy (about 305 kJ/m²K). Some of their values are **not confirmed** against the standard's text, which could not be reached: the window U of 3.0 W/m²K (Modelica's ISO 13790 model uses 3.1), the glass SHGC of 0.787 (Modelica's uses 0.769), the × 0.9 that makes it the whole-window g of 0.71 (the app's choice, as for the KENAK g), and the surface coefficients used for the wall and roof U values. As a loose check on the Golden, CO weather (BESTEST uses Denver), the heating of case 600 falls in the range of the reference programs (ranges quoted from memory), while the cooling of both boxes is lower and the heating of case 900 higher. Treat the two boxes as a check of the model's behaviour, not as a validated BESTEST result.
+**ASHRAE 140 test cases.** "ASHRAE 140 case 600 (light)" and "ASHRAE 140 case 900 (heavy)" are the test boxes of ANSI/ASHRAE Standard 140 (BESTEST): a free-standing box 8 × 6 × 2.7 m, walls and roof exposed, 12 m² of glass on the south wall (window share 0.556), the floor over outdoor air, 200 W of constant gains (4.17 W/m², every hour), infiltration 0.5 air changes per hour, set points 20 / 27 °C, no fresh air, no shading. The layers are those of the Modelica Buildings library's BESTEST data (LBNL); the U values were computed from them: walls 0.514 (600) and 0.512 (900), roof 0.318, floor 0.039 W/m²K. Case 600 has a thermal capacity of 80 kJ/m²K, the ISO 13790 very light class (its layers inside the insulation hold about 40 kJ/m²K), case 900 260 kJ/m²K, the heavy class (about 305 kJ/m²K). Some of their values are **not confirmed** against the standard's text, which could not be reached: the window U of 3.0 W/m²K (Modelica's ISO 13790 model uses 3.1), the glass SHGC of 0.787 (Modelica's uses 0.769), the × 0.9 that makes it the whole-window g of 0.71 (the app's choice, as for the KENAK g), and the surface coefficients used for the wall and roof U values. As a loose check on the Golden, CO weather (BESTEST uses Denver), the heating of case 600 falls in the range of the reference programs (ranges quoted from memory), while the cooling of both boxes is lower and the heating of case 900 higher. Treat the two boxes as a check of the model's behaviour, not as a validated BESTEST result.
 
 On the bundled Golden, CO weather file the examples give (heating and cooling of the base run, and the hours with the sun up whose benefit weight is above 0.01, of 4,438):
 
 | Example | Heating, kWh/m² a year | Cooling, kWh/m² a year | Hours that count |
 |---------|-----------------------:|-----------------------:|-----------------:|
-| Apartment, zone Α | 48.9 | 22.7 | 2,460 |
-| Apartment, zone Β | 43.7 | 24.1 | 2,386 |
-| Apartment, zone Γ | 39.7 | 27.3 | 2,258 |
-| Apartment, zone Δ | 35.8 | 28.8 | 2,235 |
-| Office, zone Α | 33.1 | 40.2 | 2,027 |
-| Office, zone Β | 28.7 | 42.6 | 1,952 |
-| Office, zone Γ | 25.3 | 46.7 | 1,897 |
-| Office, zone Δ | 22.0 | 49.0 | 1,755 |
+| Apartment, zone Α | 49.1 | 22.6 | 2,459 |
+| Apartment, zone Β | 44.0 | 24.1 | 2,395 |
+| Apartment, zone Γ | 40.0 | 27.3 | 2,258 |
+| Apartment, zone Δ | 36.0 | 28.7 | 2,236 |
+| Office, zone Α | 33.4 | 40.1 | 2,028 |
+| Office, zone Β | 28.9 | 42.5 | 1,954 |
+| Office, zone Γ | 25.5 | 46.6 | 1,899 |
+| Office, zone Δ | 22.2 | 48.9 | 1,791 |
 | ASHRAE 140 case 600 | 94.9 | 77.6 | 2,958 |
 | ASHRAE 140 case 900 | 61.7 | 37.8 | 2,469 |
 
@@ -161,9 +167,9 @@ On the bundled Golden, CO weather file the examples give (heating and cooling of
 The weights are a *marginal, single-zone, schedule-free* physical signal. They capture effects the binary balance-point rule cannot (thermal lag, mass state, gain saturation), but the model makes the following simplifications on purpose:
 
 - **Single zone, lumped mass**: the weights are facade-independent within an hour; time-of-day carries the directional signal. One room stands for the whole building (the app's average room has the mean exposure of its facades), not a room per facade direction. Perimeter-zone effects are out of scope for a massing tool.
-- **Ideal, unlimited conditioning** at the air node, at constant set points: no setback. Internal gains and ventilation may follow an hourly schedule (the app's typical cases of use); infiltration and the set points do not.
+- **Ideal, unlimited conditioning** at the air node, at constant set points: no setback. Internal gains and ventilation may follow an hourly schedule (the app's three example cases of use); infiltration and the set points do not.
 - **Fixed air-change rates**: no night flushing, and no *adaptive* shading control. Without a declared `shading_hot` coefficient the `harm` channel is **overstated**, since real buildings have cheap defenses against summer sun that they lack for missing winter sun; declaring seasonal shading in the archetype makes harm a defensible estimate instead of a worst case. `include_harm` remains opt-in.
-- **Schedules without holidays**: the app's cases of use repeat every week of the year; the office lighting counts its full installed power in every hour of use, with no daylight.
+- **Schedules without holidays**: the app's example cases of use repeat every week of the year; the office lighting counts its full installed power in every hour of use, with no daylight.
 - **Marginal linearization**: the weights describe one *extra* watt at the archetype's operating point; window sizes and g-values in the archetype set where gains saturate, and are recorded in the artifact's provenance metadata.
 - **Unshaded derivation**: the weights are computed for an unshaded archetype while the carve itself creates shading context; a first-order acceptable inconsistency for massing studies.
 - **TMY weather**; the ISO coupling coefficients carry the standard's residential-European calibration provenance.

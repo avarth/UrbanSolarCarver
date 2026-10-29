@@ -103,7 +103,7 @@ class ProjectJson(BaseModel):
     criterion_records: dict[str, dict[str, StageRecord]] = Field(default_factory=dict)
     studies: list[StudyEntry] = Field(default_factory=list)     # the studies of the Simulate workspace, in the order shown
     next_study_id: int = 1      # the id the next study gets
-    typical_building: TypicalBuildingEntry | None = None    # None: the default entry (typical_building.DEFAULT_LIBRARY_ID), not calculated
+    typical_building: TypicalBuildingEntry | None = None    # None: none chosen yet (typical_building.building_of)
 
 
 StageState = Literal["current", "out_of_date", "missing"]
@@ -556,7 +556,7 @@ class TypicalBuildingLibraryEntry(BaseModel):
     """A building of the typical building library: a built-in example (read-only) or one of the user's own."""
     id: str
     name: str
-    group: Literal["apartment", "office", "test", "own"]    # test: the ASHRAE 140 boxes
+    group: str | None                   # an example's group, named by the source of its values; None for an own entry
     read_only: bool                     # true for the examples
     source: str | None                  # where an example's values come from; None for an own entry
     values: dict
@@ -583,12 +583,13 @@ class TypicalBuildingRequest(BaseModel):
 
 class TypicalBuildingReply(BaseModel):
     """The typical building and the state of its weights; the numbers come from the weights file and are None without one."""
-    values: dict
+    values: dict | None                 # None while no building is chosen
     library_id: str | None              # the library entry the building came from
     library_name: str | None            # its name now, or the name kept when it is gone
     changed: bool                       # the values differ from the entry's; false when there is no entry
-    # current: calculated for these values and weather file; out_of_date: for others; missing: never calculated
-    state: StageState
+    # current: calculated for these values and weather file; out_of_date: for others; missing: never calculated; not_chosen: the
+    # project has no building yet (choose one from the library)
+    state: Literal["current", "out_of_date", "missing", "not_chosen"]
     heating_kwh_m2: float | None = None     # the building's heating demand in a year, kWh per m² of floor
     cooling_kwh_m2: float | None = None     # its cooling demand
     counted_hours: int | None = None        # the hours with the sun up whose benefit weight is above 0.01
@@ -613,4 +614,4 @@ class StoredFileChangedReply(ErrorDetailReply):
 
 class MissingInputsReply(ErrorDetailReply):
     """The body of a run request that lacks input files."""
-    missing_inputs: list[str]   # max_volume, "test_surfaces:<criterion id>" (a criterion that is on protects nothing), "criteria" (none is on), weather; context and terrain are optional
+    missing_inputs: list[str]   # max_volume, "test_surfaces:<criterion id>" (a criterion that is on protects nothing), "criteria" (none is on), weather, typical_building (an energy-weighted criterion is on and none is chosen); context and terrain are optional

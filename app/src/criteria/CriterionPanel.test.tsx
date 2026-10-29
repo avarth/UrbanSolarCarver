@@ -218,7 +218,7 @@ const APARTMENT = { room: "average", height: 3, depth: 6, wwr: { ne: 0.4, se: 0.
 const BUILDING: TypicalBuildingHook = {
   stored: { values: APARTMENT, library_id: "kenak-apartment-b", library_name: "Apartment, zone Β", changed: false, state: "missing" },
   values: APARTMENT, readProblem: null, fieldErrors: {}, problem: null, calculating: false, weights: null,
-  library: [{ id: "kenak-apartment-b", name: "Apartment, zone Β", group: "apartment", read_only: true, source: null, values: APARTMENT }],
+  library: [{ id: "kenak-apartment-b", name: "Apartment, zone Β", group: "Greece, KENAK reference building", read_only: true, source: null, values: APARTMENT }],
   change: () => {}, choose: () => {}, saveToLibrary: () => {}, saveAsNew: async () => null, renameEntry: async () => null, deleteEntry: async () => null,
   calculate: () => {}, readWeights: () => {},
 };
@@ -251,6 +251,13 @@ test("in Solar usefulness, Settings starts with Which hours count: Cold hours sh
   rendered.rerender(<CriterionPanel {...panelProps({ form: formFor("benefit"), hoursCounted: hoursCounted({ energyWeighted: true, building: changed }) })} />);
   expect([...find(".typical-building-box")!.querySelectorAll("p")].map((line) => line.textContent))
     .toEqual(["Typical building", "Changed from Apartment, zone Β", "Calculated"]);
+
+  // A new project: no building yet, and the box asks to choose one.
+  const none = { ...BUILDING, values: null, stored: { values: null, library_id: null, library_name: null, changed: false, state: "not_chosen" as const } };
+  rendered.rerender(<CriterionPanel {...panelProps({ form: formFor("benefit"), hoursCounted: hoursCounted({ energyWeighted: true, building: none }) })} />);
+  expect([...find(".typical-building-box")!.querySelectorAll("p")].map((line) => line.textContent))
+    .toEqual(["Typical building", "None chosen", "Choose one from the library to run the analysis."]);
+  expect(find(".typical-building-box button")!.textContent).toBe("Choose building");
 });
 
 test("Edit building opens the typical building's sheet beside the panel; Close ends it and gives the focus back to Edit building", () => {

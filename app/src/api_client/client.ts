@@ -299,7 +299,7 @@ export async function deleteTypicalBuildingLibraryEntry(token: string, entryId: 
   await send(token, `/api/typical-building-library/${encodeURIComponent(entryId)}`, "DELETE");
 }
 
-/** The project's typical building (a copy of "Apartment, zone Β" before it is saved), the library entry it came from and the state of its weights. */
+/** The project's typical building (no values and the state not_chosen until one is chosen), the library entry it came from and the state of its weights. */
 export const getTypicalBuilding = (token: string, project: string) => requestJson<TypicalBuildingReply>(token, `${projectPath(project)}/typical-building`);
 
 /**

@@ -394,12 +394,13 @@ def run_settings(store: ProjectStore, name: str) -> RunSettings:
         criteria = {criterion_id: store.read_stored_config(name, criterion_id) for criterion_id in active_ids}
         building_users = [criterion.id for criterion in active if uses_typical_building(criterion)]
         building_key = typical_building.current_key(store, name, project_json) if building_users else None
+        building = typical_building.building_of(project_json) if building_users else None
         return RunSettings(
             inputs_revision=project_json.inputs_revision, criteria=criteria,
             test_surfaces_fingerprints={criterion_id: test_surfaces.fingerprint(project_folder, criterion_id) for criterion_id in active_ids},
             leaf_settings=criteria[active_ids[-1]] if active_ids else store.read_stored_config(name),
             weights_keys={criterion_id: building_key for criterion_id in building_users},
-            typical_building_values=typical_building.building_of(project_json).values if building_users else None)
+            typical_building_values=building.values if building is not None else None)
 
 
 def record_stages(store: ProjectStore, name: str, choice: StageChoice, settings: RunSettings) -> None:
@@ -427,8 +428,9 @@ def record_stages(store: ProjectStore, name: str, choice: StageChoice, settings:
 
 def missing_inputs(store: ProjectStore, name: str) -> list[str]:
     """What a run of the project still lacks: the required meshes without a joined file (the role), a criterion that is on and
-    protects nothing ("test_surfaces:<id>"), "criteria" when no criterion is on, and the weather file when the mode of a criterion
-    that is on reads one. Context and terrain are optional; a bypassed criterion needs nothing."""
+    protects nothing ("test_surfaces:<id>"), "criteria" when no criterion is on, the weather file when the mode of a criterion
+    that is on reads one, and the typical building (typical_building.MISSING_ROLE) when an energy-weighted criterion is on and the
+    project has none. Context and terrain are optional; a bypassed criterion needs nothing."""
     project_folder = store.open(name)
     absent = [role for role in REQUIRED_MESH_ROLES if not (project_folder / JOINED_FOLDER / f"{role}.ply").is_file()]
     active = active_criteria(store.criteria(name))
@@ -439,4 +441,7 @@ def missing_inputs(store: ProjectStore, name: str) -> list[str]:
     if (any(reads_weather_file(criterion.settings.get("mode")) for criterion in active)
             and not (project_folder / INPUTS_FOLDER / WEATHER_FILE_NAME).is_file()):
         absent.append(WEATHER_ROLE)
+    if (any(uses_typical_building(criterion) for criterion in active)
+            and typical_building.building_of(store.read_project_json(name)) is None):
+        absent.append(typical_building.MISSING_ROLE)
     return absent

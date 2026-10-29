@@ -727,22 +727,27 @@ export const messages = {
   whichHoursCountChoices: { cold_hours: "Cold hours", energy_weighted: "Energy-weighted" },
   energyWeightedSummary: (summary: string) => `Energy-weighted, ${summary}`,
   whichHoursCountHelp: "Cold hours: the sun of the hours colder than the balance temperature counts. Energy-weighted: each hour counts by " +
-    "what its sun saves a typical building in heating over the year, from a simple hourly model of one room (ISO 13790).",
+    "what its sun saves a typical building in heating over the year, from a simple hourly model of one room.",
   typicalBuilding: "Typical building",
   typicalBuildingStates: { current: "Calculated", out_of_date: "Changed since it was calculated", missing: "Not calculated yet" },
   // Under the state while the weights are not current: the run does it on its own.
   typicalBuildingRunCalculates: "Run analysis calculates it first.",
   typicalBuildingReading: "Reading the typical building",
   editBuilding: "Edit building",
+  // A project has no typical building until one is chosen from the library.
+  noBuildingChosen: "None chosen",
+  chooseBuilding: "Choose building",
+  chooseBuildingToRun: "Choose one from the library to run the analysis.",
   closeTypicalBuilding: "Close",
-  // The library of typical buildings, at the top of the sheet: the examples by group, then the user's own.
+  // The library of typical buildings, at the top of the sheet: the examples in the groups the service names, then the user's own.
   typicalBuildingLibrary: "Library",
-  libraryGroups: { apartment: "Apartment", office: "Office", test: "Test boxes", own: "Your buildings" } as Record<string, string>,
+  ownBuildings: "Your buildings",
   // What the building is, in the library section's line and the box in Settings.
   changedFrom: (entryName: string) => `Changed from ${entryName}`,
   goneFromLibrary: (entryName: string) => `${entryName}, no longer in the library`,
   notFromLibrary: "Not from the library",
   libraryChooseNote: "Choosing a building replaces the values below with its own.",
+  libraryChooseFirst: "The project has no typical building yet: choose one to start from, then change its values.",
   saveToLibrary: "Save to library",
   saveAsNew: "Save as new",
   exampleCannotChange: (entryName: string) => `${entryName} is an example: Save as new keeps these values in the library.`,
@@ -763,34 +768,15 @@ export const messages = {
   typicalBuildingFields: {
     schedule: "Hours in use", t_set_heating: "Heating set point", t_set_cooling: "Cooling set point", gains_w_m2: "Internal gains while in use",
     fresh_air_m3h_m2: "Fresh air while in use", heat_recovery: "Heat recovery", u_wall: "U of the walls", u_window: "U of the windows",
-    g_value: "Window solar transmittance (g)", mass_kind: "Thermal mass", mass_class: "ISO 13790 class", totee_category: "ΤΟΤΕΕ category",
+    g_value: "Window solar transmittance (g)", mass_capacity_kj_m2k: "Thermal capacity",
     shading_factor: "Shading factor", shading_start: "From", shading_end: "To", room: "Kind of room", height: "Storey height", depth: "Room depth",
     width: "Width, east to west", length: "Length, north to south", orientation: "Orientation", wwr: "Window share of each wall",
     roof_exposed: "Roof exposed", u_roof: "U of the roof", floor_exposed: "Floor exposed", u_floor: "U of the floor",
-    infiltration_m3h_m2_window: "Infiltration",
+    ach_infiltration: "Infiltration",
   } as Record<string, string>,
-  // The typical cases of use (ΤΟΤΕΕ 20701-1/2017 table 2.1 gives the hours a day; which hours is the app's choice).
-  schedules: { apartment: "Apartment: 6:00 to 24:00 every day", office: "Office: 8:00 to 18:00 Monday to Friday", always: "Always: every hour" } as Record<string, string>,
-  scheduleWords: { apartment: "Apartment hours", office: "Office hours", always: "Every hour" } as Record<string, string>,
-  massKinds: { iso: "ISO class", totee: "ΤΟΤΕΕ category" } as Record<string, string>,
-  massClasses: {
-    very_light: "Very light, 80 kJ/m²K", light: "Light, 110 kJ/m²K", medium: "Medium, 165 kJ/m²K", heavy: "Heavy, 260 kJ/m²K",
-    very_heavy: "Very heavy, 370 kJ/m²K",
-  } as Record<string, string>,
-  // ΤΟΤΕΕ 20701-1/2017 table 3.14 (typical_building.TOTEE_CATEGORIES): the label of each category and its construction.
-  toteeCategories: {
-    reference: "Reference building, 250 kJ/m²K", 1: "1: 80 kJ/m²K", 2: "2: 110 kJ/m²K", 3: "3: 165 kJ/m²K", 4: "4: 230 kJ/m²K", 5: "5: 280 kJ/m²K",
-    6: "6: 300 kJ/m²K",
-  } as Record<string, string>,
-  toteeCategoryDescriptions: {
-    reference: "The value ΤΟΤΕΕ 20701-1/2017 (§4.2.4, ΚΕΝΑΚ article 9) gives every zone of the reference building.",
-    1: "Light timber frame, infill of plasterboard or timber, insulation on the inside of walls, ceiling and floor.",
-    2: "Light steel frame, infill of curtain walls or light insulated panels.",
-    3: "Concrete frame, infill of lightweight concrete blocks or plasterboard, suspended ceilings.",
-    4: "Load-bearing stone or solid brick walls, timber floors.",
-    5: "Concrete frame, infill of hollow clay bricks.",
-    6: "Load-bearing stone or solid brick walls, concrete floors.",
-  } as Record<string, string>,
+  // The cases of use the hours come from (typical_building.SCHEDULES).
+  schedules: { residential: "Residential: 6:00 to 24:00 every day", office: "Office: 8:00 to 18:00, Monday to Friday", always: "Always" } as Record<string, string>,
+  scheduleWords: { residential: "Residential hours", office: "Office hours", always: "Every hour" } as Record<string, string>,
   roomKinds: { average: "Average room", box: "Box" } as Record<string, string>,
   typicalBuildingDay: "Day",
   typicalBuildingMonth: "Month",
@@ -799,17 +785,17 @@ export const messages = {
   } as Record<string, string>,
   typicalBuildingSideInitials: { ne: "NE", se: "SE", sw: "SW", nw: "NW", north: "N", east: "E", south: "S", west: "W" } as Record<string, string>,
   typicalBuildingUnits: {
-    metres: "m", degrees: "°", uValue: "W/m²K", celsius: "°C", wattsPerSquareMetre: "W/m²", airPerFloor: "m³/h per m²", airPerWindow: "m³/h per m² of window",
+    metres: "m", degrees: "°", uValue: "W/m²K", celsius: "°C", wattsPerSquareMetre: "W/m²", airPerFloor: "m³/h per m²", capacity: "kJ/m²K",
+    airChanges: "1/h",
   },
   typicalBuildingNotes: {
-    schedule: "Internal gains and fresh air apply in these hours, infiltration in every hour. ΤΟΤΕΕ 20701-1/2017 table 2.1 gives the hours a day.",
+    schedule: "Internal gains and fresh air apply in these hours, infiltration in every hour.",
     gains_w_m2: "People, equipment and lighting, per m² of floor.",
     fresh_air_m3h_m2: "Per m² of floor.",
     heat_recovery: "The share of the exhaust heat the ventilation recovers, 0 to 1.",
     g_value: "The whole window, frame included, 0 to 1.",
-    iso: "The classes of ISO 13790 (table 12), by thermal capacity per m² of floor.",
-    totee: "ΤΟΤΕΕ 20701-1/2017 table 3.14. Categories 4 to 6 hold when the insulation is missing, outside or in the core of the wall; " +
-      "with insulation on the inside the zone is category 3.",
+    mass_capacity_kj_m2k: "The heat the room's walls, floors and ceilings store per m² of floor for each degree they warm; " +
+      "a heavier construction stores more of the day's sun for the night.",
     shading_factor: "0 to 1 for every window; 1 lets all the sun through. Empty: no shading.",
     shading_period: "No shading outside these dates. An end before the start runs across the new year.",
     average: "A square room turned 45° with the same window share on its four walls (NE, SE, SW, NW), so no direction is favoured. " +
@@ -817,7 +803,7 @@ export const messages = {
     orientation: "Clockwise from north; 0 has the south wall facing south.",
     wwr: "The glazed share of each wall, 0 to 0.9.",
     roof_and_floor: "Off, no heat passes through it (adiabatic), as for a storey between others.",
-    infiltration_m3h_m2_window: "Per m² of window, in every hour.",
+    ach_infiltration: "Outdoor air leaking in, in room volumes per hour, in every hour.",
   },
   // The one line of each group of the sheet while it is closed.
   useSummary: (scheduleText: string, heatingText: string, coolingText: string, gainsText: string) =>
@@ -835,7 +821,7 @@ export const messages = {
     roofText === null && floorText === null ? "Both adiabatic"
       : roofText === null ? `Roof adiabatic, floor U ${floorText} W/m²K`
         : floorText === null ? `Roof U ${roofText} W/m²K, floor adiabatic` : `Roof U ${roofText}, floor U ${floorText} W/m²K`,
-  airSummary: (infiltrationText: string) => `Infiltration ${infiltrationText} m³/h per m² of window`,
+  airSummary: (infiltrationText: string) => `Infiltration ${infiltrationText} air changes per hour`,
   monthAbbreviations: MONTH_ABBREVIATIONS,
   calculate: "Calculate",
   calculateAgain: "Calculate again",

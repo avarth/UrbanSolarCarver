@@ -590,8 +590,8 @@ export interface paths {
         };
         /**
          * Typical Building Library
-         * @description The library of typical buildings, apart from projects: the examples (apartments and offices of the KENAK reference building
-         *     by climate zone, the ASHRAE 140 test boxes; read-only), then the user's own entries by name.
+         * @description The library of typical buildings, apart from projects: the examples (read-only, in groups named by the source of their
+         *     values), then the user's own entries by name.
          */
         get: operations["typical_building_library"];
         put?: never;
@@ -640,8 +640,8 @@ export interface paths {
         };
         /**
          * Get Typical Building
-         * @description The project's typical building (a copy of the default library entry before it is saved), the entry it came from, and the
-         *     state of its weights.
+         * @description The project's typical building (no values and the state not_chosen until one is chosen from the library), the entry it
+         *     came from, and the state of its weights.
          */
         get: operations["get_typical_building"];
         /**
@@ -670,7 +670,7 @@ export interface paths {
         /**
          * Calculate Typical Building
          * @description Calculate the hourly weights of the stored typical building with the project's weather file (about 7 s); 404 without a
-         *     weather file, 409 while a run of the project is active.
+         *     building or a weather file, 409 while a run of the project is active.
          */
         post: operations["calculate_typical_building"];
         delete?: never;
@@ -2030,11 +2030,8 @@ export interface components {
             id: string;
             /** Name */
             name: string;
-            /**
-             * Group
-             * @enum {string}
-             */
-            group: "apartment" | "office" | "test" | "own";
+            /** Group */
+            group: string | null;
             /** Read Only */
             read_only: boolean;
             /** Source */
@@ -2052,7 +2049,7 @@ export interface components {
             /** Values */
             values: {
                 [key: string]: unknown;
-            };
+            } | null;
             /** Library Id */
             library_id: string | null;
             /** Library Name */
@@ -2063,7 +2060,7 @@ export interface components {
              * State
              * @enum {string}
              */
-            state: "current" | "out_of_date" | "missing";
+            state: "current" | "out_of_date" | "missing" | "not_chosen";
             /** Heating Kwh M2 */
             heating_kwh_m2?: number | null;
             /** Cooling Kwh M2 */
@@ -3778,7 +3775,7 @@ export interface operations {
                     "application/json": components["schemas"]["TypicalBuildingReply"];
                 };
             };
-            /** @description The project has no weather file: add one in Design (Inputs) to calculate the typical building. */
+            /** @description The project has no weather file: add one in Design (Inputs) to calculate the typical building. Or: The project has no typical building yet: choose one from the library. */
             404: {
                 headers: {
                     [name: string]: unknown;

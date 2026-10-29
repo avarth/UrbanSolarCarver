@@ -60,12 +60,16 @@ class MissingInputs(ProjectError):
 
 
 def _missing_inputs_message(roles: list[str], criterion_names: dict[str, str]) -> str:
-    """A sentence for the input files to upload, one when no criterion is on, and one for each criterion without test surfaces."""
+    """A sentence for the input files to upload, one when no criterion is on, one for each criterion without test surfaces, and one
+    when the typical building is not chosen."""
     test_surfaces_prefix = f"{test_surfaces.ROLE}:"
-    files = [role for role in roles if role != "criteria" and not role.startswith(test_surfaces_prefix)]
+    files = [role for role in roles
+             if role not in ("criteria", typical_building.MISSING_ROLE) and not role.startswith(test_surfaces_prefix)]
     sentences = [f"Upload the missing input files first: {', '.join(files)}."] if files else []
     if "criteria" in roles:
         sentences.append("Turn on a criterion to run.")
+    if typical_building.MISSING_ROLE in roles:
+        sentences.append("Choose a typical building for the energy-weighted criteria: Edit building, in the Settings of the criterion.")
     for role in roles:
         if role.startswith(test_surfaces_prefix):
             criterion_id = role.removeprefix(test_surfaces_prefix)

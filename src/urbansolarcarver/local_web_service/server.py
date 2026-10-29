@@ -630,8 +630,8 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
 
     @router.get("/typical-building-library")
     def typical_building_library() -> list[TypicalBuildingLibraryEntry]:
-        """The library of typical buildings, apart from projects: the examples (apartments and offices of the KENAK reference building
-        by climate zone, the ASHRAE 140 test boxes; read-only), then the user's own entries by name."""
+        """The library of typical buildings, apart from projects: the examples (read-only, in groups named by the source of their
+        values), then the user's own entries by name."""
         return [entry.reply() for entry in typical_building.library()]
 
     @router.post("/typical-building-library", responses={409: _LIBRARY_RESPONSES[409], 422: _LIBRARY_RESPONSES[422]})
@@ -654,8 +654,8 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
 
     @router.get("/projects/{name}/typical-building", responses={404: {"model": ErrorDetailReply, "description": "There is no such project."}})
     def get_typical_building(name: str) -> TypicalBuildingReply:
-        """The project's typical building (a copy of the default library entry before it is saved), the entry it came from, and the
-        state of its weights."""
+        """The project's typical building (no values and the state not_chosen until one is chosen from the library), the entry it
+        came from, and the state of its weights."""
         return typical_building.reply(folder_in_use.store, name)
 
     @router.put("/projects/{name}/typical-building", responses={409: _ERROR_RESPONSES[409], 422: _CONFIG_OR_MESSAGE_ERROR})
@@ -669,10 +669,12 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
             return typical_building.save(store, name, request.values)
 
     @router.post("/projects/{name}/typical-building/calculate",
-                 responses={404: {"model": ErrorDetailReply, "description": typical_building.NO_WEATHER_FILE_MESSAGE}, **_ERROR_RESPONSES})
+                 responses={404: {"model": ErrorDetailReply, "description": f"{typical_building.NO_WEATHER_FILE_MESSAGE} Or: "
+                                                                            f"{typical_building.NO_BUILDING_MESSAGE}"},
+                            **_ERROR_RESPONSES})
     def calculate_typical_building(name: str) -> TypicalBuildingReply:
         """Calculate the hourly weights of the stored typical building with the project's weather file (about 7 s); 404 without a
-        weather file, 409 while a run of the project is active."""
+        building or a weather file, 409 while a run of the project is active."""
         store = folder_in_use.store
         with store.project_lock(name):      # not held while the weights are calculated: calculate takes it to put them in place
             refuse_while_running(name)

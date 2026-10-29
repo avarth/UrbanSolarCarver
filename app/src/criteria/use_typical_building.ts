@@ -1,5 +1,6 @@
 // The project's typical building, which an energy-weighted Solar usefulness criterion counts its hours by: its values, the library
-// it is chosen from, the state of its weights and the weights themselves. One building per project, a copy of a library entry, read
+// it is chosen from, the state of its weights and the weights themselves. One building per project, a copy of a library entry (none
+// in a new project, state not_chosen, until one is chosen), read
 // once something shows it (*active*: the shown criterion is energy-weighted) and read again when a run of the project ends (the run
 // calculates the weights when they are missing or out of date) and when the weather file changes (the weights depend on it). The
 // sheet's changes are saved one after another, each with all the values; a refused save (422) keeps the values shown with an error
@@ -18,7 +19,8 @@ export type TypicalBuildingValues = Record<string, unknown>;
 export interface TypicalBuildingHook {
   /** The building as stored, with its library entry, the state of its weights and their numbers; null until it is read. */
   stored: TypicalBuildingReply | null;
-  /** The values shown: the stored ones, or the ones of a change that waits for its save or was refused. */
+  /** The values shown: the stored ones, or the ones of a change that waits for its save or was refused; null before they are read
+   * and while no building is chosen. */
   values: TypicalBuildingValues | null;
   /** The library: the examples in their order, then the user's own entries by name; null until read. */
   library: TypicalBuildingLibraryEntry[] | null;
@@ -171,11 +173,11 @@ export function useTypicalBuilding({ token, project, active, runActive, weatherR
     setProblem(null);
     void changeLibrary(async () => {
       const reply = latest.current;
-      if (reply?.library_id != null) await updateTypicalBuildingLibraryEntry(token, reply.library_id, { values: reply.values });
+      if (reply?.library_id != null && reply.values !== null) await updateTypicalBuildingLibraryEntry(token, reply.library_id, { values: reply.values });
     }).then((reason) => { if (reason !== null) setProblem(reason); });
   };
   const saveAsNew = (name: string) => changeLibrary(async () => {
-    const entry = await addTypicalBuildingLibraryEntry(token, name, latest.current!.values);
+    const entry = await addTypicalBuildingLibraryEntry(token, name, latest.current!.values!);
     await putTypicalBuilding(token, project, entry.values, entry.id);
   });
   const renameEntry = (entryId: string, name: string) => changeLibrary(() => updateTypicalBuildingLibraryEntry(token, entryId, { name }));

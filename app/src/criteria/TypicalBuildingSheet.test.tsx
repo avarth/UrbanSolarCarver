@@ -3,7 +3,7 @@ import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { TypicalBuildingLibraryEntry, TypicalBuildingReply } from "../api_client/client";
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
-import { buildingGroupSummary, effectColour, libraryLineOf, SUN_DOWN_COLOUR, TypicalBuildingSheet, withRoom } from "./TypicalBuildingSheet";
+import { buildingGroupSummary, effectColour, libraryGroupsOf, libraryLineOf, SUN_DOWN_COLOUR, TypicalBuildingSheet, withRoom } from "./TypicalBuildingSheet";
 import { useTypicalBuilding, type TypicalBuildingValues } from "./use_typical_building";
 
 const NBSP = " ";
@@ -11,26 +11,28 @@ const DIGIT_GROUP = " ";
 
 /** The values of the KENAK reference building of a zone, as the service gives them (typical_building._kenak_values). */
 function kenak(uWall: number, uRoof: number, uWindow: number, shading: [string, string]): TypicalBuildingValues {
-  return { schedule: "apartment", t_set_heating: 20, t_set_cooling: 26, gains_w_m2: 6, fresh_air_m3h_m2: 0.75, heat_recovery: 0, u_wall: uWall,
-           u_window: uWindow, g_value: 0.55, mass_kind: "totee", mass_class: "heavy", totee_category: "reference", shading_factor: 0.77,
-           shading_start: shading[0], shading_end: shading[1], room: "average", height: 3, depth: 6, wwr: { ne: 0.4, se: 0.4, sw: 0.4, nw: 0.4 },
-           roof_exposed: false, u_roof: uRoof, floor_exposed: false, u_floor: uRoof, infiltration_m3h_m2_window: 5.5 };
+  return { schedule: "residential", t_set_heating: 20, t_set_cooling: 26, gains_w_m2: 6, fresh_air_m3h_m2: 0.75, heat_recovery: 0, u_wall: uWall,
+           u_window: uWindow, g_value: 0.55, mass_capacity_kj_m2k: 250, shading_factor: 0.77, shading_start: shading[0], shading_end: shading[1],
+           room: "average", height: 3, depth: 6, wwr: { ne: 0.4, se: 0.4, sw: 0.4, nw: 0.4 }, roof_exposed: false, u_roof: uRoof, floor_exposed: false,
+           u_floor: uRoof, ach_infiltration: 0.37 };
 }
 
 const ZONE_A = kenak(0.6, 0.5, 3.2, ["05-15", "09-15"]);
 const ZONE_B = kenak(0.5, 0.45, 3, ["05-15", "09-15"]);
 const CASE_600: TypicalBuildingValues = {
   schedule: "always", t_set_heating: 20, t_set_cooling: 27, gains_w_m2: 4.1667, fresh_air_m3h_m2: 0, heat_recovery: 0, u_wall: 0.514, u_window: 3,
-  g_value: 0.71, mass_kind: "iso", mass_class: "very_light", totee_category: 1, shading_factor: null, shading_start: "06-01", shading_end: "08-31",
+  g_value: 0.71, mass_capacity_kj_m2k: 80, shading_factor: null, shading_start: "06-01", shading_end: "08-31",
   room: "box", height: 2.7, width: 8, length: 6, orientation: 0, wwr: { north: 0, east: 0, south: 0.5556, west: 0 }, roof_exposed: true, u_roof: 0.318,
-  floor_exposed: true, u_floor: 0.039, infiltration_m3h_m2_window: 5.4,
+  floor_exposed: true, u_floor: 0.039, ach_infiltration: 0.5,
 };
 const SOURCE_B = "ΤΟΤΕΕ 20701-1/2017 (ΦΕΚ Β' 4003/17.11.2017), reference building, zone Β";
+const KENAK_GROUP = "Greece, KENAK reference building";
+const ASHRAE_GROUP = "ASHRAE 140 test cases";
 const EXAMPLES: TypicalBuildingLibraryEntry[] = [
-  { id: "kenak-apartment-a", name: "Apartment, zone Α", group: "apartment", read_only: true, source: "zone Α source", values: ZONE_A },
-  { id: "kenak-apartment-b", name: "Apartment, zone Β", group: "apartment", read_only: true, source: SOURCE_B, values: ZONE_B },
-  { id: "kenak-office-b", name: "Office, zone Β", group: "office", read_only: true, source: "office source", values: { ...ZONE_B, schedule: "office" } },
-  { id: "ashrae140-600", name: "ASHRAE 140 case 600 (light)", group: "test", read_only: true, source: "ASHRAE source", values: CASE_600 },
+  { id: "kenak-apartment-a", name: "Apartment, zone Α", group: KENAK_GROUP, read_only: true, source: "zone Α source", values: ZONE_A },
+  { id: "kenak-apartment-b", name: "Apartment, zone Β", group: KENAK_GROUP, read_only: true, source: SOURCE_B, values: ZONE_B },
+  { id: "kenak-office-b", name: "Office, zone Β", group: KENAK_GROUP, read_only: true, source: "office source", values: { ...ZONE_B, schedule: "office" } },
+  { id: "ashrae140-600", name: "ASHRAE 140 case 600 (light)", group: ASHRAE_GROUP, read_only: true, source: "ASHRAE source", values: CASE_600 },
 ];
 
 /** The value with its object keys sorted, so two values compare by their JSON. */
@@ -52,7 +54,8 @@ const WEIGHTS = {
  * of the other room, keeps the examples read-only and names unique, and calculates.
  */
 class FakeBuildingService {
-  values: TypicalBuildingValues = ZONE_B;
+  /** Null: no building chosen yet, as in a new project. */
+  values: TypicalBuildingValues | null = ZONE_B;
   libraryId: string | null = "kenak-apartment-b";
   libraryName: string | null = "Apartment, zone Β";
   calculated: TypicalBuildingValues | null = null;
@@ -65,7 +68,7 @@ class FakeBuildingService {
   }
 
   reply(): TypicalBuildingReply {
-    const state = this.calculated === null ? "missing" : same(this.calculated, this.values) ? "current" : "out_of_date";
+    const state = this.values === null ? "not_chosen" : this.calculated === null ? "missing" : same(this.calculated, this.values) ? "current" : "out_of_date";
     const entry = this.library().find((each) => each.id === this.libraryId);
     return { values: this.values, library_id: this.libraryId, library_name: entry?.name ?? this.libraryName,
              changed: entry !== undefined && !same(entry.values, this.values), state,
@@ -80,7 +83,7 @@ class FakeBuildingService {
       const request = body as { name: string; values: TypicalBuildingValues };
       if (this.library().some((entry) => entry.name.toLowerCase() === request.name.toLowerCase()))
         return json({ detail: `A building named '${request.name}' is already in the library: choose another name.` }, 409);
-      const entry = { id: `own-${this.own.length + 1}`, name: request.name, group: "own" as const, read_only: false, source: null, values: request.values };
+      const entry = { id: `own-${this.own.length + 1}`, name: request.name, group: null, read_only: false, source: null, values: request.values };
       this.own.push(entry);
       return json(entry);
     }
@@ -210,7 +213,7 @@ test("the sheet names the library entry and its source, says each basic group in
   expect(find(".typical-building-source")!.textContent).toBe(SOURCE_B);
   expect([...find(".typical-building-groups + .typical-building-library-actions + .typical-building-groups")!.querySelectorAll(".panel-section-title")]
     .map((title) => title.textContent)).toEqual(["Use", "Fabric", "Summer shading"]);
-  expect(summaryOf("use")).toBe(`Apartment hours, 20 to 26${NBSP}°C, gains 6${NBSP}W/m²`);
+  expect(summaryOf("use")).toBe(`Residential hours, 20 to 26${NBSP}°C, gains 6${NBSP}W/m²`);
   expect(summaryOf("fabric")).toBe(`U 0.5 and 3${NBSP}W/m²K, g 0.55, mass 250${NBSP}kJ/m²K`);
   expect(summaryOf("shading")).toBe("0.77 from 15 May to 15 Sep");
   expect(advancedToggle().getAttribute("aria-expanded")).toBe("false");
@@ -218,17 +221,17 @@ test("the sheet names the library entry and its source, says each basic group in
   click(advancedToggle());
   expect(summaryOf("room")).toBe(`Average, 6${NBSP}m deep, 3${NBSP}m storey; windows 0.4 on each side`);
   expect(summaryOf("roof_and_floor")).toBe("Both adiabatic");
-  expect(summaryOf("air")).toBe(`Infiltration 5.5${NBSP}m³/h per m² of window`);
+  expect(summaryOf("air")).toBe(`Infiltration 0.37${NBSP}air changes per hour`);
   expect(calculateButton().textContent).toBe("Calculate");
   expect(find(".weights-chart")).toBeNull();      // nothing calculated yet
   expect(rendered!.container.textContent).not.toMatch(/5R1C/);
 });
 
-test("the library lists the examples by group; choosing one replaces the project's copy with its values and id", async () => {
+test("the library lists the examples in the groups the service names; choosing one replaces the project's copy with its values and id", async () => {
   await openSheet();
   openGroup("library");
   expect([...group("library").querySelectorAll(".typical-building-library-group-name")].map((name) => name.textContent))
-    .toEqual(["Apartment", "Office", "Test boxes"]);
+    .toEqual([KENAK_GROUP, ASHRAE_GROUP]);
   expect(entryButton("kenak-apartment-b").getAttribute("aria-pressed")).toBe("true");
   expect(group("library").querySelector('[data-library-entry="kenak-apartment-b"] .link-button')).toBeNull();     // an example is read-only
   click(entryButton("ashrae140-600"));
@@ -266,7 +269,7 @@ test("a changed value is saved without the entry; the library says Changed from 
 });
 
 test("an own entry takes the changed values with Save to library, and is renamed and deleted in the list", async () => {
-  service.own = [{ id: "own-1", name: "My flat", group: "own", read_only: false, source: null, values: ZONE_B }];
+  service.own = [{ id: "own-1", name: "My flat", group: null, read_only: false, source: null, values: ZONE_B }];
   service.libraryId = "own-1";
   service.libraryName = "My flat";
   await openSheet();
@@ -300,25 +303,54 @@ test("an own entry takes the changed values with Save to library, and is renamed
   expect(summaryOf("library")).toBe("My flat, no longer in the library");
 });
 
-test("thermal mass is an ISO class or a ΤΟΤΕΕ category, each with its options and the category's construction", async () => {
+test("thermal mass is one number, the thermal capacity; the schedule is one of three cases; no standard is cited in the form", async () => {
   await openSheet();
   openGroup("fabric");
-  const massSwitch = () => [...group("fabric").querySelectorAll<HTMLButtonElement>('[data-building-field="mass_kind"] button')];
-  expect(massSwitch().map((button) => [button.textContent, button.getAttribute("aria-pressed")])).toEqual([["ISO class", "false"], ["ΤΟΤΕΕ category", "true"]]);
-  const category = () => group("fabric").querySelector<HTMLSelectElement>('[data-building-field="totee_category"] select')!;
-  expect([...category().options].map((option) => option.textContent)).toEqual(["Reference building, 250", "1: 80", "2: 110", "3: 165", "4: 230", "5: 280", "6: 300"].map((name) => `${name}${NBSP}kJ/m²K`));
-  choose(category(), "5");
+  expect(group("fabric").querySelector("select")).toBeNull();
+  const capacity = group("fabric").querySelector('[data-building-field="mass_capacity_kj_m2k"]')!;
+  expect(capacity.querySelector(".setting-label")!.textContent).toBe("Thermal capacity");
+  expect(capacity.querySelector(".setting-unit")!.textContent).toBe("kJ/m²K");
+  typeInto(capacity.querySelector<HTMLInputElement>("input")!, "300");
   await settle();
-  expect(lastSaved().values.totee_category).toBe(5);
-  expect(group("fabric").querySelector('[data-building-field="totee_category"] .setting-note')!.textContent)
-    .toMatch(/^Concrete frame, infill of hollow clay bricks\. ΤΟΤΕΕ 20701-1\/2017 table 3\.14\./);
-  click(massSwitch()[0]);
-  await settle();
-  expect(lastSaved().values).toMatchObject({ mass_kind: "iso", mass_class: "heavy", totee_category: 5 });
-  expect([...group("fabric").querySelector<HTMLSelectElement>('[data-building-field="mass_class"] select')!.options].map((option) => option.textContent))
-    .toEqual(["Very light, 80", "Light, 110", "Medium, 165", "Heavy, 260", "Very heavy, 370"].map((name) => `${name}${NBSP}kJ/m²K`));
+  expect(lastSaved().values).toEqual({ ...ZONE_B, mass_capacity_kj_m2k: 300 });
   click(group("fabric").querySelector(".panel-section-header")!);
-  expect(summaryOf("fabric")).toBe(`U 0.5 and 3${NBSP}W/m²K, g 0.55, mass 260${NBSP}kJ/m²K`);
+  expect(summaryOf("fabric")).toBe(`U 0.5 and 3${NBSP}W/m²K, g 0.55, mass 300${NBSP}kJ/m²K`);
+
+  openGroup("use");
+  expect([...group("use").querySelectorAll<HTMLOptionElement>('[data-building-field="schedule"] option')].map((option) => option.textContent))
+    .toEqual(["Residential: 6:00 to 24:00 every day", "Office: 8:00 to 18:00, Monday to Friday", "Always"]);
+  openGroup("shading");
+  click(advancedToggle());
+  for (const id of ["room", "roof_and_floor", "air"]) openGroup(id);
+  expect(group("air").querySelector('[data-building-field="ach_infiltration"] .setting-unit')!.textContent).toBe("1/h");
+  // The form's labels, options and notes name no standard or table; the sources are in the examples' source text only.
+  const formText = [...rendered!.container.querySelectorAll(".typical-building-groups .setting-field, .typical-building-groups .setting-note")]
+    .map((element) => element.textContent).join(" ");
+  expect(formText).not.toMatch(/ΤΟΤΕΕ|TOTEE|KENAK|ΚΕΝΑΚ|ISO|table/);
+});
+
+test("a project without a building shows only the library, open, and choosing an example fills the form", async () => {
+  service.values = null;
+  service.libraryId = null;
+  service.libraryName = null;
+  await openSheet();
+  expect(group("library").querySelector(".panel-section-header")!.getAttribute("aria-expanded")).toBe("true");
+  expect(group("library").querySelector(".setting-note")!.textContent)
+    .toBe("The project has no typical building yet: choose one to start from, then change its values.");
+  expect(find('[data-section="use"]')).toBeNull();
+  expect(find(".typical-building-calculate")).toBeNull();
+  expect(buttonNamed("Save as new")).toBeUndefined();
+  expect(document.activeElement).toBe(group("library").querySelector(".panel-section-header"));
+  openGroup("library");
+  expect(summaryOf("library")).toBe("None chosen");
+  openGroup("library");
+  click(entryButton("kenak-apartment-b"));
+  await settle();
+  expect(lastSaved()).toEqual({ values: ZONE_B, library_id: "kenak-apartment-b" });
+  openGroup("library");
+  expect(summaryOf("library")).toBe("Apartment, zone Β");
+  expect(summaryOf("use")).toMatch(/^Residential hours/);
+  expect(calculateButton().textContent).toBe("Calculate");
 });
 
 test("summer shading takes a factor and the dates of its period; empty is no shading", async () => {
@@ -446,6 +478,9 @@ test("the colours run from white to red and to blue; a project from no entry, or
   const reply = { values: ZONE_B, library_id: "own-9", library_name: "Old flat", changed: false, state: "missing" as const };
   expect(libraryLineOf({ ...reply, library_id: null, library_name: null }, EXAMPLES)).toBe("Not from the library");
   expect(libraryLineOf(reply, EXAMPLES)).toBe("Old flat, no longer in the library");
+  expect(libraryLineOf({ values: null, library_id: null, library_name: null, changed: false, state: "not_chosen" }, EXAMPLES)).toBe("None chosen");
+  const own = { id: "own-1", name: "Mine", group: null, read_only: false, source: null, values: ZONE_B };
+  expect(libraryGroupsOf([own, ...EXAMPLES]).map(({ name, entries }) => [name, entries.length])).toEqual([[KENAK_GROUP, 3], [ASHRAE_GROUP, 1], ["Your buildings", 1]]);
 });
 
 test("while the sheet is open the 3D view's Out of date stamp goes to its right, not under it", () => {
