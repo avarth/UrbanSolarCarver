@@ -26,6 +26,7 @@ test("two criteria show cards in order, each with its result, and the first is s
   expect(selectedCardName()).toBe("Winter sun on facades");
   expect(cardLine("Winter sun on facades")).toBe("39 % of the volume carved, 390 m³ removed");
   expect(cardLine("Spring sun on windows")).toBe("20 % of the volume carved, 200 m³ removed");
+  openPanelSection("Test surfaces");
   expect(protectedFiles()).toEqual(["facades.obj"]);
   showCriterionCards();
   expect(buttonIn(stepRow("Criteria"), "Add criterion")).toBeDefined();
@@ -51,6 +52,7 @@ test("selecting a card shows its settings, its test surfaces and its results", a
   expect(periodFieldText()).toContain("21 Mar");
   expect(thresholdField().value).toBe("3");
   expect(keptTile()).toContain("80");
+  openPanelSection("Test surfaces");
   expect(protectedFiles()).toEqual(["windows.obj"]);
   expect(service.requests).toContain("GET /run/score-points?criterion=2");
   // A change now saves criterion 2's settings, not criterion 1's.
@@ -65,10 +67,9 @@ test("selecting a card shows its settings, its test surfaces and its results", a
 test("the open sections stay as the user left them when another criterion is selected; one without test surfaces opens them", async () => {
   const bare = criterion("3", "Daylight on roofs", { mode: "daylight" }, []);
   await openChain([FACADES, WINDOWS, bare]);
-  expect(openPanelSections()).toEqual(["Test surfaces", "Carving rule"]);
+  expect(openPanelSections()).toEqual(["Carving rule"]);
   togglePanelSection("Mode");
   togglePanelSection("Carving rule");
-  togglePanelSection("Test surfaces");
   expect(openPanelSections()).toEqual(["Mode"]);
   await select("Spring sun on windows");
   expect(openPanelSections()).toEqual(["Mode"]);
@@ -154,6 +155,7 @@ test("deleting the selected criterion selects the next one, and the last one the
   expect(card("Spring sun on windows").querySelector(".criterion-card-handle")).toBeNull();
   expectNoProblemShown();
   expect(periodFieldText()).toContain("21 Mar");
+  openPanelSection("Test surfaces");
   expect(protectedFiles()).toEqual(["windows.obj"]);
   showCriterionCards();
   expect(buttonIn(stepRow("Criteria"), "Add criterion")).toBeDefined();
@@ -196,8 +198,7 @@ test("switch off the first of two criteria, delete the second: the one left stay
 test("Add criterion with one criterion opens a menu of the modes; choosing one adds a criterion of it, selected, its test surfaces open", async () => {
   await openChain([FACADES]);
   expect(cardNames()).toEqual(["Winter sun on facades"]);
-  togglePanelSection("Test surfaces");                             // closed by the user; the new criterion has no files to show
-  expect(openPanelSections()).toEqual(["Carving rule"]);
+  expect(openPanelSections()).toEqual(["Carving rule"]);            // Test surfaces starts closed; the new criterion has no files, which opens it
   showCriterionCards();
   act(() => buttonIn(stepRow("Criteria"), "Add criterion").click());
   expect(container().querySelector('.add-criterion [role="radio"]')).toBeNull();
@@ -232,6 +233,7 @@ test("while a card's settings are on their way its panel waits, and a reply for 
   await act(async () => answerWindows());
   await settle();
   expect(selectedCardName()).toBe("Daylight on roofs");
+  openPanelSection("Test surfaces");
   expect(protectedFiles()).toEqual(["roofs.obj"]);
   openPanelSection("Mode");
   expect(panel().querySelector('[role="radio"][aria-checked="true"]')!.textContent).toBe("Daylight");
@@ -297,6 +299,7 @@ test("reordering with the keyboard sends the new order and the cards follow it",
 
 test("a file added to two criteria is stored once and replacing it dates both", async () => {
   await openChain([FACADES, WINDOWS]);
+  openPanelSection("Test surfaces");
   // Criterion 1 takes criterion 2's file too, from the list of the other criteria's files.
   await act(async () => panel().querySelector<HTMLButtonElement>('[aria-label="Use windows.obj"]')!.click());
   await settle();
@@ -316,6 +319,7 @@ test("a file added to two criteria is stored once and replacing it dates both", 
 
 test("use a file from another criterion", async () => {
   await openChain([FACADES, WINDOWS]);
+  openPanelSection("Test surfaces");
   const reuse = panel().querySelector<HTMLElement>(".protects-reuse")!;
   expect([...reuse.querySelectorAll(".protects-reuse-name")].map((name) => name.textContent)).toEqual(["windows.obj"]);
   await act(async () => reuse.querySelector<HTMLButtonElement>('[aria-label="Use windows.obj"]')!.click());

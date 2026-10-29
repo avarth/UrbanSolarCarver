@@ -55,7 +55,7 @@ test("the section that holds a setting: Mode for the mode, Carving rule for a ca
   expect(sectionOfSetting("start_month")).toBe("settings");
   expect(sectionOfSetting("end_hour")).toBe("settings");
   expect(sectionOfSetting("rays_per_patch")).toBe("settings");
-  expect([...DEFAULT_OPEN_SECTIONS].sort()).toEqual(["carving", "test_surfaces"]);
+  expect([...DEFAULT_OPEN_SECTIONS].sort()).toEqual(["carving"]);
 });
 
 test("the settings to fix by section: the criterion's fields with an error, one field for the six period settings, and the messages that name none", () => {

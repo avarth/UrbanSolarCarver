@@ -1,5 +1,5 @@
 // The folded sections of a criterion's panel (CriterionPanel): which section holds a setting, the one line each says while it is
-// closed, and the settings to fix in each. Test surfaces and Carving rule start open, Mode and Settings closed.
+// closed, and the settings to fix in each. Carving rule starts open; Test surfaces, Mode and Settings start closed (Test surfaces opens when the criterion has none).
 import { messages } from "../messages";
 import { periodFromSettings, periodInWords, type AnalysisPeriodField } from "../settings_form/analysis_period";
 import { defaultValue, shownValue, type FormState } from "../settings_form/form_state";
@@ -15,7 +15,7 @@ export type PanelSectionId = "test_surfaces" | "mode" | "settings" | "carving";
 /** The sections in the order of the panel. */
 export const PANEL_SECTIONS: readonly PanelSectionId[] = ["test_surfaces", "mode", "settings", "carving"];
 
-export const DEFAULT_OPEN_SECTIONS: ReadonlySet<PanelSectionId> = new Set(["test_surfaces", "carving"]);
+export const DEFAULT_OPEN_SECTIONS: ReadonlySet<PanelSectionId> = new Set(["carving"]);
 
 const sameValue = (first: unknown, second: unknown) => JSON.stringify(first) === JSON.stringify(second);
 

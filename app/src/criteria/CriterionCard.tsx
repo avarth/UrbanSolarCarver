@@ -1,7 +1,8 @@
 // One criterion's card in the list (spec 7.2): a drag handle when the list has several cards (the arrow keys on it move the card
-// one place), the colour swatch of the criterion in the 3D view, its name, its mode's symbol and one line (its result while
-// current, else its status), a switch that is on while the chain uses the criterion, and a menu with Rename, Duplicate and
-// Delete. A press on the card selects it. The list (CriterionList) does the dragging and the requests.
+// one place), the colour swatch of the criterion in the 3D view, its name (whole, up to two lines), its mode's symbol, a
+// chevron that says the card opens, a switch that is on while the chain uses the criterion, and a menu with Rename, Duplicate
+// and Delete; under them, at the card's full width, one line (its result while current, else its status). A press on the card
+// selects it. The list (CriterionList) does the dragging and the requests.
 import { useId, type DragEvent, type KeyboardEvent } from "react";
 import type { CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
@@ -55,6 +56,7 @@ export function CriterionCard(props: CriterionCardProps) {
   const { entry, selected, disabledReason } = props;
   const disabled = disabledReason !== null;
   const hintId = useId();
+  const lineId = useId();
   const mode = String(entry.settings?.mode ?? "");
   const symbol = MODE_TILES.find((tile) => tile.engine_name === mode)?.symbol;
   const moveWithKeys = (event: KeyboardEvent) => {
@@ -63,7 +65,7 @@ export function CriterionCard(props: CriterionCardProps) {
     event.preventDefault();
     props.onMove(step);
   };
-  const classes = ["criterion-card", selected && "criterion-card-selected", entry.bypassed && "criterion-card-bypassed", props.dropTarget && "criterion-card-drop-target",
+  const classes = ["criterion-card", props.reorderable && "criterion-card-reorderable", selected && "criterion-card-selected", entry.bypassed && "criterion-card-bypassed", props.dropTarget && "criterion-card-drop-target",
                    props.running && "criterion-card-running"];
   return (
     <li className={classes.filter(Boolean).join(" ")} aria-current={selected || undefined} aria-busy={props.running || undefined} data-criterion-id={entry.id}
@@ -76,13 +78,11 @@ export function CriterionCard(props: CriterionCardProps) {
           <span id={hintId} className="visually-hidden">{messages.moveCriterionHint}</span>
         </span>
       )}
-      <button type="button" className="criterion-card-select" onClick={props.onSelect}>
+      <button type="button" className="criterion-card-select" aria-describedby={lineId} onClick={props.onSelect}>
         <span className="criterion-card-swatch" style={{ background: entry.colour }} aria-hidden="true" />
-        <span className="criterion-card-text">
-          <span className="criterion-card-name">{entry.name}</span>
-          <span className="criterion-card-line">{props.line}</span>
-        </span>
+        <span className="criterion-card-name">{entry.name}</span>
         {symbol !== undefined && <ModeTileSymbol symbol={symbol} />}
+        <span className="criterion-card-chevron" aria-hidden="true">›</span>
       </button>
       <input type="checkbox" role="switch" className="setting-switch criterion-card-switch" checked={!entry.bypassed} disabled={disabled}
              aria-label={messages.criterionSwitchLabel(entry.name)} onChange={(event) => props.onSetBypassed(!event.target.checked)} />
@@ -93,6 +93,7 @@ export function CriterionCard(props: CriterionCardProps) {
                     { key: "duplicate", label: messages.duplicateCriterion, disabledReason },
                     { key: "delete", label: messages.deleteCriterion, disabledReason: disabledReason ?? props.deleteDisabledReason },
                   ]} />
+      <span id={lineId} className="criterion-card-line" onClick={props.onSelect}>{props.line}</span>
     </li>
   );
 }

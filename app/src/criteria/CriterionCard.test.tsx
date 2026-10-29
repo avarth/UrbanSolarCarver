@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { CriterionEntry } from "../api_client/client";
@@ -43,6 +44,16 @@ test("a card shows the criterion's colour, name, mode symbol and its line", () =
   expect(card().querySelector(".mode-tile-symbol")).not.toBeNull();
   expect(card().querySelector(".criterion-card-line")!.textContent).toBe("70 % of the score carved, 18 400 m³ removed");
   expect(card().getAttribute("aria-current")).toBeNull();
+});
+
+test("a card shows its whole name on up to two lines, its line under it, and a chevron that says it opens", () => {
+  const name = "Solar usefulness on alatini_testSrfs_solargains_with_a_long_tail_of_eighty_characters_x";
+  renderCard({ entry: { ...DAYLIGHT, name } });
+  expect(rendered!.container.querySelector(".criterion-card-name")!.textContent).toBe(name);
+  expect(rendered!.container.querySelector(".criterion-card-chevron")!.getAttribute("aria-hidden")).toBe("true");
+  const css = readFileSync("src/steps/steps.css", "utf8");
+  expect(css).toMatch(/\.criterion-card-name\s*{[^}]*-webkit-line-clamp:\s*2/);
+  expect(css).not.toMatch(/\.criterion-card-name\s*{[^}]*white-space:\s*nowrap/);
 });
 
 test("the running criterion's card says Running and is marked busy; the others are not", () => {

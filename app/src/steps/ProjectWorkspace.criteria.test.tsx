@@ -63,6 +63,7 @@ test("one criterion shows its row in the list, with the switch on and no drag ha
   expect(step.textContent).not.toContain("Add another criterion");
   expect(step.querySelector(".chain-summary")).toBeNull();
   showCriterionEditor();
+  openPanelSection("Test surfaces");
   expect(protectedFiles()).toEqual(["surfaces.obj"]);
   expect(buttonIn(pinnedBar(), "Run analysis")).toBeDefined();
   expect(buttonIn(pinnedBar(), "Build envelope and massing")).toBeDefined();
@@ -146,6 +147,7 @@ test("during a run the criterion's controls are disabled and the pinned bar says
   expect(reasonOf(buttonIn(pinnedBar(), "Build envelope and massing"))).toBe("A run is in progress");      // the same line
   expect(pinnedBar().textContent!.split("A run is in progress")).toHaveLength(2);
   expect(panel()!.textContent).not.toContain("A run is in progress");
+  openPanelSection("Test surfaces");
   expect(protectsBox().querySelector<HTMLButtonElement>(".input-add")!.disabled).toBe(true);
   openPanelSection("Mode");
   expect(panel()!.querySelector('[role="radiogroup"]')!.getAttribute("aria-disabled")).toBe("true");
@@ -163,6 +165,7 @@ test("an earlier project shows its test surfaces in the criterion", async () => 
   service.summary = { carving: CARVING, envelope: ENVELOPE, massing: MASSING };
   await openWorkspace(service, opened);
   openStep("Criteria");
+  openPanelSection("Test surfaces");
   expect(protectedFiles()).toEqual(["roofs.ply", "windows.ply"]);
   expect(protectsBox().querySelector(".input-file-detail")!.textContent).toBe("20 triangles");
   for (const title of ["Inputs", "Site and grid", "Criteria", "Envelope and massing", "Export"]) {
@@ -210,6 +213,7 @@ test("test surfaces added to and removed from the criterion go to its routes; th
   await openWorkspace(service, project(CARVED));
   openStep("Criteria");
   const statusReadsBefore = service.count("GET /stage-status");
+  openPanelSection("Test surfaces");
   const picker = protectsBox().querySelector<HTMLInputElement>('input[type="file"]')!;
   Object.defineProperty(picker, "files", { value: [new File([TRIANGLE_OBJ], "windows.obj")], configurable: true });
   service.stages = { ...CARVED, preprocessing: "out_of_date", thresholding: "out_of_date" };

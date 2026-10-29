@@ -76,13 +76,21 @@ const sectionSummary = (id: PanelSectionId) => find(`.panel-section[data-section
 const sectionOpen = (id: PanelSectionId) => sectionHeader(id).getAttribute("aria-expanded") === "true";
 const isWarning = (element: Element) => element.classList.contains("panel-section-summary-problem");
 
-test("the panel shows four sections with test surfaces and carving open", () => {
+test("a criterion opens with only Carving rule open; a criterion without test surfaces opens Test surfaces as well", () => {
+  rendered = renderForTest(<PanelInStep {...panelProps()} />);
+  expect(PANEL_SECTIONS.filter(sectionOpen)).toEqual(["carving"]);
+  rendered.unmount();
+  rendered = renderForTest(<PanelInStep {...panelProps({ testSurfaces: [] })} />);
+  expect(PANEL_SECTIONS.filter(sectionOpen)).toEqual(["test_surfaces", "carving"]);
+});
+
+test("the panel shows four sections with carving open", () => {
   rendered = renderForTest(<PanelInStep {...panelProps()} />);
   const headers = [...rendered.container.querySelectorAll<HTMLButtonElement>(".panel-section-header")];
   expect(headers.map((header) => header.querySelector(".panel-section-title")!.textContent)).toEqual(["Test surfaces", "Mode", "Settings", "Carving rule"]);
-  expect(headers.map((header) => header.getAttribute("aria-expanded"))).toEqual(["true", "false", "false", "true"]);
+  expect(headers.map((header) => header.getAttribute("aria-expanded"))).toEqual(["false", "false", "false", "true"]);
   // An open section's header names its content; a closed section has none.
-  expect(document.getElementById(sectionHeader("test_surfaces").getAttribute("aria-controls")!)!.querySelector(".input-box")).not.toBeNull();
+  expect(document.getElementById(sectionHeader("carving").getAttribute("aria-controls")!)!.querySelector(".carving-rule-for-test")).not.toBeNull();
   expect(sectionHeader("mode").hasAttribute("aria-controls")).toBe(false);
   expect(find('[role="radiogroup"]')).toBeNull();
   expect(find('[data-setting="start_month"]')).toBeNull();
@@ -98,12 +106,11 @@ test("the panel shows four sections with test surfaces and carving open", () => 
 test("a closed section shows its summary", () => {
   const daylight = { ...formFor("daylight"), userValues: { carve_fraction: 0.7 } };
   rendered = renderForTest(<PanelInStep {...panelProps({ form: daylight })} />);
-  expect(sectionSummary("test_surfaces")).toBeNull();                 // open: no summary
+  expect(sectionSummary("carving")).toBeNull();                       // open: no summary
   expect(sectionSummary("mode")!.textContent).toBe("Daylight");
   expect(sectionSummary("settings")!.textContent).toBe("Starting values");
   click(sectionHeader("carving"));
   expect(sectionSummary("carving")!.textContent).toBe("Carve 70 %");
-  click(sectionHeader("test_surfaces"));
   expect(sectionSummary("test_surfaces")!.textContent).toBe("windows.ply");
   expect(sectionHeader("mode").textContent).toBe("ModeDaylight");      // in the header, after the title
   rendered.unmount();
@@ -115,7 +122,6 @@ test("a closed section shows its summary", () => {
 
 test("a criterion without test surfaces opens its test surfaces section; closed, it says none yet in the warning style", () => {
   rendered = renderForTest(<PanelInStep {...panelProps()} />);
-  click(sectionHeader("test_surfaces"));
   expect(sectionOpen("test_surfaces")).toBe(false);
   expect(isWarning(sectionSummary("test_surfaces")!)).toBe(false);
   rendered.rerender(<PanelInStep {...panelProps({ testSurfaces: [] })} />);       // the last file goes
@@ -130,7 +136,6 @@ test("a criterion without test surfaces opens its test surfaces section; closed,
 
 test("a criterion that is off needs no test surfaces: none is no problem, and the section stays as it is", () => {
   rendered = renderForTest(<PanelInStep {...panelProps({ criterionOn: false })} />);
-  click(sectionHeader("test_surfaces"));
   rendered.rerender(<PanelInStep {...panelProps({ criterionOn: false, testSurfaces: [] })} />);
   expect(sectionOpen("test_surfaces")).toBe(false);
   expect(sectionSummary("test_surfaces")!.textContent).toBe("None yet");
@@ -154,6 +159,7 @@ test("closed, the carving rule of a criterion that is off reads Off", () => {
 
 test("a closed section with a problem says so to screen readers in its header; one without says nothing more", () => {
   rendered = renderForTest(<PanelInStep {...panelProps({ testSurfaces: [] })} />);
+  expect(sectionOpen("test_surfaces")).toBe(true);                               // it opens for the problem
   click(sectionHeader("test_surfaces"));
   expect(sectionHeader("test_surfaces").querySelector(".visually-hidden")!.textContent).toBe("Needs attention");
   expect(sectionHeader("mode").querySelector(".visually-hidden")).toBeNull();
@@ -163,6 +169,7 @@ test("a closed section with a problem says so to screen readers in its header; o
 
 test("inside the sections the test surfaces box is named by an aria-label, not a hidden heading; the setting groups' titles are h4", () => {
   rendered = renderForTest(<PanelInStep {...panelProps()} />);
+  click(sectionHeader("test_surfaces"));
   const box = find('.panel-section[data-section="test_surfaces"] .input-box')!;
   expect(box.getAttribute("aria-label")).toBe("Test surfaces");
   expect(box.hasAttribute("aria-labelledby")).toBe(false);
