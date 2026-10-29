@@ -41,17 +41,26 @@ async function changeFolderTo(outcome: ProjectsFolderChange) {
   expect(onChangeProjectsFolder).toHaveBeenCalledOnce();
 }
 
-test("while the GPU warms up, the device card has the spinner, Preparing the GPU and the warm-up line", () => {
+test("while the GPU warms up, the device notice has the spinner, Preparing the GPU and the warm-up line", () => {
   rendered = renderForTest(startScreen(WARMING_UP));
   const card = rendered.container.querySelector(".start-device-card")!;
   expect(card.querySelector(".spinner")).not.toBeNull();
-  expect(card.textContent).toBe("Preparing the GPUYou can open a project and add files now. The run buttons wait until the GPU is ready.");
-  expect(rendered.container.textContent).toContain("Version 1.4.0");
+  expect(card.textContent).toBe("Preparing the GPU. You can open a project and add files now. The run buttons wait until the GPU is ready.");
+  expect(rendered.container.querySelector(".start-footer")!.textContent).toBe("Version 1.4.0");     // the device line waits for the warm-up
 });
 
-test("after the warm-up the device line names the GPU, the CPU, or the engine's reason", () => {
+test("the page heading is Projects; the version is in the footer, not under the heading", () => {
   rendered = renderForTest(startScreen({ version: "1.4.0", warm_up: { state: "ready", device_name: "NVIDIA RTX 4070" } }));
-  expect(rendered.container.querySelector(".start-device-line")!.textContent).toBe("GPU ready: NVIDIA RTX 4070");
+  expect(rendered.container.querySelector("h1")!.textContent).toBe("Projects");
+  expect(rendered.container.querySelector(".start-cards")!.textContent).not.toContain("Version");
+  expect(rendered.container.querySelector(".start-footer")!.textContent).toBe("Version 1.4.0NVIDIA RTX 4070");
+});
+
+test("after the warm-up the footer's device line names the GPU, the CPU, or the engine's reason", () => {
+  rendered = renderForTest(startScreen({ version: "1.4.0", warm_up: { state: "ready", device_name: "NVIDIA RTX 4070" } }));
+  expect(rendered.container.querySelector(".start-device-line")!.textContent).toBe("NVIDIA RTX 4070");     // the top bar says GPU ready
+  rendered.rerender(startScreen({ version: "1.4.0", warm_up: { state: "ready" } }));
+  expect(rendered.container.querySelector(".start-device-line")).toBeNull();
   rendered.rerender(startScreen({ version: "1.4.0", warm_up: { state: "cpu", cuda_available: false } }));
   expect(rendered.container.querySelector(".start-device-line")!.textContent).toBe("No CUDA-enabled GPU found. USC runs on the CPU, which is slower.");
   rendered.rerender(startScreen({ version: "1.4.0", warm_up: { state: "cpu", cuda_available: true } }));      // usc ui --device cpu
@@ -64,6 +73,9 @@ test("three cards: a new project with the name hint, the projects newest first, 
   rendered = renderForTest(startScreen(WARMING_UP));
   const cards = [...rendered.container.querySelectorAll(".start-card")];
   expect(cards.map((card) => card.querySelector("h2")!.textContent)).toEqual(["New project", "Open a project", "Try an example"]);
+  expect(cards.every((card) => card.querySelector(".start-card-icon svg[aria-hidden='true']") !== null)).toBe(true);
+  expect(cards[1].querySelector(".start-card-foot .start-projects-folder")).not.toBeNull();       // the folder at the foot of the list
+  expect(cards[1].querySelector<HTMLElement>(".start-projects-folder-line")!.title).toBe(FOLDER.path);
   expect(cards[0].textContent).toContain("Up to 64 letters, numbers, spaces, hyphens or underscores.");
   expect([...cards[1].querySelectorAll(".start-choice-name")].map((name) => name.textContent)).toEqual(["Newer", "Older"]);
   expect(cards[1].querySelector(".start-choice-detail")!.textContent).toBe("16 Oct 2026, 14:05");

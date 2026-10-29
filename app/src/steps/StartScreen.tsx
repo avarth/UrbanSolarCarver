@@ -1,6 +1,7 @@
-// The start screen (UX 5.1, R2 7.1, 7.2): the version, the device and its warm-up, and three cards side by side: a new project,
-// the projects there are (newest first) under the projects folder and its Change folder, each with its menu, and the bundled
-// examples. Choosing one opens the project at its Inputs step.
+// The start screen (UX 5.1, R2 7.1, 7.2): the GPU's warm-up while it lasts, three cards side by side (a new project, the
+// projects there are, newest first, each with its menu, with the projects folder and its Change folder at the foot, and the
+// bundled examples), and a footer with the version and the device. The top bar shows the device's state, so the footer only
+// names the GPU, or says why the CPU is used. Choosing a project opens it at its Inputs step.
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type Ref } from "react";
 import type { ExampleInfo, HealthReply, ProjectsFolderReply, ProjectSummary } from "../api_client/client";
 import { dateAndTime, messages } from "../messages";
@@ -54,11 +55,11 @@ export function cpuChosenAtLaunch(warmUp: HealthReply["warm_up"]): boolean {
   return warmUp.state === "cpu" && warmUp.cuda_available === true;
 }
 
-/** The device line once the warm-up has ended: the GPU's name, the CPU and why, or why Warp cannot run (with the engine's repair). */
+/** The device line of the footer once the warm-up has ended: the GPU's name, the CPU and why, or why Warp cannot run (with the engine's repair). */
 function deviceLine(warmUp: HealthReply["warm_up"]): string {
   switch (warmUp.state) {
     case "ready":
-      return warmUp.device_name ? messages.gpuReadyWithDevice(warmUp.device_name) : messages.gpuReady;
+      return warmUp.device_name ?? "";
     case "cpu":
       return cpuChosenAtLaunch(warmUp) ? messages.cpuModeChosenAtLaunch : messages.noCudaGpuFound;
     default:
@@ -68,6 +69,33 @@ function deviceLine(warmUp: HealthReply["warm_up"]): string {
 
 export function Spinner() {
   return <span className="spinner" aria-hidden="true" />;
+}
+
+const CARD_ICON_PROPS = { width: 20, height: 20, viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", strokeWidth: 1.6,
+                          strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true } as const;
+
+const CARD_ICONS = {
+  new: <svg {...CARD_ICON_PROPS}><rect x="3" y="3" width="14" height="14" rx="2" /><path d="M10 6.5v7M6.5 10h7" /></svg>,
+  open: <svg {...CARD_ICON_PROPS}><path d="M2.5 5.5a1 1 0 0 1 1-1h4l1.6 1.8h7.4a1 1 0 0 1 1 1v8.2a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1z" /></svg>,
+  example: (
+    <svg {...CARD_ICON_PROPS}>
+      <circle cx="10" cy="10" r="3.2" />
+      <path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" />
+    </svg>
+  ),
+};
+
+/** A card's heading with its symbol, and the line under it. */
+function CardHeading({ icon, title, lead, headingRef }: { icon: ReactNode; title: string; lead?: string; headingRef?: Ref<HTMLHeadingElement> }) {
+  return (
+    <div className="start-card-heading">
+      <span className="start-card-icon">{icon}</span>
+      <div>
+        <h2 ref={headingRef} tabIndex={headingRef ? -1 : undefined}>{title}</h2>
+        {lead && <p className="start-hint">{lead}</p>}
+      </div>
+    </div>
+  );
 }
 
 /** Projects newest first by their last change. */
@@ -97,7 +125,7 @@ function NewProjectCard({ onCreateProject, pickerWaitId }: Pick<StartScreenProps
   };
   return (
     <section className="start-card">
-      <h2>{messages.newProject}</h2>
+      <CardHeading icon={CARD_ICONS.new} title={messages.newProject} lead={messages.newProjectLead} />
       <form className="start-new-project" onSubmit={create}>
         <label htmlFor={fieldId}>{messages.projectNameLabel}</label>
         <input id={fieldId} className="setting-number start-name-field" value={name} maxLength={64} aria-describedby={hintId}
@@ -111,8 +139,10 @@ function NewProjectCard({ onCreateProject, pickerWaitId }: Pick<StartScreenProps
   );
 }
 
-function ChoiceListCard<Item>({ title, items, emptyText, keyOf, onChoose, render, menuOf, children, pickerWaitId, cardRef, headingRef }: {
+function ChoiceListCard<Item>({ icon, title, lead, items, emptyText, keyOf, onChoose, render, menuOf, footer, pickerWaitId, cardRef, headingRef }: {
+  icon: ReactNode;
   title: string;
+  lead?: string;
   items: Item[] | null;
   emptyText: string;
   keyOf: (item: Item) => string;
@@ -120,8 +150,8 @@ function ChoiceListCard<Item>({ title, items, emptyText, keyOf, onChoose, render
   render: (item: Item) => { name: string; detail: string };
   /** The menu beside an item, for items that have one. */
   menuOf?: (item: Item) => ReactNode;
-  /** Shown under the title. */
-  children?: ReactNode;
+  /** Shown at the foot of the card. */
+  footer?: ReactNode;
   cardRef?: Ref<HTMLElement>;
   headingRef?: Ref<HTMLHeadingElement>;
 } & WaitsForPicker) {
@@ -135,8 +165,7 @@ function ChoiceListCard<Item>({ title, items, emptyText, keyOf, onChoose, render
   };
   return (
     <section ref={cardRef} className="start-card">
-      <h2 ref={headingRef} tabIndex={-1}>{title}</h2>
-      {children}
+      <CardHeading icon={icon} title={title} lead={lead} headingRef={headingRef} />
       {items !== null && items.length === 0 && <p className="start-hint">{emptyText}</p>}
       {items !== null && items.length > 0 && (
         <ul className="start-choice-list">
@@ -156,6 +185,7 @@ function ChoiceListCard<Item>({ title, items, emptyText, keyOf, onChoose, render
         </ul>
       )}
       {problem !== null && <p className="setting-error" role="alert">{problem}</p>}
+      {footer && <div className="start-card-foot">{footer}</div>}
     </section>
   );
 }
@@ -170,7 +200,9 @@ function ProjectsFolderLine({ projectsFolder, choosing, change, pickerLineId, on
 }) {
   return (
     <div className="start-projects-folder">
-      <p className="start-hint">{messages.projectsFolderIs}<span className="start-projects-folder-path">{projectsFolder.path}</span></p>
+      <p className="start-hint start-projects-folder-line" title={projectsFolder.path}>
+        {messages.projectsFolderIs}<span className="start-projects-folder-path">{projectsFolder.path}</span>
+      </p>
       {projectsFolder.can_change
         ? <button type="button" className="link-button" disabled={choosing} onClick={onChooseFolder}>{messages.changeFolder}</button>
         : (
@@ -254,20 +286,16 @@ export function StartScreen({ health, projects, examples, projectsFolder, active
 
   return (
     <main className="start-screen">
-      <header className="start-heading">
-        <h1 ref={pageHeading} tabIndex={-1}>{messages.productName}</h1>
-        {health && <p className="start-version">{messages.versionLine(health.version)}</p>}
-      </header>
+      <h1 ref={pageHeading} className="start-heading" tabIndex={-1}>{messages.startScreenHeading}</h1>
       {health && warmingUp && (
         <section className="start-device-card" aria-live="polite">
-          <p className="start-device-status"><Spinner />{messages.gpuPreparing}</p>
-          <p className="start-hint">{messages.gpuWarmUpHint}</p>
+          <Spinner />
+          <p><span className="start-device-status">{messages.gpuPreparing}.</span> <span className="start-hint">{messages.gpuWarmUpHint}</span></p>
         </section>
       )}
-      {health && !warmingUp && <p className="start-device-line" aria-live="polite">{deviceLine(health.warm_up)}</p>}
       <div className="start-cards">
         <NewProjectCard onCreateProject={onCreateProject} pickerWaitId={pickerWaitId} />
-        <ChoiceListCard title={messages.openProject} items={projects === null ? null : newestFirst(projects)} emptyText={messages.noProjectsYet}
+        <ChoiceListCard icon={CARD_ICONS.open} title={messages.openProject} items={projects === null ? null : newestFirst(projects)} emptyText={messages.noProjectsYet}
                         keyOf={(project) => project.name} onChoose={(project) => onOpenProject(project.name)}
                         render={(project) => ({ name: project.name, detail: dateAndTime(new Date(project.modified)) })}
                         pickerWaitId={pickerWaitId} cardRef={projectsCard} headingRef={projectsHeading}
@@ -276,15 +304,20 @@ export function StartScreen({ health, projects, examples, projectsFolder, active
                                        projectFolderPath={projectsFolder && projectFolderPath(projectsFolder.path, project.name)}
                                        runActive={activeRunProject !== null && sameProjectName(activeRunProject, project.name)}
                                        actions={rowActions} placement="project_row" waitReasonId={pickerWaitId} />
-                        )}>
-          {projectsFolder !== null && (
-            <ProjectsFolderLine projectsFolder={projectsFolder} choosing={choosingFolder} change={folderChange} pickerLineId={pickerLineId}
-                                onChooseFolder={() => void chooseFolder()} />
-          )}
-        </ChoiceListCard>
-        <ChoiceListCard title={messages.tryExample} items={examples} emptyText="" keyOf={(example) => example.name} onChoose={onTryExample}
+                        )}
+                        footer={projectsFolder !== null && (
+                          <ProjectsFolderLine projectsFolder={projectsFolder} choosing={choosingFolder} change={folderChange} pickerLineId={pickerLineId}
+                                              onChooseFolder={() => void chooseFolder()} />
+                        )} />
+        <ChoiceListCard icon={CARD_ICONS.example} title={messages.tryExample} lead={messages.tryExampleLead} items={examples} emptyText="" keyOf={(example) => example.name} onChoose={onTryExample}
                         render={(example) => ({ name: example.title, detail: example.description })} pickerWaitId={pickerWaitId} />
       </div>
+      {health && (
+        <footer className="start-footer">
+          <span>{messages.versionLine(health.version)}</span>
+          {!warmingUp && deviceLine(health.warm_up) && <span className="start-device-line" aria-live="polite">{deviceLine(health.warm_up)}</span>}
+        </footer>
+      )}
     </main>
   );
 }

@@ -3,7 +3,7 @@ import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { TypicalBuildingLibraryEntry, TypicalBuildingReply } from "../api_client/client";
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
-import { buildingGroupSummary, effectColour, libraryGroupsOf, libraryLineOf, SUN_DOWN_COLOUR, TypicalBuildingSheet, withRoom } from "./TypicalBuildingSheet";
+import { buildingGroupSummary, effectColour, libraryGroupsOf, libraryLineOf, SUN_DOWN_COLOUR, SUN_DOWN_COLOUR_DARK, TypicalBuildingSheet, withRoom } from "./TypicalBuildingSheet";
 import { useTypicalBuilding, type TypicalBuildingValues } from "./use_typical_building";
 
 const NBSP = " ";
@@ -475,6 +475,11 @@ test("the colours run from white to red and to blue; a project from no entry, or
   expect(effectColour(1)).toEqual([178, 24, 43]);
   expect(effectColour(-1)).toEqual([33, 102, 172]);
   expect(SUN_DOWN_COLOUR).toBe("#c4c4c4");
+  // The dark theme: no effect is the dark panel, and a stronger effect is brighter, red or blue
+  expect(effectColour(0, "dark")).toEqual([30, 39, 46]);
+  expect(effectColour(1, "dark")).toEqual([244, 165, 130]);
+  expect(effectColour(-1, "dark")).toEqual([146, 197, 222]);
+  expect(SUN_DOWN_COLOUR_DARK).toBe("#3e474e");
   const reply = { values: ZONE_B, library_id: "own-9", library_name: "Old flat", changed: false, state: "missing" as const };
   expect(libraryLineOf({ ...reply, library_id: null, library_name: null }, EXAMPLES)).toBe("Not from the library");
   expect(libraryLineOf(reply, EXAMPLES)).toBe("Old flat, no longer in the library");

@@ -27,11 +27,20 @@ When the service starts it compiles the GPU kernels in the background. The start
 
 ## The start screen
 
-The start screen shows the version, the device (the GPU's name, or that the CPU is used) and three cards:
+The start screen, headed **Projects**, has three cards side by side (one above the other in a narrow window):
 
 - **New project**: type a name (up to 64 letters, numbers, spaces, hyphens or underscores) and create the project.
-- **Open a project**: the projects folder, with **Change folder**, and the projects in it, newest first. Each project has a menu (see [Managing a project](#managing-a-project)).
+- **Open a project**: the projects in the projects folder, newest first, and at the foot of the card the folder (on one line, the whole path on hover) with **Change folder**. Each project has a menu (see [Managing a project](#managing-a-project)).
 - **Try an example**: three projects with their files already in place, so you can run an analysis without preparing any input. *Perimeter block* (a perimeter block 126 by 92 m, mode Solar time-based) is the smallest, *New building among neighbors* (a plot of about 18 by 17 m among existing buildings, mode Solar energy) is the middle one, and *District of many buildings* (about 208 by 227 m, mode Solar energy) is the largest. The first time you choose an example, it makes a copy as a new project, so the example itself never changes. After that, choosing it opens that project again. A project records which example it came from, so it is found after a rename. To start from a fresh copy, use **Reset to the example** in the project's menu.
+
+A small footer under the cards gives the version and the GPU's name, or why the CPU is used. While the GPU warms up, a one-line notice above the cards says so.
+
+### The top bar
+
+- **UrbanSolarCarver** at the left returns to the start screen when a project is open (it is a button: Tab to it and press Enter). Leaving Inspect with turned surfaces not saved asks first.
+- The project's name with its menu, and the **Design | Simulate | Inspect** switch, while a project is open.
+- The device's state at the right: "GPU ready" (the GPU's name on hover), "Preparing the GPU", "CPU mode", or "GPU not available" with its reason.
+- The **theme button** at the right end: a moon switches the whole app to its dark theme, a sun back to the light one. The 3D view follows the theme. The choice is kept in the browser's storage for the address of the app, so a launch with another `--port` starts in the light theme.
 
 ### The projects folder
 
@@ -280,7 +289,7 @@ While the mode or the analysis settings in the form differ from the stored ones,
 
 ## The 3D view
 
-The view has a compass, an axis gizmo (the three lettered axes, drawn straight on the viewport) and a legend for the coloured layers. The **Layers** menu switches the maximum volume, the test surfaces, the existing surroundings (neutral grey massing) and the terrain (a ground surface), both shown in every step, the kept and carved voxels (with several criteria also the carved voxels by criterion), the sun path, the sky dome, the carved envelope and the building massing. Buttons frame the whole model, show the top view and switch between a light and a dark viewport (remembered in the browser).
+The view has a compass, an axis gizmo (the three lettered axes, drawn straight on the viewport) and a legend for the coloured layers. The **Layers** menu switches the maximum volume, the test surfaces, the existing surroundings (neutral grey massing) and the terrain (a ground surface), both shown in every step, the kept and carved voxels (with several criteria also the carved voxels by criterion), the sun path, the sky dome, the carved envelope and the building massing. Buttons frame the whole model, show the top view and switch the ground aid (the ground grid, the compass ring, or neither). The viewport is light or dark with the app's theme (the theme button in the top bar).
 
 The ground aid button cycles through three states: off, a ground grid with a scale bar, and a compass ring on the ground around the scene (ticks every 10 degrees, the letters N, E, S and W every 90 degrees, rotated by the north direction). The button names the aid it switches to, and the choice is remembered in the browser. The compass ring, the sun path and the sky dome are centred on, and sized to, everything loaded (the maximum volume and the test surfaces together). Framing the model leaves out the surroundings and the terrain, which can reach far beyond the site.
 
@@ -354,7 +363,7 @@ The service listens on `127.0.0.1` only and checks the `Host` header of every re
 
 ## Without a CUDA-enabled GPU
 
-When no CUDA-enabled GPU is found, the start screen says so and the engine runs on the CPU. The results are the same, and an analysis takes noticeably longer, so start with a larger voxel size or with the smallest example. `--device cpu` chooses the CPU even when a GPU is present.
+When no CUDA-enabled GPU is found, the top bar says "CPU mode" (the reason on hover), the start screen's footer gives the reason, and the engine runs on the CPU. The results are the same, and an analysis takes noticeably longer, so start with a larger voxel size or with the smallest example. `--device cpu` chooses the CPU even when a GPU is present.
 
 ## Rebuilding the front-end after changing `app/`
 

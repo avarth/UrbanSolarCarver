@@ -1,30 +1,12 @@
-// The toolbar of UX 8.1, top right of the 3D view and left of the layers menu: frame all, top view, the ground aid (R2 2: off,
-// ground grid, compass ring in turn, the button showing the one it switches to), and the light or dark viewport (a moon on the
-// light viewport, a sun on the dark one). The ground aid and the viewport choices are kept in this browser's storage.
+// The toolbar of UX 8.1, top right of the 3D view and left of the layers menu: frame all, top view, and the ground aid (R2 2:
+// off, ground grid, compass ring in turn, the button showing the one it switches to), kept in this browser's storage. The
+// viewport is light or dark with the app's theme (theme/app_theme.tsx).
 import type { ReactElement } from "react";
 import { messages } from "../messages";
 import { GROUND_AIDS, nextGroundAid, type GroundAid, type ViewportTheme } from "../viewer/scene";
 import "./overlays.css";
 
-const VIEWPORT_THEME_KEY = "usc.viewportTheme";
 const GROUND_AID_KEY = "usc.groundAid";
-
-/** The viewport theme chosen last on this computer; light when none was chosen or storage is blocked. */
-export function rememberedViewportTheme(): ViewportTheme {
-  try {
-    return window.localStorage.getItem(VIEWPORT_THEME_KEY) === "dark" ? "dark" : "light";
-  } catch {
-    return "light";
-  }
-}
-
-export function rememberViewportTheme(theme: ViewportTheme): void {
-  try {
-    window.localStorage.setItem(VIEWPORT_THEME_KEY, theme);
-  } catch {
-    // storage is blocked: the choice lasts for this page only
-  }
-}
 
 /** The ground aid chosen last on this computer; the ground grid when none was chosen or storage is blocked. */
 export function rememberedGroundAid(): GroundAid {
@@ -49,7 +31,6 @@ interface ViewToolbarProps {
   groundAid: GroundAid;
   onFrameAll: () => void;
   onTopView: () => void;
-  onThemeChange: (theme: ViewportTheme) => void;
   onGroundAidChange: (aid: GroundAid) => void;
 }
 
@@ -84,31 +65,12 @@ function NoGroundAidIcon() {
 
 const GROUND_AID_ICONS: Record<GroundAid, () => ReactElement> = { off: NoGroundAidIcon, grid: GroundGridIcon, compass_ring: CompassRingIcon };
 
-function MoonIcon() {
-  return <svg {...ICON_PROPS}><path d="M15.5 12.5A6 6 0 0 1 7.5 4.5a6 6 0 1 0 8 8z" /></svg>;
-}
-
-function SunIcon() {
-  return (
-    <svg {...ICON_PROPS}>
-      <circle cx="10" cy="10" r="3.2" />
-      <path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" />
-    </svg>
-  );
-}
-
-export function ViewToolbar({ theme, groundAid, onFrameAll, onTopView, onThemeChange, onGroundAidChange }: ViewToolbarProps) {
-  const dark = theme === "dark";
+export function ViewToolbar({ theme, groundAid, onFrameAll, onTopView, onGroundAidChange }: ViewToolbarProps) {
   const followingGroundAid = nextGroundAid(groundAid);
   const FollowingGroundAidIcon = GROUND_AID_ICONS[followingGroundAid];
   const switchGroundAid = () => {
     rememberGroundAid(followingGroundAid);
     onGroundAidChange(followingGroundAid);
-  };
-  const switchTheme = () => {
-    const next: ViewportTheme = dark ? "light" : "dark";
-    rememberViewportTheme(next);
-    onThemeChange(next);
   };
   return (
     <div className="viewer-overlay viewer-toolbar" data-viewport-theme={theme} role="toolbar">
@@ -117,10 +79,6 @@ export function ViewToolbar({ theme, groundAid, onFrameAll, onTopView, onThemeCh
       <button type="button" className="viewer-ground-aid-button" aria-label={messages.groundAidSwitchTo[followingGroundAid]}
               title={messages.groundAidSwitchTo[followingGroundAid]} onClick={switchGroundAid}>
         <FollowingGroundAidIcon />
-      </button>
-      <button type="button" aria-label={messages.darkViewport} aria-pressed={dark} title={dark ? messages.lightViewport : messages.darkViewport}
-              onClick={switchTheme}>
-        {dark ? <SunIcon /> : <MoonIcon />}
       </button>
     </div>
   );

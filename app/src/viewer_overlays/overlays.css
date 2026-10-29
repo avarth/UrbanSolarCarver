@@ -10,7 +10,7 @@
   color: var(--colour-ink);
   border: 1px solid var(--colour-line);
   border-radius: var(--radius-large);
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--colour-ink) 16%, transparent);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--colour-shadow) 16%, transparent);
   font-family: var(--font-family);
   font-size: var(--text-secondary);
   line-height: var(--line-height);
@@ -20,7 +20,7 @@
   background: var(--colour-overlay-on-dark);
   color: var(--colour-ink-on-dark);
   border-color: var(--colour-line-on-dark);
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--colour-ink) 60%, transparent);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--colour-shadow) 60%, transparent);
 }
 
 /* The accent outline of tokens.css is too dark against the dark overlays; the lighter blue of the dark viewport keeps it visible. */

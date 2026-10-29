@@ -39,6 +39,7 @@
   --colour-error: #a3271c;
   --colour-out-of-date: #8a5a00;     /* the Out of date stamp on the 3D view */
   --colour-surface-back: #c2610a;    /* the back of a test surface in Inspect (the front is the accent); an orange that reads on both viewports */
+  --colour-shadow: #1f2a30;          /* shadows and the dimming behind a dialog, mixed with transparency */
 
   --colour-viewport-light: #e3e8e7;
   --colour-viewport-dark: #22303a;
@@ -88,6 +89,24 @@
   --space-unit: 4px;
   --radius-large: 6px;     /* steps, tiles, overlays */
   --radius-small: 4px;     /* inputs */
+}
+
+/* The dark theme of the interface (theme/app_theme.tsx sets data-theme on the body). It is set on the body, not the root, so
+   the colours the 3D scene reads from the root (colourToken) stay the same: the 3D view has its own dark colours, the
+   viewport-dark and on-dark rows above. Only the interface's colours change here. */
+body[data-theme="dark"] {
+  color-scheme: dark;
+  --colour-chrome: #161d22;
+  --colour-panel: #1e272e;
+  --colour-ink: #e6ecee;
+  --colour-muted: #a3b0b6;
+  --colour-line: #36444e;
+  --colour-accent: #7fb2d6;
+  --colour-accent-soft: #233847;
+  --colour-ready: #5fb87a;
+  --colour-error: #f08a7c;
+  --colour-out-of-date: #f2b632;
+  --colour-shadow: #000000;
 }
 
 body {

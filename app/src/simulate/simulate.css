@@ -23,7 +23,7 @@
   background: var(--colour-panel);
   border: 1px solid var(--colour-line);
   border-radius: var(--radius-large);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-ink) 12%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-shadow) 12%, transparent);
 }
 .studies-panel-collapsed, .sun-panel-collapsed { width: auto; padding: var(--space-unit); }
 
@@ -100,7 +100,7 @@
   background: var(--colour-panel);
   border: 1px solid var(--colour-line);
   border-radius: var(--radius-large);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-ink) 18%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-shadow) 18%, transparent);
 }
 .study-popover-header { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--space-unit) * 2); }
 .study-popover-header h3 { margin: 0; font-size: var(--text-body); font-weight: 600; }
@@ -130,7 +130,7 @@
   background: var(--colour-panel);
   border: 1px solid var(--colour-line);
   border-radius: var(--radius-large);
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--colour-ink) 16%, transparent);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--colour-shadow) 16%, transparent);
 }
 .geometry-switch-segment,
 .geometry-switch-change {
@@ -155,7 +155,7 @@
 .geometry-switch-change {
   border: 1px solid var(--colour-line);
   border-radius: var(--radius-large);
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--colour-ink) 16%, transparent);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--colour-shadow) 16%, transparent);
 }
 .geometry-switch-stale { width: 6px; height: 6px; border-radius: 50%; background: var(--colour-out-of-date); }
 .viewer-pane:has(.simulate-geometry-bar) .viewer-out-of-date { top: 56px; }

@@ -28,12 +28,13 @@ import type { Hemisphere } from "../viewer/sky_dome";
 import { sunPathLegend, sunPathObjects, type SunPathWithNorth } from "../viewer/sun_path";
 import { sunStudyObjects } from "../viewer/sun_study";
 import type { SunStudyView } from "../simulate/use_sun_study";
+import { useAppTheme } from "../theme/app_theme";
 import { AxisGizmo } from "./AxisGizmo";
 import { Compass } from "./Compass";
 import { LayersMenu, type LayersMenuEntry } from "./LayersMenu";
 import { Legend, type LegendContent } from "./Legend";
 import { ScaleBar } from "./ScaleBar";
-import { rememberedGroundAid, rememberedViewportTheme, ViewToolbar } from "./ViewToolbar";
+import { rememberedGroundAid, ViewToolbar } from "./ViewToolbar";
 import "./overlays.css";
 
 /** What the runs have produced for the view; each is null until its stage has written it. */
@@ -171,7 +172,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   const [scene, setScene] = useState<ViewerScene | null>(null);
   const [sceneUnavailable, setSceneUnavailable] = useState(false);
   const [camera, setCamera] = useState<CameraState>(NO_CAMERA);
-  const [theme, setTheme] = useState<ViewportTheme>(rememberedViewportTheme);
+  const theme: ViewportTheme = useAppTheme();
   const [groundAid, setGroundAid] = useState<GroundAid>(rememberedGroundAid);
   const [visibleByChoice, setVisibleByChoice] = useState<Partial<Record<LayerName, boolean>>>({});
   const [skyDomeOpacity, setSkyDomeOpacity] = useState(DEFAULT_SKY_DOME_OPACITY);
@@ -410,7 +411,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
       <div ref={container} className="viewer-canvas" />
       {progressBar}
       <Compass yawDegrees={camera.yawDegrees} northDegrees={northDegrees} theme={theme} onViewTop={() => scene?.viewTop()} />
-      <ViewToolbar theme={theme} groundAid={groundAid} onFrameAll={() => scene?.frameAll()} onTopView={() => scene?.viewTop()} onThemeChange={setTheme}
+      <ViewToolbar theme={theme} groundAid={groundAid} onFrameAll={() => scene?.frameAll()} onTopView={() => scene?.viewTop()}
                    onGroundAidChange={setGroundAid} />
       {entries.length > 0 && (
         <LayersMenu entries={entries} skyDomeOpacity={skyDomeOpacity} theme={theme} onSkyDomeOpacityChange={setSkyDomeOpacity}

@@ -18,7 +18,7 @@
   background: var(--colour-panel);
   border: 1px solid var(--colour-line);
   border-radius: var(--radius-large);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-ink) 12%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-shadow) 12%, transparent);
 }
 .files-panel-collapsed { width: auto; padding: var(--space-unit); }
 

@@ -4,9 +4,10 @@
 // at a time as the engine runs them, so a run goes on being followed while the start screen or another project is open. The
 // projects folder and the project menus (on the start screen and on the project name in the top bar) send their requests here:
 // a rename keeps the open project open under its new name and on its open step, a delete of it returns to the start screen, a
-// reset opens it afresh. Leaving Inspect with turned surfaces not saved, by the switch or the Projects link, asks first
-// (UnsavedTurnsDialog).
-import { useEffect, useRef, useState } from "react";
+// reset opens it afresh. The product name at the left of the top bar returns to the start screen; leaving Inspect with turned
+// surfaces not saved, by it or by the switch, asks first (UnsavedTurnsDialog). The theme button at the right of the top bar
+// switches the whole app, the 3D view with it, between light and dark (theme/app_theme.tsx).
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   chooseProjectsFolder, createProject, createProjectFromExample, deleteProject, failureTextOf, getExamples, getHealth, getModes, getProject, getProjectsFolder,
   getCriterionKeys, getSchema, listProjects, openProjectFolder, readTokenFromLaunchUrl, renameProject, resetProjectToExample, serviceProblemOf,
@@ -23,6 +24,7 @@ import { ProjectWorkspace, type OpenProjectSettingsSaver, type WorkspaceSteps } 
 import { useRunLoop } from "./steps/run_state";
 import { WorkspaceModeSwitch, type WorkspaceMode } from "./steps/WorkspaceModeSwitch";
 import { cpuChosenAtLaunch, exampleTitleOf, isWarmingUp, Spinner, StartScreen, type ProjectsFolderChange } from "./steps/StartScreen";
+import { AppThemeProvider, rememberedTheme, showTheme, ThemeButton, type AppTheme } from "./theme/app_theme";
 import "./App.css";
 
 const accessToken = readTokenFromLaunchUrl();
@@ -93,7 +95,13 @@ function MessageText({ parts }: { parts: MessagePart[] }) {
 export function DeviceStatus({ warmUp }: { warmUp: HealthReply["warm_up"] }) {
   const [reasonOpen, setReasonOpen] = useState(false);
   if (isWarmingUp(warmUp)) return <span className="device-status"><Spinner />{messages.gpuPreparing}</span>;
-  if (warmUp.state === "ready") return <span className="device-status"><span className="device-dot device-dot-ready" />{messages.gpuReady}</span>;
+  if (warmUp.state === "ready") {
+    return (
+      <span className="device-status" title={warmUp.device_name ? messages.gpuReadyWithDevice(warmUp.device_name) : undefined}>
+        <span className="device-dot device-dot-ready" />{messages.gpuReady}
+      </span>
+    );
+  }
   if (cpuChosenAtLaunch(warmUp)) return <span className="device-status"><span className="device-dot" />{messages.cpuModeChosenAtLaunch}</span>;
   if (warmUp.state === "cpu") {
     return <span className="device-status" title={messages.noCudaGpuFound}><span className="device-dot" />{messages.cpuMode}</span>;
@@ -108,6 +116,7 @@ export function DeviceStatus({ warmUp }: { warmUp: HealthReply["warm_up"] }) {
 }
 
 export function App() {
+  const [theme, setTheme] = useState<AppTheme>(rememberedTheme);
   const [health, setHealth] = useState<HealthReply | null>(null);
   const [problem, setProblem] = useState<ServiceProblem | null>(null);
   const [setup, setSetup] = useState<{ schema: Record<string, unknown>; modes: ModeInfo[]; criterionKeys: ReadonlySet<string> } | null>(null);
@@ -149,6 +158,9 @@ export function App() {
       askAgainAfter: () => false,
     });
   };
+
+  // Before the page is painted, so a dark theme never shows light first.
+  useLayoutEffect(() => showTheme(theme), [theme]);
 
   useEffect(() => {
     const stopPolling = pollHealth({
@@ -296,40 +308,47 @@ export function App() {
     return <div className="service-problem-overlay" role="alert"><MessageText parts={problem === "access_lost" ? messages.accessLost : messages.engineStopped} /></div>;
   }
   return (
-    <div className="app">
-      <header className="top-bar">
-        <span className="top-bar-product">{messages.productName}</span>
-        {openProject && (
-          <>
-            <ProjectMenu projectName={openProject.name} exampleTitle={exampleTitleOf(openProject.example, examples)}
-                         projectFolderPath={projectsFolder && projectFolderPath(projectsFolder.path, openProject.name)}
-                         runActive={runActiveFor(openProject.name)} actions={projectActions} placement="top_bar" />
-            <WorkspaceModeSwitch mode={workspaceMode} onChange={(mode) => {
-              if (mode !== workspaceMode) leavingInspect.leave(() => setWorkspaceMode(mode));
-            }} />
-            <button type="button" className="link-button" onClick={() => leavingInspect.leave(() => setOpenProject(null))}>{messages.projectsLink}</button>
-          </>
+    <AppThemeProvider value={theme}>
+      <div className="app">
+        <header className="top-bar">
+          {openProject
+            ? (
+              <button type="button" className="top-bar-product top-bar-home" title={messages.backToProjects}
+                      onClick={() => leavingInspect.leave(() => setOpenProject(null))}>{messages.productName}</button>
+            )
+            : <span className="top-bar-product">{messages.productName}</span>}
+          {openProject && (
+            <>
+              <ProjectMenu projectName={openProject.name} exampleTitle={exampleTitleOf(openProject.example, examples)}
+                           projectFolderPath={projectsFolder && projectFolderPath(projectsFolder.path, openProject.name)}
+                           runActive={runActiveFor(openProject.name)} actions={projectActions} placement="top_bar" />
+              <WorkspaceModeSwitch mode={workspaceMode} onChange={(mode) => {
+                if (mode !== workspaceMode) leavingInspect.leave(() => setWorkspaceMode(mode));
+              }} />
+            </>
+          )}
+          <span className="top-bar-device">{health && <DeviceStatus warmUp={health.warm_up} />}</span>
+          <ThemeButton theme={theme} onChange={setTheme} />
+        </header>
+        {openProject === null && (
+          <StartScreen health={health} projects={projects} examples={examplesCurrent ? examples : null} projectsFolder={projectsFolder}
+                       activeRunProject={runs.activeRun?.project ?? null} projectActions={projectActions} headingTakesFocus={focusStartScreenHeading}
+                       onCreateProject={(name) => openFrom(createProject(accessToken, name, NEW_PROJECT_MODE))}
+                       onOpenProject={(name) => openFrom(getProject(accessToken, name))}
+                       onTryExample={(example) => openFrom(example.project
+                         ? getProject(accessToken, example.project)       // made from this example before (R2 7.4)
+                         : createProjectFromExample(accessToken, freeProjectName(example.title, (projects ?? []).map((project) => project.name)), example.name))}
+                       onChangeProjectsFolder={changeProjectsFolder} />
         )}
-        <span className="top-bar-device">{health && <DeviceStatus warmUp={health.warm_up} />}</span>
-      </header>
-      {openProject === null && (
-        <StartScreen health={health} projects={projects} examples={examplesCurrent ? examples : null} projectsFolder={projectsFolder}
-                     activeRunProject={runs.activeRun?.project ?? null} projectActions={projectActions} headingTakesFocus={focusStartScreenHeading}
-                     onCreateProject={(name) => openFrom(createProject(accessToken, name, NEW_PROJECT_MODE))}
-                     onOpenProject={(name) => openFrom(getProject(accessToken, name))}
-                     onTryExample={(example) => openFrom(example.project
-                       ? getProject(accessToken, example.project)       // made from this example before (R2 7.4)
-                       : createProjectFromExample(accessToken, freeProjectName(example.title, (projects ?? []).map((project) => project.name)), example.name))}
-                     onChangeProjectsFolder={changeProjectsFolder} />
-      )}
-      {openProject !== null && setup !== null && (
-        <ProjectWorkspace key={`${openProject.name}/${openProjectResets}`} token={accessToken} project={openProject} schema={setup.schema} modes={setup.modes} criterionKeys={setup.criterionKeys}
-                          mode={workspaceMode} warmUpState={health?.warm_up.state ?? null} runs={runs} onServiceProblem={handleServiceProblem}
-                          onShowProjects={() => setOpenProject(null)} onSettingsSaverReady={(saver) => { openProjectSettings.current = saver; }}
-                          startSteps={workspaceStartSteps} onStepsChange={(steps) => { openWorkspaceSteps.current = steps; }}
-                          onInspectUnsavedChange={leavingInspect.onUnsavedChange} onInspectTurnsReady={leavingInspect.onTurnsReady} />
-      )}
-      {leavingInspect.dialog}
-    </div>
+        {openProject !== null && setup !== null && (
+          <ProjectWorkspace key={`${openProject.name}/${openProjectResets}`} token={accessToken} project={openProject} schema={setup.schema} modes={setup.modes} criterionKeys={setup.criterionKeys}
+                            mode={workspaceMode} warmUpState={health?.warm_up.state ?? null} runs={runs} onServiceProblem={handleServiceProblem}
+                            onShowProjects={() => setOpenProject(null)} onSettingsSaverReady={(saver) => { openProjectSettings.current = saver; }}
+                            startSteps={workspaceStartSteps} onStepsChange={(steps) => { openWorkspaceSteps.current = steps; }}
+                            onInspectUnsavedChange={leavingInspect.onUnsavedChange} onInspectTurnsReady={leavingInspect.onTurnsReady} />
+        )}
+        {leavingInspect.dialog}
+      </div>
+    </AppThemeProvider>
   );
 }

@@ -7,6 +7,18 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed (app: top bar, start screen, dark theme)
+
+- **Dark theme for the whole app**, switched by a moon or sun button at the right end of the top bar and remembered in the
+  browser's storage (`usc.theme`). It replaces the light/dark button of the 3D view's toolbar: the viewport now follows the app's
+  theme. The dark values of the interface colours are set on the body, so the 3D scene's own colours are unchanged; the
+  typical building's chart starts its red and blue scale from the dark panel in the dark theme; shadows have a colour of their
+  own (`--colour-shadow`) that stays dark.
+- **UrbanSolarCarver in the top bar returns to the start screen** with a project open, in place of the **Projects** link.
+- **Start screen**: headed **Projects**; the three cards with a symbol and a line under their titles, equal in height; the
+  projects folder at the foot of Open a project, on one line with the whole path on hover; the version and the GPU's name in a
+  small footer instead of under the heading (the top bar's "GPU ready" names the GPU on hover); the warm-up notice on one line.
+
 ### Added (energy-weighted Solar usefulness)
 
 - **Which hours count** in the Settings of a Solar usefulness criterion: **Cold hours** (the balance temperature rule, as before,

@@ -293,7 +293,7 @@ test("Try an example creates the project the first time; the examples are read a
   await settle();
   expect(service.requests).toContain("POST /api/projects/Perimeter%20block/examples/perimeter_block");
   const examplesAsked = service.count("GET /api/examples");
-  click(buttonNamed("Projects"));
+  click(buttonNamed("UrbanSolarCarver"));
   await settle();
   expect(service.count("GET /api/examples")).toBe(examplesAsked + 1);
 });
@@ -324,7 +324,7 @@ test("deleting the open project from the top bar returns to the start screen, wh
   expect(service.requests).toContain("DELETE /api/projects/Plot%207?confirm_name=Plot%207");
   expect(topBarMenuButton()).toBeNull();
   expect(page().querySelector(".start-screen")!.textContent).toContain("No projects yet.");
-  expect(document.activeElement).toBe(page().querySelector(".start-heading h1"));
+  expect(document.activeElement).toBe(page().querySelector("h1.start-heading"));
 });
 
 function savedChanges(service: FakeService) {
@@ -430,7 +430,7 @@ test("on the way back to the start screen, the examples wait to be read again be
   let answerExamples: () => void = () => {};
   service.examplesAnswerWhen = new Promise((resolve) => { answerExamples = resolve; });
   service.examples = [{ ...service.examples[0], project: "Plot 7" }];
-  click(buttonNamed("Projects"));
+  click(buttonNamed("UrbanSolarCarver"));
   await settle();
   expect(startChoice("Perimeter block")).toBeUndefined();
   await act(async () => answerExamples());
@@ -500,7 +500,7 @@ test("a changed projects folder forgets the last run's record: a project of the 
   await act(async () => { await workspaceSteps.runs!.start("Plot 7", ["thresholding"], "settings_run_analysis"); });
   await settle();
   expect(page().querySelector(".fake-workspace")!.getAttribute("data-run-refusal")).toBe("The maximum volume is missing.");
-  click(buttonNamed("Projects"));
+  click(buttonNamed("UrbanSolarCarver"));
   await settle();
   await act(async () => click(buttonNamed("Change folder")));
   await settle();
@@ -523,7 +523,7 @@ test("renaming the open project keeps the open step; opening a project and reset
   await settle();
   expect(workspaceMounts).toEqual(["Plot 7", "Plot 7", "Plot 8"]);
   expect(workspaceSteps.startedWith).toEqual([undefined, undefined, { open: "criteria", view: "criteria" }]);
-  click(buttonNamed("Projects"));
+  click(buttonNamed("UrbanSolarCarver"));
   await settle();
   await openPlot7();
   expect(workspaceSteps.startedWith).toHaveLength(4);
@@ -577,6 +577,51 @@ test("a rename or delete of the open project waits for its uploads under way, so
   expect(service.requests).toContain("DELETE /api/projects/Plot%208?confirm_name=Plot%208");
 });
 
+test("the product name in the top bar goes back to the start screen once a project is open; on the start screen it is plain text", async () => {
+  const service = new FakeService();
+  await renderApp(service);
+  const product = () => page().querySelector<HTMLElement>(".top-bar-product")!;
+  expect(product().tagName).toBe("SPAN");
+  expect(page().querySelector(".top-bar")!.textContent).not.toContain("Projects");
+  await openPlot7();
+  expect(product().tagName).toBe("BUTTON");
+  expect(product().textContent).toBe("UrbanSolarCarver");
+  expect(product().getAttribute("title")).toBe("Back to the projects");
+  click(product());
+  await settle();
+  expect(page().querySelector(".fake-workspace")).toBeNull();
+  expect(page().querySelector(".start-screen h1")!.textContent).toBe("Projects");
+});
+
+test("the theme button at the right of the top bar switches the whole page to dark and back, and the choice is remembered", async () => {
+  const service = new FakeService();
+  await renderApp(service);
+  const themeButton = () => page().querySelector<HTMLButtonElement>(".top-bar .top-bar-icon-button")!;
+  expect(page().querySelector(".top-bar")!.lastElementChild).toBe(themeButton());
+  expect(document.body.dataset.theme).toBe("light");
+  expect(themeButton().getAttribute("aria-label")).toBe("Dark theme");
+  expect(themeButton().getAttribute("aria-pressed")).toBe("false");
+  expect(themeButton().title).toBe("Switch to the dark theme");
+  click(themeButton());
+  expect(document.body.dataset.theme).toBe("dark");
+  expect(themeButton().getAttribute("aria-pressed")).toBe("true");
+  expect(themeButton().title).toBe("Switch to the light theme");
+  expect(window.localStorage.getItem("usc.theme")).toBe("dark");
+  rendered!.unmount();
+  rendered = null;
+  await renderApp(service);           // the next visit opens in the theme chosen last
+  expect(document.body.dataset.theme).toBe("dark");
+  click(themeButton());
+  expect(document.body.dataset.theme).toBe("light");
+});
+
+test("the top bar names the GPU on hover once it is ready", () => {
+  rendered = renderForTest(<DeviceStatus warmUp={{ state: "ready", device_name: "NVIDIA RTX 4070" }} />);
+  const status = rendered.container.querySelector(".device-status")!;
+  expect(status.textContent).toBe("GPU ready");
+  expect(status.getAttribute("title")).toBe("GPU ready: NVIDIA RTX 4070");
+});
+
 const modeSwitch = () => page().querySelector<HTMLElement>(".top-bar .workspace-mode-switch");
 const modeButton = (name: string) => buttonNamed(name, modeSwitch()!);
 const workspaceMode = () => page().querySelector(".fake-workspace")!.getAttribute("data-mode");
@@ -597,7 +642,7 @@ test("the Design | Simulate | Inspect switch shows only with an open project and
   click(modeButton("Inspect"));
   expect(workspaceMode()).toBe("inspect");
   expect(modePressed()).toEqual([["Design", "false"], ["Simulate", "false"], ["Inspect", "true"]]);
-  click(buttonNamed("Projects"));
+  click(buttonNamed("UrbanSolarCarver"));
   await settle();
   expect(modeSwitch()).toBeNull();
 });
@@ -607,7 +652,7 @@ test("another project opens in Design, whatever mode the last one was left in", 
   await renderApp(service);
   await openPlot7();
   click(modeButton("Simulate"));
-  click(buttonNamed("Projects"));
+  click(buttonNamed("UrbanSolarCarver"));
   await settle();
   await openPlot7();
   expect(workspaceMode()).toBe("design");

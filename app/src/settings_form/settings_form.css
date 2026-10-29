@@ -371,7 +371,7 @@
   border-radius: var(--radius-large);
   background: var(--colour-panel);
   color: var(--colour-ink);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-ink) 18%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-shadow) 18%, transparent);
   font-size: var(--text-body);
   line-height: var(--line-height);
 }

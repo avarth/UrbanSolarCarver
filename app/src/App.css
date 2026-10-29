@@ -19,7 +19,39 @@
 }
 
 .top-bar-product { font-size: var(--text-step-title); font-weight: 700; }
+
+/* With a project open, the product name is a button back to the start screen. */
+.top-bar-home {
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  margin-left: calc(var(--space-unit) * -2);
+  border: 0;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--colour-ink);
+  font-family: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.top-bar-home:hover { background: var(--colour-chrome); color: var(--colour-accent); }
+
 .top-bar-device { position: relative; margin-left: auto; }
+
+/* The theme button at the right end of the top bar. */
+.top-bar-icon-button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-small);
+  background: var(--colour-panel);
+  color: var(--colour-ink);
+  cursor: pointer;
+}
+
+.top-bar-icon-button:hover { background: var(--colour-chrome); }
 
 .device-status {
   display: inline-flex;
@@ -49,7 +81,7 @@
   border-radius: var(--radius-large);
   background: var(--colour-panel);
   color: var(--colour-ink);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-ink) 18%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-shadow) 18%, transparent);
 }
 
 /* Buttons shared by the screens: the primary action, and a link-styled button. */
@@ -131,7 +163,7 @@
     bottom: 0;
     left: 0;
     z-index: 5;
-    box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-ink) 18%, transparent);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-shadow) 18%, transparent);
   }
 }
 

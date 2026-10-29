@@ -15,6 +15,7 @@ import { dayAndMonth, messages } from "../messages";
 import { WarningIcon } from "../settings_form/SettingField";
 import { SettingTooltip } from "../settings_form/SettingTooltip";
 import { formatNumber, formattedNumber, groupedDigits } from "../steps/format_numbers";
+import { useAppTheme, type AppTheme } from "../theme/app_theme";
 import { PanelSection } from "./PanelSection";
 import { DeleteLibraryEntryDialog, LibraryNameDialog } from "./TypicalBuildingDialogs";
 import type { TypicalBuildingHook, TypicalBuildingValues } from "./use_typical_building";
@@ -329,12 +330,22 @@ function BuildingDate({ name, value, error, disabled, onSave }: { name: string; 
 export const OFFSETS_HEATING_STOPS = ["#ffffff", "#fddbc7", "#f4a582", "#d6604d", "#b2182b"];
 export const ADDS_TO_COOLING_STOPS = ["#ffffff", "#d1e5f0", "#92c5de", "#4393c3", "#2166ac"];
 export const SUN_DOWN_COLOUR = "#c4c4c4";
+// In the dark theme the scale starts from the dark panel, 0, and grows brighter with the effect, so that no effect is not a
+// white block on the dark panel; the sun-down grey is a little lighter than the panel.
+export const OFFSETS_HEATING_STOPS_DARK = ["#1e272e", "#4f2a30", "#8a2d35", "#d6604d", "#f4a582"];
+export const ADDS_TO_COOLING_STOPS_DARK = ["#1e272e", "#22394f", "#2b5f8f", "#4393c3", "#92c5de"];
+export const SUN_DOWN_COLOUR_DARK = "#3e474e";
+
+const CHART_COLOURS = {
+  light: { heating: OFFSETS_HEATING_STOPS, cooling: ADDS_TO_COOLING_STOPS, sunDown: SUN_DOWN_COLOUR },
+  dark: { heating: OFFSETS_HEATING_STOPS_DARK, cooling: ADDS_TO_COOLING_STOPS_DARK, sunDown: SUN_DOWN_COLOUR_DARK },
+};
 
 const rgbOf = (hex: string) => [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16));
 
 /** The colour of an hour whose sun has *effect*, -1 (adds to cooling) to 1 (offsets heating), as [red, green, blue]. */
-export function effectColour(effect: number): number[] {
-  const stops = effect >= 0 ? OFFSETS_HEATING_STOPS : ADDS_TO_COOLING_STOPS;
+export function effectColour(effect: number, theme: AppTheme = "light"): number[] {
+  const stops = effect >= 0 ? CHART_COLOURS[theme].heating : CHART_COLOURS[theme].cooling;
   const position = Math.min(1, Math.abs(Number.isFinite(effect) ? effect : 0)) * (stops.length - 1);
   const index = Math.min(stops.length - 2, Math.floor(position));
   const [low, high] = [rgbOf(stops[index]), rgbOf(stops[index + 1])];
@@ -348,16 +359,18 @@ export function effectColour(effect: number): number[] {
  */
 export function EffectChart({ weights, countsHarm }: { weights: TypicalBuildingWeightsReply | null; countsHarm: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const theme = useAppTheme();
+  const colours = CHART_COLOURS[theme];
   useEffect(() => {
     const context = weights === null ? null : canvas.current?.getContext("2d") ?? null;
     if (context === null || weights === null) return;
     const image = context.createImageData(DAYS_IN_YEAR, HOURS_IN_DAY);
-    const sunDown = rgbOf(SUN_DOWN_COLOUR);
+    const sunDown = rgbOf(colours.sunDown);
     for (let day = 0; day < DAYS_IN_YEAR; day++) {
       for (let hour = 0; hour < HOURS_IN_DAY; hour++) {
         const at = day * HOURS_IN_DAY + hour;
         const effect = (weights.benefit[at] ?? 0) - (countsHarm ? weights.harm[at] ?? 0 : 0);
-        const [red, green, blue] = weights.sun_up[at] === 0 ? sunDown : effectColour(effect);
+        const [red, green, blue] = weights.sun_up[at] === 0 ? sunDown : effectColour(effect, theme);
         const offset = (hour * DAYS_IN_YEAR + day) * 4;
         image.data[offset] = red;
         image.data[offset + 1] = green;
@@ -366,8 +379,8 @@ export function EffectChart({ weights, countsHarm }: { weights: TypicalBuildingW
       }
     }
     context.putImageData(image, 0, 0);
-  }, [weights, countsHarm]);
-  const ramp = countsHarm ? [...ADDS_TO_COOLING_STOPS.slice(1).reverse(), ...OFFSETS_HEATING_STOPS] : OFFSETS_HEATING_STOPS;
+  }, [weights, countsHarm, theme]);
+  const ramp = countsHarm ? [...colours.cooling.slice(1).reverse(), ...colours.heating] : colours.heating;
   const legend = messages.effectLegend;
   return (
     <figure className="weights-chart">
@@ -383,7 +396,7 @@ export function EffectChart({ weights, countsHarm }: { weights: TypicalBuildingW
         <span>{countsHarm ? legend.cooling : legend.none}</span>
         <span className="weights-chart-ramp" style={{ background: `linear-gradient(to right, ${ramp.join(", ")})` }} />
         <span>{legend.heating}</span>
-        <span className="weights-chart-sun-down"><span className="weights-chart-swatch" style={{ background: SUN_DOWN_COLOUR }} />{legend.sunDown}</span>
+        <span className="weights-chart-sun-down"><span className="weights-chart-swatch" style={{ background: colours.sunDown }} />{legend.sunDown}</span>
       </div>
       {weights === null && <p className="step-reason">{messages.weightsChartWaits}</p>}
     </figure>

@@ -8,7 +8,8 @@ import { LayersMenu } from "./LayersMenu";
 import { Legend } from "./Legend";
 import { ScaleBar } from "./ScaleBar";
 import { ViewerPane, type ViewerPaneProps } from "./ViewerPane";
-import { ViewToolbar, rememberedGroundAid, rememberedViewportTheme } from "./ViewToolbar";
+import { AppThemeProvider } from "../theme/app_theme";
+import { ViewToolbar, rememberedGroundAid } from "./ViewToolbar";
 import { addStyleSheetForTest, click, renderForTest, type RenderedOverlay } from "./render_for_test";
 
 let rendered: RenderedOverlay | null = null;
@@ -106,18 +107,13 @@ test("the axis gizmo is drawn straight on the viewport, without a background, a 
   }
 });
 
-const TOOLBAR_CALLBACKS = { onFrameAll: () => {}, onTopView: () => {}, onThemeChange: () => {}, onGroundAidChange: () => {} };
+const TOOLBAR_CALLBACKS = { onFrameAll: () => {}, onTopView: () => {}, onGroundAidChange: () => {} };
 
-test("the toolbar has four named buttons and remembers the viewport theme", () => {
-  const onThemeChange = vi.fn();
-  expect(rememberedViewportTheme()).toBe("light");
-  rendered = renderForTest(<ViewToolbar {...TOOLBAR_CALLBACKS} theme="light" groundAid="grid" onThemeChange={onThemeChange} />);
+test("the toolbar has three named buttons; the light or dark viewport is the app's theme, not a button here", () => {
+  rendered = renderForTest(<ViewToolbar {...TOOLBAR_CALLBACKS} theme="dark" groundAid="grid" />);
   const names = Array.from(rendered.container.querySelectorAll("button")).map((button) => button.getAttribute("aria-label"));
-  expect(names).toEqual(["Frame all", "Top view with north up", "Show the compass ring", "Dark viewport"]);
-  click(rendered.container.querySelectorAll("button")[3]);
-  expect(onThemeChange).toHaveBeenCalledWith("dark");
-  expect(window.localStorage.getItem("usc.viewportTheme")).toBe("dark");
-  expect(rememberedViewportTheme()).toBe("dark");
+  expect(names).toEqual(["Frame all", "Top view with north up", "Show the compass ring"]);
+  expect(rendered.container.querySelector(".viewer-toolbar")!.getAttribute("data-viewport-theme")).toBe("dark");
 });
 
 test("the ground aid button names the aid it switches to, and the choice is remembered on this computer", () => {
@@ -210,6 +206,15 @@ test("without WebGL (jsdom has none, like a remote desktop) the view says so, an
   expect(rendered.container.querySelector(".run-report-panel")!.textContent).toBe("Run report");
   expect(rendered.container.querySelector(".viewer-toolbar")).toBeNull();      // no controls for a view that is not there
   expect(unavailable.textContent).toContain("for example over a remote desktop, or when the graphics card is blocked");
+});
+
+test("the view is light or dark with the app's theme: the overlay content (Simulate's legend) is given the theme", () => {
+  pretendTheBrowserHasNoWebGl();
+  const overlayContent = (theme: string) => <div className="run-report-panel">{theme}</div>;
+  rendered = renderForTest(<AppThemeProvider value="dark"><ViewerPane {...EMPTY_VIEW} overlayContent={overlayContent} /></AppThemeProvider>);
+  expect(rendered.container.querySelector(".run-report-panel")!.textContent).toBe("dark");
+  rendered.rerender(<AppThemeProvider value="light"><ViewerPane {...EMPTY_VIEW} overlayContent={overlayContent} /></AppThemeProvider>);
+  expect(rendered.container.querySelector(".run-report-panel")!.textContent).toBe("light");
 });
 
 test("without WebGL the empty project's way to start (the hint, Add files, the examples) stays under the message", () => {

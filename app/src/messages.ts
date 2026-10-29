@@ -74,7 +74,11 @@ export const messages = {
   // Top bar and start screen (4, 5.1)
   productName: "UrbanSolarCarver",
   versionLine: (version: string) => `Version ${version}`,
-  projectsLink: "Projects",
+  backToProjects: "Back to the projects",
+  startScreenHeading: "Projects",
+  darkTheme: "Dark theme",
+  switchToDarkTheme: "Switch to the dark theme",
+  switchToLightTheme: "Switch to the light theme",
   workspaceModeLabel: "Workspace mode",
   workspaceModes: { design: "Design", simulate: "Simulate", inspect: "Inspect" },
 
@@ -158,12 +162,14 @@ export const messages = {
   stayInInspect: "Stay",
   inspectSaveUnderWay: "A save is under way.",
   newProject: "New project",
+  newProjectLead: "Start empty and add your own files.",
   projectNameLabel: "Project name",
   projectNameHint: "Up to 64 letters, numbers, spaces, hyphens or underscores.",
   createProject: "Create project",
   openProject: "Open a project",
   noProjectsYet: "No projects yet.",
   tryExample: "Try an example",
+  tryExampleLead: "A project with its files and settings, ready to run.",
 
   // The projects folder and the menu of a project (R2 7.1, 7.2). The service's own reasons for a refusal are shown as it gives them.
   projectsFolderIs: "Projects folder: ",
@@ -684,8 +690,6 @@ export const messages = {
   axisGizmo: "Axes: X, Y and Z",
   frameAll: "Frame all",
   topView: "Top view with north up",
-  darkViewport: "Dark viewport",
-  lightViewport: "Light viewport",
   // The ground aid button names the aid it switches to: off, ground grid and compass ring follow each other in a cycle
   groundAidSwitchTo: { grid: "Show the ground grid", compass_ring: "Show the compass ring", off: "Hide the compass ring" },
   keptVoxelsNote: (cutoff: string) => `Kept voxels. Carved voxels score above ${cutoff}.`,
