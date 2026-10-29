@@ -1755,7 +1755,7 @@
 </tr>
 <tr>
 <td><code>simulated_weights.py</code></td>
-<td>Simulated benefit weights (opt-in via <code>simulated_weights_path</code>). Implements the ISO 13790 Annex C hourly thermal model ("5R1C": five conductances, one lumped mass capacitance, one zone) in NumPy, and derives the hourly <em>marginal</em> benefit/harm of solar gain by perturbation: for each hour of the year, one watt of solar gain is added and removed and the change in annual heating and cooling demand is attributed to that hour (<code>benefit[t]</code> / <code>harm[t]</code>, both in [0, 1]; all 17,521 year-simulations, the base run plus two per hour, march as one vectorized batch). <strong><code>generate_simulated_weights</code></strong>: EPW + archetype → <code>simulated_weights.json</code> artifact with provenance metadata plus a <code>.png</code> heatmap preview. <strong><code>ZoneParams.from_archetype</code></strong> builds the thermal network from about 10 physical inputs; <strong><code>expand_shoebox</code></strong> derives all areas from a width/length/height + per-facade window-to-wall ratio shorthand. Validated against ETH's RC_BuildingSimulator (<code>tests/data/oracle_5r1c_reference.json</code>). Design note: <code>design/simulated-weights.md</code>.</td>
+<td>Simulated benefit weights (opt-in via <code>simulated_weights_path</code>). Implements the ISO 13790 Annex C hourly thermal model ("5R1C": five conductances, one lumped mass capacitance, one zone) in NumPy, and derives the hourly <em>marginal</em> benefit/harm of solar gain by perturbation: for each hour of the year, one watt of solar gain is added and removed and the change in annual heating and cooling demand is attributed to that hour (<code>benefit[t]</code> / <code>harm[t]</code>, both in [0, 1]; all 17,521 year-simulations, the base run plus two per hour, march as one vectorized batch). <strong><code>generate_simulated_weights</code></strong>: EPW + archetype → <code>simulated_weights.json</code> artifact with provenance metadata plus a <code>.png</code> heatmap preview. <strong><code>ZoneParams.from_archetype</code></strong> builds the thermal network from about 10 physical inputs; <strong><code>expand_shoebox</code></strong> derives all areas from a width/length/height + per-facade window-to-wall ratio shorthand, with <code>u_wall</code>, <code>u_roof</code>, <code>u_floor</code> and the <code>roof_exposed</code> / <code>floor_exposed</code> switches as the alternative to one <code>u_opaque</code>. Internal gains and <code>ach_vent</code> also take 8,760 hourly values (an hourly ventilation conductance in the time loop), <code>mass_capacity_kj_m2k</code> is the alternative to <code>mass_class</code>, <code>shading_hot_period</code> (first and last day of the year) the alternative to <code>hot_months</code>; <code>sun_up_hours</code> gives the hours with the sun above the horizon, recorded in the artifact's meta as <code>sun_up</code>. Validated against ETH's RC_BuildingSimulator (<code>tests/data/oracle_5r1c_reference.json</code>). Design note: <code>design/simulated-weights.md</code>.</td>
 </tr>
 </tbody>
 </table>
@@ -1797,7 +1797,7 @@
 </tr>
 <tr>
 <td><code>archetype_defaults.py</code></td>
-<td>The shoebox archetype defaults (<code>ARCHETYPE_DEFAULTS</code>, <code>WINDOW_TO_WALL_DEFAULTS</code>, <code>ARCHETYPE_OPTIONAL_KEYS</code>) read by <code>usc archetype</code>, <code>simulated_weights.py</code> and the USC_Archetype component. Standard library only.</td>
+<td>The shoebox archetype defaults (<code>ARCHETYPE_DEFAULTS</code>, <code>WINDOW_TO_WALL_DEFAULTS</code>, <code>ARCHETYPE_OPTIONAL_KEYS</code>, <code>SHOEBOX_EXPOSURE_DEFAULTS</code>) read by <code>usc archetype</code>, <code>simulated_weights.py</code> and the USC_Archetype component. Standard library only.</td>
 </tr>
 <tr>
 <td><code>errors.py</code></td>
@@ -1883,7 +1883,11 @@
 </tr>
 <tr>
 <td><code>local_web_service/criteria.py</code></td>
-<td>The criterion model helpers: the colour palette, <code>config.yaml</code> generated from <code>project.json</code> (shared settings, then the criteria that are on), and the split of the app's settings into shared and criterion keys (<code>split_settings</code>).</td>
+<td>The criterion model helpers: the colour palette, <code>config.yaml</code> generated from <code>project.json</code> (shared settings, then the criteria that are on), and the split of the app's settings into shared and criterion keys (<code>split_settings</code>). <code>engine_settings</code> gives an energy-weighted Solar usefulness criterion (<code>CriterionEntry.energy_weighted</code>) <code>simulated_weights_path: inputs/typical_building/weights.json</code> and leaves out its <code>balance_temperature</code> and <code>balance_offset</code>, which <code>project.json</code> keeps; <code>ProjectStore.read_stored_config</code> reads the engine's form, <code>read_settings</code> (the browser's) the stored one.</td>
+</tr>
+<tr>
+<td><code>local_web_service/typical_building.py</code></td>
+<td>The project's typical building (<code>ProjectJson.typical_building</code>, <code>TypicalBuildingEntry</code>: a copy of the values with the library entry it came from), shared by its energy-weighted criteria; <code>building_of</code> gives None while none is chosen (a new project) or when the stored values no longer validate (an earlier form of the keys), and <code>stage_records.missing_inputs</code> then names <code>typical_building</code> for a run of an energy-weighted criterion. The library: built-in read-only <code>EXAMPLES</code> in groups named by the source of their values (the ten examples of <a href="../simulated-weights/#the-library-examples">Simulated Benefit Weights: the library examples</a>, with their sources) and the user's own entries, one YAML file each in <code>library_folder()</code> (<code>typical_buildings/</code> beside the user preferences file); <code>add_entry</code>, <code>update_entry</code>, <code>delete_entry</code>. <code>validate</code> (each value's type and range, the keys of the room kind, then the engine's <code>expand_shoebox</code>, <code>ZoneParams.from_archetype</code> and <code>_shading_factors</code>, an error at each field), <code>archetype_of</code> (the engine's shoebox archetype: the average room as a 4 x depth square turned 45°, the schedule's hours as 8,760-value gains and ventilation, the weekday of 1 January from the weather file's DATA PERIODS, the thermal capacity as <code>mass_capacity_kj_m2k</code>, the infiltration in air changes per hour, the summer shading as <code>shading_hot_period</code>), <code>weights_key</code> (sha256 of the values and the weather file) and <code>calculate</code> (<code>generate_simulated_weights</code> into a new folder, then the file, its heatmap and <code>calculated_key</code> put in place together under the project lock).</td>
 </tr>
 <tr>
 <td><code>local_web_service/test_surfaces.py</code></td>
@@ -1911,11 +1915,11 @@
 </tr>
 <tr>
 <td><code>local_web_service/stage_records.py</code></td>
-<td>Which stages of a project are current, out of date or missing, for each criterion (<code>criterion_status</code>) and summed up (<code>stage_status</code>), and which stages a run has to execute: <code>choose_stages</code> returns the criteria to trace (<code>trace_criteria</code>), the criterion to threshold from and what the run does for each criterion.</td>
+<td>Which stages of a project are current, out of date or missing, for each criterion (<code>criterion_status</code>) and summed up (<code>stage_status</code>), and which stages a run has to execute: <code>choose_stages</code> returns the criteria to trace (<code>trace_criteria</code>), the criterion to threshold from and what the run does for each criterion. The preprocessing record of an energy-weighted criterion keeps the typical building's key (<code>StageRecord.weights_key</code>); another key now dates that preprocessing.</td>
 </tr>
 <tr>
 <td><code>local_web_service/run_worker.py</code></td>
-<td>Runs a project in a background thread in two phases (analysis, then envelope and massing), publishes progress events that name their criterion, refuses a run without test surfaces in a criterion that is on, and handles cancel. Runs a simulation of the studies (<code>start_simulation</code>, stage <code>simulate</code>) as the same kind of job: one job at a time, the same events and cancel, no stage record touched.</td>
+<td>Runs a project in a background thread in two phases (analysis, then envelope and massing), publishes progress events that name their criterion, refuses a run without test surfaces in a criterion that is on, and handles cancel. When it preprocesses an energy-weighted criterion and the weights are missing or for another key, it calculates them first (progress events of stage <code>typical_building</code>, criterion <code>null</code>, 0 then 1 of 1). Runs a simulation of the studies (<code>start_simulation</code>, stage <code>simulate</code>) as the same kind of job: one job at a time, the same events and cancel, no stage record touched.</td>
 </tr>
 <tr>
 <td><code>local_web_service/run_summary.py</code>, <code>score_points.py</code></td>
@@ -2037,7 +2041,7 @@
 </tr>
 <tr>
 <td><code>PATCH /projects/{name}/criteria/{id}</code></td>
-<td>Change <code>name</code>, <code>colour</code>, <code>bypassed</code> or <code>values</code> (the criterion's own settings; shared keys in <code>values</code> are ignored and belong to <code>PUT /projects/{name}/shared-settings</code>)</td>
+<td>Change <code>name</code>, <code>colour</code>, <code>bypassed</code>, <code>energy_weighted</code> (Solar usefulness: count the hours by the typical building) or <code>values</code> (the criterion's own settings; shared keys in <code>values</code> are ignored and belong to <code>PUT /projects/{name}/shared-settings</code>)</td>
 </tr>
 <tr>
 <td><code>DELETE /projects/{name}/criteria/{id}</code></td>
@@ -2090,7 +2094,50 @@
 </tbody>
 </table>
 <p><code>POST /projects/{name}/runs</code> answers with <code>criterion_stages</code> besides <code>stages</code>, and refuses with a 422 (<code>missing_inputs</code>) when no criterion is on or a criterion that is on has no test surfaces.</p>
-<p><code>app/</code> holds the front-end source (<code>src/inspect/</code> the Inspect workspace: <code>InspectView.tsx</code>, what it puts over the 3D view, <code>FilesPanel.tsx</code>, the Files panel with a file's summary, Flip mode, Save, Discard and Restore original, <code>use_inspection.ts</code>, the summaries, the selected file and the staged turns, <code>UnsavedTurnsDialog.tsx</code>, the Save, Discard or Stay question when leaving Inspect, and <code>inspect_geometry_decoder.ts</code>, the reader of the geometry binary; <code>src/simulate/</code> the Simulate workspace: <code>SimulateView.tsx</code>, what it puts over the 3D view, <code>StudiesPanel.tsx</code> and <code>AddStudyMenu.tsx</code>, the Studies panel and its Add study menu, <code>StudyPopover.tsx</code>, a study's settings, <code>GeometrySwitch.tsx</code> and <code>ResultCard.tsx</code>, the geometry switch with Change and the result card, <code>use_studies.ts</code> and <code>use_study_view.ts</code>, the studies and the study on the view (geometry, Change, target, legend, card), and <code>study_values.ts</code> with <code>study_values_decoder.ts</code>, the statistics and the reader of the values binary; <code>src/viewer_overlays/TargetLegend.tsx</code> is its legend with the draggable target; <code>src/steps/</code> the five steps: <code>InputsStep.tsx</code>, <code>SiteAndGridStep.tsx</code>, the result steps and the export, with <code>ActionMenu.tsx</code>, the menu of a project and of a criterion row, <code>menu_popup.ts</code>, the placement and keys of a popup menu that <code>ActionMenu.tsx</code> and the mode menu share, and <code>CriteriaRunBar.tsx</code>, the Run analysis and Build buttons pinned under the Criteria step; <code>src/criteria/</code> the criteria hook and its helpers (<code>use_criteria.ts</code>, <code>criteria_state.ts</code>), the Criteria step, the criterion list and its rows (<code>CriterionList.tsx</code>, <code>CriterionCard.tsx</code>) and their dialogs, <code>ModeMenu.tsx</code>, the short menu of modes behind Add criterion, the criterion panel with <code>PanelSection.tsx</code>, its folded sections, and <code>section_summaries.ts</code>, the one-line summary of each section, and its Test surfaces box; <code>src/settings_form/</code> the settings, with <code>two_forms.ts</code> for the shared and the criterion settings held side by side; <code>src/viewer/</code> and <code>src/viewer_overlays/</code> the 3D view, with <code>carved_by_criterion_decoder.ts</code> for the carved-by-criterion layer; <code>src/api_client/</code> the typed client). See <a href="../ui/#rebuilding-the-front-end-after-changing-app">Browser UI</a> for building it.</p>
+<p><strong>Routes for the typical building</strong> (all under <code>/api</code>; the project's save and Calculate answer 409 while a run of the project is active):</p>
+<table>
+<thead>
+<tr>
+<th>Route</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /typical-building-library</code></td>
+<td>The library: <code>id</code>, <code>name</code>, <code>group</code> (an example's group, named by the source of its values; null for an own entry), <code>read_only</code>, <code>source</code>, <code>values</code> of each entry; the examples first, then the own entries by name</td>
+</tr>
+<tr>
+<td><code>POST /typical-building-library</code></td>
+<td>Body <code>name</code>, <code>values</code>: a new own entry (Save as new); 422 <code>ConfigErrorReply</code> at <code>name</code> or a value's field, 409 for a name in use</td>
+</tr>
+<tr>
+<td><code>PUT /typical-building-library/{id}</code></td>
+<td>Body <code>name</code> and/or <code>values</code> (rename, Save to library); 404 for no such entry, 409 for an example or a name in use</td>
+</tr>
+<tr>
+<td><code>DELETE /typical-building-library/{id}</code></td>
+<td>204; 409 for an example. Projects keep their copies</td>
+</tr>
+<tr>
+<td><code>GET /projects/{name}/typical-building</code></td>
+<td>The <code>TypicalBuildingReply</code>: <code>values</code>, <code>library_id</code>, <code>library_name</code> (the entry's name now, or the name kept when it is gone), <code>changed</code> (the copy differs from its entry), <code>state</code> (<code>current</code>, <code>out_of_date</code>, <code>missing</code>, or <code>not_chosen</code> with null <code>values</code> while the project has no building) and, from the weights file, <code>heating_kwh_m2</code>, <code>cooling_kwh_m2</code> and <code>counted_hours</code> (hours with the sun up and benefit above 0.01)</td>
+</tr>
+<tr>
+<td><code>PUT /projects/{name}/typical-building</code></td>
+<td>Body <code>values</code> and, when sent, <code>library_id</code> (null: from none; left out: the entry stays); a bad value is a 422 <code>ConfigErrorReply</code> at its field (<code>wwr.&lt;side&gt;</code> for a window share, <code>library_id</code> for no such entry)</td>
+</tr>
+<tr>
+<td><code>POST /projects/{name}/typical-building/calculate</code></td>
+<td>Calculate the weights of the stored building into <code>inputs/typical_building/weights.json</code> (about 7 s); 404 without a building or a weather file</td>
+</tr>
+<tr>
+<td><code>GET /projects/{name}/typical-building/weights</code></td>
+<td><code>benefit</code> and <code>harm</code>, 8,760 values each to 3 decimals, and <code>sun_up</code> (0 or 1); 404 before a calculation</td>
+</tr>
+</tbody>
+</table>
+<p><code>app/</code> holds the front-end source (<code>src/inspect/</code> the Inspect workspace: <code>InspectView.tsx</code>, what it puts over the 3D view, <code>FilesPanel.tsx</code>, the Files panel with a file's summary, Flip mode, Save, Discard and Restore original, <code>use_inspection.ts</code>, the summaries, the selected file and the staged turns, <code>UnsavedTurnsDialog.tsx</code>, the Save, Discard or Stay question when leaving Inspect, and <code>inspect_geometry_decoder.ts</code>, the reader of the geometry binary; <code>src/simulate/</code> the Simulate workspace: <code>SimulateView.tsx</code>, what it puts over the 3D view, <code>StudiesPanel.tsx</code> and <code>AddStudyMenu.tsx</code>, the Studies panel and its Add study menu, <code>StudyPopover.tsx</code>, a study's settings, <code>GeometrySwitch.tsx</code> and <code>ResultCard.tsx</code>, the geometry switch with Change and the result card, <code>use_studies.ts</code> and <code>use_study_view.ts</code>, the studies and the study on the view (geometry, Change, target, legend, card), and <code>study_values.ts</code> with <code>study_values_decoder.ts</code>, the statistics and the reader of the values binary; <code>src/viewer_overlays/TargetLegend.tsx</code> is its legend with the draggable target; <code>src/steps/</code> the five steps: <code>InputsStep.tsx</code>, <code>SiteAndGridStep.tsx</code>, the result steps and the export, with <code>ActionMenu.tsx</code>, the menu of a project and of a criterion row, <code>menu_popup.ts</code>, the placement and keys of a popup menu that <code>ActionMenu.tsx</code> and the mode menu share, and <code>CriteriaRunBar.tsx</code>, the Run analysis and Build buttons pinned under the Criteria step; <code>src/criteria/</code> the criteria hook and its helpers (<code>use_criteria.ts</code>, <code>criteria_state.ts</code>), the Criteria step, the criterion list and its rows (<code>CriterionList.tsx</code>, <code>CriterionCard.tsx</code>) and their dialogs, <code>ModeMenu.tsx</code>, the short menu of modes behind Add criterion, the criterion panel with <code>PanelSection.tsx</code>, its folded sections, and <code>section_summaries.ts</code>, the one-line summary of each section, and its Test surfaces box, with <code>TypicalBuildingSheet.tsx</code>, <code>TypicalBuildingDialogs.tsx</code> and <code>use_typical_building.ts</code>, the typical building's box in a Solar usefulness criterion's Settings, its sheet beside the panel (the library with Save to library and Save as new, the values in folded groups with Advanced, Calculate, the day-by-hour chart of the effect of sunlight), the library's name and delete dialogs, and the project's building and the library as read, saved and calculated; <code>src/settings_form/</code> the settings, with <code>two_forms.ts</code> for the shared and the criterion settings held side by side; <code>src/viewer/</code> and <code>src/viewer_overlays/</code> the 3D view, with <code>carved_by_criterion_decoder.ts</code> for the carved-by-criterion layer; <code>src/api_client/</code> the typed client). See <a href="../ui/#rebuilding-the-front-end-after-changing-app">Browser UI</a> for building it.</p>
 <h2 id="grasshopper-plugin-grasshopper">Grasshopper plugin (<code>grasshopper/</code>)<a class="headerlink" href="#grasshopper-plugin-grasshopper" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>grasshopper/
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>├── USC_GHplugin/       27 .ghuser components (copy into the GH User Objects folder)

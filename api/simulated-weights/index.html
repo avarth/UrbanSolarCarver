@@ -1108,6 +1108,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.simulated_weights.nearest_mass_class" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        nearest_mass_class
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.simulated_weights.simulate" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1134,6 +1145,17 @@
     <span class="md-ellipsis">
       
         transmitted_solar_from_epw
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.simulated_weights.sun_up_hours" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sun_up_hours
       
     </span>
   </a>
@@ -1451,6 +1473,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.simulated_weights.nearest_mass_class" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        nearest_mass_class
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.simulated_weights.simulate" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1477,6 +1510,17 @@
     <span class="md-ellipsis">
       
         transmitted_solar_from_epw
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.simulated_weights.sun_up_hours" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sun_up_hours
       
     </span>
   </a>
@@ -1642,7 +1686,9 @@ helper imports Ladybug lazily.</p>
         <p>5R1C parameters: conductances (<code>h_*</code>) in W/K, <code>c_m</code> in J/K,
 areas (<code>floor_area</code>, <code>a_m</code>, <code>a_t</code>) in m², set-points in °C.</p>
 <p><code>h_tr_em</code> is exterior to mass, <code>h_tr_w</code> windows, <code>h_tr_is</code> air to
-internal surfaces, <code>h_tr_ms</code> surfaces to mass, <code>h_ve</code> ventilation.</p>
+internal surfaces, <code>h_tr_ms</code> surfaces to mass, <code>h_ve</code> ventilation:
+one value, or an (8760,) array of one value per hour when the
+ventilation follows a schedule.</p>
 <p>Use :meth:<code>from_archetype</code> to derive them from physical archetype
 inputs per the standard; tests may also construct directly from
 known conductances (e.g. values from the reference simulator).</p>
@@ -1672,7 +1718,7 @@ known conductances (e.g. values from the reference simulator).</p>
 
 
 <h4 id="urbansolarcarver.simulated_weights.ZoneParams.from_archetype" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <code class="highlight language-python"><span class="n">from_archetype</span><span class="p">(</span><span class="n">floor_area</span><span class="p">,</span> <span class="n">volume</span><span class="p">,</span> <span class="n">u_opaque</span><span class="p">,</span> <span class="n">area_opaque</span><span class="p">,</span> <span class="n">u_window</span><span class="p">,</span> <span class="n">area_window</span><span class="p">,</span> <span class="n">ach_vent</span><span class="p">,</span> <span class="n">ach_infiltration</span><span class="p">,</span> <span class="n">heat_recovery</span><span class="o">=</span><span class="n">ARCHETYPE_DEFAULTS</span><span class="p">[</span><span class="s1">&#39;heat_recovery&#39;</span><span class="p">],</span> <span class="n">mass_class</span><span class="o">=</span><span class="n">ARCHETYPE_DEFAULTS</span><span class="p">[</span><span class="s1">&#39;mass_class&#39;</span><span class="p">],</span> <span class="n">t_set_heating</span><span class="o">=</span><span class="n">ARCHETYPE_DEFAULTS</span><span class="p">[</span><span class="s1">&#39;t_set_heating&#39;</span><span class="p">],</span> <span class="n">t_set_cooling</span><span class="o">=</span><span class="n">ARCHETYPE_DEFAULTS</span><span class="p">[</span><span class="s1">&#39;t_set_cooling&#39;</span><span class="p">])</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <code class="highlight language-python"><span class="n">from_archetype</span><span class="p">(</span><span class="n">floor_area</span><span class="p">,</span> <span class="n">volume</span><span class="p">,</span> <span class="n">u_opaque</span><span class="p">,</span> <span class="n">area_opaque</span><span class="p">,</span> <span class="n">u_window</span><span class="p">,</span> <span class="n">area_window</span><span class="p">,</span> <span class="n">ach_vent</span><span class="p">,</span> <span class="n">ach_infiltration</span><span class="p">,</span> <span class="n">heat_recovery</span><span class="o">=</span><span class="n">ARCHETYPE_DEFAULTS</span><span class="p">[</span><span class="s1">&#39;heat_recovery&#39;</span><span class="p">],</span> <span class="n">mass_class</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">t_set_heating</span><span class="o">=</span><span class="n">ARCHETYPE_DEFAULTS</span><span class="p">[</span><span class="s1">&#39;t_set_heating&#39;</span><span class="p">],</span> <span class="n">t_set_cooling</span><span class="o">=</span><span class="n">ARCHETYPE_DEFAULTS</span><span class="p">[</span><span class="s1">&#39;t_set_cooling&#39;</span><span class="p">],</span> <span class="n">mass_capacity_kj_m2k</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
@@ -1686,7 +1732,9 @@ known conductances (e.g. values from the reference simulator).</p>
         <p>Derive the network from archetype inputs per ISO 13790.</p>
 <ul>
 <li>A_tot = 4.5 · A_f;  H_tr,is = 3.45 · A_tot</li>
-<li>(A_m, C_m) from the Table-12 mass class</li>
+<li>(A_m, C_m) from the Table-12 mass class, or, with
+  <code>mass_capacity_kj_m2k</code>, C_m = capacity · 1000 · A_f and A_m of
+  the class nearest in capacity (the lighter one on a tie)</li>
 <li>H_tr,ms = 9.1 · A_m</li>
 <li>H_tr,op = U_opaque · A_opaque;  H_tr,w = U_window · A_window</li>
 <li>H_tr,em = 1 / (1/H_tr,op − 1/H_tr,ms)   (§12.2.2 serial split)</li>
@@ -1696,10 +1744,17 @@ known conductances (e.g. values from the reference simulator).</p>
 </ul>
 <p>Units: areas in m², <code>volume</code> in m³, U-values in W/(m²K), air
 change rates in 1/h, <code>heat_recovery</code> (η_hr) as a fraction 0-1,
-set-points in °C.</p>
-<p>Raises ValueError for an unknown <code>mass_class</code>, when
-H_tr,op &gt;= H_tr,ms (the serial split would be negative or
-infinite), or when the total air change rate is not positive.</p>
+set-points in °C, <code>mass_capacity_kj_m2k</code> in kJ/(m²K) of floor.
+<code>ach_vent</code> is one value or 8760 hourly values (a ventilation
+schedule); then <code>h_ve</code> is hourly too, heat recovery applying to
+the ventilation part of each hour. <code>mass_class</code> defaults to the
+archetype default ("medium") when no capacity is given.</p>
+<p>Raises ValueError for an unknown <code>mass_class</code>, for both
+<code>mass_class</code> and <code>mass_capacity_kj_m2k</code>, for a capacity that
+is not positive, when H_tr,op &gt;= H_tr,ms (the serial split would
+be negative or infinite), for an <code>ach_vent</code> that is neither one
+value nor 8760, or when the total air change rate is not positive
+(in any hour).</p>
 
 
     </div>
@@ -1763,6 +1818,25 @@ infinite), or when the total air change rate is not positive.</p>
 
 </div>
 
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.simulated_weights.nearest_mass_class" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">nearest_mass_class</span><span class="p">(</span><span class="n">capacity_kj_m2k</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.simulated_weights.nearest_mass_class" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The Table-12 class whose C_m per m² floor is nearest to the given
+capacity [kJ/(m²K)]; on a tie the lighter class.</p>
+
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-function">
 
@@ -1846,6 +1920,27 @@ area and g_value.</p>
 <div class="doc doc-object doc-function">
 
 
+<h3 id="urbansolarcarver.simulated_weights.sun_up_hours" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">sun_up_hours</span><span class="p">(</span><span class="n">epw_path</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.simulated_weights.sun_up_hours" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>(8760,) array of 0 and 1: 1 for the hours with the sun above the
+horizon at the weather file's site.</p>
+<p>The sun is placed as :func:<code>transmitted_solar_from_epw</code> places it: by a
+Ladybug Sunpath at the middle of each hour (the Wea's datetimes).</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="urbansolarcarver.simulated_weights.write_simulated_weights" class="doc doc-heading">
 <code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">write_simulated_weights</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">benefit</span><span class="p">,</span> <span class="n">harm</span><span class="p">,</span> <span class="n">meta</span><span class="p">)</span></code>
 
@@ -1909,14 +2004,28 @@ has an unsupported schema_version, or holds invalid series.</p>
 <li><code>g_value</code>: glazing solar transmittance for all windows (default 0.6)</li>
 <li><code>orientation</code>: degrees to rotate the box clockwise from north
   (optional, default 0)</li>
+<li><code>roof_exposed</code> (default true) and <code>floor_exposed</code> (default
+  false): whether the roof and the floor lose heat to the outside; a
+  roof or floor that is not exposed is adiabatic (a storey between
+  others, or a slab whose ground loss is left out)</li>
+<li>the opaque U values: either <code>u_opaque</code>, one U for the walls and
+  the exposed roof and floor, or <code>u_wall</code> with <code>u_roof</code> (needed
+  when the roof is exposed) and <code>u_floor</code> (needed when the floor is
+  exposed)</li>
 </ul>
 <p>Derived: floor area = width x length; volume = floor area x height;
 per-facade window areas = wwr x facade area; <code>area_opaque</code> = opaque
-walls + roof (ground slab excluded); <code>area_window</code> = sum of windows.
+walls + the exposed roof and floor; <code>area_window</code> = sum of windows.
+With <code>u_wall</code>, <code>u_opaque</code> is the area-weighted U of that opaque
+area, so H_tr,op = u_wall x opaque walls + u_roof x roof (if exposed)
++ u_floor x floor (if exposed).
 Archetypes without any of the shoebox keys above are returned as an
 unchanged copy.</p>
 <p>Raises ValueError if the shoebox keys are incomplete, mixed with
-explicit-area keys, non-positive, or define no window.</p>
+explicit-area keys, non-positive, or define no window; for both
+<code>u_opaque</code> and <code>u_wall</code>, for <code>u_roof</code>/<code>u_floor</code> without
+<code>u_wall</code>, for a missing U of an exposed roof or floor, or for an
+exposure that is not true or false.</p>
 
 
     </div>
@@ -1939,17 +2048,25 @@ explicit-area keys, non-positive, or define no window.</p>
 arguments plus <code>windows</code>: a list of [azimuth_deg, area_m2, g_value]
 (or the shoebox geometry shorthand, see :func:<code>expand_shoebox</code>).
 Optional keys: <code>shading_permanent</code>, <code>shading_hot</code> and
-<code>hot_months</code> (transmission multipliers, see :func:<code>_shading_factors</code>),
-and the internal-gain keys below.</p>
-<p>Internal gains are either a single flat value [W/m²] or a 24-value
-daily occupancy profile [W/m² per hour of day], tiled over the year.
+<code>hot_months</code> or <code>shading_hot_period</code> (transmission multipliers,
+see :func:<code>_shading_factors</code>), and the internal-gain keys below.
+<code>ach_vent</code> may be 8760 hourly values (see
+:meth:<code>ZoneParams.from_archetype</code>).</p>
+<p>Internal gains are either a single flat value [W/m²], a 24-value
+daily occupancy profile [W/m² per hour of day], tiled over the year,
+or 8760 hourly values from 1 January 0:00.
 They may come from the <code>internal_gains_w_m2</code> /
 <code>internal_gains_profile_w_m2</code> archetype keys, or be passed as the
 <code>internal_gains_w_m2</code> argument (which takes precedence). Default 5.0.</p>
 <p><code>eps</code> is the solar-gain perturbation [W] used by
 :func:<code>attribute_solar_gains</code>.  Writes the JSON artifact to
 <code>out_path</code> and, if matplotlib is installed, a heatmap PNG next to it
-with the same name; returns the artifact path.</p>
+with the same name; returns the artifact path.  The artifact's meta
+also holds the zone's annual heating and cooling demand per m² of floor
+(<code>heating_kwh_m2</code>, <code>cooling_kwh_m2</code>, in kWh/m²), from
+:func:<code>simulate</code> with the same gains, and <code>sun_up</code>, 8760 values of
+0 or 1 marking the hours with the sun above the horizon
+(:func:<code>sun_up_hours</code>).</p>
 
 
     </div>
