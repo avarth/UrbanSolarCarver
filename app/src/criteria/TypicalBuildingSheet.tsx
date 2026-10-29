@@ -10,6 +10,7 @@
 // calculated, the chart is dimmed and Calculate reads Calculate again. The window opens with the focus on its title; Escape, × and Done end it,
 // and the focus goes back to Edit building.
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import type { TypicalBuildingLibraryEntry, TypicalBuildingReply, TypicalBuildingWeightsReply } from "../api_client/client";
 import { dayAndMonth, messages } from "../messages";
 import { WarningIcon } from "../settings_form/SettingField";
@@ -496,6 +497,16 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
   const read = stored !== null && library !== null;
   const notChosen = stored?.state === "not_chosen";
 
+  // The window changes shape (reading, library only, the full window) with different elements, so the control that had the focus (the
+  // entry just chosen) is gone: the focus goes to the title, so it stays in the window and Escape and Tab still reach it.
+  const shape = !read ? "reading" : notChosen || values === null ? "library" : "full";
+  const shapeBefore = useRef(shape);
+  useLayoutEffect(() => {
+    if (shapeBefore.current === shape) return;
+    shapeBefore.current = shape;
+    const window = sheet.current?.closest('[role="dialog"]');
+    if (window !== undefined && window !== null && !window.contains(document.activeElement)) window.querySelector<HTMLElement>("h2")?.focus();
+  }, [shape]);
   // Without a building the library opens, to choose one from.
   useLayoutEffect(() => {
     if (notChosen) setOpenGroups((open) => new Set([...open, "library"]));
@@ -530,11 +541,13 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
   };
 
   // The window: the frame of the project dialogs, wide, with × and its title in focus. Each of the three states below is one, so the
-  // window stays open (and keeps the focus) while the building is read.
-  const windowOf = (content: ReactNode) => (
+  // window stays open while the building is read. It is drawn into the page's body: inside the criterion panel, which narrow windows
+  // make a stacking context under the view's overlays, its dimmed backdrop could not cover them.
+  const windowOf = (content: ReactNode) => createPortal(
     <DialogFrame title={messages.typicalBuilding} busy={false} onClose={onClose} wide closeLabel={messages.closeTypicalBuilding} titleTakesFocus>
       <div ref={sheet} id={id} className="typical-building-sheet">{content}</div>
-    </DialogFrame>
+    </DialogFrame>,
+    document.body,
   );
   if (!read) {
     return windowOf(building.readProblem === null ? <p className="step-reason">{messages.typicalBuildingReading}</p> : <FieldError message={building.readProblem} />);

@@ -271,16 +271,17 @@ test("Edit building opens the typical building's window; Close ends it and gives
   rendered = renderForTest(<CriterionPanel {...panelProps({ form: formFor("benefit"), hoursCounted: hoursCounted({ energyWeighted: true }) })} />);
   const edit = [...rendered.container.querySelectorAll<HTMLButtonElement>(".typical-building-box button")].find((button) => button.textContent === "Edit building")!;
   expect(edit.getAttribute("aria-expanded")).toBe("false");
-  expect(find(".typical-building-sheet")).toBeNull();
+  expect(document.querySelector(".typical-building-sheet")).toBeNull();
   click(edit);
-  const sheet = find(".typical-building-sheet")!;
+  // The window is drawn into document.body, over the whole app.
+  const sheet = document.querySelector<HTMLElement>(".typical-building-sheet")!;
   expect(sheet.closest('[role="dialog"][aria-modal="true"]')).not.toBeNull();
   expect(edit.getAttribute("aria-expanded")).toBe("true");
   expect(edit.getAttribute("aria-controls")).toBe(sheet.id);
   // The sheet is outside the folded sections, so it stays open when Settings is closed.
   expect(sheet.closest(".panel-section")).toBeNull();
   click(document.querySelector<HTMLButtonElement>('[role="dialog"] button[aria-label="Close"]')!);
-  expect(find(".typical-building-sheet")).toBeNull();
+  expect(document.querySelector(".typical-building-sheet")).toBeNull();
   expect(document.activeElement).toBe(edit);
 });
 

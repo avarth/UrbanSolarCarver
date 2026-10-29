@@ -638,8 +638,9 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 
 /* The typical building's window: the project dialogs' modal frame (DialogFrame), wide, as tall as the browser window lets it be.
    From 900 px the values are a column on the left that scrolls, and Calculate, the chart and the numbers a column on the right that
-   stays where it is; under 900 px the columns are one under the other and the window scrolls. */
-.project-dialog-wide { max-height: calc(100vh - 64px); }
+   stays where it is (each scrolls when it does not fit; so do the windows of one column); under 900 px the columns are one under the
+   other and the window scrolls. */
+.project-dialog-wide { width: min(880px, 100%); max-height: calc(100vh - 64px); }
 .project-dialog-title-row { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--space-unit) * 2); }
 .project-dialog h2:focus { outline: none; }      /* the title takes the focus on opening, which is not a control to point at */
 .project-dialog-close {
@@ -665,8 +666,8 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 .typical-building-window-values, .typical-building-window-results { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); min-width: 0; }
 .typical-building-window-results .weights-chart-canvas { height: 140px; }
 @media (min-width: 900px) {
-  .project-dialog-wide { width: min(880px, 100%); overflow-y: hidden; }
-  .project-dialog-wide > .typical-building-sheet { flex: 1 1 auto; min-height: 0; }
+  .project-dialog-wide { overflow-y: hidden; }
+  .project-dialog-wide > .typical-building-sheet { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
   .typical-building-window-columns {
     display: grid;
     grid-template-columns: minmax(0, 440px) minmax(0, 1fr);
@@ -676,6 +677,7 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
     gap: calc(var(--space-unit) * 5);
   }
   .typical-building-window-values { min-height: 0; overflow-y: auto; padding-right: var(--space-unit); }
+  .typical-building-window-results { min-height: 0; overflow-y: auto; }
 }
 .typical-building-sheet p { margin: 0; }
 .typical-building-sheet .segmented-switch { align-self: flex-start; }

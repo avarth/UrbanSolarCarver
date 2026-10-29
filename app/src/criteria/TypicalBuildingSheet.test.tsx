@@ -168,12 +168,13 @@ async function openSheet(props: { includesHarm?: boolean; hasWeatherFile?: boole
   await settle();
 }
 
-const find = <Element extends HTMLElement = HTMLElement>(selector: string) => rendered!.container.querySelector<Element>(selector);
+// The window is rendered into document.body (over the whole app), not into the container of the render.
+const find = <Element extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<Element>(selector);
 const group = (id: string) => find(`.panel-section[data-section="${id}"]`)!;
 const summaryOf = (id: string) => group(id).querySelector(".panel-section-summary")?.textContent;
 const openGroup = (id: string) => click(group(id).querySelector(".panel-section-header")!);
 const calculateButton = () => find<HTMLButtonElement>(".typical-building-calculate button")!;
-const buttonNamed = (name: string) => [...rendered!.container.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === name)!;
+const buttonNamed = (name: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === name)!;
 const entryButton = (id: string) => find<HTMLButtonElement>(`[data-library-entry="${id}"] .typical-building-library-entry`)!;
 const advancedToggle = () => find<HTMLButtonElement>(".typical-building-advanced-toggle")!;
 const lastSaved = () => service.saved.at(-1)!;
@@ -227,7 +228,7 @@ test("the sheet names the library entry and its source, says each basic group in
   expect(summaryOf("air")).toBe(`Infiltration 0.37${NBSP}air changes per hour`);
   expect(calculateButton().textContent).toBe("Calculate");
   expect(find(".weights-chart")).toBeNull();      // nothing calculated yet
-  expect(rendered!.container.textContent).not.toMatch(/5R1C/);
+  expect(find(".typical-building-sheet")!.textContent).not.toMatch(/5R1C/);
 });
 
 test("the library lists the examples in the groups the service names; choosing one replaces the project's copy with its values and id", async () => {
@@ -327,7 +328,7 @@ test("thermal mass is one number, the thermal capacity; the schedule is one of t
   for (const id of ["room", "roof_and_floor", "air"]) openGroup(id);
   expect(group("air").querySelector('[data-building-field="ach_infiltration"] .setting-unit')!.textContent).toBe("1/h");
   // The form's labels, options and notes name no standard or table; the sources are in the examples' source text only.
-  const formText = [...rendered!.container.querySelectorAll(".typical-building-groups .setting-field, .typical-building-groups .setting-note")]
+  const formText = [...document.querySelectorAll(".typical-building-groups .setting-field, .typical-building-groups .setting-note")]
     .map((element) => element.textContent).join(" ");
   expect(formText).not.toMatch(/ΤΟΤΕΕ|TOTEE|KENAK|ΚΕΝΑΚ|ISO|table/);
 });
@@ -417,7 +418,7 @@ test("Calculate draws the effect of each hour's sun, grey with the sun down, and
   click(calculateButton());
   await settle();
   expect(service.requests).toContain("POST /api/projects/p/typical-building/calculate");
-  expect(rendered!.container.querySelectorAll(".weights-chart")).toHaveLength(1);
+  expect(document.querySelectorAll(".weights-chart")).toHaveLength(1);
   expect(find(".weights-chart-title")!.textContent).toBe("Effect of sunlight, by hour");
   expect(find(".weights-chart canvas")!.getAttribute("aria-label")).toBe("Effect of sunlight, by hour: day of the year across, hour of the day down; " +
     "red where the sun offsets heating, grey with the sun down");
@@ -428,7 +429,7 @@ test("Calculate draws the effect of each hour's sun, grey with the sun down, and
   expect(pixel(0, 2)).toEqual([196, 196, 196]);          // 1 January, 2:00: the sun is down
   expect(pixel(0, 10)).toEqual([244, 165, 130]);         // 0.5 of offsets heating
   expect(pixel(340, 10)).toEqual([255, 255, 255]);       // no effect: harm is not counted
-  expect([...rendered!.container.querySelectorAll(".typical-building-numbers dd")].map((value) => value.textContent))
+  expect([...document.querySelectorAll(".typical-building-numbers dd")].map((value) => value.textContent))
     .toEqual([`43.7${NBSP}kWh/m² a year`, `24.1${NBSP}kWh/m² a year`, `2${DIGIT_GROUP}386 of 2${DIGIT_GROUP}920 daytime hours`]);
   expect(find(".typical-building-results-out-of-date")).toBeNull();
 
@@ -571,11 +572,41 @@ test("the values are in the left column and Calculate, the chart and the numbers
   expect(find(".project-dialog-buttons")!.previousElementSibling).toBe(find(".typical-building-window-columns"));
 });
 
+test("the window is drawn into document.body, over the whole app, not inside the render's container", async () => {
+  await openSheet();
+  const backdrop = find(".project-dialog-backdrop")!;
+  expect(backdrop.parentElement).toBe(document.body);
+  expect(rendered!.container.contains(backdrop)).toBe(false);
+  expect(document.getElementById("sheet")).not.toBeNull();
+});
+
+test("choosing the first building changes the window's shape without losing the focus: it stays inside, and Escape closes the window", async () => {
+  service.values = null;
+  service.libraryId = null;
+  service.libraryName = null;
+  await openSheet();
+  const entry = entryButton("kenak-apartment-b");
+  entry.focus();
+  expect(document.activeElement).toBe(entry);
+  click(entry);
+  await settle();
+  expect(find(".typical-building-window-columns")).not.toBeNull();
+  const window = find('[role="dialog"]')!;
+  expect(window.contains(document.activeElement)).toBe(true);
+  expect(document.activeElement).not.toBe(document.body);
+  act(() => document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  expect(closed).toBe(1);
+});
+
 test("the window is a modal frame in two columns from 900 px: no fixed sheet beside the panel, no stamp moved aside for it", () => {
   const css = readFileSync("src/steps/steps.css", "utf8").replace(/\r\n/g, "\n");
   const wide = css.match(/@media \(min-width: 900px\) \{[\s\S]*?\n\}/)![0];
+  // At every width the window is as wide as 880 px allows; under 900 px it is one column, not a narrow dialog.
+  expect(css.replace(wide, "")).toMatch(/\.project-dialog-wide \{[^}]*width: min\(880px, 100%\)/);
   expect(wide).toMatch(/\.typical-building-window-columns \{[^}]*display: grid;[^}]*grid-template-columns: minmax\(0, 440px\) minmax\(0, 1fr\)/);
-  expect(wide).toMatch(/\.project-dialog-wide \{[^}]*width: min\(880px, 100%\)/);
+  // From 900 px only the values column scrolls beside the results; the short windows and the results column scroll when they do not fit.
+  expect(wide).toMatch(/\.project-dialog-wide > \.typical-building-sheet \{[^}]*overflow-y: auto/);
+  expect(wide).toMatch(/\.typical-building-window-results \{[^}]*min-height: 0;[^}]*overflow-y: auto/);
   expect(wide).toMatch(/\.typical-building-window-values \{[^}]*overflow-y: auto/);
   expect(css).toMatch(/\.project-dialog-wide \{[^}]*max-height: calc\(100vh - 64px\)/);
   expect(css).not.toMatch(/\.typical-building-sheet \{[^}]*position: fixed/);
