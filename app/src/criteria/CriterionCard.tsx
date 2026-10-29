@@ -1,8 +1,9 @@
-// One criterion's card in the list (spec 7.2): a drag handle when the list has several cards (the arrow keys on it move the card
-// one place), the colour swatch of the criterion in the 3D view, its name (whole, up to two lines), its mode's symbol, a
-// chevron that says the card opens, a switch that is on while the chain uses the criterion, and a menu with Rename, Duplicate
-// and Delete; under them, at the card's full width, one line (its result while current, else its status). A press on the card
-// selects it. The list (CriterionList) does the dragging and the requests.
+// One criterion's card in the list (spec 7.2), in three rows. Row 1: a drag handle when the list has several cards (the arrow keys on
+// it move the card one place), the colour swatch of the criterion in the 3D view, its mode's symbol, then at the right end a switch
+// that is on while the chain uses the criterion, a menu with Rename, Duplicate and Delete, and a chevron that says the card opens.
+// Row 2: its name, whole on up to two lines, across the card. Row 3: one line (its result while current, else its status), across
+// the card too. A press on the card (the button over the swatch, symbol, name and chevron) selects it. The list (CriterionList) does
+// the dragging and the requests.
 import { useId, type DragEvent, type KeyboardEvent } from "react";
 import type { CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
@@ -80,7 +81,7 @@ export function CriterionCard(props: CriterionCardProps) {
       )}
       <button type="button" className="criterion-card-select" aria-describedby={lineId} onClick={props.onSelect}>
         <span className="criterion-card-swatch" style={{ background: entry.colour }} aria-hidden="true" />
-        <span className="criterion-card-name">{entry.name}</span>
+        <span className="criterion-card-name" title={entry.name}>{entry.name}</span>
         {symbol !== undefined && <ModeTileSymbol symbol={symbol} />}
         <span className="criterion-card-chevron" aria-hidden="true">›</span>
       </button>

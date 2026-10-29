@@ -507,17 +507,27 @@ test("the typical building opens as a modal window: aria-modal, its title takes 
   expect(closed).toBe(2);
 });
 
-test("the short windows (reading, no building chosen) are the same modal window, closed by ×, without Done", async () => {
+test("the short windows (reading, no building chosen) are the same modal window, closed by ×, Escape or Done", async () => {
   service.values = null;
   service.libraryId = null;
   service.libraryName = null;
-  await openSheet();
+  rendered = renderForTest(<Sheet />);
+  // While the building is read: the window says so and has Done.
+  expect(find(".typical-building-sheet")!.textContent).toContain("Reading the typical building");
+  click(buttonNamed("Done"));
+  expect(closed).toBe(1);
+  await settle();
+  // No building chosen: only the library, and Done under it.
   expect(find('[role="dialog"][aria-modal="true"].project-dialog-wide')).not.toBeNull();
   expect(document.activeElement).toBe(find("h2"));
   expect(find(".typical-building-window-columns")).toBeNull();
-  expect(buttonNamed("Done")).toBeUndefined();
+  expect(find(".project-dialog-buttons")!.previousElementSibling).toBe(find(".typical-building-groups"));
+  click(buttonNamed("Done"));
+  expect(closed).toBe(2);
   click(find<HTMLButtonElement>('button[aria-label="Close"]')!);
-  expect(closed).toBe(1);
+  expect(closed).toBe(3);
+  act(() => find("h2")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  expect(closed).toBe(4);
 });
 
 test("Escape closes the window; in a library dialog over it, Escape closes only that dialog", async () => {

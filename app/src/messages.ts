@@ -265,6 +265,8 @@ export const messages = {
   // The editor of one criterion (its header): back to the list, where it stands in carving order, its neighbours
   allCriteria: "All criteria",
   criterionPosition: (position: number, count: number) => `${position} of ${count}`,
+  // Said by the editor's header after Previous or Next criterion: the criterion now shown and where it stands ("Daylight, 2 of 3")
+  criterionShownAt: (name: string, position: string) => `${name}, ${position}`,
   previousCriterion: "Previous criterion",
   nextCriterion: "Next criterion",
   newCriterionModeTitle: "Mode of the new criterion",

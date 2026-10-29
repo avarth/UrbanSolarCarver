@@ -46,14 +46,37 @@ test("a card shows the criterion's colour, name, mode symbol and its line", () =
   expect(card().getAttribute("aria-current")).toBeNull();
 });
 
-test("a card shows its whole name on up to two lines, its line under it, and a chevron that says it opens", () => {
-  const name = "Solar usefulness on alatini_testSrfs_solargains_with_a_long_tail_of_eighty_characters_x";
-  renderCard({ entry: { ...DAYLIGHT, name } });
-  expect(rendered!.container.querySelector(".criterion-card-name")!.textContent).toBe(name);
-  expect(rendered!.container.querySelector(".criterion-card-chevron")!.getAttribute("aria-hidden")).toBe("true");
+/** The name a button is given by its content: its text without the parts hidden from screen readers. */
+function nameFromContent(element: Element): string {
+  return [...element.childNodes].map((node) => (node.nodeType === Node.TEXT_NODE ? node.textContent
+    : node instanceof Element && node.getAttribute("aria-hidden") !== "true" ? nameFromContent(node) : "")).join("");
+}
+
+const EIGHTY_CHARACTERS = "Solar usefulness on alatini_testSrfs_solargains_with_a_long_tail_of_eighty_chars";
+
+test("a card shows its whole name on up to two lines in a row of its own, its line under it, and a chevron that says it opens", () => {
+  expect(EIGHTY_CHARACTERS).toHaveLength(80);
+  for (const name of [EIGHTY_CHARACTERS, "Daylight on alatini_testSrfs_daylight"]) {
+    renderCard({ entry: { ...DAYLIGHT, name } });
+    const nameElement = card().querySelector(".criterion-card-name")!;
+    expect(nameElement.textContent).toBe(name);
+    expect(nameElement.getAttribute("title")).toBe(name);
+    expect(nameFromContent(card().querySelector(".criterion-card-select")!)).toBe(name);        // the one control that opens the card
+    expect(card().querySelector(".criterion-card-chevron")!.getAttribute("aria-hidden")).toBe("true");
+    rendered!.unmount();
+    rendered = null;
+  }
   const css = readFileSync("src/steps/steps.css", "utf8");
-  expect(css).toMatch(/\.criterion-card-name\s*{[^}]*-webkit-line-clamp:\s*2/);
-  expect(css).not.toMatch(/\.criterion-card-name\s*{[^}]*white-space:\s*nowrap/);
+  const rule = (selector: string) => css.match(new RegExp(`\\n${selector.replace(/[.>]/g, "\\$&")}\\s*{([^}]*)}`))![1];
+  expect(rule(".criterion-card-name")).toMatch(/-webkit-line-clamp:\s*2/);
+  expect(rule(".criterion-card-name")).toMatch(/overflow-wrap:\s*anywhere/);
+  expect(rule(".criterion-card-name")).not.toMatch(/white-space:\s*nowrap/);
+  // The name has the second row across the card; the chevron is in the last column, after the switch and the menu.
+  expect(rule(".criterion-card-name")).toMatch(/grid-column:\s*1\s*\/\s*-1;\s*grid-row:\s*2/);
+  expect(rule(".criterion-card-chevron")).toMatch(/grid-column:\s*-2\s*\/\s*-1/);
+  expect(rule(".criterion-card > .criterion-card-switch")).toMatch(/grid-column:\s*-4\s*\/\s*-3/);
+  expect(rule(".criterion-card > .action-menu")).toMatch(/grid-column:\s*-3\s*\/\s*-2/);
+  expect(rule(".criterion-card-select")).toMatch(/grid-row:\s*1\s*\/\s*3/);
 });
 
 test("the running criterion's card says Running and is marked busy; the others are not", () => {

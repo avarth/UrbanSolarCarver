@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, expect, test, vi } from "vitest";
 import type { CriterionEntry } from "../api_client/client";
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
@@ -52,13 +53,45 @@ test("All criteria asks for the list; the position and the neighbours' buttons s
   expect(onNext).toHaveBeenCalledOnce();
 });
 
-test("the first criterion has no previous and the last no next, both disabled", () => {
-  renderHeader({ position: 1 });
-  expect(button("Previous criterion")!.disabled).toBe(true);
-  expect(button("Next criterion")!.disabled).toBe(false);
-  rendered!.rerender(<CriterionEditorHeader {...headerProps({ position: 3 })} />);
-  expect(button("Next criterion")!.disabled).toBe(true);
-  expect(button("Previous criterion")!.disabled).toBe(false);
+test("the first criterion's previous and the last one's next wait without leaving the focus: aria-disabled, and a press does nothing", () => {
+  const onPrevious = vi.fn(), onNext = vi.fn();
+  renderHeader({ position: 1, onPrevious, onNext });
+  expect(button("Previous criterion")!.getAttribute("aria-disabled")).toBe("true");
+  expect(button("Previous criterion")!.disabled).toBe(false);              // a disabled button would drop the focus it has
+  expect(button("Next criterion")!.getAttribute("aria-disabled")).toBeNull();
+  click(button("Previous criterion")!);
+  expect(onPrevious).not.toHaveBeenCalled();
+  rendered!.rerender(<CriterionEditorHeader {...headerProps({ position: 3, onPrevious, onNext })} />);
+  expect(button("Next criterion")!.getAttribute("aria-disabled")).toBe("true");
+  expect(button("Previous criterion")!.getAttribute("aria-disabled")).toBeNull();
+  click(button("Next criterion")!);
+  expect(onNext).not.toHaveBeenCalled();
+});
+
+test("the name is whole, on a row of its own under the colour, symbol, switch and menu, with the whole name as its title", () => {
+  const name = "Solar usefulness on alatini_testSrfs_solargains_with_a_long_tail_of_eighty_chars";
+  renderHeader({ entry: { ...DAYLIGHT, name } });
+  const nameElement = header().querySelector(".criterion-editor-name")!;
+  expect(nameElement.textContent).toBe(name);
+  expect(nameElement.getAttribute("title")).toBe(name);
+  const identity = header().querySelector(".criterion-editor-identity")!;
+  expect([...identity.children].map((child) => child.classList[0])).toEqual(["criterion-card-swatch", "mode-tile-symbol", "setting-switch", "action-menu", "criterion-editor-name"]);
+  const css = readFileSync("src/steps/steps.css", "utf8");
+  const nameRule = css.match(/\n\.criterion-editor-name\s*{([^}]*)}/)![1];
+  expect(nameRule).toMatch(/-webkit-line-clamp:\s*2/);
+  expect(nameRule).toMatch(/overflow-wrap:\s*anywhere/);
+  expect(nameRule).toMatch(/grid-column:\s*1\s*\/\s*-1;\s*grid-row:\s*2/);
+});
+
+test("a polite live region in the header says the criterion's name and position once previous or next has changed it", () => {
+  renderHeader();
+  const region = header().querySelector<HTMLElement>('.visually-hidden[role="status"]')!;
+  expect(region.textContent).toBe("");                                     // nothing said when the editor opens
+  click(button("Next criterion")!);
+  rendered!.rerender(<CriterionEditorHeader {...headerProps({ entry: { ...DAYLIGHT, id: "3", name: "Night cooling" }, position: 3 })} />);
+  expect(region.textContent).toBe("Night cooling, 3 of 3");
+  rendered!.rerender(<CriterionEditorHeader {...headerProps({ entry: { ...DAYLIGHT, id: "1", name: "Winter sun" }, position: 1 })} />);
+  expect(region.textContent).toBe("Night cooling, 3 of 3");                // not a change made by previous or next
 });
 
 test("with one criterion there is no position and no previous or next", () => {

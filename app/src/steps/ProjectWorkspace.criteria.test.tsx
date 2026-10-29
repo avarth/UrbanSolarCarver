@@ -376,3 +376,12 @@ test("the workspace made again after a rename opens on the same criterion, in th
   expect(container().querySelector(".criterion-panel")).not.toBeNull();       // its settings are in
   expect(stepsReported).toHaveBeenLastCalledWith({ open: "criteria", view: "criteria", criteria: { shows: "editor", criterionId: "2" } });
 });
+
+test("the steps reported name the criterion pressed while its settings are on their way, so a rename then reopens on it", async () => {
+  const stepsReported = vi.fn();
+  await openChain([FACADES, WINDOWS], undefined, () => {}, [], (opened) => opened, { onStepsChange: stepsReported });
+  chainService.settingsAnswerWhen["2"] = new Promise(() => {});        // its settings never come in this test
+  await select("Spring sun on windows");
+  expect(container().querySelector('.criterion-panel-frame [role="status"]')!.textContent).toBe("Loading the settings of Spring sun on windows");
+  expect(stepsReported).toHaveBeenLastCalledWith(expect.objectContaining({ criteria: { shows: "editor", criterionId: "2" } }));
+});

@@ -204,11 +204,12 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const [viewStep, setViewStep] = useState<StepName>(props.startSteps?.view ?? "inputs");
   // What the Criteria step shows, the list or the editor of the selected criterion. Null until the step first opens: a project with one
   // criterion then opens on its editor, one with several on the list (criteria_shows.ts). From then on it is kept while the project
-  // stays open (also in the steps reported for a renamed project), whatever opens the step.
+  // stays open (also in the steps reported for a renamed project), whatever opens the step. The criterion reported is the selected one,
+  // also while its settings are on their way, so the workspace made again after a rename opens on it.
   const [criteriaShows, setCriteriaShows] = useState<CriteriaShows | null>(props.startSteps?.criteria?.shows ?? null);
   useEffect(() => props.onStepsChange?.({
-    open: openStep, view: viewStep, ...(criteriaShows === null ? {} : { criteria: { shows: criteriaShows, criterionId: shownCriterionId } }),
-  }), [openStep, viewStep, criteriaShows, shownCriterionId]);
+    open: openStep, view: viewStep, ...(criteriaShows === null ? {} : { criteria: { shows: criteriaShows, criterionId: criteria.selectedId } }),
+  }), [openStep, viewStep, criteriaShows, criteria.selectedId]);
   const panel = useRef<HTMLElement>(null);
   // In Simulate the panel is hidden, not unmounted (Design then finds its open step, folds and forms as left); its scroll is kept.
   const keepScroll = useKeptScroll(panel, props.mode === "design");

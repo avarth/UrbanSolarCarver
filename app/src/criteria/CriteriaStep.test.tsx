@@ -1,4 +1,5 @@
-import { act } from "react";
+import { act, useState } from "react";
+import { flushSync } from "react-dom";
 import { afterEach, expect, test, vi } from "vitest";
 import type { CriterionEntry } from "../api_client/client";
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
@@ -58,14 +59,70 @@ test("a press on a card selects it and asks for the editor", () => {
   expect(onShowsChange).toHaveBeenCalledWith("editor");
 });
 
-test("the editor view shows the header and the panel, not the cards; the focus goes to the criterion's name", () => {
+test("the editor view shows the header and the panel, not the cards; the step opening on the editor leaves the focus where it was", () => {
+  const stepHeader = document.body.appendChild(document.createElement("button"));      // the step's header button, pressed to open it
+  stepHeader.focus();
   rendered = renderForTest(<CriteriaStep panel={PANEL} shows="editor" onShowsChange={() => {}}
                                          list={listProps([entry("1", "Daylight on windows"), entry("2", "Solar energy on roofs")], { selectedId: "2" })} />);
   expect(step().querySelector(".criterion-card")).toBeNull();
   expect(step().querySelector(".criterion-editor-name")!.textContent).toBe("Solar energy on roofs");
   expect(step().querySelector(".criterion-editor-position")!.textContent).toBe("2 of 2");
   expect(step().querySelector(".criterion-panel-frame")).not.toBeNull();
+  expect(document.activeElement).toBe(stepHeader);
+  stepHeader.remove();
+});
+
+/** The step with its parent's state: the criteria, the one selected and what the step shows. Delete selects the next card first. */
+function StepWithState({ start, selected, shows: startShows, onSelect }: { start: CriterionEntry[]; selected: string; shows: "list" | "editor"; onSelect?: (id: string) => void }) {
+  const [criteria, setCriteria] = useState(start);
+  const [selectedId, setSelectedId] = useState(selected);
+  const [shows, setShows] = useState(startShows);
+  const onDelete = async (id: string) => {
+    const index = criteria.findIndex((criterion) => criterion.id === id), left = criteria.filter((criterion) => criterion.id !== id);
+    // As criteria.remove does: the next criterion is selected, and drawn, before the request resolves.
+    flushSync(() => { setCriteria(left); setSelectedId(left[Math.min(index, left.length - 1)].id); });
+    return null;
+  };
+  return <CriteriaStep panel={PANEL} shows={shows} onShowsChange={setShows}
+                       list={listProps(criteria, { selectedId, onDelete, onSelect: (id) => { onSelect?.(id); setSelectedId(id); } })} />;
+}
+
+test("a press on a card opens its editor with the focus on the name; Next then keeps the focus on Next and the live region says the criterion", () => {
+  const onSelect = vi.fn();
+  rendered = renderForTest(<StepWithState start={[entry("1", "A"), entry("2", "B"), entry("3", "C")]} selected="1" shows="list" onSelect={onSelect} />);
+  click(step().querySelectorAll<HTMLButtonElement>(".criterion-card-select")[1]);
   expect(document.activeElement).toBe(step().querySelector(".criterion-editor-name"));
+  const next = buttonNamed("Next criterion")!;
+  const region = step().querySelector<HTMLElement>('.criterion-editor-header [role="status"]')!;
+  next.focus();
+  click(next);
+  expect(step().querySelector(".criterion-editor-name")!.textContent).toBe("C");
+  expect(document.activeElement).toBe(next);
+  expect(region.textContent).toBe("C, 3 of 3");
+  // At the last criterion Next waits, keeps the focus, and a press does nothing.
+  expect(next.getAttribute("aria-disabled")).toBe("true");
+  onSelect.mockClear();
+  click(next);
+  expect(onSelect).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(next);
+  expect(step().querySelector(".criterion-editor-name")!.textContent).toBe("C");
+});
+
+test("Delete from the editor's menu ends on the list with the focus on the card selected then, never in the next criterion's editor", async () => {
+  rendered = renderForTest(<StepWithState start={[entry("1", "A"), entry("2", "B"), entry("3", "C")]} selected="2" shows="editor" />);
+  const focused: Element[] = [];
+  const keep = (event: FocusEvent) => focused.push(event.target as Element);
+  document.addEventListener("focusin", keep);
+  click(step().querySelector(".criterion-editor-header .action-menu-button")!);
+  await act(async () => click([...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "Delete")!));
+  await act(async () => click([...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((button) => button.textContent === "Delete")!));
+  document.removeEventListener("focusin", keep);
+  expect(step().querySelector(".criterion-editor-header")).toBeNull();
+  const selectedCard = step().querySelector<HTMLElement>('.criterion-card[aria-current="true"]')!;
+  expect(selectedCard.querySelector(".criterion-card-name")!.textContent).toBe("C");
+  expect(document.activeElement).toBe(selectedCard.querySelector(".criterion-card-select"));
+  expect(focused.some((element) => element.classList.contains("criterion-editor-name"))).toBe(false);
+  expect(focused.length).toBeGreaterThan(0);                                // focusin is heard
 });
 
 test("All criteria asks for the list; previous and next select the neighbours in carving order", () => {

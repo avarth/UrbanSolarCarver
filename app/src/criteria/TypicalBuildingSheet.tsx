@@ -4,7 +4,8 @@
 // top (the examples by the groups the service names, then the user's own entries; choosing one replaces the project's copy; Save to
 // library, Save as new, rename and delete of own entries) and the values in folded groups with a line each (Use, Fabric, Summer
 // shading, and under Advanced: Room, Roof and floor, Air); in a right column, Calculate, then the effect of each hour's sun as a
-// day-by-hour chart and three numbers; and Done under both. In a window narrower than 900 px the columns are one under the other. A new project has no building: the box asks to choose one, and the window shows only the library, open. Each change is
+// day-by-hour chart and three numbers; and Done under both. In a window narrower than 900 px the columns are one under the other. A new
+// project has no building: the box asks to choose one, and the window shows only the library, open, with Done under it. Each change is
 // saved at once (use_typical_building.ts): a number when its field is left or Enter is pressed, the other controls on the change; a
 // refused value shows its error at its field, and its group opens. While the building or the weather file differs from the one
 // calculated, the chart is dimmed and Calculate reads Calculate again. The window opens with the focus on its title; Escape, × and Done end it,
@@ -549,8 +550,19 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
     </DialogFrame>,
     document.body,
   );
+  // Done, at the bottom right of every shape of the window (there is no Cancel: the values are saved as they are typed).
+  const done = (
+    <div className="project-dialog-buttons">
+      <button type="button" className="primary-button" onClick={onClose}>{messages.done}</button>
+    </div>
+  );
   if (!read) {
-    return windowOf(building.readProblem === null ? <p className="step-reason">{messages.typicalBuildingReading}</p> : <FieldError message={building.readProblem} />);
+    return windowOf(
+      <>
+        {building.readProblem === null ? <p className="step-reason">{messages.typicalBuildingReading}</p> : <FieldError message={building.readProblem} />}
+        {done}
+      </>,
+    );
   }
   const dialogs = (
     <>
@@ -578,6 +590,7 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
         {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
         {librarySection}
         {building.problem !== null && <p className="setting-error" role="alert"><WarningIcon /><span>{building.problem}</span></p>}
+        {done}
         {dialogs}
       </>,
     );
@@ -748,9 +761,7 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
           )}
         </div>
       </div>
-      <div className="project-dialog-buttons">
-        <button type="button" className="primary-button" onClick={onClose}>{messages.done}</button>
-      </div>
+      {done}
       {dialogs}
     </>,
   );

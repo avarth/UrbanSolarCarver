@@ -9,13 +9,15 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed (app: criterion editor)
 
-- **The Criteria step shows the list or one criterion's editor.** The list is the cards only: the whole name on up to two lines,
-  the result line under it, a **›** that opens the card, **Add criterion** and, with two or more criteria, the chain's "Kept ..."
+- **The Criteria step shows the list or one criterion's editor.** The list is the cards only: the whole name on up to two lines
+  across the card, the result line under it, a **›** at the card's right end that opens it, **Add criterion** and, with two or more criteria, the chain's "Kept ..."
   line. Pressing a card, **Add criterion** and **Duplicate** open the editor; **All criteria** and **Delete** return to the list.
 - **The editor has a header that stays at the top while the sections scroll**: **All criteria**, "1 of 3" with previous and next
-  buttons (two or more criteria), the colour dot, the name, the mode symbol, the on/off switch and the menu, and the result line.
-  Of the sections (Test surfaces, Mode, Settings, Carving rule) only Carving rule is open by default, so it starts within 200 px
-  of the top; a section still opens by itself when it has something to fix. The mode is changed by opening Mode.
+  buttons (two or more criteria), the colour dot, the mode symbol, the on/off switch and the menu, the name on a row of its own,
+  and the result line.
+  Of the sections (Test surfaces, Mode, Settings, Carving rule) only Carving rule is open by default, so it starts 196 px below
+  the top of the editor with a name on one line and 216 px with a name on two; a section still opens by itself when it has
+  something to fix. The mode is changed by opening Mode. Previous and next keep the focus on their button.
 - **Which view opens**: the first time the step opens after the project opens, one criterion opens on its editor and two or more
   on the list; after that the step remembers, also across a rename. A refused run, a link to a criterion's setting or the weather
   notice opens that criterion's editor.
