@@ -7,6 +7,22 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed (app: criterion editor)
+
+- **The Criteria step shows the list or one criterion's editor.** The list is the cards only: the whole name on up to two lines,
+  the result line under it, a **›** that opens the card, **Add criterion** and, with two or more criteria, the chain's "Kept ..."
+  line. Pressing a card, **Add criterion** and **Duplicate** open the editor; **All criteria** and **Delete** return to the list.
+- **The editor has a header that stays at the top while the sections scroll**: **All criteria**, "1 of 3" with previous and next
+  buttons (two or more criteria), the colour dot, the name, the mode symbol, the on/off switch and the menu, and the result line.
+  Of the sections (Test surfaces, Mode, Settings, Carving rule) only Carving rule is open by default, so it starts within 200 px
+  of the top; a section still opens by itself when it has something to fix. The mode is changed by opening Mode.
+- **Which view opens**: the first time the step opens after the project opens, one criterion opens on its editor and two or more
+  on the list; after that the step remembers, also across a rename. A refused run, a link to a criterion's setting or the weather
+  notice opens that criterion's editor.
+- **The typical building opens as a window** in the middle of the screen over the dimmed app, in place of the sheet beside the
+  panel: values on the left; Calculate, the chart and the numbers on the right (one column in a window under 900 px wide). It
+  closes with ×, Escape or **Done**; values save as typed, and there is no Cancel.
+
 ### Changed (app: top bar, start screen, dark theme)
 
 - **Dark theme for the whole app**, switched by a moon or sun button at the right end of the top bar and remembered in the
