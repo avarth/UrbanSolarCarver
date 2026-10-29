@@ -262,6 +262,11 @@ export const messages = {
   // The cards of the criteria (7.2), their menu and dialogs
   criteriaListLabel: "Criteria in carving order",
   addCriterion: "Add criterion",
+  // The editor of one criterion (its header): back to the list, where it stands in carving order, its neighbours
+  allCriteria: "All criteria",
+  criterionPosition: (position: number, count: number) => `${position} of ${count}`,
+  previousCriterion: "Previous criterion",
+  nextCriterion: "Next criterion",
   newCriterionModeTitle: "Mode of the new criterion",
   addingCriterion: "Adding the criterion",
   // The panel of a card just selected, until its settings are in

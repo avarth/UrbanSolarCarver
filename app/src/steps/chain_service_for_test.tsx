@@ -6,7 +6,7 @@ import { expect } from "vitest";
 import type { ChainSummary, CriterionCarvingSummary, CriterionEntry, ProjectDetail } from "../api_client/client";
 import { plainModeName, type PipelineStage, type StageState } from "./step_summaries";
 import {
-  CARVED, CARVING, CRITERION_KEYS, FakeService, buttonIn, container, json, openPanelSection, openStep, openWorkspace, project, settle, stepRow,
+  CARVED, CARVING, CRITERION_KEYS, FakeService, buttonIn, container, json, openPanelSection, openStep, openWorkspace, project, settle, showCriterionCards, showCriterionEditor, stepRow,
 } from "./project_workspace_for_test";
 
 export type CriterionStages = Record<"preprocessing" | "thresholding", StageState>;
@@ -219,12 +219,15 @@ export async function openChainWith<Service extends ChainService>(
   await settle();
 }
 
-export const cards = () => [...container().querySelectorAll<HTMLElement>(".criterion-card")];
+export const cards = () => {
+  showCriterionCards();
+  return [...container().querySelectorAll<HTMLElement>(".criterion-card")];
+};
 export const cardNames = () => cards().map((card) => card.querySelector(".criterion-card-name")!.textContent);
 export const card = (name: string) => cards().find((candidate) => candidate.querySelector(".criterion-card-name")!.textContent === name)!;
 export const cardLine = (name: string) => card(name).querySelector(".criterion-card-line")!.textContent;
-export const selectedCardName = () => container().querySelector('.criterion-card[aria-current="true"] .criterion-card-name')!.textContent;
-export const panel = () => container().querySelector<HTMLElement>(".criterion-panel")!;
+export const selectedCardName = () => (showCriterionCards(), container().querySelector('.criterion-card[aria-current="true"] .criterion-card-name')!.textContent);
+export const panel = () => (showCriterionEditor(), container().querySelector<HTMLElement>(".criterion-panel")!);
 export const protectedFiles = () => [...panel().querySelectorAll(".input-box .input-file-name")].map((name) => name.textContent);
 /** The text of the shown criterion's period field, its Settings section opened first. */
 export function periodFieldText() {
@@ -235,7 +238,7 @@ export const keptTile = () => panel().querySelector(".number-tile-value")!.textC
 export const criteriaSummary = () => stepRow("Criteria").querySelector(".step-summary")!.textContent;
 export const settingsSaves = () => service.requests.filter((request) => request.startsWith("PATCH") || request.startsWith("PUT /shared"));
 export const selectButtonOf = (name: string) => card(name).querySelector(".criterion-card-select");
-export const panelFrame = () => container().querySelector<HTMLElement>(".criterion-panel-frame")!;
+export const panelFrame = () => (showCriterionEditor(), container().querySelector<HTMLElement>(".criterion-panel-frame")!);
 
 /** The results of criterion *id* were asked for: its score points, sky dome and sun path. */
 export function expectResultsOfCriterion(id: string) {
@@ -251,13 +254,15 @@ export function expectNoProblemShown() {
 }
 
 export async function select(name: string) {
-  act(() => card(name).querySelector<HTMLButtonElement>(".criterion-card-select")!.click());
+  const target = card(name);                       // outside act: showing the cards is an act of its own
+  act(() => target.querySelector<HTMLButtonElement>(".criterion-card-select")!.click());
   await settle();
 }
 
 export async function chooseFromMenu(name: string, label: string) {
-  act(() => card(name).querySelector<HTMLButtonElement>(".action-menu-button")!.click());
-  await act(async () => [...card(name).querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((item) => item.textContent === label)!.click());
+  const target = card(name);
+  act(() => target.querySelector<HTMLButtonElement>(".action-menu-button")!.click());
+  await act(async () => [...target.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((item) => item.textContent === label)!.click());
 }
 
 export async function deleteCriterion(name: string) {

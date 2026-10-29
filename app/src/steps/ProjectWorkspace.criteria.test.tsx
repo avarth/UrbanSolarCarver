@@ -7,7 +7,7 @@ import { FakeViewerScene } from "../viewer/fake_scene_for_test";
 import type { PipelineStage, StageState } from "./step_summaries";
 import {
   CARVED, CARVING, ENVELOPE, FakeService, MASSING, NOTHING_RUN, TRIANGLE_OBJ, buttonIn, container, criterionEntry, endWorkspaceTest, openStep,
-  openPanelSection, openWorkspace, pinnedBar, pressRunAnalysis, project, reasonOf, settle, startWorkspaceTest, stepRow, type, voxelSizeField,
+  openPanelSection, openWorkspace, pinnedBar, pressRunAnalysis, project, reasonOf, settle, showCriterionCards, showCriterionEditor, startWorkspaceTest, stepRow, type, voxelSizeField,
 } from "./project_workspace_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
@@ -37,6 +37,7 @@ test("one criterion shows its row in the list, with the switch on and no drag ha
   openStep("Criteria");
   const step = stepRow("Criteria");
   expect(panel()).not.toBeNull();                                                      // the criterion open at once
+  showCriterionCards();
   const rows = [...step.querySelectorAll(".criterion-list .criterion-card")];
   expect(rows).toHaveLength(1);
   expect(rows[0].querySelector(".criterion-card-swatch")).not.toBeNull();
@@ -54,9 +55,10 @@ test("one criterion shows its row in the list, with the switch on and no drag ha
   const addLink = buttonIn(step, "Add criterion");
   expect(addLink.classList.contains("link-button")).toBe(true);
   expect(rows[0].closest(".criterion-list")!.compareDocumentPosition(addLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(addLink.compareDocumentPosition(panel()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(step.querySelector(".criterion-panel")).toBeNull();                          // the list shows no panel
   expect(step.textContent).not.toContain("Add another criterion");
   expect(step.querySelector(".chain-summary")).toBeNull();
+  showCriterionEditor();
   expect(protectedFiles()).toEqual(["surfaces.obj"]);
   expect(buttonIn(pinnedBar(), "Run analysis")).toBeDefined();
   expect(buttonIn(pinnedBar(), "Build envelope and massing")).toBeDefined();
@@ -69,6 +71,7 @@ test("a new project opens with one criterion in the list, its switch on", async 
   service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, project(NOTHING_RUN));
   openStep("Criteria");
+  showCriterionCards();
   const rows = [...stepRow("Criteria").querySelectorAll(".criterion-list .criterion-card")];
   expect(rows).toHaveLength(1);
   expect(rows[0].querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(true);

@@ -2,7 +2,7 @@
 // opens a short menu of the modes. With several cards, a card moves by dragging its handle onto another card, or with the arrow keys on its
 // handle; its menu renames (in a dialog), duplicates, or deletes (after a confirmation; never the only criterion). A change the
 // service refuses is said under the cards.
-import { useEffect, useId, useRef, useState, type DragEvent } from "react";
+import { useEffect, useId, useRef, useState, type DragEvent, type ReactNode } from "react";
 import type { CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
 import { useDialogRequest } from "../steps/ProjectDialogs";
@@ -33,6 +33,34 @@ export interface CriterionListProps {
 }
 
 type OpenDialog = { kind: "rename" | "delete"; criterion: CriterionEntry };
+
+/**
+ * The Rename and Delete dialogs of a criterion's menu, for a card and for the editor's header alike: *open* opens one for the
+ * criterion, *dialogs* is what to render. Closing a dialog gives the focus back to that criterion's menu button, in its card or its header.
+ */
+export function useCriterionDialogs(props: Pick<CriterionListProps, "onRename" | "onDelete">): {
+  open: (kind: "rename" | "delete", criterion: CriterionEntry) => void;
+  dialogs: ReactNode;
+} {
+  const [dialog, setDialog] = useState<OpenDialog | null>(null);
+  const closeDialog = () => {
+    const criterionId = dialog?.criterion.id;
+    setDialog(null);
+    [...document.querySelectorAll<HTMLElement>(".criterion-card, .criterion-editor-header")]
+      .find((element) => element.dataset.criterionId === criterionId)?.querySelector<HTMLElement>(".action-menu-button")?.focus();
+  };
+  const dialogs = (
+    <>
+      {dialog?.kind === "rename" && (
+        <RenameCriterionDialog name={dialog.criterion.name} onRename={(name) => props.onRename(dialog.criterion.id, name)} onClose={closeDialog} />
+      )}
+      {dialog?.kind === "delete" && (
+        <DeleteCriterionDialog name={dialog.criterion.name} onDelete={() => props.onDelete(dialog.criterion.id)} onClose={closeDialog} />
+      )}
+    </>
+  );
+  return { open: (kind, criterion) => setDialog({ kind, criterion }), dialogs };
+}
 
 interface AddCriterionProps {
   onAdd: (mode: string) => Promise<string | null>;
@@ -78,7 +106,7 @@ function AddCriterion({ onAdd, disabledReason }: AddCriterionProps) {
 
 export function CriterionList(props: CriterionListProps) {
   const { criteria, selectedId, disabledReason } = props;
-  const [dialog, setDialog] = useState<OpenDialog | null>(null);
+  const { open: openDialog, dialogs } = useCriterionDialogs(props);
   const [problem, setProblem] = useState<string | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
@@ -112,12 +140,7 @@ export function CriterionList(props: CriterionListProps) {
   };
   const choose = (criterion: CriterionEntry, item: CriterionMenuItem) => {
     if (item === "duplicate") void request(props.onDuplicate(criterion.id));
-    else setDialog({ kind: item, criterion });
-  };
-  const closeDialog = () => {
-    const criterionId = dialog?.criterion.id;
-    setDialog(null);
-    cardElement(criterionId)?.querySelector<HTMLElement>(".action-menu-button")?.focus();
+    else openDialog(item, criterion);
   };
 
   const dragHandlers = (criterion: CriterionEntry) => ({
@@ -170,12 +193,7 @@ export function CriterionList(props: CriterionListProps) {
       </ol>
       {problem !== null && <p className="setting-error criterion-list-problem" role="alert">{problem}</p>}
       <AddCriterion onAdd={props.onAdd} disabledReason={disabledReason} />
-      {dialog?.kind === "rename" && (
-        <RenameCriterionDialog name={dialog.criterion.name} onRename={(name) => props.onRename(dialog.criterion.id, name)} onClose={closeDialog} />
-      )}
-      {dialog?.kind === "delete" && (
-        <DeleteCriterionDialog name={dialog.criterion.name} onDelete={() => props.onDelete(dialog.criterion.id)} onClose={closeDialog} />
-      )}
+      {dialogs}
     </div>
   );
 }

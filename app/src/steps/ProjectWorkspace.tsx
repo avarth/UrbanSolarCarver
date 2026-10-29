@@ -15,7 +15,7 @@ import {
   failureTextOf, putSharedSettings, serviceProblemOf, updateCriterion, type HealthReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
 import { filesOfOtherCriteria } from "../criteria/criteria_state";
-import { CriteriaStep } from "../criteria/CriteriaStep";
+import { CriteriaStep, type CriteriaShows } from "../criteria/CriteriaStep";
 import { CriterionPanel } from "../criteria/CriterionPanel";
 import { usePanelSections } from "../criteria/PanelSection";
 import { sectionOfSetting } from "../criteria/section_summaries";
@@ -196,6 +196,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const [openStep, setOpenStep] = useState<StepName | null>(props.startSteps?.open ?? "inputs");
   const [viewStep, setViewStep] = useState<StepName>(props.startSteps?.view ?? "inputs");
   useEffect(() => props.onStepsChange?.({ open: openStep, view: viewStep }), [openStep, viewStep]);
+  // What the Criteria step shows, the list or the editor of the selected criterion (for now always the editor first).
+  const [criteriaShows, setCriteriaShows] = useState<CriteriaShows>("editor");
   const panel = useRef<HTMLElement>(null);
   // In Simulate the panel is hidden, not unmounted (Design then finds its open step, folds and forms as left); its scroll is kept.
   const keepScroll = useKeptScroll(panel, props.mode === "design");
@@ -377,7 +379,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                        disabledReason={inputsDisabledReason} inputRoles={inputRolesWithFiles} />
     ),
     criteria: (
-      <CriteriaStep list={cards.list} load={selection.load} chainLine={cards.chainLine}
+      <CriteriaStep list={cards.list} load={selection.load} chainLine={cards.chainLine} shows={criteriaShows} onShowsChange={setCriteriaShows}
                     panelProblem={workspaceCriteria.panelProblem} panel={
         <CriterionPanel key={criterionId} {...panelSections} testSurfaces={criterionTestSurfaces} criterionOn={criterionOn} testSurfaceDrawingProblems={testSurfacesMesh.drawingProblems} onAddTestSurfaces={testSurfaceCalls.add}
                         onRemoveTestSurface={testSurfaceCalls.remove} otherTestSurfaces={filesOfOtherCriteria(criteria.criteria, criterionId)}

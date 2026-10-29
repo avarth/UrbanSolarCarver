@@ -8,7 +8,8 @@ import {
   settingsSaves,
 } from "./chain_service_for_test";
 import {
-  buttonIn, container, endWorkspaceTest, openPanelSection, openPanelSections, openStep, pinnedBar, reasonOf, settle, startWorkspaceTest, stepRow, thresholdField, togglePanelSection,
+  buttonIn, container, endWorkspaceTest, openPanelSection, openPanelSections, openStep, pinnedBar, reasonOf, settle, showCriterionCards, startWorkspaceTest, stepRow, thresholdField,
+  togglePanelSection,
   unmountWorkspace, waitForTheSave,
 } from "./project_workspace_for_test";
 
@@ -26,6 +27,7 @@ test("two criteria show cards in order, each with its result, and the first is s
   expect(cardLine("Winter sun on facades")).toBe("39 % of the volume carved, 390 m³ removed");
   expect(cardLine("Spring sun on windows")).toBe("20 % of the volume carved, 200 m³ removed");
   expect(protectedFiles()).toEqual(["facades.obj"]);
+  showCriterionCards();
   expect(buttonIn(stepRow("Criteria"), "Add criterion")).toBeDefined();
   expect(container().textContent).not.toContain("Add another criterion");
   openStep("Inputs");
@@ -153,6 +155,7 @@ test("deleting the selected criterion selects the next one, and the last one the
   expectNoProblemShown();
   expect(periodFieldText()).toContain("21 Mar");
   expect(protectedFiles()).toEqual(["windows.obj"]);
+  showCriterionCards();
   expect(buttonIn(stepRow("Criteria"), "Add criterion")).toBeDefined();
 });
 
@@ -195,6 +198,7 @@ test("Add criterion with one criterion opens a menu of the modes; choosing one a
   expect(cardNames()).toEqual(["Winter sun on facades"]);
   togglePanelSection("Test surfaces");                             // closed by the user; the new criterion has no files to show
   expect(openPanelSections()).toEqual(["Carving rule"]);
+  showCriterionCards();
   act(() => buttonIn(stepRow("Criteria"), "Add criterion").click());
   expect(container().querySelector('.add-criterion [role="radio"]')).toBeNull();
   expect([...container().querySelectorAll('.add-criterion [role="menuitem"] .mode-menu-name')].map((name) => name.textContent))
@@ -204,11 +208,11 @@ test("Add criterion with one criterion opens a menu of the modes; choosing one a
   await settle();
   expect(service.requests).toContain("POST /criteria");
   expect(container().querySelector('.add-criterion [role="menu"]')).toBeNull();
+  expect(document.activeElement).toBe(container().querySelector(".criterion-editor-name"));    // the new criterion's editor opens, the focus on its name
   expect(cardNames()).toEqual(["Winter sun on facades", "Daylight"]);
   expect(selectedCardName()).toBe("Daylight");
   expect(service.requests).toContain("GET /criteria/2/settings");
   expect(cardLine("Daylight")).toBe("Add test surfaces");
-  expect(document.activeElement).toBe(selectButtonOf("Daylight"));
   expect(protectedFiles()).toEqual([]);
   expect(openPanelSections()).toEqual(["Test surfaces", "Carving rule"]);
   openPanelSection("Mode");
@@ -341,20 +345,21 @@ test("duplicating a card adds the copy after the last card and selects it", asyn
   await chooseFromMenu("Winter sun on facades", "Duplicate");
   await settle();
   expect(service.requests).toContain("POST /criteria/1/duplicate");
+  expect(document.activeElement).toBe(container().querySelector(".criterion-editor-name"));    // the copy's editor opens, the focus on its name
+  expect(container().querySelector(".criterion-editor-name")!.textContent).toBe("Winter sun on facades copy");
   expect(cardNames()).toEqual(["Winter sun on facades", "Spring sun on windows", "Winter sun on facades copy"]);
   expect(selectedCardName()).toBe("Winter sun on facades copy");
-  expect(document.activeElement).toBe(selectButtonOf("Winter sun on facades copy"));
   expect(service.requests).toContain("GET /criteria/3/settings");
 });
 
-const chainLine = () => container().querySelector(".chain-summary")?.textContent?.replace(/[  ]/g, " ") ?? null;
+const chainLine = () => (showCriterionCards(), container().querySelector(".chain-summary"))?.textContent?.replace(/[  ]/g, " ") ?? null;
 
 test("the chain summary line under the cards: the last volume and its share of the maximum volume", async () => {
   await openChain([FACADES, WINDOWS], undefined, (chain) => { chain.summaryChain = { volume_after_each_m3: [610, 480], share_of_max_volume_kept: 0.4813 }; });
   expect(chainLine()).toBe("Kept 480 m³, 48 % of the maximum volume");
   const list = container().querySelector(".criterion-list")!;
   expect(list.compareDocumentPosition(container().querySelector(".chain-summary")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(container().querySelector(".chain-summary")!.compareDocumentPosition(panel()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(container().querySelector(".criterion-panel")).toBeNull();                       // the list shows no panel
 });
 
 test("the chain summary line says the volume alone when there is no share, and is not there while the summary has no chain", async () => {

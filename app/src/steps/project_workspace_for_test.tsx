@@ -2,6 +2,7 @@
 // ProjectWorkspace.view_and_results.test.tsx: the fake service, the project it serves, opening the workspace and finding its parts.
 // Each test file mocks ../viewer/scene with FakeViewerScene itself (vi.mock applies to the file it is written in).
 import { act, useState, type ComponentProps } from "react";
+import { flushSync } from "react-dom";
 import { vi } from "vitest";
 import type { CriterionEntry, InputFileChange, InputFileInfo, InspectedFile, ModeInfo, ProjectDetail, SunChart, SunPath } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
@@ -364,8 +365,24 @@ export function openStep(title: string) {
   act(() => stepRow(title).querySelector<HTMLButtonElement>(".step-header")!.click());
 }
 
+/**
+ * The Criteria step shows the cards of the criteria or the editor of the selected one, never both. A test that needs the cards asks for them
+ * (the editor's All criteria), a test that needs the panel asks for the editor (a press on the selected card); each does nothing when the
+ * step already shows what is asked for or is not open. The press is flushed at once (flushSync), so they also work inside another act.
+ */
+export function showCriterionCards() {
+  const back = container().querySelector<HTMLButtonElement>(".criterion-editor-back");
+  if (back !== null) act(() => { flushSync(() => back.click()); });
+}
+
+export function showCriterionEditor() {
+  const selected = container().querySelector<HTMLButtonElement>('.criterion-card[aria-current="true"] .criterion-card-select');
+  if (selected !== null) act(() => { flushSync(() => selected.click()); });
+}
+
 /** The header of the criterion panel's section titled *title* ("Test surfaces", "Mode", "Settings", "Carving rule"). */
 export function panelSectionHeader(title: string): HTMLButtonElement {
+  showCriterionEditor();
   return [...container().querySelectorAll<HTMLButtonElement>(".panel-section-header")]
     .find((header) => header.querySelector(".panel-section-title")!.textContent === title)!;
 }
@@ -373,8 +390,8 @@ export function panelSectionHeader(title: string): HTMLButtonElement {
 export const panelSectionOpen = (title: string) => panelSectionHeader(title).getAttribute("aria-expanded") === "true";
 
 /** The titles of the criterion panel's open sections, in order. */
-export const openPanelSections = () => [...container().querySelectorAll<HTMLButtonElement>('.panel-section-header[aria-expanded="true"]')]
-  .map((header) => header.querySelector(".panel-section-title")!.textContent);
+export const openPanelSections = () => (showCriterionEditor(), [...container().querySelectorAll<HTMLButtonElement>('.panel-section-header[aria-expanded="true"]')]
+  .map((header) => header.querySelector(".panel-section-title")!.textContent));
 
 export function togglePanelSection(title: string) {
   act(() => panelSectionHeader(title).click());
@@ -420,5 +437,5 @@ export function buttonIn(root: Element, text: string): HTMLButtonElement {
 export const reasonOf = (button: HTMLButtonElement) => document.getElementById(button.getAttribute("aria-describedby")!)!.textContent;
 
 export const voxelSizeField = () => container().querySelector<HTMLInputElement>('[data-setting="voxel_size"] input[type="number"]')!;
-export const thresholdField = () => container().querySelector<HTMLInputElement>(".threshold-control input[type=number]")!;
+export const thresholdField = () => (showCriterionEditor(), container().querySelector<HTMLInputElement>(".threshold-control input[type=number]")!);
 export const thresholdOf = (values: Record<string, unknown>) => (values.threshold as { value: number }).value;

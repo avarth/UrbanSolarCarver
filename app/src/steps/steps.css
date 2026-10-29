@@ -740,10 +740,8 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
   .workspace:has(.typical-building-sheet) .viewer-out-of-date { position: absolute; top: var(--overlay-gap); left: 50%; transform: translateX(-50%); }
 }
 
-/* The cards in carving order, Add criterion under them, then the selected criterion's panel, set off by a line. */
+/* The cards in carving order, Add criterion under them, then what the chain kept. */
 .criteria-list-block { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
-.criteria-list-block + .criterion-panel-frame,
-.chain-summary + .criterion-panel-frame { padding-top: calc(var(--space-unit) * 4); border-top: 1px solid var(--colour-line); }
 /* What the chain kept, under the cards. */
 .chain-summary { margin: 0; font-size: var(--text-body); font-weight: 600; }
 /* The panel takes the focus after a change of the cards; a ring only when the keyboard put it there. */
@@ -807,6 +805,54 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 .criterion-card-switch { flex: none; }
 .criterion-card-menu-button { padding: var(--space-unit) calc(var(--space-unit) * 1.5); font-size: var(--text-step-title); line-height: 1; }
 .criterion-list-problem { margin: 0; }
+
+/* The header of the editor of one criterion: three rows (about 90 px) that stay at the top while the sections scroll under them. */
+.criterion-editor-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-unit);
+  padding-bottom: var(--space-unit);
+  border-bottom: 1px solid var(--colour-line);
+  background: var(--colour-panel);
+}
+.criterion-editor-row { display: flex; align-items: center; gap: calc(var(--space-unit) * 2); }
+.criterion-editor-back { display: inline-flex; align-items: center; gap: var(--space-unit); }
+.criterion-editor-neighbours { display: inline-flex; align-items: center; gap: var(--space-unit); margin-left: auto; }
+.criterion-editor-position { color: var(--colour-muted); font-size: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.criterion-editor-step {
+  display: inline-flex;
+  padding: var(--space-unit);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.criterion-editor-step:disabled { opacity: 0.4; cursor: default; }
+/* The name, up to two lines. It takes the focus when the editor opens; a ring only when the keyboard put it there. */
+.criterion-editor-name {
+  display: -webkit-box;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--text-body);
+  font-weight: 600;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.criterion-editor-name:focus { outline: none; }
+.criterion-editor-name:focus-visible { outline: 2px solid var(--colour-accent); outline-offset: 2px; }
+.criterion-editor-line { margin: 0; overflow: hidden; color: var(--colour-muted); font-size: var(--text-secondary); text-overflow: ellipsis; white-space: nowrap; }
+.criterion-editor-problem { margin: 0; }
+.criterion-editor-header .mode-tile-symbol { flex: none; width: 22px; height: 22px; }
+.criterion-editor-header-bypassed .criterion-card-swatch,
+.criterion-editor-header-bypassed .mode-tile-symbol { opacity: 0.45; }
+.criterion-editor-header + .criterion-panel-frame,
+.criterion-editor-problem + .criterion-panel-frame { padding-top: calc(var(--space-unit) * 3); }
 
 /* Add criterion: a link, and under it the short menu of the modes (ModeMenu, in the popup of ActionMenu): symbol, name, one line. */
 .add-criterion { display: flex; flex-direction: column; align-items: flex-start; gap: calc(var(--space-unit) * 2); }

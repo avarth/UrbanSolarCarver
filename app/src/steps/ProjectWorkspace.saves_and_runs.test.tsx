@@ -16,7 +16,7 @@ import {
 import {
   CARVED, CARVING, ENVELOPE, FakeService, MASSING, MODES, NOTHING_RUN, SCHEMA, TRIANGLE_OBJ, buildPart, buttonIn, container,
   dimmedCarvingLayers, endWorkspaceTest, openPanelSection, openStep, openWorkspace, panelSectionOpen, pinnedBar, pressRunAnalysis, project, reasonOf, settle,
-  startWorkspaceTest, stepRow, thresholdField, thresholdOf, togglePanelSection, type, typeAndLeave, unmountWorkspace, voxelSizeField,
+  showCriterionEditor, startWorkspaceTest, stepRow, thresholdField, thresholdOf, togglePanelSection, type, typeAndLeave, unmountWorkspace, voxelSizeField,
   waitForTheSave,
 } from "./project_workspace_for_test";
 
@@ -855,10 +855,11 @@ test("a run refused for criterion 2's settings selects its card, says so in its 
     status: 422, body: { field_errors: [{ field: "max_slope_deg", message: "Input should be less than 90" }], grid_plan: null, criterion: "2" },
   };
   await pressRunAnalysis();
-  expect(selectedCardName()).toBe("Spring sun on windows");
   expect(chainService.requests).toContain("GET /criteria/2/settings");
   expect(pinnedBar().textContent).toContain("The run stopped on an error.");
   expect(container().querySelector('[data-setting="max_slope_deg"] .setting-error')!.textContent).toBe("Input should be less than 90");
+  expect(selectedCardName()).toBe("Spring sun on windows");
+  showCriterionEditor();
   await select("Winter sun on facades");
   expect(container().querySelector('[data-setting="max_slope_deg"] .setting-error')).toBeNull();      // criterion 1's settings are fine
 });
@@ -1027,8 +1028,8 @@ test("a run refused for criterion 2's settings, seen from criterion 1, names cri
   const link = buttonIn(pinnedBar(), "Go to steepest step between columns of Spring sun on windows");
   await act(async () => link.click());
   await settle();
-  expect(selectedCardName()).toBe("Spring sun on windows");
   expect(container().querySelector('[data-setting="max_slope_deg"]')!.contains(document.activeElement)).toBe(true);
+  expect(selectedCardName()).toBe("Spring sun on windows");
 });
 
 test("go to a setting of another criterion, its section closed: that criterion is selected, the section opens and the field has the focus", async () => {
@@ -1042,9 +1043,9 @@ test("go to a setting of another criterion, its section closed: that criterion i
   togglePanelSection("Settings");
   await act(async () => buttonIn(pinnedBar(), "Go to analysis period of Spring sun on windows").click());
   await settle();
-  expect(selectedCardName()).toBe("Spring sun on windows");
   expect(panelSectionOpen("Settings")).toBe(true);
   expect(container().querySelector('[data-setting="start_month"]')!.contains(document.activeElement)).toBe(true);
+  expect(selectedCardName()).toBe("Spring sun on windows");
 });
 
 test("with several criteria the build buttons name the criterion whose analysis they wait for", async () => {
