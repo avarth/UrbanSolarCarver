@@ -1,13 +1,17 @@
 // The open project's steps for one criterion, against a fake service: Inputs hold the site, Site and grid the shared settings,
-// and Criteria opens straight on the criterion, whose test surfaces go through its own routes.
+// and Criteria opens straight on the criterion, whose test surfaces go through its own routes. The last tests are of what the
+// Criteria step shows, the list or the editor of one criterion: how it opens, what it keeps, and what leads to a criterion's settings.
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { ProjectDetail } from "../api_client/client";
+import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
 import type { PipelineStage, StageState } from "./step_summaries";
+import { FACADES, ROOFS, WINDOWS, deleteCriterion, openChain, select, service as chainService } from "./chain_service_for_test";
 import {
   CARVED, CARVING, ENVELOPE, FakeService, MASSING, NOTHING_RUN, TRIANGLE_OBJ, buttonIn, container, criterionEntry, endWorkspaceTest, openStep,
-  openPanelSection, openWorkspace, pinnedBar, pressRunAnalysis, project, reasonOf, settle, showCriterionCards, showCriterionEditor, startWorkspaceTest, stepRow, type, voxelSizeField,
+  openPanelSection, openWorkspace, pinnedBar, pressRunAnalysis, project, reasonOf, settle, showCriterionCards, showCriterionEditor, startWorkspaceTest, stepRow, type,
+  unmountWorkspace, voxelSizeField,
 } from "./project_workspace_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
@@ -228,4 +232,143 @@ test("test surfaces added to and removed from the criterion go to its routes; th
   expect(service.count("GET /stage-status")).toBe(statusReadsBefore + 2);
   expect(fileReads("windows.obj")).toBe(2);                                          // the test surfaces drawn again, without the removed file
   expect(fileReads("surfaces.obj")).toBe(2);                                         // drawn at the start and after the upload only
+});
+
+// ---- What the Criteria step shows: the list or the editor of one criterion ----
+
+const editorName = () => container().querySelector(".criterion-editor-name")?.textContent ?? null;
+const listShown = () => container().querySelector(".criterion-list") !== null;
+const REFUSED_FOR_TEST_SURFACES = "Add test surfaces to Spring sun on windows.";
+
+test("a project with one criterion opens the Criteria step on its editor; with two, on the list", async () => {
+  service = new FakeService(CARVED, CARVING);
+  await openWorkspace(service, project(CARVED));
+  openStep("Criteria");
+  expect(editorName()).not.toBeNull();
+  expect(listShown()).toBe(false);
+  unmountWorkspace();
+  await openChain([FACADES, WINDOWS]);
+  expect(listShown()).toBe(true);
+  expect(editorName()).toBeNull();
+});
+
+test("after All criteria, closing and opening the Criteria step shows the list again", async () => {
+  service = new FakeService(CARVED, CARVING);
+  await openWorkspace(service, project(CARVED));
+  openStep("Criteria");
+  expect(listShown()).toBe(false);
+  showCriterionCards();
+  openStep("Inputs");
+  openStep("Criteria");
+  expect(listShown()).toBe(true);                        // remembered, not decided again from the one criterion
+  unmountWorkspace();
+  await openChain([FACADES, WINDOWS]);
+  showCriterionEditor();
+  openStep("Inputs");
+  openStep("Criteria");
+  expect(editorName()).toBe("Winter sun on facades");     // and the editor too, of two criteria
+});
+
+test("a run that ends and opens the Criteria step keeps the list or the editor as it was", async () => {
+  async function runFromSiteAndGrid() {
+    openStep("Site and grid");
+    await pressRunAnalysis();
+    service.stages = CARVED;
+    FakeWebSocket.opened.at(-1)!.send({ type: "run_finished", stages: ["preprocessing", "thresholding"], files: [] });
+    await settle();
+    expect(stepRow("Criteria").classList.contains("step-open")).toBe(true);
+  }
+  service = new FakeService(NOTHING_RUN, null);
+  await openWorkspace(service, project(NOTHING_RUN));
+  openStep("Criteria");
+  showCriterionCards();
+  await runFromSiteAndGrid();
+  expect(listShown()).toBe(true);
+  unmountWorkspace();
+  FakeWebSocket.opened = [];
+  service = new FakeService(NOTHING_RUN, null);
+  await openWorkspace(service, project(NOTHING_RUN));
+  openStep("Criteria");
+  expect(editorName()).not.toBeNull();
+  await runFromSiteAndGrid();
+  expect(listShown()).toBe(false);
+  expect(editorName()).not.toBeNull();
+});
+
+test("a run refused because a criterion has no test surfaces opens that criterion's editor, from Site and grid and from the Criteria bar", async () => {
+  await openChain([FACADES, WINDOWS]);
+  chainService.runRefusal = { status: 422, body: { detail: REFUSED_FOR_TEST_SURFACES, missing_inputs: ["test_surfaces:2"] } };
+  expect(listShown()).toBe(true);
+  await pressRunAnalysis();                              // the Criteria bar's: it says the reason under its button
+  expect(editorName()).toBe("Spring sun on windows");
+  expect(pinnedBar().querySelector(".run-outcome-error")!.textContent).toBe(REFUSED_FOR_TEST_SURFACES);
+  expect(container().querySelector(".criterion-panel-problem")).toBeNull();
+  await select("Winter sun on facades");
+  showCriterionCards();
+  openStep("Site and grid");
+  await pressRunAnalysis();                              // Site and grid's own button
+  openStep("Criteria");
+  expect(editorName()).toBe("Spring sun on windows");
+  expect(container().querySelector(".criterion-panel-problem")!.textContent).toBe(REFUSED_FOR_TEST_SURFACES);
+});
+
+test("a run failure's link to a criterion setting opens the editor of that criterion with the field focused", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  await openWorkspace(service, project(NOTHING_RUN));
+  openStep("Criteria");
+  await pressRunAnalysis();
+  FakeWebSocket.opened[0].send({ type: "run_failed", error_type: "ConfigError", message: "invalid",
+                                 field_errors: [{ field: "max_slope_deg", message: "Input should be less than 90" }] });
+  await settle();
+  showCriterionCards();
+  expect(listShown()).toBe(true);
+  act(() => buttonIn(container(), "Go to steepest step between columns").click());
+  expect(listShown()).toBe(false);
+  const slopeField = container().querySelector('[data-setting="max_slope_deg"]')!;
+  expect(slopeField.contains(document.activeElement)).toBe(true);       // the field, not the editor's name, has the focus
+  expect(document.activeElement).not.toBe(container().querySelector(".criterion-editor-name"));
+});
+
+test("a new weather file's notice opens the Criteria step on the criterion it concerns, its notice under the Settings header", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  service.uploadedWeather = { location: "Brisbane, AUS", latitude: -27.38 };
+  await openWorkspace(service, project(NOTHING_RUN));
+  openStep("Criteria");
+  showCriterionCards();
+  openStep("Inputs");
+  const weatherPicker = container().querySelector<HTMLInputElement>('input[type="file"][accept=".epw"]')!;
+  Object.defineProperty(weatherPicker, "files", { value: [new File(["LOCATION"], "weather.epw")], configurable: true });
+  act(() => weatherPicker.dispatchEvent(new Event("change", { bubbles: true })));
+  await settle();
+  openStep("Criteria");
+  expect(listShown()).toBe(false);
+  expect(editorName()).not.toBeNull();
+  openPanelSection("Settings");
+  const notice = container().querySelector<HTMLElement>(".weather-change-notice")!;
+  expect(notice.textContent).toContain("Brisbane, AUS");
+  const settingsSection = [...container().querySelectorAll<HTMLElement>(".panel-section")]
+    .find((section) => section.querySelector(".panel-section-title")!.textContent === "Settings")!;
+  expect(settingsSection.contains(notice)).toBe(true);
+});
+
+test("deleting criteria down to one leaves the step on the list", async () => {
+  await openChain([FACADES, WINDOWS, ROOFS]);
+  await deleteCriterion("Daylight on roofs");
+  await deleteCriterion("Spring sun on windows");
+  expect(container().querySelectorAll(".criterion-card")).toHaveLength(1);
+  expect(listShown()).toBe(true);
+  expect(editorName()).toBeNull();
+});
+
+test("the workspace made again after a rename opens on the same criterion, in the editor (Review Focus 3)", async () => {
+  const stepsReported = vi.fn();
+  await openChain([FACADES, WINDOWS], undefined, () => {}, [], (opened) => opened,
+                  { startSteps: { open: "criteria", view: "criteria", criteria: { shows: "editor", criterionId: "2" } }, onStepsChange: stepsReported });
+  await settle();
+  openStep("Criteria");                                  // openChain pressed the open step shut
+  await settle();
+  expect(editorName()).toBe("Spring sun on windows");
+  expect(listShown()).toBe(false);
+  expect(container().querySelector(".criterion-panel")).not.toBeNull();       // its settings are in
+  expect(stepsReported).toHaveBeenLastCalledWith({ open: "criteria", view: "criteria", criteria: { shows: "editor", criterionId: "2" } });
 });

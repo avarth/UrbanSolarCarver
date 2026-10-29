@@ -2,7 +2,8 @@
 // selection moving as the selected one is deleted, or a new one added or duplicated) first saves a change still waiting
 // to the criterion it was made in, then asks for the new one's settings (GET criteria/{id}/settings) and starts the criterion form
 // again from them; the shared form follows its mode. Until they are in, the panel waits (SelectionLoad); a refusal is said there.
-// A run refused for a criterion selects it the same way (showCriterion) and marks its fields once its settings are shown.
+// A run refused for a criterion selects it the same way (showCriterion) and marks its fields once its settings are shown; the
+// workspace shows that criterion's editor then (onShowCriterion).
 // Each change of the criteria dates thresholding (order, bypass) or adds stages, so the stage status is asked for again.
 import { useEffect, useRef, useState } from "react";
 import { failureTextOf, getCriterionSettings, serviceProblemOf } from "../api_client/client";
@@ -31,6 +32,8 @@ interface CriterionSelectionSource {
   followed?: <Reply>(request: Promise<Reply>) => Promise<Reply>;
   /** After a criterion is deleted: the stored test surface files are asked for again, as the files only it used are gone. */
   afterDelete?: () => Promise<void>;
+  /** Called whenever showCriterion selects a criterion (a refused run, a link to a setting), before its settings are read: the step shows its editor. */
+  onShowCriterion?: () => void;
   onServiceProblem: (error: unknown) => void;
 }
 
@@ -106,6 +109,7 @@ export function useCriterionSelection(source: CriterionSelectionSource): Criteri
     criteria.select(id);
   };
   const showCriterion = (id: string, then?: () => void) => {
+    source.onShowCriterion?.();
     if (id === wanted && id === shownCriterionId) {
       then?.();
       return;

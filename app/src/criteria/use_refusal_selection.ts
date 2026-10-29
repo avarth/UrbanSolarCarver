@@ -1,6 +1,6 @@
 // A start refused because criteria that are on protect nothing (MissingInputsReply naming "test_surfaces:<id>", spec 7.2, 7.3):
-// the first of them is selected (unless one of them is selected already), and its panel asks for test surfaces until its files
-// change or another run is asked for. The Criteria bar's Run analysis and carving update say the refusal under their button, so
+// the first of them is selected (unless one of them is selected already) and its editor is shown, and its panel asks for test
+// surfaces until its files change or another run is asked for. The Criteria bar's Run analysis and carving update say the refusal under their button, so
 // the panel asks only for a refusal of a button elsewhere (Site and grid), and never says it twice.
 import { useEffect, useMemo, useRef } from "react";
 import type { CriterionEntry } from "../api_client/client";
@@ -23,7 +23,7 @@ interface RefusalSelectionSource {
   selectedId: string;
   /** The criterion whose panel is shown; null when the project lists none. */
   shownCriterion: CriterionEntry | null;
-  /** Selects a card as a press does (useCriterionSelection's showCriterion). */
+  /** Selects a card as a press does and shows its editor (useCriterionSelection's showCriterion, whose onShowCriterion opens the editor). */
   showCriterion: (id: string) => void;
 }
 
@@ -36,7 +36,7 @@ export function useRefusalSelection({ record, criteria, selectedId, shownCriteri
   useEffect(() => {
     if (record === null || record.serial === refusalSeen.current) return;
     refusalSeen.current = record.serial;
-    if (askedFor.length > 0 && !askedFor.includes(selectedId)) showCriterion(askedFor[0]);
+    if (askedFor.length > 0) showCriterion(askedFor.includes(selectedId) ? selectedId : askedFor[0]);
   }, [record?.serial]);
   const asksHere = shownCriterion !== null && record !== null && !ORIGINS_IN_CRITERIA_BAR.includes(record.origin) && askedFor.includes(shownCriterion.id)
     && filesWhenRefused[shownCriterion.id] === testSurfaceFilesKey(criteria, shownCriterion.id);

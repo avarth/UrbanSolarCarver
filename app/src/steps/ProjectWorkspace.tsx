@@ -10,12 +10,13 @@
 // view, which draws the orientation of the test surfaces (use_inspection.ts); turns not saved are reported to the app, which asks
 // before Inspect is left. The project's typical building (use_typical_building.ts) is read once the shown criterion counts its hours
 // by it (Energy-weighted, in Solar usefulness).
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   failureTextOf, putSharedSettings, serviceProblemOf, updateCriterion, type HealthReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
 import { filesOfOtherCriteria } from "../criteria/criteria_state";
 import { CriteriaStep, type CriteriaShows } from "../criteria/CriteriaStep";
+import { firstCriteriaShows } from "../criteria/criteria_shows";
 import { CriterionPanel } from "../criteria/CriterionPanel";
 import { usePanelSections } from "../criteria/PanelSection";
 import { sectionOfSetting } from "../criteria/section_summaries";
@@ -113,10 +114,14 @@ interface ProjectWorkspaceProps {
   onInspectTurnsReady?: (turns: InspectTurns | null) => void;
 }
 
-/** The step open in the panel (null when all are closed) and the step whose layers the 3D view shows: the last one opened. */
+/**
+ * The step open in the panel (null when all are closed) and the step whose layers the 3D view shows: the last one opened, and what the
+ * Criteria step shows (the list or the editor of a criterion) once it has been decided; absent before the Criteria step first opened.
+ */
 export interface WorkspaceSteps {
   open: StepName | null;
   view: StepName;
+  criteria?: { shows: CriteriaShows; criterionId: string };
 }
 
 /** The settings saver of the open project, as the app uses it around a rename, reset or delete of that project. */
@@ -131,13 +136,15 @@ export interface OpenProjectSettingsSaver {
 
 export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const { token, project, modes, criterionKeys, warmUpState, runs, onServiceProblem } = props;
-  const criteria = useCriteria(token, project);
+  const criteria = useCriteria(token, project, props.startSteps?.criteria?.criterionId);
   // The studies of Simulate, kept while Design is shown (the selection stays); SimulateView reads them when Simulate opens.
   const studies = useStudies(token, project.name, onServiceProblem);
   // The criterion whose settings the criterion form holds: the selected one, once its settings are in (a card just selected waits
   // for GET criteria/{id}/settings). Its panel, its results and the run's check of its test surfaces follow it. A project that lists
   // none (its migration failed) still has the settings of one.
-  const [shownCriterionId, setShownCriterionId] = useState(criteria.selectedId);
+  // The form starts from the first criterion's settings (formStarts), so that is the criterion it holds at the start; a workspace made
+  // again on another criterion asks for its settings as a press on its card does.
+  const [shownCriterionId, setShownCriterionId] = useState(criteria.criteria[0]?.id ?? "");
   const formCriterionId = shownCriterionId === "" ? FIRST_CRITERION_ID : shownCriterionId;
   // The shown criterion; while a deleted one's place waits for the next one's settings, the selected one.
   const criterion = criteria.criteria.find((entry) => entry.id === shownCriterionId) ?? criteria.criteria.find((entry) => entry.id === criteria.selectedId) ?? null;
@@ -195,14 +202,23 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   }, []);
   const [openStep, setOpenStep] = useState<StepName | null>(props.startSteps?.open ?? "inputs");
   const [viewStep, setViewStep] = useState<StepName>(props.startSteps?.view ?? "inputs");
-  useEffect(() => props.onStepsChange?.({ open: openStep, view: viewStep }), [openStep, viewStep]);
-  // What the Criteria step shows, the list or the editor of the selected criterion (for now always the editor first).
-  const [criteriaShows, setCriteriaShows] = useState<CriteriaShows>("editor");
+  // What the Criteria step shows, the list or the editor of the selected criterion. Null until the step first opens: a project with one
+  // criterion then opens on its editor, one with several on the list (criteria_shows.ts). From then on it is kept while the project
+  // stays open (also in the steps reported for a renamed project), whatever opens the step.
+  const [criteriaShows, setCriteriaShows] = useState<CriteriaShows | null>(props.startSteps?.criteria?.shows ?? null);
+  useEffect(() => props.onStepsChange?.({
+    open: openStep, view: viewStep, ...(criteriaShows === null ? {} : { criteria: { shows: criteriaShows, criterionId: shownCriterionId } }),
+  }), [openStep, viewStep, criteriaShows, shownCriterionId]);
   const panel = useRef<HTMLElement>(null);
   // In Simulate the panel is hidden, not unmounted (Design then finds its open step, folds and forms as left); its scroll is kept.
   const keepScroll = useKeptScroll(panel, props.mode === "design");
   const [addFilesRequest, setAddFilesRequest] = useState(0);
   const [settingToFocus, setSettingToFocus] = useState<{ name: string } | null>(null);
+  // A criterion's setting to focus is in its editor: the editor is shown in the same render that asks for the focus, so its field is there.
+  const focusSettingInPanel = (settingName: string) => {
+    if (stepOfSetting(settingName, criterionKeys) === "criteria") setCriteriaShows("editor");
+    setSettingToFocus({ name: settingName });
+  };
 
   const modeInfo = modes.find((candidate) => candidate.name === form.mode);
   const modeNeedsWeatherFile = modeInfo?.needs_epw ?? false;
@@ -319,7 +335,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   // Either button of the notice ends it; the focus, on a button that goes away, moves to the period the notice was about.
   const endWeatherChangeNotice = () => {
     weather.setFileChange(null);
-    setSettingToFocus({ name: fieldSettingOf(ANALYSIS_PERIOD_FIELDS[0]) });
+    focusSettingInPanel(fieldSettingOf(ANALYSIS_PERIOD_FIELDS[0]));
   };
 
   // The criteria's part: the selection, the requests of the cards, why a run cannot start, and what the results and cards read.
@@ -328,8 +344,18 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     currentForm, schema: props.schema, modes, criterionKeys, runs, warmUpState, maxVolumeFiles: files.max_volume.length,
     testSurfaceFiles: files.test_surfaces.length, hasWeatherFile, modeNeedsWeatherFile, criterionStages, shownAs, refreshStageStatus,
     followed: followedInputChange, reloadTestSurfaces: testSurfaceCalls.reloadStoredFiles, openStep: openTheStep,
-    focusSetting: (settingName) => setSettingToFocus({ name: fieldSettingOf(settingName) }), onServiceProblem,
+    focusSetting: (settingName) => focusSettingInPanel(fieldSettingOf(settingName)), onShowCriterion: () => setCriteriaShows("editor"), onServiceProblem,
   });
+  // The first time the Criteria step opens, before the first paint of it.
+  const criteriaCount = criteria.criteria.length;
+  useLayoutEffect(() => {
+    if (openStep === "criteria" && criteriaShows === null) setCriteriaShows(firstCriteriaShows(criteriaCount));
+  }, [openStep, criteriaShows]);
+  // A new weather file's notice belongs to the criterion whose form it is shown in: while it waits, the Criteria step opens on that editor.
+  const weatherNoticeWaits = weatherChangeSuggestionNow !== null;
+  useLayoutEffect(() => {
+    if (openStep === "criteria" && weatherNoticeWaits) setCriteriaShows("editor");
+  }, [openStep, weatherNoticeWaits]);
   const { selection, active, ownStages } = workspaceCriteria;
   const resultSteps = useResultSteps({
     ...workspaceCriteria.ofResults,
@@ -379,7 +405,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                        disabledReason={inputsDisabledReason} inputRoles={inputRolesWithFiles} />
     ),
     criteria: (
-      <CriteriaStep list={cards.list} load={selection.load} chainLine={cards.chainLine} shows={criteriaShows} onShowsChange={setCriteriaShows}
+      <CriteriaStep list={cards.list} load={selection.load} chainLine={cards.chainLine} shows={criteriaShows ?? firstCriteriaShows(criteriaCount)} onShowsChange={setCriteriaShows}
                     panelProblem={workspaceCriteria.panelProblem} panel={
         <CriterionPanel key={criterionId} {...panelSections} testSurfaces={criterionTestSurfaces} criterionOn={criterionOn} testSurfaceDrawingProblems={testSurfacesMesh.drawingProblems} onAddTestSurfaces={testSurfaceCalls.add}
                         onRemoveTestSurface={testSurfaceCalls.remove} otherTestSurfaces={filesOfOtherCriteria(criteria.criteria, criterionId)}

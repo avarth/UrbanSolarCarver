@@ -507,7 +507,7 @@ test("a workspace made again for a renamed project opens with the steps it had o
   expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
   expect(FakeViewerScene.latest!.visibleLayers.has("max_volume")).toBe(true);         // the layers of Criteria, the maximum volume as a ghost
   openStep("Export");
-  expect(stepsReported).toHaveBeenLastCalledWith({ open: "export", view: "export" });
+  expect(stepsReported).toHaveBeenLastCalledWith({ open: "export", view: "export", criteria: { shows: "editor", criterionId: "1" } });      // the one criterion's editor
   expect(FakeViewerScene.latest!.visibleLayers.has("max_volume")).toBe(false);
 });
 

@@ -68,6 +68,8 @@ export interface WorkspaceCriteriaSource {
   openStep: (step: StepName) => void;
   /** Moves the focus to a setting's field in the panel. */
   focusSetting: (settingName: string) => void;
+  /** A criterion is shown for a refused run or a link to one of its settings (showCriterion): the Criteria step shows its editor. */
+  onShowCriterion: () => void;
   onServiceProblem: (error: unknown) => void;
 }
 
@@ -101,7 +103,7 @@ export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): Workspace
   const selection = useCriterionSelection({
     token, project, criteria, shownCriterionId: source.shownCriterionId, setShownCriterionId: source.setShownCriterionId, criterionForm: source.criterionForm,
     sharedForm: source.sharedForm, refreshStageStatus: source.refreshStageStatus, followed: source.followed, afterDelete: source.reloadTestSurfaces,
-    onServiceProblem,
+    onServiceProblem, onShowCriterion: source.onShowCriterion,
     criterionStartOf: (settings): FormStart => ({
       schema: source.schema, modes: source.modes, settings: splitSettings(settings, criterionKeys).criterion, gridPlan: null,
     }),
@@ -198,7 +200,8 @@ export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): Workspace
     criterionNames: severalCriteria ? Object.fromEntries(criteria.criteria.map((entry) => [entry.id, entry.name])) : undefined,
   };
 
-  // A start refused because criteria that are on protect nothing selects the first of them; its panel asks for test surfaces.
+  // A start refused because criteria that are on protect nothing shows the first of them (the selected one when it is among them); its
+// editor opens and its panel asks for test surfaces.
   const record = pipelineRecordOf(runs, project);
   const panelProblem = useRefusalSelection({
     record, criteria: criteria.criteria, selectedId: criteria.selectedId, shownCriterion: criterion, showCriterion: (id) => selection.showCriterion(id),

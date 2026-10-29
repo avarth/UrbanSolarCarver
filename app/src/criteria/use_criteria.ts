@@ -35,9 +35,12 @@ export interface CriteriaHook {
   applyReply: (entry: CriterionEntry) => void;
 }
 
-export function useCriteria(token: string, project: ProjectDetail): CriteriaHook {
+/** *startSelectedId* is the criterion selected at the start (the workspace made again for a renamed project); absent or not listed: the first. */
+export function useCriteria(token: string, project: ProjectDetail, startSelectedId?: string): CriteriaHook {
   const start = project.criteria ?? [];
-  const [state, setState] = useState({ criteria: start, selectedId: start[0]?.id ?? "" });
+  const [state, setState] = useState({
+    criteria: start, selectedId: start.some((entry) => entry.id === startSelectedId) ? startSelectedId! : start[0]?.id ?? "",
+  });
   // The latest state, read by calls that wait for a reply while another reply arrives (a file upload goes on while a name is saved).
   const latest = useRef(state);
   const commit = (next: typeof state) => {
