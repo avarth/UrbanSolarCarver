@@ -73,6 +73,26 @@ test("the sky dome keeps the words of the mode it was analysed in after the mode
   expect(legendTitle()).toBe("Solar energy from each sky patch, kWh/m²");
 });
 
+test("the sky dome shows after a run; hidden by the user it stays hidden, across steps and later views on this computer, until shown again", () => {
+  const skyDomeEntry = () => rendered!.container.querySelector<HTMLInputElement>(".viewer-layers-panel li input")!;
+  rendered = renderForTest(<ViewerPane {...viewWithSkyDome("daylight")} />);
+  expect(FakeViewerScene.latest!.visibleLayers.has("sky_dome")).toBe(true);
+  openLayersMenu();
+  click(skyDomeEntry());
+  expect(FakeViewerScene.latest!.visibleLayers.has("sky_dome")).toBe(false);
+  rendered.rerender(<ViewerPane {...viewWithSkyDome("daylight")} shownByDefault={["sky_dome", "test_surfaces"]} />);      // another step
+  expect(FakeViewerScene.latest!.visibleLayers.has("sky_dome")).toBe(false);
+  rendered.unmount();
+  rendered = renderForTest(<ViewerPane {...viewWithSkyDome("daylight")} />);                                           // a later view
+  expect(FakeViewerScene.latest!.visibleLayers.has("sky_dome")).toBe(false);
+  openLayersMenu();
+  click(skyDomeEntry());
+  expect(FakeViewerScene.latest!.visibleLayers.has("sky_dome")).toBe(true);
+  rendered.unmount();
+  rendered = renderForTest(<ViewerPane {...viewWithSkyDome("daylight")} />);
+  expect(FakeViewerScene.latest!.visibleLayers.has("sky_dome")).toBe(true);
+});
+
 test("an error of the scene that is not a missing WebGL is logged, and the view does not claim WebGL is missing", () => {
   const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => ({}) as RenderingContext);     // WebGL is there

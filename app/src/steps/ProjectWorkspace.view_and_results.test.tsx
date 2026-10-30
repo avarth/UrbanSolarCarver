@@ -26,7 +26,7 @@ test("the sun path, the sky dome and the compass ring are sized to the maximum v
   service.inputFileContents["/inputs/test_surfaces/surfaces.obj"] = "v 9 0 0\nv 10 0 0\nv 9 1 0\nf 1 2 3\n";
   await openWorkspace(service, project(NOTHING_RUN));
   // The scene runs from 0 to 10 m along x and 0 to 1 m along y: centred at (5, 0.5) on the ground, 1.5 x 10 m wide
-  expect(FakeViewerScene.latest!.sceneHemisphere).toEqual({ centre: [5, 0.5, 0], radius: 15 });
+  expect(FakeViewerScene.latest!.sceneHemisphere).toEqual({ centre: [5, 0.5, 0], radius: 7.5 });
 });
 
 test("the 3D view and Export use the envelope file that was built, not a format stored since without a build", async () => {

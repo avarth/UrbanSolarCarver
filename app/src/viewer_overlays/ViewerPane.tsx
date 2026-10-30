@@ -1,5 +1,6 @@
 // The 3D view beside the step panel (UX 4, 8): the scene and its overlays, the layers built from what the project has so far.
 // Each step shows its own layers by default (UX 8.2); the layers menu turns them on and off until another step opens.
+// The sky dome is the exception: once hidden in the menu it stays hidden on this computer until shown again.
 // The maximum volume is a light solid in Inputs, Mode and Settings and a ghost, off by default, in the later steps. Result
 // layers that are out of date, or being replaced by a run, are dimmed (UX 6.3), and while one of them is shown a stamp at the top
 // of the view says so ("Out of date", or "Updating" during a run); a thin bar along the top shows a run's progress. In Simulate
@@ -36,6 +37,26 @@ import { Legend, type LegendContent } from "./Legend";
 import { ScaleBar } from "./ScaleBar";
 import { rememberedGroundAid, ViewToolbar } from "./ViewToolbar";
 import "./overlays.css";
+
+const SKY_DOME_HIDDEN_KEY = "usc.skyDomeHidden";
+
+/** Whether the user hid the sky dome on this computer (it then starts hidden until shown again); false when storage is blocked. */
+function rememberedSkyDomeHidden(): boolean {
+  try {
+    return window.localStorage.getItem(SKY_DOME_HIDDEN_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function rememberSkyDomeHidden(hidden: boolean): void {
+  try {
+    if (hidden) window.localStorage.setItem(SKY_DOME_HIDDEN_KEY, "true");
+    else window.localStorage.removeItem(SKY_DOME_HIDDEN_KEY);
+  } catch {
+    // storage is blocked: the choice lasts for this view only
+  }
+}
 
 /** What the runs have produced for the view; each is null until its stage has written it. */
 export interface ViewerResults {
@@ -175,6 +196,9 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   const theme: ViewportTheme = useAppTheme();
   const [groundAid, setGroundAid] = useState<GroundAid>(rememberedGroundAid);
   const [visibleByChoice, setVisibleByChoice] = useState<Partial<Record<LayerName, boolean>>>({});
+  // The sky dome shows where the step shows it, so a first sky-based run shows what it weighed; hidden by the user, it stays hidden
+  // (across steps, projects and launches on this computer) until shown again.
+  const [skyDomeHidden, setSkyDomeHidden] = useState(rememberedSkyDomeHidden);
   const [skyDomeOpacity, setSkyDomeOpacity] = useState(DEFAULT_SKY_DOME_OPACITY);
   const defaultsKey = shownByDefault.join(",");
   const { scorePoints, carving, skyDome, envelope, massing, carvedByCriterion } = results;
@@ -242,7 +266,8 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   // Each carved voxel in the colour of the criterion that removed it, whose id the layer names; the layer is drawn again when a colour
   // changes. It is a layer of up to a million cubes that starts hidden: it is built (and the voxels listed, thinned to the cap of the
   // score points) only while it is shown, and dropped when it is hidden again.
-  const isVisible = (name: LayerName) => visibleByChoice[name] ?? (name === "inspect_surfaces" || shownByDefault.includes(name));
+  const isVisible = (name: LayerName) => visibleByChoice[name]
+    ?? (name === "inspect_surfaces" || (shownByDefault.includes(name) && !(name === "sky_dome" && skyDomeHidden)));
   const showsCarvedByCriterion = carvedByCriterion !== null && isVisible("carved_by_criterion");
   const carvedVoxelsOfCriteria = useMemo(() => (carvedByCriterion !== null && showsCarvedByCriterion ? carvedVoxelsByCriterion(carvedByCriterion, localOrigin) : null),
                                          [carvedByCriterion, showsCarvedByCriterion, originKey]);
@@ -355,6 +380,10 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   ];
   const changeVisible = (name: LayerName, visible: boolean) => {
     setVisibleByChoice((choices) => ({ ...choices, [name]: visible }));
+    if (name === "sky_dome") {
+      rememberSkyDomeHidden(!visible);
+      setSkyDomeHidden(!visible);
+    }
     // Shown again with every criterion hidden by its own entry: nothing would appear, so they are all shown
     if (visible && name === "test_surfaces" && testSurfaceParts && !testSurfaces.some((group) => group.shown)) onTestSurfacesShownChange?.(testSurfaces.map(({ id }) => id), true);
   };

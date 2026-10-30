@@ -7,12 +7,13 @@ export interface Hemisphere {
   radius: number;
 }
 
-const HEMISPHERE_RADIUS_SHARE = 1.5;
+const HEMISPHERE_RADIUS_SHARE = 0.75;
 const DEGREES = 180 / Math.PI;
 
 /**
  * The hemisphere around the whole scene: *sceneBounds* are the bounds of the maximum volume and the test surfaces together.
- * Centred on their footprint centre at their lowest z, radius 1.5 times their larger horizontal side.
+ * Centred on their footprint centre at their lowest z, radius 0.75 times their larger horizontal side: just more than half the
+ * diagonal of a square footprint, so the rim encloses the footprint without dwarfing it.
  */
 export function sceneHemisphere(sceneBounds: Bounds3): Hemisphere {
   const [low, high] = sceneBounds;
