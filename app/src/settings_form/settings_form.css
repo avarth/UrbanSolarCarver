@@ -391,18 +391,18 @@
   line-height: var(--line-height);
 }
 
-/* The arrow on the tooltip's top edge, under the centre of its "i". */
+/* The arrow on the tooltip's top edge, under the centre of its "i"; at its foot when it opens over the "i" (placedTooltipStyle). */
 .setting-tooltip::before {
   content: "";
   position: absolute;
-  top: -6px;
+  top: var(--setting-tooltip-arrow-top, -6px);
   left: calc(var(--setting-tooltip-arrow-left, 50%) - 5px);
   width: 10px;
   height: 10px;
   border-top: 1px solid var(--colour-line);
   border-left: 1px solid var(--colour-line);
   background: var(--colour-panel);
-  transform: rotate(45deg);
+  transform: rotate(var(--setting-tooltip-arrow-turn, 45deg));
 }
 
 /* A transparent strip over the gap between the "i" and the tooltip: the pointer crossing it stays on the tooltip, so the
@@ -410,7 +410,7 @@
 .setting-tooltip::after {
   content: "";
   position: absolute;
-  top: -9px;
+  top: var(--setting-tooltip-bridge-top, -9px);
   left: 0;
   right: 0;
   height: 9px;

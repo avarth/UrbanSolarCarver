@@ -23,21 +23,37 @@ export interface TooltipPlacement {
   top: number;
   left: number;
   arrowLeft: number;
+  /** The tooltip opens over its anchor, its arrow at its foot. */
+  above: boolean;
 }
 
-/** Under the anchor (an "i", a mode tile), centred on it, moved sideways as little as keeps it inside the window. */
+/**
+ * Under the anchor (an "i", a mode tile), centred on it, moved sideways as little as keeps it inside the window; over the anchor
+ * when under it would leave the window or cover a part that stays clear of tooltips (data-tooltips-stay-clear: the pinned run
+ * bar, whose buttons must stay in view), and there is room over it.
+ */
 export function placementUnder(infoButton: HTMLElement, tooltip: HTMLElement): TooltipPlacement {
   const anchor = infoButton.getBoundingClientRect();
   const anchorCentre = anchor.left + anchor.width / 2;
   const widestLeft = window.innerWidth - tooltip.offsetWidth - WINDOW_MARGIN_PIXELS;
   const left = Math.max(WINDOW_MARGIN_PIXELS, Math.min(anchorCentre - tooltip.offsetWidth / 2, widestLeft));
-  return { top: anchor.bottom + GAP_UNDER_INFO_BUTTON_PIXELS, left, arrowLeft: anchorCentre - left };
+  const under = anchor.bottom + GAP_UNDER_INFO_BUTTON_PIXELS;
+  let lowestBottom = window.innerHeight - WINDOW_MARGIN_PIXELS;
+  for (const clear of document.querySelectorAll<HTMLElement>("[data-tooltips-stay-clear]")) {
+    const rect = clear.getBoundingClientRect();
+    if (rect.top >= anchor.bottom && rect.left < left + tooltip.offsetWidth && rect.right > left) lowestBottom = Math.min(lowestBottom, rect.top - WINDOW_MARGIN_PIXELS);
+  }
+  const over = anchor.top - GAP_UNDER_INFO_BUTTON_PIXELS - tooltip.offsetHeight;
+  const above = under + tooltip.offsetHeight > lowestBottom && over >= WINDOW_MARGIN_PIXELS;
+  return { top: above ? over : under, left, arrowLeft: anchorCentre - left, above };
 }
 
 /** The style of a tooltip at *placement*; hidden until it is placed, so it never shows where it would first land. */
 export function placedTooltipStyle(placement: TooltipPlacement | null): CSSProperties {
-  return placement === null ? { visibility: "hidden" }
-    : { top: placement.top, left: placement.left, "--setting-tooltip-arrow-left": `${placement.arrowLeft}px` } as CSSProperties;
+  if (placement === null) return { visibility: "hidden" };
+  const style: Record<string, string | number> = { top: placement.top, left: placement.left, "--setting-tooltip-arrow-left": `${placement.arrowLeft}px` };
+  if (placement.above) Object.assign(style, { "--setting-tooltip-arrow-top": "calc(100% - 5px)", "--setting-tooltip-arrow-turn": "225deg", "--setting-tooltip-bridge-top": "100%" });
+  return style as CSSProperties;
 }
 
 export function MessageParts({ parts }: { parts: MessagePart[] }) {

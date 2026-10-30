@@ -254,7 +254,7 @@ test("the tooltip stays open while the pointer moves from the i onto it, over a 
   act(() => { tooltip.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body })); });
   expect(rendered.container.querySelector("[role='tooltip']")).toBeNull();
   const formCss = readFileSync("src/settings_form/settings_form.css", "utf8");
-  expect(formCss).toMatch(/\.setting-tooltip::after\s*{[^}]*top: -9px;[^}]*height: 9px;/);
+  expect(formCss).toMatch(/\.setting-tooltip::after\s*{[^}]*top: var\(--setting-tooltip-bridge-top, -9px\);[^}]*height: 9px;/);
 });
 
 test("a tooltip opened by a click closes when the pointer presses elsewhere", () => {
