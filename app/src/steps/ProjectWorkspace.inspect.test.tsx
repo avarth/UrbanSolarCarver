@@ -9,6 +9,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { InspectedFile } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
+import { click } from "../viewer_overlays/render_for_test";
 import {
   FILE_CHANGED_SINCE_READ, FILE_CHANGED_SINCE_TURNED, NOTHING_RUN, FakeService, buttonIn, container, endWorkspaceTest, openStep, openWorkspace,
   packedInspectGeometry, pressRunAnalysis, project, reasonOf, settle, startWorkspaceTest, switchMode,
@@ -95,7 +96,10 @@ test("opening Inspect lists the files by role with triangles and area; a row sel
   expect(fileNames()).toEqual(["volume.obj", "facades.obj", "box.obj", "broken.obj", "ground.obj"]);
   expect(fileLine("volume.obj")).toBe("12 triangles, 600 m²");
   expect(fileLine("facades.obj")).toBe("3 triangles, 4.5 m²");
-  expect(plain(filesPanel().querySelector(".inspect-view-origin"))).toBe("The view is drawn around x 0, y 0, z 0.");
+  // Where the view is drawn around is in the info beside the panel's title, not a line of the panel
+  expect(filesPanel().textContent).not.toContain("drawn around");
+  click(filesPanel().querySelector<HTMLButtonElement>(".files-panel-header .setting-info")!);
+  expect(plain(filesPanel().querySelector(".setting-tooltip-help"))).toBe("The view is drawn around x 0, y 0, z 0 of the files' coordinates.");
   // A file that cannot be read is listed with its problem, and nothing to select.
   expect(plain(fileRow("broken.obj").querySelector(".inspect-file-problem"))).toBe("The context file 'broken.obj' cannot be read: no faces.");
   expect(fileRow("broken.obj").querySelector("button")).toBeNull();

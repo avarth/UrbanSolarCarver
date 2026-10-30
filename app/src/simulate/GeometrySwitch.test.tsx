@@ -62,7 +62,7 @@ test("the geometry switch offers Envelope and Massing only once built and marks 
 
 test("Change colours by the change from the maximum volume, and waits on the maximum volume itself", () => {
   const { onChangeToggle } = renderSwitch(["max_volume", "envelope"], [], "max_volume");
-  expect(changeToggle().textContent).toBe("Change");
+  expect(changeToggle().textContent).toBe("Difference");
   expect(changeToggle().getAttribute("aria-disabled")).toBe("true");
   expect(describedBy(changeToggle())).toEqual(["Choose Envelope or Massing"]);
   click(changeToggle());
@@ -71,7 +71,7 @@ test("Change colours by the change from the maximum volume, and waits on the max
   rendered!.unmount();
   const onEnvelope = renderSwitch(["max_volume", "envelope"], [], "envelope", true);
   expect(changeToggle().getAttribute("aria-pressed")).toBe("true");
-  expect(changeToggle().title).toBe("Colours each point by its change from the maximum volume");
+  expect(changeToggle().title).toBe("Colours each point by its difference from the maximum volume");
   click(changeToggle());
   expect(onEnvelope.onChangeToggle).toHaveBeenCalledWith(false);
 });

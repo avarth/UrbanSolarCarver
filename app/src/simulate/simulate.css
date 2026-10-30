@@ -73,7 +73,8 @@
 }
 .study-row-swatch { flex: none; width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--colour-ink) 25%, transparent); }
 .study-row-text { display: flex; flex-direction: column; min-width: 0; }
-.study-row-name { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+/* A study's whole name, on up to two lines (the whole on hover). */
+.study-row-name { display: -webkit-box; overflow: hidden; font-weight: 600; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .study-row-line { overflow: hidden; color: var(--colour-muted); font-size: var(--text-secondary); text-overflow: ellipsis; white-space: nowrap; }
 /* The reason a study is refused is read whole: its last words say what to do. */
 .study-row-line-refused { white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }

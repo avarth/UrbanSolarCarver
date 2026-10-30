@@ -126,7 +126,7 @@ export function StudiesPanel(props: StudiesPanelProps) {
                     <button type="button" className="study-row-select" onClick={() => props.onSelect(id)}>
                       <span className="study-row-swatch" style={{ background: colour }} aria-hidden="true" />
                       <span className="study-row-text">
-                        <span className="study-row-name">{name}</span>
+                        <span className="study-row-name" title={name}>{name}</span>
                         <span className={`study-row-line study-row-line-${study.state}`} title={studyLine(study)}>{studyLine(study)}</span>
                       </span>
                     </button>

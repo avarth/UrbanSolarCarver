@@ -449,7 +449,7 @@ test("dragging the target mark or pressing arrow keys moves the target and saves
   await settle();
   // Shown at once: the mark, the card, and the same layer recoloured in place (points below the target muted).
   expect(targetMark().getAttribute("aria-valuenow")).toBe("5");
-  expect(cardLines()).toEqual(["keeps 50 % of the no-build value", "mean 4 h", "lowest tenth 0.6 h", "at target 50 %"]);
+  expect(cardLines()).toEqual(["keeps 50 % of the no-build value", "mean 4 h", "lowest tenth 0.6 h", "50 % at or above the target"]);
   expect(scene().layers.get("study_values")).toBe(layer);
   expect(colours.version).toBeGreaterThan(coloursVersion);
   expect(scene().redraws).toBeGreaterThan(redraws);

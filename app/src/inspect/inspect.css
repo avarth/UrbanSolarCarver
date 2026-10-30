@@ -84,8 +84,6 @@
 .inspect-file-actions { display: flex; flex-wrap: wrap; gap: var(--space-unit); }
 .inspect-flip-mode[aria-pressed="true"] { background: var(--colour-accent); color: var(--colour-panel); }
 
-.inspect-view-origin { color: var(--colour-muted); font-size: var(--text-secondary); }
-
 @media (max-width: 720px) {
   .files-panel { width: min(300px, calc(100vw - 48px)); }
 }

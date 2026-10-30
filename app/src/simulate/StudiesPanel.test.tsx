@@ -35,6 +35,16 @@ const container = () => rendered!.container;
 const rows = () => [...container().querySelectorAll<HTMLElement>(".study-row")];
 const toggle = () => container().querySelector<HTMLButtonElement>(".studies-panel-toggle")!;
 
+test("a study's whole name shows on up to two lines, and on hover, not cut on one line", async () => {
+  const { readFileSync } = await import("node:fs");
+  rendered = renderForTest(<StudiesPanel {...panelProps()} />);
+  expect(rows().map((row) => row.querySelector<HTMLElement>(".study-row-name")!.title))
+    .toEqual(["Sun hours, 21 Dec", "Sky view factor", "Solar energy, 21 Jun", "Overcast sky component"]);
+  const nameRule = readFileSync("src/simulate/simulate.css", "utf8").match(/\.study-row-name\s*{([^}]*)}/)![1];
+  expect(nameRule).toMatch(/-webkit-line-clamp: 2/);
+  expect(nameRule).not.toMatch(/white-space: nowrap/);
+});
+
 test("a study row shows its files, Not run yet, Out of date or the reason it cannot run", () => {
   const onSelect = vi.fn();
   rendered = renderForTest(<StudiesPanel {...panelProps({ onSelect })} />);

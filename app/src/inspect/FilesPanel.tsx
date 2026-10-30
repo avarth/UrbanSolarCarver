@@ -8,6 +8,7 @@
 import { useId, useState, type ReactNode } from "react";
 import type { InspectedFile } from "../api_client/client";
 import { messages } from "../messages";
+import { SettingTooltip } from "../settings_form/SettingTooltip";
 import { formattedNumber } from "../steps/format_numbers";
 import type { Point3 } from "../viewer/local_origin";
 import { TEST_SURFACES_ROLE, type InspectionHook } from "./use_inspection";
@@ -138,6 +139,9 @@ export function FilesPanel({ inspection, origin, saveDisabledReason, notice }: F
           <FilesIcon />
         </button>
         {open && <h2 id={titleId} className="files-panel-title">{messages.inspectFilesTitle}</h2>}
+        {open && inspection.reply !== null && (
+          <SettingTooltip settingLabel={messages.inspectFilesTitle} help={messages.inspectViewOrigin(number(origin[0]), number(origin[1]), number(origin[2]))} />
+        )}
       </div>
       {open && (
         <div id={bodyId} className="files-panel-body">
@@ -157,7 +161,6 @@ export function FilesPanel({ inspection, origin, saveDisabledReason, notice }: F
               </ul>
             </section>
           ))}
-          {inspection.reply !== null && <p className="inspect-view-origin">{messages.inspectViewOrigin(number(origin[0]), number(origin[1]), number(origin[2]))}</p>}
         </div>
       )}
     </section>

@@ -116,10 +116,10 @@ export const messages = {
   buildGeometryFirst: { envelope: "Build the envelope first", massing: "Build the massing first" },
   runStudyAgainFor: { envelope: "Run the study again to see it on the envelope", massing: "Run the study again to see it on the massing" },
   outOfDateInDesign: "Out of date in Carve",
-  changeToggle: "Change",
-  changeToggleHint: "Colours each point by its change from the maximum volume",
+  changeToggle: "Difference",
+  changeToggleHint: "Colours each point by its difference from the maximum volume",
   changeNeedsGeometry: "Choose Envelope or Massing",
-  changeLegend: (unit: string) => `Change from max volume (${unit})`,
+  changeLegend: (unit: string) => `Difference from max volume (${unit})`,
   changeLoss: "Loss",
   // Colouring by the value (the default), or by each point's share of what it receives with nothing built on the plot (the no-build
   // value: the surroundings and terrain still block), between the two ends of the colour range.
@@ -135,7 +135,7 @@ export const messages = {
   resultKept: (percent: string) => `keeps ${percent} of the no-build value`,
   resultMean: (value: string) => `mean ${value}`,
   resultLowestTenth: (value: string) => `lowest tenth ${value}`,
-  resultAtTarget: (value: string) => `at target ${value}`,
+  resultAtTarget: (value: string) => `${value} at or above the target`,
 
   // Inspect: the Files panel over the 3D view, a file's summary, flipping its surfaces (inspect design, sections 3, 5 and 6). The
   // titles of the roles are the layers' (layerNames).
@@ -150,7 +150,7 @@ export const messages = {
     `Bounds: x ${xMin} to ${xMax}, y ${yMin} to ${yMax}, z ${zMin} to ${withUnit(zMax, "m")}`,
   georeferencedCoordinates: (kilometres: number) => `Georeferenced coordinates, about ${withUnit(groupedDigits(Math.round(kilometres)), "km")} from 0.`,
   inspectSurfaces: (count: number) => `Surfaces: ${groupedDigits(count)}`,
-  inspectViewOrigin: (x: string, y: string, z: string) => `The view is drawn around x ${x}, y ${y}, z ${z}.`,
+  inspectViewOrigin: (x: string, y: string, z: string) => `The view is drawn around x ${x}, y ${y}, z ${z} of the files' coordinates.`,
   flipMode: "Flip mode",
   flipAll: "Flip all",
   saveTurns: "Save",
