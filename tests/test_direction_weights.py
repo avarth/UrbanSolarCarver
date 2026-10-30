@@ -112,7 +112,7 @@ def test_the_generator_calculates_the_rooms_per_direction_and_records_them(tmp_p
     below)."""
     rooms = []
 
-    def room_weights(epw_path, arch, gains, eps, outdoor_temperature):
+    def room_weights(epw_path, arch, gains, eps, outdoor_temperature, progress=None):
         rooms.append(arch)
         level = 0.5 if len(arch["windows"]) > 1 else 0.1 + 0.01 * len(rooms)
         return {"benefit": np.full(HOURS, level), "harm": np.zeros(HOURS), "archetype": dict(arch),
@@ -136,11 +136,53 @@ def test_the_generator_calculates_the_rooms_per_direction_and_records_them(tmp_p
 
 
 def test_the_generator_without_rooms_per_direction_writes_none(tmp_path, monkeypatch):
-    monkeypatch.setattr(sw, "_room_weights", lambda epw, arch, gains, eps, outdoor: {
+    monkeypatch.setattr(sw, "_room_weights", lambda epw, arch, gains, eps, outdoor, progress=None: {
         "benefit": np.full(HOURS, 0.5), "harm": np.zeros(HOURS), "archetype": dict(arch), "heating_kwh_m2": 1.0, "cooling_kwh_m2": 1.0})
     monkeypatch.setattr(sw, "sun_up_hours", lambda epw: np.zeros(HOURS, dtype=np.int8))
     path = sw.generate_simulated_weights("weather.epw", AVERAGE_ROOM, tmp_path / "w.json")
     assert read_direction_weights(path) is None and "direction_factors" not in read_simulated_weights(path)[2]
+
+
+# ---- Progress ----
+
+def _rooms_reporting_halfway(monkeypatch):
+    """Stands in for the room simulation: each room reports half done, then done."""
+    def room_weights(epw_path, arch, gains, eps, outdoor_temperature, progress=None):
+        progress(0.5)
+        progress(1.0)
+        return {"benefit": np.full(HOURS, 0.5), "harm": np.zeros(HOURS), "archetype": dict(arch),
+                "heating_kwh_m2": 1.0, "cooling_kwh_m2": 1.0}
+    monkeypatch.setattr(sw, "_room_weights", room_weights)
+    monkeypatch.setattr(sw, "sun_up_hours", lambda epw: np.zeros(HOURS, dtype=np.int8))
+    monkeypatch.setattr(sw, "_save_heatmaps", lambda benefit, harm, path: None)
+
+
+def test_the_generator_reports_the_share_of_one_room_done(tmp_path, monkeypatch):
+    _rooms_reporting_halfway(monkeypatch)
+    shares = []
+    sw.generate_simulated_weights("weather.epw", AVERAGE_ROOM, tmp_path / "w.json", progress=shares.append)
+    assert shares == [0.5, 1.0, 1.0]
+
+
+def test_the_generator_reports_the_rooms_per_direction_and_the_factors_by_their_time(tmp_path, monkeypatch):
+    _rooms_reporting_halfway(monkeypatch)
+    monkeypatch.setattr(sky_patches, "direction_factors", lambda epw, averaged, directions, hoys, include_harm=False: np.ones(9))
+    shares = []
+    sw.generate_simulated_weights("weather.epw", {**AVERAGE_ROOM, "direction_rooms": True}, tmp_path / "w.json", progress=shares.append)
+    total = 10 + sw._FACTORS_IN_ROOMS
+    assert shares[:4] == pytest.approx([0.5 / total, 1 / total, 1.5 / total, 2 / total])
+    assert shares[19] == pytest.approx(10 / total)                         # the 10 rooms done
+    assert shares[20:] == pytest.approx([(10 + sw._FACTORS_IN_ROOMS / 3) / total, 1.0, 1.0])
+    assert shares == sorted(shares)
+
+
+def test_the_hourly_march_reports_the_share_of_the_year_done():
+    p = sw.ZoneParams.from_archetype(floor_area=24.0, volume=72.0, u_opaque=0.5, area_opaque=20.0, u_window=2.8, area_window=4.0,
+                                     ach_vent=0.5, ach_infiltration=0.2)
+    shares = []
+    sw._march(p, np.full(HOURS, 5.0), np.zeros(HOURS), np.zeros(HOURS), progress=shares.append)
+    assert len(shares) == 20 and shares[0] == pytest.approx(438 / HOURS) and shares[-1] == 1.0
+    assert shares == sorted(shares)
 
 
 @pytest.mark.parametrize("value", ["yes", 1])

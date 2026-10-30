@@ -848,6 +848,7 @@ export const messages = {
   calculateAgain: "Calculate again",
   calculating: "Calculating, about 10 s",
   calculatingByDirection: "Calculating, about a minute",
+  calculationProgress: "Calculation progress",
   // Why Calculate waits: one sentence without a final period, as the run buttons' reasons.
   calculateNeedsWeatherFile: "Add a weather file in Carve (Inputs) to calculate the typical building",
   calculateWaitsForValues: "Fix the values marked above to calculate",

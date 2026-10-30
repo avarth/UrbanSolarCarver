@@ -16,6 +16,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
   Thessaloniki, north a fifth more). The typical building window shows the factors. The weights file is now schema
   version 2 (version 1 is still read); windows may have an altitude (90 for a skylight). Calculate takes about a minute
   with rooms per direction.
+- **Progress of Calculate** in the typical building window: a bar under the button fills as the weights are calculated
+  (`GET /projects/{name}/typical-building/progress`; `generate_simulated_weights` takes a `progress` callback). A run
+  that calculates the weights first reports the same progress, in percent.
 
 ## [0.10.0] - 2026-10-30
 

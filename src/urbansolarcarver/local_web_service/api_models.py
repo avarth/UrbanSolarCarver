@@ -606,6 +606,11 @@ class TypicalBuildingWeightsReply(BaseModel):
     sun_up: list[int]                   # 1 for the hours with the sun above the horizon, 0 for the others
 
 
+class TypicalBuildingProgressReply(BaseModel):
+    """How far the calculation of the typical building's weights has come, from Calculate or from a run."""
+    share_done: float | None            # 0 to 1, by the measured time of each step; None when no calculation is under way
+
+
 class ErrorDetailReply(BaseModel):
     """The body of a request the service refuses with a message."""
     detail: str

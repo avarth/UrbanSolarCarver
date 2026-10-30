@@ -698,6 +698,12 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 .typical-building-advanced > .typical-building-groups { margin-left: calc(var(--space-unit) * 3); border-bottom: 0; }
 .typical-building-calculate { display: flex; flex-direction: column; gap: var(--space-unit); }
 .typical-building-calculate .primary-button { display: inline-flex; align-items: center; justify-content: center; gap: calc(var(--space-unit) * 2); }
+/* How far Calculate has come, under the button: as the run's bar over the 3D view, a thin accent bar on a tint of the accent. */
+.typical-building-progress { height: 4px; border-radius: 2px; overflow: hidden; background: color-mix(in srgb, var(--colour-accent) 20%, transparent); }
+.typical-building-progress-bar { height: 100%; background: var(--colour-accent); transition: width 450ms linear; }
+@media (prefers-reduced-motion: reduce) {
+  .typical-building-progress-bar { transition: none; }
+}
 .typical-building-results-area { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
 .typical-building-out-of-date { color: var(--colour-out-of-date); font-size: var(--text-secondary); font-weight: 600; }
 .typical-building-results { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); }

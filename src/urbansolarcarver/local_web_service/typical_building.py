@@ -662,9 +662,23 @@ def save(store, name: str, values, library_id=_KEEP) -> TypicalBuildingReply:
     return reply(store, name)
 
 
-def calculate(store, name: str, values: dict | None = None) -> str:
+# The share done of each calculation under way, by project folder (calculate, calculation_progress).
+_progress: dict[Path, float] = {}
+_progress_lock = threading.Lock()
+
+
+def calculation_progress(store, name: str) -> float | None:
+    """The share done (0 to 1) of the calculation of the project's weights under way, from Calculate or from a run; None when none
+    is. 404 for an unknown project."""
+    folder = store.open(name)
+    with _progress_lock:
+        return _progress.get(folder)
+
+
+def calculate(store, name: str, values: dict | None = None, progress=None) -> str:
     """Calculate the weights of *values* (default: the stored building) with the project's weather file into WEIGHTS_PATH and record
-    their key in project.json; the key.
+    their key in project.json; the key. While it runs, calculation_progress gives the share done, which *progress*, when given, is
+    also called with (0 to 1, rising).
 
     The generator writes into a new folder beside WEIGHTS_PATH, and the files replace the earlier ones together with the record of the
     key, under the project lock, so the file and its key always belong together. The lock is not held while the generator runs (about
@@ -684,9 +698,19 @@ def calculate(store, name: str, values: dict | None = None) -> str:
     target = weights_file(store.open(name))
     target.parent.mkdir(parents=True, exist_ok=True)
     work_folder = Path(tempfile.mkdtemp(dir=target.parent, prefix="calculating-"))
+    folder = store.open(name)
+
+    def report(share: float) -> None:
+        with _progress_lock:
+            _progress[folder] = share
+        if progress is not None:
+            progress(share)
+
+    report(0.0)
     try:
         try:
-            written = Path(generate_simulated_weights(str(weather_path), archetype_of(values, weather_path), work_folder / target.name))
+            written = Path(generate_simulated_weights(str(weather_path), archetype_of(values, weather_path), work_folder / target.name,
+                                                      progress=report))
         except Exception as error:      # the weather file cannot be read, or the generator refuses the archetype
             raise ProjectError(f"The typical building could not be calculated: {error}", status_code=422) from error
         with store.project_lock(name):
@@ -701,6 +725,8 @@ def calculate(store, name: str, values: dict | None = None) -> str:
             project_json.typical_building = building.model_copy(update={"calculated_key": key})
             store.write_project_json(name, project_json)
     finally:
+        with _progress_lock:
+            _progress.pop(folder, None)
         with contextlib.suppress(OSError):
             shutil.rmtree(work_folder)
     return key

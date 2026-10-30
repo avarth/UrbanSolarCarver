@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { TypicalBuildingLibraryEntry, TypicalBuildingReply } from "../api_client/client";
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { buildingGroupSummary, DirectionFactors, effectColour, libraryGroupsOf, libraryLineOf, SUN_DOWN_COLOUR, SUN_DOWN_COLOUR_DARK, TypicalBuildingSheet, withRoom } from "./TypicalBuildingSheet";
-import { useTypicalBuilding, type TypicalBuildingValues } from "./use_typical_building";
+import { PROGRESS_MILLISECONDS, useTypicalBuilding, type TypicalBuildingValues } from "./use_typical_building";
 
 const NBSP = " ";
 const DIGIT_GROUP = " ";
@@ -58,6 +58,9 @@ class FakeBuildingService {
   libraryId: string | null = "kenak-apartment-b";
   libraryName: string | null = "Apartment, zone Β";
   calculated: TypicalBuildingValues | null = null;
+  /** What the progress route answers; with *finishCalculation* set, Calculate waits until it is called. */
+  shareDone: number | null = null;
+  finishCalculation: (() => void) | null = null;
   own: TypicalBuildingLibraryEntry[] = [];
   readonly requests: string[] = [];
   readonly saved: { values: TypicalBuildingValues; library_id?: string }[] = [];
@@ -74,7 +77,7 @@ class FakeBuildingService {
              ...(this.calculated === null ? {} : { heating_kwh_m2: 43.71, cooling_kwh_m2: 24.06, counted_hours: 2386 }) };
   }
 
-  handle(method: string, address: string, body: unknown): Response {
+  handle(method: string, address: string, body: unknown): Response | Promise<Response> {
     this.requests.push(`${method} ${address}`);
     const libraryPath = "/api/typical-building-library";
     if (address === libraryPath && method === "GET") return json(this.library());
@@ -99,9 +102,14 @@ class FakeBuildingService {
       return json(entry);
     }
     if (address === "/api/projects/p/typical-building/weights") return this.calculated === null ? json({ detail: "not yet" }, 404) : json(WEIGHTS);
+    if (address === "/api/projects/p/typical-building/progress") return json({ share_done: this.shareDone });
     if (address === "/api/projects/p/typical-building/calculate") {
-      this.calculated = this.values;
-      return json(this.reply());
+      const finish = () => {
+        this.calculated = this.values;
+        return json(this.reply());
+      };
+      if (this.finishCalculation === null) return finish();
+      return new Promise<Response>((resolve) => { this.finishCalculation = () => resolve(finish()); });
     }
     if (method === "PUT") {
       const request = body as { values: TypicalBuildingValues; library_id?: string };
@@ -416,6 +424,25 @@ test("a refused value shows its error at its field, opens Advanced and its group
   expect(group("room").querySelector(".panel-section-summary-problem")).not.toBeNull();
   click(advancedToggle());
   expect(advancedToggle().querySelector(".panel-section-summary-problem")).not.toBeNull();
+});
+
+test("while Calculate waits, a bar under the button fills to the share done the service tells", async () => {
+  await openSheet();
+  service.finishCalculation = () => {};
+  click(calculateButton());
+  await settle();
+  const bar = () => find(".typical-building-calculate [role=progressbar]");
+  expect(bar()!.getAttribute("aria-valuenow")).toBe("0");         // the service tells nothing yet
+  expect(bar()!.getAttribute("aria-label")).toBe("Calculation progress");
+  service.shareDone = 0.42;
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, PROGRESS_MILLISECONDS + 50)); });
+  await settle();
+  expect(bar()!.getAttribute("aria-valuenow")).toBe("42");
+  expect(find<HTMLElement>(".typical-building-progress-bar")!.style.width).toBe("42%");
+  service.finishCalculation();
+  await settle();
+  expect(bar()).toBeNull();
+  expect(find(".weights-chart")).not.toBeNull();
 });
 
 test("Calculate draws the effect of each hour's sun, grey with the sun down, and the numbers; a change after it dims them", async () => {

@@ -41,7 +41,7 @@ from .api_models import (
     ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, StoredFileChangedReply, SunChart, SunPath, SunPositions, TurnSurfacesRequest,
     UpdateCriterionRequest, AddStudyRequest, ReorderStudiesRequest, StudiesReply, StudyEntry, StudyWithState, UpdateStudyRequest,
     NewLibraryEntryRequest, TypicalBuildingLibraryEntry, TypicalBuildingReply, TypicalBuildingRequest, TypicalBuildingWeightsReply,
-    UpdateLibraryEntryRequest,
+    TypicalBuildingProgressReply, UpdateLibraryEntryRequest,
 )
 from .carve_further import carve_further
 from .criteria import active_criteria, find_criterion
@@ -673,13 +673,20 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
                                                                             f"{typical_building.NO_BUILDING_MESSAGE}"},
                             **_ERROR_RESPONSES})
     def calculate_typical_building(name: str) -> TypicalBuildingReply:
-        """Calculate the hourly weights of the stored typical building with the project's weather file (about 7 s); 404 without a
-        building or a weather file, 409 while a run of the project is active."""
+        """Calculate the hourly weights of the stored typical building with the project's weather file (about 7 s, about a minute
+        with one room per facade direction; GET .../progress tells how far it has come); 404 without a building or a weather file,
+        409 while a run of the project is active."""
         store = folder_in_use.store
         with store.project_lock(name):      # not held while the weights are calculated: calculate takes it to put them in place
             refuse_while_running(name)
         typical_building.calculate(store, name)
         return typical_building.reply(store, name)
+
+    @router.get("/projects/{name}/typical-building/progress", responses={404: {"model": ErrorDetailReply, "description": "There is no such project."}})
+    def typical_building_progress(name: str) -> TypicalBuildingProgressReply:
+        """How far the calculation of the typical building's weights has come (Calculate's or a run's), which the app asks while
+        Calculate waits; share_done is null when none is under way."""
+        return TypicalBuildingProgressReply(share_done=typical_building.calculation_progress(folder_in_use.store, name))
 
     @router.get("/projects/{name}/typical-building/weights",
                 responses={404: {"model": ErrorDetailReply, "description": "The typical building has not been calculated."}})

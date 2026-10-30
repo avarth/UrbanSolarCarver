@@ -58,11 +58,16 @@ class FakeGenerator:
     def __init__(self, error: Exception | None = None):
         self.archetypes = []
         self.error = error
+        self.during = None      # a function called halfway, after reporting a share of 0.5
 
-    def __call__(self, epw_path, archetype, out_path, internal_gains_w_m2=None, eps=1.0):
+    def __call__(self, epw_path, archetype, out_path, internal_gains_w_m2=None, eps=1.0, progress=None):
         if self.error is not None:
             raise self.error
         self.archetypes.append(archetype)
+        if progress is not None:
+            progress(0.5)
+        if self.during is not None:
+            self.during()
         hours = np.arange(simulated_weights.HOURS)
         benefit = np.where(hours < 1000, 0.5, 0.0)          # 1,000 hours above 0.01, 500 of them with the sun up
         harm = np.where(hours > 8000, 0.2345, 0.0)
@@ -75,6 +80,8 @@ class FakeGenerator:
                                          for label, offset in (("benefit", 0.0), ("benefit_minus_harm", -0.5))}
         path = simulated_weights.write_simulated_weights(out_path, benefit, harm, meta, directions)
         path.with_suffix(".png").write_bytes(b"png")
+        if progress is not None:
+            progress(1.0)
         return path
 
 
@@ -485,6 +492,27 @@ def test_a_weights_file_without_sun_up_counts_every_hour(tmp_path):
     assert typical_building.weights_reply(store, name).sun_up == [1] * 8760
 
 
+def test_progress_tells_the_share_done_while_the_weights_are_calculated(client, fake_generator):
+    create_project(client, "p", "benefit")
+    choose_building(client)
+    assert upload(client, "p", "weather", ("golden.epw", GOLDEN_EPW.read_bytes())).status_code == 200
+    assert client.get("/api/projects/p/typical-building/progress").json() == {"share_done": None}
+    seen = []
+    fake_generator.during = lambda: seen.append(client.get("/api/projects/p/typical-building/progress").json())
+    assert client.post("/api/projects/p/typical-building/calculate").status_code == 200
+    assert seen == [{"share_done": 0.5}]
+    assert client.get("/api/projects/p/typical-building/progress").json() == {"share_done": None}
+    assert client.get("/api/projects/nobody/typical-building/progress").status_code == 404
+
+
+def test_a_failed_calculation_leaves_no_progress(tmp_path, monkeypatch):
+    monkeypatch.setattr(simulated_weights, "generate_simulated_weights", FakeGenerator(error=ValueError("no")))
+    store, name = with_building(*benefit_project(tmp_path))
+    with pytest.raises(typical_building.ProjectError):
+        typical_building.calculate(store, name)
+    assert typical_building.calculation_progress(store, name) is None
+
+
 def test_calculate_without_a_building_or_a_weather_file_is_refused(client, fake_generator):
     create_project(client, "p", "benefit")
     refused = client.post("/api/projects/p/typical-building/calculate")
@@ -584,8 +612,8 @@ def test_a_run_with_missing_weights_calculates_them_first(tmp_path, fake_generat
     events = wait_until_finished(worker, reply.run_id)
     assert events[-1]["type"] == "run_finished", events[-1]
     progress = [(event["stage"], event["criterion"], event["done"], event["total"]) for event in events if event["type"] == "stage_progress"]
-    assert progress[:2] == [("typical_building", None, 0, 1), ("typical_building", None, 1, 1)]
-    assert progress[2][0] == "preprocessing"
+    assert progress[:3] == [("typical_building", None, 0, 100), ("typical_building", None, 50, 100), ("typical_building", None, 100, 100)]
+    assert progress[3][0] == "preprocessing"
     assert len(fake_generator.archetypes) == 1
     key = typical_building.current_key(store, name)
     project_json = store.read_project_json(name)

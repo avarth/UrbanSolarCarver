@@ -39,6 +39,7 @@ export type InspectedFile = Schemas["InspectedFile"];
 export type InspectReply = Schemas["InspectReply"];
 export type TypicalBuildingReply = Schemas["TypicalBuildingReply"];
 export type TypicalBuildingWeightsReply = Schemas["TypicalBuildingWeightsReply"];
+export type TypicalBuildingProgressReply = Schemas["TypicalBuildingProgressReply"];
 export type TypicalBuildingLibraryEntry = Schemas["TypicalBuildingLibraryEntry"];
 
 /** What a new study starts from: a metric (its defaults, no files), or a criterion (its metric, period, mode settings and files). */
@@ -313,6 +314,10 @@ export const putTypicalBuilding = (token: string, project: string, values: Recor
 /** Calculates the weights of the stored building with the project's weather file (about 9 s); 404 without a weather file. */
 export const calculateTypicalBuilding = (token: string, project: string) =>
   requestJson<TypicalBuildingReply>(token, `${projectPath(project)}/typical-building/calculate`, "POST");
+
+/** How far the calculation of the weights under way (Calculate's or a run's) has come: share_done 0 to 1, null when none is. */
+export const getTypicalBuildingProgress = (token: string, project: string) =>
+  requestJson<TypicalBuildingProgressReply>(token, `${projectPath(project)}/typical-building/progress`);
 
 /** The weights of the last calculation and the hours with the sun up, 8,760 each, hour 0 at 1 January 0:00; 404 before the first. */
 export const getTypicalBuildingWeights = (token: string, project: string) =>

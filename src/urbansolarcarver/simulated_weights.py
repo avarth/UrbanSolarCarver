@@ -295,8 +295,12 @@ def _air_temperature(p, consts, t_m_prev, t_e, phi_int, phi_sol, phi_hc):
     return t_air, t_m_next
 
 
+# How often the hourly march reports its progress: 20 times a year.
+_PROGRESS_HOURS = HOURS // 20
+
+
 def _march(p, t_out, phi_int, phi_sol_base, *, deltas: float | None = None,
-           t_m_init: float = 20.0, record_series: bool = False):
+           t_m_init: float = 20.0, record_series: bool = False, progress=None):
     """Step through the 8760 hours of the year, vectorized over trajectories.
 
     With ``deltas=None`` runs a single trajectory. With ``deltas=eps`` [W]
@@ -310,6 +314,8 @@ def _march(p, t_out, phi_int, phi_sol_base, *, deltas: float | None = None,
     heating and cooling demand [Wh] per trajectory (shape (N,)), and,
     when ``record_series`` is true, hourly air temperature, mass
     temperature and signed demand of row 0 (otherwise None).
+    ``progress``, when given, is called with the share of the year done
+    (0 to 1) every :data:`_PROGRESS_HOURS` hours and at the end.
     """
     consts = _hourly_constants(p)
     consts_by_hour = _constants_by_hour(consts)
@@ -327,6 +333,8 @@ def _march(p, t_out, phi_int, phi_sol_base, *, deltas: float | None = None,
     series_demand = np.empty(HOURS) if record_series else None
 
     for h in range(HOURS):
+        if progress is not None and h and h % _PROGRESS_HOURS == 0:
+            progress(h / HOURS)
         if consts_by_hour is not None:
             consts = consts_by_hour[h]
         t_e = float(t_out[h])
@@ -364,6 +372,8 @@ def _march(p, t_out, phi_int, phi_sol_base, *, deltas: float | None = None,
             series_tm[h] = t_m if np.isscalar(t_m) else t_m[0]
             series_demand[h] = phi_nd if np.isscalar(phi_nd) else phi_nd[0]
 
+    if progress is not None:
+        progress(1.0)
     return q_h, q_c, series_air, series_tm, series_demand
 
 
@@ -396,14 +406,15 @@ def simulate(p: ZoneParams, t_out, phi_int, phi_sol,
 
 def attribute_solar_gains(p: ZoneParams, t_out, phi_int, phi_sol,
                      eps: float = 1.0,
-                     t_m_init: float = 20.0) -> Tuple[np.ndarray, np.ndarray]:
+                     t_m_init: float = 20.0, progress=None) -> Tuple[np.ndarray, np.ndarray]:
     """Marginal hourly benefit/harm of solar gain by central-difference perturbation.
 
     Returns ``(benefit, harm)``, each (8760,) in [0, 1]:
     the fraction of one extra watt-hour of solar gain at hour t that
     offsets heating demand / becomes cooling load over the year.
-    ``eps`` is the perturbation size [W]; the other arguments are as in
-    :func:`simulate`.
+    ``eps`` is the perturbation size [W]; ``progress``, when given, is
+    called with the share of the year done (0 to 1); the other arguments
+    are as in :func:`simulate`.
 
     Values are marginal at this archetype's operating point.  At hours
     where the control switches between heating, free-floating and
@@ -416,7 +427,7 @@ def attribute_solar_gains(p: ZoneParams, t_out, phi_int, phi_sol,
     phi_int = np.asarray(phi_int, dtype=np.float64)
     phi_sol = np.asarray(phi_sol, dtype=np.float64)
     q_h, q_c, *_ = _march(p, t_out, phi_int, phi_sol, deltas=float(eps),
-                          t_m_init=t_m_init)
+                          t_m_init=t_m_init, progress=progress)
     d_qh = (q_h[1::2] - q_h[2::2]) / (2.0 * eps)   # +eps rows minus −eps rows
     d_qc = (q_c[1::2] - q_c[2::2]) / (2.0 * eps)
     benefit = -d_qh
@@ -974,13 +985,26 @@ def _save_heatmaps(benefit: np.ndarray, harm: np.ndarray, path) -> "Path | None"
     return path
 
 
-def _room_weights(epw_path: str, arch: dict, internal_gains_w_m2, eps: float, outdoor_temperature) -> dict:
+# The share of one room's time in each of its steps (measured: 0.3 s for
+# the windows' irradiance, 4.3 s for the attribution, 0.75 s for the base
+# run), for the progress it reports.
+_ROOM_STEP_SHARES = {"windows": 0.06, "attribution": 0.8, "base": 0.14}
+# The time of the factors per facade direction, in rooms (6 s against 5.4 s
+# a room), and the share of it before the second of their two calls.
+_FACTORS_IN_ROOMS = 1.1
+_FACTORS_FIRST_SHARE = 1 / 3
+
+
+def _room_weights(epw_path: str, arch: dict, internal_gains_w_m2, eps: float, outdoor_temperature,
+                  progress=None) -> dict:
     """The benefit and harm series of one room, its explicit archetype *arch*
     (after :func:`expand_shoebox`), with the annual demand of its base run
     and its archetype as the artifact's meta records it.  See
     :func:`generate_simulated_weights` for the keys and the gains;
     *outdoor_temperature* returns the weather file's dry-bulb series, read
-    once the archetype has passed its checks."""
+    once the archetype has passed its checks.  *progress*, when given, is
+    called with the share of the room done (0 to 1)."""
+    report = progress if progress is not None else (lambda share: None)
     arch = dict(arch)
     profile = arch.pop("internal_gains_profile_w_m2", None)
     flat = arch.pop("internal_gains_w_m2", None)
@@ -1011,6 +1035,7 @@ def _room_weights(epw_path: str, arch: dict, internal_gains_w_m2, eps: float, ou
     # The irradiance of each window is computed once (Ladybug's transposition
     # takes about 0.25 s a window) for the shaded and the unshaded sums.
     window_gains = _window_gains(epw_path, windows)
+    report(_ROOM_STEP_SHARES["windows"])
     phi_sol = _summed_gains(window_gains, shading)
     if shading is not None:
         # Effective shading factor per hour (shaded / unshaded gain).  Benefit
@@ -1033,10 +1058,13 @@ def _room_weights(epw_path: str, arch: dict, internal_gains_w_m2, eps: float, ou
             f"daily profile or {HOURS} hourly values, got shape {gains.shape}"
         )
 
-    benefit, harm = attribute_solar_gains(params, t_out, phi_int, phi_sol, eps=eps)
+    benefit, harm = attribute_solar_gains(
+        params, t_out, phi_int, phi_sol, eps=eps,
+        progress=lambda share: report(_ROOM_STEP_SHARES["windows"] + _ROOM_STEP_SHARES["attribution"] * share))
     # The annual demand of the zone as given (shaded solar and internal gains),
     # recorded so a reader need not simulate again.
     base = simulate(params, t_out, phi_int, phi_sol)
+    report(1.0)
     if shading is not None:
         # Only the fraction f_eff of an extra unshaded watt-hour reaches the
         # zone; scale the attribution accordingly (f_eff <= 1, so the
@@ -1073,6 +1101,7 @@ def generate_simulated_weights(
     out_path,
     internal_gains_w_m2: "float | Sequence[float] | None" = None,
     eps: float = 1.0,
+    progress=None,
 ) -> Path:
     """Run the full 5R1C weights pipeline: EPW + archetype → artifact.
 
@@ -1105,7 +1134,10 @@ def generate_simulated_weights(
     ``benefit_minus_harm``; computing them imports torch).
 
     ``eps`` is the solar-gain perturbation [W] used by
-    :func:`attribute_solar_gains`.  Writes the JSON artifact to
+    :func:`attribute_solar_gains`.  ``progress``, when given, is called
+    with the share of the calculation done (0 to 1, rising, by the
+    measured time of each step), about 20 times a room, and with 1 once
+    the artifact is written.  Writes the JSON artifact to
     ``out_path`` and, if matplotlib is installed, a heatmap PNG of the
     room's own series next to it with the same name; returns the artifact
     path.  The artifact's meta also holds the zone's annual heating and
@@ -1122,11 +1154,20 @@ def generate_simulated_weights(
     if by_direction:
         rooms.update(direction_archetypes(archetype))
 
+    # The time of the whole calculation in rooms, for the progress.
+    total = len(rooms) + (_FACTORS_IN_ROOMS if by_direction else 0.0)
+
+    def report(rooms_done: float) -> None:
+        if progress is not None:
+            progress(min(rooms_done / total, 1.0))
+
     # One after the other: about 6 s a room (threads are slower, the year's
     # hourly loop holds the GIL).
     outdoor_temperature = functools.lru_cache(maxsize=1)(lambda: read_weather_file(epw_path).dry_bulb_temperature())
-    done = {name: _room_weights(epw_path, arch, internal_gains_w_m2, eps, outdoor_temperature)
-            for name, arch in rooms.items()}
+    done = {}
+    for index, (name, arch) in enumerate(rooms.items()):
+        done[name] = _room_weights(epw_path, arch, internal_gains_w_m2, eps, outdoor_temperature,
+                                   progress=lambda share, index=index: report(index + share))
     main = done.pop("room")
 
     from datetime import datetime, timezone
@@ -1150,11 +1191,13 @@ def generate_simulated_weights(
             for name in DIRECTION_ROOMS}
         from .sky_patches import direction_factors
         averaged = (main["benefit"], main["harm"])
-        meta["direction_factors"] = {
-            label: dict(zip(DIRECTION_ROOMS, (round(float(f), 4) for f in direction_factors(
+        meta["direction_factors"] = {}
+        for label, harm in (("benefit", False), ("benefit_minus_harm", True)):
+            meta["direction_factors"][label] = dict(zip(DIRECTION_ROOMS, (round(float(f), 4) for f in direction_factors(
                 str(epw_path), averaged, directions, range(HOURS), include_harm=harm))))
-            for label, harm in (("benefit", False), ("benefit_minus_harm", True))}
+            report(len(rooms) + _FACTORS_IN_ROOMS * (_FACTORS_FIRST_SHARE if not harm else 1.0))
     artifact = write_simulated_weights(out_path, main["benefit"], main["harm"], meta, directions)
     # Companion preview so users can inspect the weights without writing code.
     _save_heatmaps(main["benefit"], main["harm"], artifact.with_suffix(".png"))
+    report(total)
     return artifact

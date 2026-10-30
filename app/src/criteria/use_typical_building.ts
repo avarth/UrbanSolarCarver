@@ -6,15 +6,19 @@
 // sheet's changes are saved one after another, each with all the values; a refused save (422) keeps the values shown with an error
 // at each field, as the settings form keeps a refused value. Calculate saves what waits first, then calculates the stored building.
 // The library's changes (Save to library, Save as new, rename, delete) go in the same line, and the library and the building are
-// read again after each: the building's library name and "changed" follow them.
+// read again after each: the building's library name and "changed" follow them. While Calculate waits, the share done is asked every
+// half second (PROGRESS_MILLISECONDS).
 import { useEffect, useRef, useState } from "react";
 import {
   addTypicalBuildingLibraryEntry, ApiError, calculateTypicalBuilding, deleteTypicalBuildingLibraryEntry, failureTextOf, getTypicalBuilding,
-  getTypicalBuildingLibrary, getTypicalBuildingWeights, putTypicalBuilding, serviceProblemOf, updateTypicalBuildingLibraryEntry,
+  getTypicalBuildingLibrary, getTypicalBuildingProgress, getTypicalBuildingWeights, putTypicalBuilding, serviceProblemOf, updateTypicalBuildingLibraryEntry,
   type TypicalBuildingLibraryEntry, type TypicalBuildingReply, type TypicalBuildingWeightsReply,
 } from "../api_client/client";
 
 export type TypicalBuildingValues = Record<string, unknown>;
+
+/** How often the share done of a calculation is asked while Calculate waits. */
+export const PROGRESS_MILLISECONDS = 500;
 
 export interface TypicalBuildingHook {
   /** The building as stored, with its library entry, the state of its weights and their numbers; null until it is read. */
@@ -31,6 +35,8 @@ export interface TypicalBuildingHook {
   /** Why the last save, library change or calculation failed, when no field is named; null when none did. */
   problem: string | null;
   calculating: boolean;
+  /** The share done of the calculation while Calculate waits, 0 to 1 (0 until the service tells); null when not calculating. */
+  calculationShare: number | null;
   /** The weights of the last calculation once read (readWeights); null before. */
   weights: TypicalBuildingWeightsReply | null;
   /** Saves *values* (all of them); the building still comes from the same library entry. */
@@ -77,6 +83,7 @@ export function useTypicalBuilding({ token, project, active, runActive, weatherR
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [problem, setProblem] = useState<string | null>(null);
   const [calculating, setCalculating] = useState(false);
+  const [calculationShare, setCalculationShare] = useState<number | null>(null);
   const [weights, setWeights] = useState<TypicalBuildingWeightsReply | null>(null);
   // The saves go out one after another; while one waits, a reply does not replace the values shown.
   const saves = useRef<Promise<void>>(Promise.resolve());
@@ -197,6 +204,29 @@ export function useTypicalBuilding({ token, project, active, runActive, weatherR
     });
   };
 
+  // The share done, asked at once and then every PROGRESS_MILLISECONDS while Calculate waits; it only rises. A failed question is
+  // left: the next one may answer, and Calculate's own reply ends the wait.
+  useEffect(() => {
+    if (!calculating) {
+      setCalculationShare(null);
+      return;
+    }
+    setCalculationShare(0);
+    let waiting = true;
+    const ask = () => {
+      getTypicalBuildingProgress(token, project).then((reply) => {
+        const share = reply.share_done;
+        if (waiting && share != null) setCalculationShare((shown) => Math.max(shown ?? 0, share));
+      }, () => {});
+    };
+    ask();
+    const timer = setInterval(ask, PROGRESS_MILLISECONDS);
+    return () => {
+      waiting = false;
+      clearInterval(timer);
+    };
+  }, [calculating]);
+
   const readWeights = () => {
     if (weightsAsked.current) return;
     weightsAsked.current = true;
@@ -207,7 +237,7 @@ export function useTypicalBuilding({ token, project, active, runActive, weatherR
   };
 
   return {
-    stored, values: shown, library, readProblem, fieldErrors, problem, calculating, weights,
+    stored, values: shown, library, readProblem, fieldErrors, problem, calculating, calculationShare, weights,
     change: (values) => save(values), choose: (entry) => save(structuredClone(entry.values), entry.id), saveToLibrary, saveAsNew, renameEntry,
     deleteEntry, calculate, readWeights,
   };

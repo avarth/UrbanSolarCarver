@@ -224,7 +224,7 @@ test("a request to open a section (a link to a setting) opens it, once per reque
 const APARTMENT = { room: "average", height: 3, depth: 6, wwr: { ne: 0.4, se: 0.4, sw: 0.4, nw: 0.4 } };
 const BUILDING: TypicalBuildingHook = {
   stored: { values: APARTMENT, library_id: "kenak-apartment-b", library_name: "Apartment, zone Β", changed: false, state: "missing" },
-  values: APARTMENT, readProblem: null, fieldErrors: {}, problem: null, calculating: false, weights: null,
+  values: APARTMENT, readProblem: null, fieldErrors: {}, problem: null, calculating: false, calculationShare: null, weights: null,
   library: [{ id: "kenak-apartment-b", name: "Apartment, zone Β", group: "Greece, KENAK reference building", read_only: true, source: null, values: APARTMENT }],
   change: () => {}, choose: () => {}, saveToLibrary: () => {}, saveAsNew: async () => null, renameEntry: async () => null, deleteEntry: async () => null,
   calculate: () => {}, readWeights: () => {},

@@ -303,14 +303,22 @@ class RunWorker:
     def _calculate_typical_building(self, state: RunState, context: RunContext, choice: StageChoice, settings: RunSettings) -> None:
         """Calculate the typical building's weights, as they were when the run started, when a criterion the run preprocesses uses them
         and the weights file is missing or was calculated for another key; the progress is the stage typical_building, of no
-        criterion. The engine reads the file only in preprocessing. An error of the calculation ends the run as any error does."""
+        criterion, in percent (done of total 100). The engine reads the file only in preprocessing. An error of the calculation ends
+        the run as any error does."""
         keys = {settings.weights_keys[criterion_id] for criterion_id, stages in choice.criterion_stages.items()
                 if "preprocessing" in stages and criterion_id in settings.weights_keys}
         if not keys or not typical_building.needs_calculation(self._store, state.project, next(iter(keys))):
             return
-        state.emit({"type": "stage_progress", "stage": typical_building.STAGE, "criterion": None, "done": 0, "total": 1})
-        typical_building.calculate(self._store, state.project, settings.typical_building_values)
-        state.emit({"type": "stage_progress", "stage": typical_building.STAGE, "criterion": None, "done": 1, "total": 1})
+        percent_sent = [-1]
+
+        def emit_percent(share: float) -> None:
+            percent = round(share * 100)
+            if percent != percent_sent[0]:
+                percent_sent[0] = percent
+                state.emit({"type": "stage_progress", "stage": typical_building.STAGE, "criterion": None, "done": percent, "total": 100})
+
+        typical_building.calculate(self._store, state.project, settings.typical_building_values, progress=emit_percent)
+        emit_percent(1.0)
         context.raise_if_cancelled()
 
     def _release_session_memory(self) -> None:

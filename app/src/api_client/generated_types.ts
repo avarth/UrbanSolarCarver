@@ -669,10 +669,32 @@ export interface paths {
         put?: never;
         /**
          * Calculate Typical Building
-         * @description Calculate the hourly weights of the stored typical building with the project's weather file (about 7 s); 404 without a
-         *     building or a weather file, 409 while a run of the project is active.
+         * @description Calculate the hourly weights of the stored typical building with the project's weather file (about 7 s, about a minute
+         *     with one room per facade direction; GET .../progress tells how far it has come); 404 without a building or a weather file,
+         *     409 while a run of the project is active.
          */
         post: operations["calculate_typical_building"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/typical-building/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Typical Building Progress
+         * @description How far the calculation of the typical building's weights has come (Calculate's or a run's), which the app asks while
+         *     Calculate waits; share_done is null when none is under way.
+         */
+        get: operations["typical_building_progress"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2040,6 +2062,14 @@ export interface components {
             values: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * TypicalBuildingProgressReply
+         * @description How far the calculation of the typical building's weights has come, from Calculate or from a run.
+         */
+        TypicalBuildingProgressReply: {
+            /** Share Done */
+            share_done: number | null;
         };
         /**
          * TypicalBuildingReply
@@ -3808,6 +3838,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    typical_building_progress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TypicalBuildingProgressReply"];
+                };
+            };
+            /** @description There is no such project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

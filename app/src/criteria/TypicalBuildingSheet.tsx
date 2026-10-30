@@ -310,6 +310,17 @@ function BuildingOnOff({ name, value, error, disabled, onChange }: { name: strin
   );
 }
 
+/** How far Calculate has come: a bar under the button, filled to the share done. */
+function CalculationProgress({ share }: { share: number }) {
+  const percent = Math.round(share * 100);
+  return (
+    <div className="typical-building-progress" role="progressbar" aria-label={messages.calculationProgress} aria-valuemin={0}
+         aria-valuemax={100} aria-valuenow={percent}>
+      <div className="typical-building-progress-bar" style={{ width: `${percent}%` }} />
+    </div>
+  );
+}
+
 /** The factor of each facade direction (typical_building.reply), from benefit minus harm when the criterion counts harm; nothing
  *  without rooms per direction. A direction whose factor is 0 is named below the grid. */
 export function DirectionFactors({ factors, countsHarm }: { factors: Record<string, number> | null; countsHarm: boolean }) {
@@ -769,6 +780,7 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
                 {values.by_direction === true ? messages.calculatingByDirection : messages.calculating}</>
                 : outOfDate ? messages.calculateAgain : messages.calculate}
             </button>
+            {building.calculating && <CalculationProgress share={building.calculationShare ?? 0} />}
             {calculateBlocker !== null && <p id={reasonId} className="run-button-reason">{calculateBlocker}</p>}
             {building.problem !== null && <p className="setting-error" role="alert"><WarningIcon /><span>{building.problem}</span></p>}
           </div>
