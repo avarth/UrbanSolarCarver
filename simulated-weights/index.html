@@ -1699,7 +1699,7 @@
 </tbody>
 </table>
 <p>The three cases of use are examples of hours, not an editor: gains and fresh air are on in the hours of the case and off outside them, with no holidays. The project's values (project.json, the library's YAML files) use the keys of <code>typical_building.VALUE_KEYS</code>: <code>schedule</code> (<code>residential</code>, <code>office</code>, <code>always</code>), <code>t_set_heating</code>, <code>t_set_cooling</code>, <code>gains_w_m2</code>, <code>fresh_air_m3h_m2</code>, <code>heat_recovery</code>, <code>u_wall</code>, <code>u_window</code>, <code>g_value</code>, <code>mass_capacity_kj_m2k</code>, <code>shading_factor</code> (null for none), <code>shading_start</code>, <code>shading_end</code> ("MM-DD"), <code>room</code> (<code>average</code> with <code>depth</code>, or <code>box</code> with <code>width</code>, <code>length</code>, <code>orientation</code>), <code>height</code>, <code>wwr</code>, <code>roof_exposed</code>, <code>u_roof</code>, <code>floor_exposed</code>, <code>u_floor</code>, <code>ach_infiltration</code>.</p>
-<p><strong>The default room.</strong> The weights do not depend on the size of the room, only on its ratios: facade and window per m² of floor, volume per m² of floor. The default room ("average") is a square plan turned 45° with all four walls exposed and the same window share on each, so its windows face NE, SE, SW and NW and no direction is favoured. Its side is four times the room depth, which gives it the facade per m² of floor of a room that deep with one facade: 6 m deep is a 24 × 24 m square. An average room of depth d is the box of width and length 4d at orientation 45° whose north, east, south and west shares are the NE, SE, SW and NW ones. The explicit box (width, length, orientation, a share per wall) is the other kind of room, used by the ASHRAE 140 boxes.</p>
+<p><strong>The default room.</strong> The weights do not depend on the size of the room, only on its ratios: facade and window per m² of floor, volume per m² of floor. The default room ("average") is a square plan turned 45° with all four walls exposed and the same window share on each, so its windows face NE, SE, SW and NW and no direction is favoured. Its side is four times the room depth, which gives it the facade per m² of floor of a room that deep with one facade: 6 m deep is a 24 × 24 m square. An average room of depth d is the box of width and length 4d at orientation 45° whose north, east, south and west shares are the NE, SE, SW and NW ones. The explicit box (width, length, orientation, a share per wall) is the other kind of room.</p>
 <p><strong>Roof and floor are adiabatic by default</strong>: the room stands for a storey between others, and no heat passes through its ceiling and floor. A top storey or a floor over pilotis is turned on under Advanced, Roof and floor, with its own U.</p>
 <p>The weights describe one room with the mean exposure of the building's facades. They are the same for every facade of the carved volume within an hour (the time of day carries the direction of the sun): a south facade and a north facade of the same building get the same weight in the same hour. Weights per facade direction (one room per orientation) are not in the app.</p>
 <h3 id="the-library">The library<a class="headerlink" href="#the-library" title="Permanent link">&para;</a></h3>
@@ -1822,7 +1822,6 @@
 </table>
 <p>The same for all eight: whole-window g 0.55 (glass 0.76 at normal incidence, × 0.9 for the mean over the angles, × 0.8 for a 20 % frame, §4.2.7); infiltration 5.5 m³/h per m² of window (§4.4.1), which in the examples' room is 115.2 m² of window × 5.5 / 1,728 m³ = 0.37 air changes per hour (the value the examples carry, to 2 decimals; a room of another depth or window share has another value); summer shading 0.77, the mean of the reference building's factors for NE, SE, SW and NW windows (0.80, 0.73, 0.73, 0.80, §4.3.1), over the zone's cooling period and none outside it; the average room 6 m deep with a 3 m storey, 40 % window share on each side, roof and floor adiabatic (their U values are the zone's, so turning them on gives the KENAK values). The 250 kJ/m²K takes the effective mass area of the ISO 13790 class nearest in capacity (heavy, 260).</p>
 <p>The office lighting gain counts the reference building's full installed power, 16 W/m², in every hour of use. Daylight would lower it in a real office, so the office examples overstate the internal gains of sunny hours, and so the cooling and the harm.</p>
-<p><strong>ASHRAE 140 test cases.</strong> "ASHRAE 140 case 600 (light)" and "ASHRAE 140 case 900 (heavy)" are the test boxes of ANSI/ASHRAE Standard 140 (BESTEST): a free-standing box 8 × 6 × 2.7 m, walls and roof exposed, 12 m² of glass on the south wall (window share 0.556), the floor over outdoor air, 200 W of constant gains (4.17 W/m², every hour), infiltration 0.5 air changes per hour, set points 20 / 27 °C, no fresh air, no shading. The layers are those of the Modelica Buildings library's BESTEST data (LBNL); the U values were computed from them: walls 0.514 (600) and 0.512 (900), roof 0.318, floor 0.039 W/m²K. Case 600 has a thermal capacity of 80 kJ/m²K, the ISO 13790 very light class (its layers inside the insulation hold about 40 kJ/m²K), case 900 260 kJ/m²K, the heavy class (about 305 kJ/m²K). Some of their values are <strong>not confirmed</strong> against the standard's text, which could not be reached: the window U of 3.0 W/m²K (Modelica's ISO 13790 model uses 3.1), the glass SHGC of 0.787 (Modelica's uses 0.769), the × 0.9 that makes it the whole-window g of 0.71 (the app's choice, as for the KENAK g), and the surface coefficients used for the wall and roof U values. As a loose check on the Golden, CO weather (BESTEST uses Denver), the heating of case 600 falls in the range of the reference programs (ranges quoted from memory), while the cooling of both boxes is lower and the heating of case 900 higher. Treat the two boxes as a check of the model's behaviour, not as a validated BESTEST result.</p>
 <p>On the bundled Golden, CO weather file the examples give (heating and cooling of the base run, and the hours with the sun up whose benefit weight is above 0.01, of 4,438):</p>
 <table>
 <thead>
@@ -1881,18 +1880,6 @@
 <td style="text-align: right;">22.2</td>
 <td style="text-align: right;">48.9</td>
 <td style="text-align: right;">1,791</td>
-</tr>
-<tr>
-<td>ASHRAE 140 case 600</td>
-<td style="text-align: right;">94.9</td>
-<td style="text-align: right;">77.6</td>
-<td style="text-align: right;">2,958</td>
-</tr>
-<tr>
-<td>ASHRAE 140 case 900</td>
-<td style="text-align: right;">61.7</td>
-<td style="text-align: right;">37.8</td>
-<td style="text-align: right;">2,469</td>
 </tr>
 </tbody>
 </table>
