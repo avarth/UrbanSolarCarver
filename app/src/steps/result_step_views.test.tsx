@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { act, useMemo, useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ModeInfo, RunSummary } from "../api_client/client";
@@ -762,4 +763,10 @@ test("while the analysis is out of date, only a carving setting with an error st
   act(() => slope.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
   expect(onChange).toHaveBeenLastCalledWith({ max_slope_deg: 45 });
   expect(onCarvingSettingCommit).not.toHaveBeenCalled();
+});
+
+test("the carving rule's info sits beside Manual | Automatic on one row, not on a line of its own", () => {
+  const css = readFileSync("src/steps/steps.css", "utf8");
+  expect(css).toMatch(/\.setting-field\.carving-rule-choice\s*{[^}]*flex-direction: row;/);
+  expect(css).toMatch(/\.carving-rule-choice > \.setting-label-row\s*{\s*order: 2;/);
 });

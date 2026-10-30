@@ -547,6 +547,7 @@ export const messages = {
   },
   // The fold of a group that shows no essential setting where it is drawn (a criterion's Detail: the rays per sky patch only).
   foldedGroupTitles: {
+    "Mode specific": "More mode settings",
     "Detail": "Detail settings",
   },
   aboutSetting: (settingLabel: string) => `About ${String(settingLabel).toLowerCase()}`,

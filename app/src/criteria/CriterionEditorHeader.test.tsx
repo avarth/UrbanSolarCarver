@@ -132,3 +132,13 @@ test("during a run the switch and the menu items wait", () => {
   click(header().querySelector(".action-menu-button")!);
   expect([...header().querySelectorAll('[role="menuitem"]')].every((item) => item.getAttribute("aria-disabled") === "true")).toBe(true);
 });
+
+test("the sticky header stays over the controls that scroll under it, the period control's bubbles included", () => {
+  const zIndexOf = (css: string, selector: string) => {
+    const start = css.indexOf(`${selector} {`);
+    return Number(/z-index:\s*(\d+)/.exec(css.slice(start, css.indexOf("}", start)))![1]);
+  };
+  const header = zIndexOf(readFileSync("src/steps/steps.css", "utf8"), ".criterion-editor-header");
+  const bubble = zIndexOf(readFileSync("src/settings_form/settings_form.css", "utf8"), ".scale-strip-bubble");
+  expect(header).toBeGreaterThan(bubble);
+});
