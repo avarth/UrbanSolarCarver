@@ -688,6 +688,19 @@ test("Solar usefulness: the notice waits for the cold period of the new file and
   expect(service.savedValues).toEqual([{ mode: "benefit", start_month: 5, start_day: 3, end_month: 9, end_day: 20 }]);           // the hours kept
 });
 
+test("Solar usefulness, energy-weighted: a new file's cold period is not offered, as it belongs to the cold hours rule", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  service.uploadedWeather = BRISBANE;
+  const energyWeighted = project(NOTHING_RUN, { mode: "benefit" });
+  energyWeighted.criteria = energyWeighted.criteria!.map((criterion) => ({ ...criterion, energy_weighted: true }));
+  await openWorkspace(service, energyWeighted, {}, { schema: BENEFIT_SCHEMA, modes: MODES_WITH_BENEFIT });
+  await waitForTheColdPeriod();
+  service.coldPeriodReply = { status: "found", period: { start_month: 5, start_day: 3, end_month: 9, end_day: 20 } };
+  await addWeatherFile();
+  await waitForTheColdPeriod();
+  expect(weatherNotice()).toBeNull();
+});
+
 test("Solar usefulness: no cold period in the new file, or the one the period already has, brings no notice", async () => {
   service = new FakeService(NOTHING_RUN, null);
   service.uploadedWeather = BRISBANE;

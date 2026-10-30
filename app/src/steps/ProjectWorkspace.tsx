@@ -263,8 +263,9 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const { coldPeriod, answeredWeatherFileRevision } = useColdPeriod({ token, project: project.name, form, hasWeatherFile, weatherFileRevision: weather.fileRevision, onServiceProblem });
   const modeReadsPeriod = modeInfo?.needs_period ?? false;
   const periodShown = analysisPeriodOf(form, modeReadsPeriod);
+  // The cold period belongs to the cold hours rule: an energy-weighted criterion is offered no cold period, by the notice nor the preset.
   const weatherChangeSuggestionNow = weatherChangeSuggestion(weather.fileChange, {
-    mode: form.mode, modeReadsPeriod, period: periodShown, coldPeriod, answeredWeatherFileRevision,
+    mode: form.mode, modeReadsPeriod, period: periodShown, coldPeriod: criterion?.energy_weighted ? null : coldPeriod, answeredWeatherFileRevision,
   });
   // Once the period is not the one the new file came with, the notice has nothing more to say about it, even if the period comes back.
   const weatherChangeOutlived = weather.fileChange !== null && periodChangedSince(weather.fileChange, periodShown);
