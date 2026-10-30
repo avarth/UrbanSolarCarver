@@ -7,6 +7,25 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-30
+
+### Highlights
+
+- **Browser app** (`usc ui`): projects with their inputs, a Carve workspace (criteria, carving rule with a histogram,
+  envelope and building massing, export), a Simulate workspace (studies of sun hours, irradiance, daylight and useful
+  solar gains on any test surfaces, the sky dome, a Sun panel with sun paths, shadows and hours in shade) and an Inspect
+  workspace (input files, face normals, turning faces). Light and dark themes.
+- **Chained carvings**: several criteria, each with its own test surfaces and mode, carved one after another.
+- **Context and terrain**: existing surroundings and the ground block sun and sky in every mode and client.
+- **Energy-weighted Solar usefulness**: hours weighted by what their sun saves a typical building in heating, from a
+  simple hourly model of one room; a library of typical buildings with example buildings.
+- **Building massing** on floor plates, also on sloped ground.
+- **Sky sampling**: several jittered rays per sky patch (`rays_per_patch`), removing banding far from the test surfaces.
+- **Time basis** for time-based mode: standard, daylight saving or solar time.
+- **Test point access evaluation** in the Python API; cold period preset from the weather file; scores in kWh or m².
+
+The sections below list every change since 0.9.0.
+
 ### Changed (app: review follow-ups)
 
 - **The workspace switch reads Carve | Simulate | Inspect** (it read Design). Messages follow: "A carving run is in progress",

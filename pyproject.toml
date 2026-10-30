@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "urbansolarcarver"
-version = "0.9.0"
+version = "0.10.0"
 description = "GPU-accelerated generation of maximum buildable volumes that respect solar access, daylight, and thermal comfort constraints in urban environments."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
