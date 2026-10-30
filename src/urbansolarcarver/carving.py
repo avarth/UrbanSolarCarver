@@ -63,9 +63,9 @@ import threading
 import torch
 import numpy as np
 
-from .scoring import get_weights
+from .scoring import get_direction_factors, get_weights
 from .stage_settings import PreprocessingSettings
-from .sky_patches import fetch_tregenza_patch_cells, fetch_tregenza_patch_directions, patch_facing_margin
+from .sky_patches import fetch_tregenza_patch_cells, fetch_tregenza_patch_directions, patch_facing_margin, point_direction_factors
 from .sun import get_sun_vectors
 from .run_context import active_context, report_issue, report_progress
 from .ray_tracing import (
@@ -347,13 +347,29 @@ class SkyPatchRaySet(NamedTuple):
     sub_rays: "SkySubRays | None" = None     # jittered sub-rays per ray, or None: trace the patch centres
 
 
+def direction_point_weights(settings: PreprocessingSettings, hoys, sample_normals) -> "np.ndarray | None":
+    """Each sample point's factor of its facade direction (R,), for benefit
+    mode with a simulated-weights file that has rooms per direction
+    (scoring.get_direction_factors, sky_patches.point_direction_factors);
+    None otherwise."""
+    if str(settings.mode).strip().lower() != "benefit" or not settings.simulated_weights_path:
+        return None
+    factors = get_direction_factors(settings.epw_path, list(hoys), bool(settings.include_harm),
+                                    settings.simulated_weights_path)
+    if factors is None:
+        return None
+    return point_direction_factors(sample_normals, factors, settings.north_deg)
+
+
 def sky_patch_ray_set(device, sample_points, sample_normals, settings: PreprocessingSettings,
                       hoys, point_weights=None) -> SkyPatchRaySet:
     """The rays and weights of the sky-patch modes, on *device*.
 
     One ray from each sample point toward every Tregenza patch on the
     outward side of its normal; rays of points whose *point_weights*
-    (edge_taper) entry is 0 are dropped.  The patch weights are those of
+    (edge_taper) entry is 0 are dropped.  In benefit mode with rooms per
+    facade direction, the point weights are multiplied by each point's
+    direction factor (:func:`direction_point_weights`).  The patch weights are those of
     ``settings.mode`` over the hours *hoys*.
 
     With ``settings.rays_per_patch`` above 1, the kernels trace each ray as
@@ -387,6 +403,13 @@ def sky_patch_ray_set(device, sample_points, sample_normals, settings: Preproces
         )
     )
     surface_normals = torch.as_tensor(sample_normals, dtype=torch.float32, device=device)
+
+    # --- 2a) Weights per facade direction ----------------------------------
+    # With a simulated-weights file that has rooms per direction, each point
+    # counts with its direction's factor, folded into its point weight.
+    by_direction = direction_point_weights(settings, hoys, sample_normals)
+    if by_direction is not None:
+        point_weights = by_direction if point_weights is None else np.asarray(point_weights) * by_direction
 
     # --- 2b) Per-point design weights (edge_taper) -------------------------
     # Fold sample-point weights into per-ray weighting; rays from

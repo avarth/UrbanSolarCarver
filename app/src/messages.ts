@@ -786,6 +786,7 @@ export const messages = {
     g_value: "Window solar transmittance (g)", mass_capacity_kj_m2k: "Thermal capacity",
     shading_factor: "Shading factor", shading_start: "From", shading_end: "To", room: "Kind of room", height: "Storey height", depth: "Room depth",
     width: "Width, east to west", length: "Length, north to south", orientation: "Orientation", wwr: "Window share of each wall",
+    by_direction: "One room per facade direction",
     roof_exposed: "Roof exposed", u_roof: "U of the roof", floor_exposed: "Floor exposed", u_floor: "U of the floor",
     ach_infiltration: "Infiltration",
   } as Record<string, string>,
@@ -816,6 +817,10 @@ export const messages = {
     average: "A square room turned 45° with the same window share on its four walls (NE, SE, SW, NW), so no direction is favoured. " +
       "Its side is 4 times the depth: the weights depend on the ratios, not on the size.",
     orientation: "Clockwise from north; 0 has the south wall facing south.",
+    by_direction: "On: the room is also calculated behind a single facade turned to each of 8 directions, and under a roof with " +
+      "a skylight, each with this room's facade and glass per m² of floor. Each test point then counts by its direction: a south " +
+      "room that its own sun already warms gains less from more sun than a north room. Off: one room for all facades. On takes " +
+      "about a minute to calculate.",
     wwr: "The glazed share of each wall, 0 to 0.9.",
     roof_and_floor: "Off, no heat passes through it (adiabatic), as for a storey between others.",
     ach_infiltration: "Outdoor air leaking in, in room volumes per hour, in every hour.",
@@ -831,6 +836,7 @@ export const messages = {
   boxRoomSummary: (widthText: string, lengthText: string, heightText: string, orientationText: string, sharesText: string) =>
     `Box ${widthText} × ${lengthText} × ${heightText} m, ${orientationText}° from north; ${sharesText}`,
   sameShareSummary: (shareText: string) => `windows ${shareText} on each side`,
+  byDirectionSummary: (roomText: string) => `${roomText}; one room per facade direction`,
   noWindows: "no windows",
   roofAndFloorSummary: (roofText: string | null, floorText: string | null) =>
     roofText === null && floorText === null ? "Both adiabatic"
@@ -841,6 +847,7 @@ export const messages = {
   calculate: "Calculate",
   calculateAgain: "Calculate again",
   calculating: "Calculating, about 10 s",
+  calculatingByDirection: "Calculating, about a minute",
   // Why Calculate waits: one sentence without a final period, as the run buttons' reasons.
   calculateNeedsWeatherFile: "Add a weather file in Carve (Inputs) to calculate the typical building",
   calculateWaitsForValues: "Fix the values marked above to calculate",
@@ -858,4 +865,13 @@ export const messages = {
   countedHours: "Hours that count",
   countedHoursOfDaytime: (count: number, daytimeCount: number) => `${groupedDigits(count)} of ${groupedDigits(daytimeCount)} daytime hours`,
   countedHoursNote: "Hours with the sun up whose weight is above 0.01.",
+  // The factor of each facade direction, with one room per facade direction (typical_building.reply).
+  directionFactorsTitle: "Factor by facade direction",
+  directionFactorsNote: "How much a test point facing each way counts, against one room for all facades: the sky it sees, weighted " +
+    "with its own direction's room, over the same weighted with the averaged room, over the whole year. Between two directions a " +
+    "point takes a mix of the two; a point facing up within 45° takes the roof's. The carve uses the criterion's period.",
+  directionNames: { N: "N", NE: "NE", E: "E", SE: "SE", S: "S", SW: "SW", W: "W", NW: "NW", roof: "Roof" } as Record<string, string>,
+  zeroFactorNote: (namesText: string, count: number, countsHarm: boolean) =>
+    `${namesText}: factor 0, so ${count === 1 ? "this direction's" : "these directions'"} test points protect no sky` +
+    `${countsHarm ? ": in their room the sun adds more to cooling than it saves in heating, in every part of the sky" : ""}.`,
 };

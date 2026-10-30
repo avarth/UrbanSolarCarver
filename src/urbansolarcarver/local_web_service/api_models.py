@@ -593,6 +593,10 @@ class TypicalBuildingReply(BaseModel):
     heating_kwh_m2: float | None = None     # the building's heating demand in a year, kWh per m² of floor
     cooling_kwh_m2: float | None = None     # its cooling demand
     counted_hours: int | None = None        # the hours with the sun up whose benefit weight is above 0.01
+    # With one room per facade direction: each direction's factor over the whole year (N, NE, E, SE, S, SW, W, NW, roof), from the
+    # benefit alone and from benefit minus harm; None without rooms per direction
+    direction_factors: dict[str, float] | None = None
+    direction_factors_with_harm: dict[str, float] | None = None
 
 
 class TypicalBuildingWeightsReply(BaseModel):

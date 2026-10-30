@@ -35,6 +35,7 @@ BOX = typical_building.validate({
     "room": "box", "height": 2.7, "width": 8.0, "length": 6.0, "orientation": 0.0,
     "wwr": {"north": 0.0, "east": 0.0, "south": 0.5, "west": 0.0},
     "roof_exposed": True, "u_roof": 0.3, "floor_exposed": True, "u_floor": 0.3, "ach_infiltration": 0.5})
+WITHOUT_DIRECTIONS = {**DEFAULT, "by_direction": False}
 EXAMPLE_IDS = ["kenak-apartment-a", "kenak-apartment-b", "kenak-apartment-c", "kenak-apartment-d",
                "kenak-office-a", "kenak-office-b", "kenak-office-c", "kenak-office-d"]
 
@@ -66,8 +67,13 @@ class FakeGenerator:
         benefit = np.where(hours < 1000, 0.5, 0.0)          # 1,000 hours above 0.01, 500 of them with the sun up
         harm = np.where(hours > 8000, 0.2345, 0.0)
         sun_up = [int(hour >= 500) for hour in hours]
-        path = simulated_weights.write_simulated_weights(out_path, benefit, harm,
-                                                         {"heating_kwh_m2": 41.5, "cooling_kwh_m2": 12.25, "sun_up": sun_up})
+        meta = {"heating_kwh_m2": 41.5, "cooling_kwh_m2": 12.25, "sun_up": sun_up}
+        directions = None
+        if archetype.get("direction_rooms"):
+            directions = {room: (benefit, harm) for room in simulated_weights.DIRECTION_ROOMS}
+            meta["direction_factors"] = {label: {room: 0.5 + 0.1 * index + offset for index, room in enumerate(simulated_weights.DIRECTION_ROOMS)}
+                                         for label, offset in (("benefit", 0.0), ("benefit_minus_harm", -0.5))}
+        path = simulated_weights.write_simulated_weights(out_path, benefit, harm, meta, directions)
         path.with_suffix(".png").write_bytes(b"png")
         return path
 
@@ -376,7 +382,8 @@ def test_a_new_project_has_no_building_until_one_is_chosen(client):
     create_project(client, "p", "benefit")
     reply = client.get("/api/projects/p/typical-building").json()
     assert reply == {"values": None, "library_id": None, "library_name": None, "changed": False,
-                     "state": "not_chosen", "heating_kwh_m2": None, "cooling_kwh_m2": None, "counted_hours": None}
+                     "state": "not_chosen", "heating_kwh_m2": None, "cooling_kwh_m2": None, "counted_hours": None,
+                     "direction_factors": None, "direction_factors_with_harm": None}
     assert client.get("/api/projects/p/typical-building/weights").status_code == 404
     chosen = choose_building(client)
     assert (chosen["values"], chosen["library_id"], chosen["library_name"], chosen["changed"], chosen["state"]) == (
@@ -451,13 +458,15 @@ def test_a_bad_value_is_refused_by_the_route_and_nothing_changes(client):
 def test_calculate_writes_the_weights_and_answers_the_numbers(client, fake_generator):
     create_project(client, "p", "benefit")
     choose_building(client)
+    assert client.put("/api/projects/p/typical-building", json={"values": WITHOUT_DIRECTIONS}).status_code == 200
     assert upload(client, "p", "weather", ("golden.epw", GOLDEN_EPW.read_bytes())).status_code == 200
     reply = client.post("/api/projects/p/typical-building/calculate")
     assert reply.status_code == 200, reply.text
     assert reply.json() | {"values": None} == {"values": None, "library_id": "kenak-apartment-b", "library_name": "Apartment, zone Β",
-                                               "changed": False, "state": "current", "heating_kwh_m2": 41.5, "cooling_kwh_m2": 12.25,
-                                               "counted_hours": 500}       # the hours with the sun up only
-    assert json.dumps(fake_generator.archetypes) == json.dumps([typical_building.archetype_of(DEFAULT, GOLDEN_EPW)])
+                                               "changed": True, "state": "current", "heating_kwh_m2": 41.5, "cooling_kwh_m2": 12.25,
+                                               "counted_hours": 500,       # the hours with the sun up only
+                                               "direction_factors": None, "direction_factors_with_harm": None}
+    assert json.dumps(fake_generator.archetypes) == json.dumps([typical_building.archetype_of(WITHOUT_DIRECTIONS, GOLDEN_EPW)])
     weights = client.get("/api/projects/p/typical-building/weights").json()
     assert len(weights["benefit"]) == len(weights["harm"]) == len(weights["sun_up"]) == 8760
     assert weights["benefit"][0] == 0.5 and weights["harm"][-1] == 0.234      # 3 decimals
@@ -639,6 +648,8 @@ def test_a_failed_calculation_ends_the_run(tmp_path, monkeypatch):
 def test_calculate_with_the_engine_gives_the_numbers_of_its_file(client, projects_folder):
     create_project(client, "p", "benefit")
     choose_building(client)
+    # one room for all facades (7 s; with rooms per direction see test_direction_weights)
+    assert client.put("/api/projects/p/typical-building", json={"values": WITHOUT_DIRECTIONS}).status_code == 200
     assert upload(client, "p", "weather", ("golden.epw", GOLDEN_EPW.read_bytes())).status_code == 200
     reply = client.post("/api/projects/p/typical-building/calculate").json()
     assert reply["state"] == "current"
@@ -653,11 +664,13 @@ def test_calculate_with_the_engine_gives_the_numbers_of_its_file(client, project
 
 @pytest.mark.slow
 def test_every_example_calculates_on_the_bundled_weather_file(tmp_path):
-    """Each example's weights on the Golden weather file (about 7 s each); the numbers are printed (-s) for the docs."""
+    """Each example's weights on the Golden weather file (about 7 s each); the numbers are printed (-s) for the docs. The room
+    itself only: its numbers do not depend on the rooms per direction (test_direction_weights calculates those)."""
     numbers = {}
     for entry in typical_building.library():
-        out = simulated_weights.generate_simulated_weights(str(GOLDEN_EPW), typical_building.archetype_of(entry.values, GOLDEN_EPW),
-                                                           tmp_path / f"{entry.id}.json")
+        archetype = {key: value for key, value in typical_building.archetype_of(entry.values, GOLDEN_EPW).items()
+                     if key != "direction_rooms"}
+        out = simulated_weights.generate_simulated_weights(str(GOLDEN_EPW), archetype, tmp_path / f"{entry.id}.json")
         benefit, harm, meta = simulated_weights.read_simulated_weights(out)
         sun_up = np.asarray(meta["sun_up"], dtype=bool)
         numbers[entry.id] = (meta["heating_kwh_m2"], meta["cooling_kwh_m2"], int(((benefit > 0.01) & sun_up).sum()))
@@ -668,3 +681,52 @@ def test_every_example_calculates_on_the_bundled_weather_file(tmp_path):
     for use in ("apartment", "office"):
         heating = [numbers[f"kenak-{use}-{zone}"][0] for zone in "abcd"]
         assert heating == sorted(heating, reverse=True)     # the colder zones' walls are better insulated
+
+
+# ---- One room per facade direction ----
+
+def test_the_examples_have_one_room_per_facade_direction():
+    for entry_id in EXAMPLE_IDS:
+        values = typical_building.EXAMPLES[entry_id].values
+        assert values["by_direction"] is True
+        assert typical_building.archetype_of(values)["direction_rooms"] is True
+    assert "direction_rooms" not in typical_building.archetype_of(WITHOUT_DIRECTIONS)
+
+
+def test_a_building_stored_before_rooms_per_direction_has_one_room_and_keeps_its_key(tmp_path):
+    earlier = {key: value for key, value in WITHOUT_DIRECTIONS.items() if key != "by_direction"}
+    assert typical_building.validate(earlier) == WITHOUT_DIRECTIONS
+    assert typical_building.weights_key(earlier, GOLDEN_EPW) == typical_building.weights_key(WITHOUT_DIRECTIONS, GOLDEN_EPW)
+    assert typical_building.weights_key(DEFAULT, GOLDEN_EPW) != typical_building.weights_key(WITHOUT_DIRECTIONS, GOLDEN_EPW)
+    store, name = benefit_project(tmp_path)
+    entry = typical_building.add_entry("Mine", WITHOUT_DIRECTIONS)
+    project_json = store.read_project_json(name)
+    project_json.typical_building = TypicalBuildingEntry(values=earlier, library_id=entry.id, library_name="Mine", calculated_key=None)
+    store.write_project_json(name, project_json)
+    reply = typical_building.reply(store, name)
+    assert reply.state == "missing" and reply.changed is False
+
+
+def test_by_direction_must_be_true_or_false():
+    with pytest.raises(ConfigError) as refused:
+        typical_building.validate({**DEFAULT, "by_direction": "yes"})
+    assert [error.field for error in refused.value.errors] == ["by_direction"]
+
+
+def test_rooms_per_direction_need_a_skylight_smaller_than_the_floor():
+    deep_glass = {**DEFAULT, "depth": 1.0, "height": 4.0, "wwr": {side: 0.9 for side in ("ne", "se", "sw", "nw")}}
+    with pytest.raises(ConfigError) as refused:
+        typical_building.validate(deep_glass)
+    assert [error.field for error in refused.value.errors] == ["wwr"]
+    assert typical_building.validate({**deep_glass, "by_direction": False})["by_direction"] is False
+
+
+def test_the_reply_gives_the_factors_per_direction(client, fake_generator):
+    create_project(client, "p", "benefit")
+    choose_building(client)
+    assert upload(client, "p", "weather", ("golden.epw", GOLDEN_EPW.read_bytes())).status_code == 200
+    reply = client.post("/api/projects/p/typical-building/calculate").json()
+    assert fake_generator.archetypes[0]["direction_rooms"] is True
+    assert list(reply["direction_factors"]) == list(simulated_weights.DIRECTION_ROOMS)
+    assert reply["direction_factors"]["N"] == pytest.approx(0.5) and reply["direction_factors"]["roof"] == pytest.approx(1.3)
+    assert reply["direction_factors_with_harm"]["N"] == pytest.approx(0.0)

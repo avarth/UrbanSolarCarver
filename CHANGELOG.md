@@ -7,6 +7,16 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Weights per facade direction** for energy-weighted Solar usefulness: with the archetype key `direction_rooms`
+  (in the app, **One room per facade direction** under Room, on in the library examples) the weights are also
+  calculated for a room behind one facade turned to each of 8 directions and for a roof room with a skylight, and each
+  test point counts with the factor of its direction (south facades about half as much as with one averaged room in
+  Thessaloniki, north a fifth more). The typical building window shows the factors. The weights file is now schema
+  version 2 (version 1 is still read); windows may have an altitude (90 for a skylight). Calculate takes about a minute
+  with rooms per direction.
+
 ## [0.10.0] - 2026-10-30
 
 ### Highlights

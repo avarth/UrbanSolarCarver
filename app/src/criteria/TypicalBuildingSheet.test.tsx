@@ -3,7 +3,7 @@ import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { TypicalBuildingLibraryEntry, TypicalBuildingReply } from "../api_client/client";
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
-import { buildingGroupSummary, effectColour, libraryGroupsOf, libraryLineOf, SUN_DOWN_COLOUR, SUN_DOWN_COLOUR_DARK, TypicalBuildingSheet, withRoom } from "./TypicalBuildingSheet";
+import { buildingGroupSummary, DirectionFactors, effectColour, libraryGroupsOf, libraryLineOf, SUN_DOWN_COLOUR, SUN_DOWN_COLOUR_DARK, TypicalBuildingSheet, withRoom } from "./TypicalBuildingSheet";
 import { useTypicalBuilding, type TypicalBuildingValues } from "./use_typical_building";
 
 const NBSP = " ";
@@ -626,4 +626,17 @@ test("the window is a modal frame in two columns from 900 px: no fixed sheet bes
   expect(css).toMatch(/\.project-dialog-wide \{[^}]*max-height: calc\(100vh - 64px\)/);
   expect(css).not.toMatch(/\.typical-building-sheet \{[^}]*position: fixed/);
   expect(css).not.toContain("viewer-out-of-date");
+});
+
+test("one room per facade direction: the Room line says so, and the factors show with a note for a direction at 0", () => {
+  expect(buildingGroupSummary("room", { ...ZONE_B, by_direction: true }))
+    .toBe(`Average, 6${NBSP}m deep, 3${NBSP}m storey; windows 0.4 on each side; one room per facade direction`);
+  const factors = { N: 1.19, NE: 1.16, E: 1.03, SE: 0.75, S: 0, SW: 0.74, W: 1.03, NW: 1.17, roof: 0.82 };
+  rendered = renderForTest(<DirectionFactors factors={factors} countsHarm />);
+  const cells = [...rendered.container.querySelectorAll(".typical-building-factors-grid > div")].map((cell) => cell.textContent);
+  expect(cells).toEqual(["N1.19", "NE1.16", "E1.03", "SE0.75", "S0.00", "SW0.74", "W1.03", "NW1.17", "Roof0.82"]);
+  expect(rendered.container.textContent).toContain("S: factor 0, so this direction's test points protect no sky: in their room");
+  rendered.unmount();
+  rendered = renderForTest(<DirectionFactors factors={null} countsHarm={false} />);
+  expect(rendered.container.innerHTML).toBe("");
 });

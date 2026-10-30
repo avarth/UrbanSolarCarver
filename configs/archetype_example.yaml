@@ -17,6 +17,10 @@ wwr:                     # omit a side for no windows on that facade
   west: 0.15
 g_value: 0.6             # glazing solar transmittance (applies to all windows)
 # orientation: 0.0       # deg, rotate the whole box clockwise from north
+# direction_rooms: false # true: also a room behind one facade turned to each of 8
+#                        # directions and a roof room with a skylight; benefit mode
+#                        # then scales each test point by its direction's factor
+#                        # (docs/simulated-weights.md, about 10 times longer)
 
 # --- Alternative to the shoebox: explicit areas (use one form, not both) ---
 # floor_area: 100.0      # m² conditioned floor area

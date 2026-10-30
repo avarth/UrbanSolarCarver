@@ -11,6 +11,11 @@ Sky-patch weight computation and threshold selection for voxel carving.
    and by the contents of the EPW and simulated-weights files, so a
    preprocessing run with unchanged weather settings skips the sky matrix.
 
+   get_direction_factors(epw_file, hoys, include_harm, simulated_weights_path)
+   → the factor of each room per facade direction (sky_patches.direction_factors)
+   when the simulated-weights file has rooms per direction, else None; cached
+   the same way.
+
 2. carve_fraction_threshold(scores, fraction) → float
    Score cutoff above which the highest-scoring voxels hold *fraction* of
    the total score.
@@ -30,7 +35,7 @@ import torch
 
 from .compute_device import resolve_compute_device
 from .session import session_cache
-from .sky_patches import compute_EPW_based_weights, compute_radiative_cooling_weights
+from .sky_patches import compute_EPW_based_weights, compute_radiative_cooling_weights, direction_factors
 from typing import Sequence
 
 
@@ -184,6 +189,35 @@ def get_weights(
     raise ValueError(f"get_weights: unsupported mode '{mode}'")
 
 
+
+
+def _direction_factors_cache_key(args, kwargs) -> str:
+    """Session cache key of a get_direction_factors call: the hours hashed,
+    the EPW and simulated-weights files replaced by digests of their contents."""
+    call = inspect.signature(get_direction_factors).bind(*args, **kwargs)
+    call.apply_defaults()
+    values = dict(call.arguments)
+    values["epw_file"] = _file_contents_digest(values["epw_file"])
+    values["simulated_weights_path"] = _file_contents_digest(values["simulated_weights_path"])
+    values["hoys"] = hashlib.sha1(np.asarray(values["hoys"], dtype=np.int64).tobytes()).hexdigest()
+    return json.dumps(values, sort_keys=True, default=str)
+
+
+@session_cache(_direction_factors_cache_key)
+def get_direction_factors(epw_file: str, hoys: Sequence[int], include_harm: bool,
+                          simulated_weights_path: str) -> "np.ndarray | None":
+    """The factor of each room per facade direction of a simulated-weights
+    file (benefit mode), in the order of simulated_weights.DIRECTION_ROOMS,
+    over the hours *hoys* (see sky_patches.direction_factors); None when the
+    file has no rooms per direction (``direction_rooms`` was off).  Inside a
+    CarverSession the result is cached like get_weights' (callers must not
+    modify it)."""
+    from .simulated_weights import read_direction_weights, read_simulated_weights
+    directions = read_direction_weights(simulated_weights_path)
+    if directions is None:
+        return None
+    benefit, harm, _meta = read_simulated_weights(simulated_weights_path)
+    return direction_factors(epw_file, (benefit, harm), directions, hoys, include_harm=include_harm)
 
 
 def carve_fraction_threshold(scores: np.ndarray, fraction: float,

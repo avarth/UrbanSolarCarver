@@ -455,6 +455,105 @@ def _scaled_cumulative_matrix(epw_path: str, hourly_weights, lb_north: float,
     return _summed_patch_irradiance(sky, expected_patches, np.float64)
 
 
+def _period_mask(hoys_list) -> np.ndarray:
+    """(8760,) array of 1 for the hours of the analysis period and 0 for the others."""
+    mask = np.zeros(8760)
+    for h in hoys_list:
+        if int(h) < 8760:
+            mask[int(h)] = 1.0
+    return mask
+
+
+def _simulated_patch_weights(epw_path: str, benefit, harm, hoys_list, lb_north: float, expected_patches: int,
+                             include_harm: bool) -> np.ndarray:
+    """Benefit-mode patch weights [kWh/m²] of hourly simulated weights: the
+    cumulative sky matrix with each hour of the period scaled by benefit[t];
+    with ``include_harm`` minus the same with harm[t], clipped at 0.  Zeros
+    when no hour of the period has a benefit; float64, shape
+    (expected_patches,).  See compute_EPW_based_weights."""
+    period = _period_mask(hoys_list)
+    w_ben = np.asarray(benefit, dtype=np.float64) * period
+    if not w_ben.any():
+        return np.zeros(expected_patches)
+    weights = _scaled_cumulative_matrix(epw_path, w_ben, lb_north, expected_patches)
+    if include_harm:
+        w_harm = np.asarray(harm, dtype=np.float64) * period
+        if w_harm.any():
+            weights = np.clip(weights - _scaled_cumulative_matrix(epw_path, w_harm, lb_north, expected_patches), 0.0, None)
+    return weights
+
+
+def direction_factors(epw_path: str, averaged, directions: dict, hoys: Sequence[int],
+                      include_harm: bool = False) -> np.ndarray:
+    """The factor of each room per facade direction, in the order of
+    simulated_weights.DIRECTION_ROOMS: what an unobstructed test point of
+    that direction scores with its own room's weights over what it scores
+    with the averaged room's.
+
+    *averaged* is the averaged room's (benefit, harm) series and
+    *directions* the rooms' ``{name: (benefit, harm)}``
+    (simulated_weights.read_direction_weights).  For each room both series
+    become benefit-mode patch weights over the hours *hoys* (minus harm,
+    clipped at 0, with *include_harm*), in the geographic frame (north 0);
+    the factor is the sum of the room's patch weights over the patches it
+    faces divided by the same sum of the averaged room's.  A facade room
+    faces the patches whose centre lies in front of a vertical facade of its
+    azimuth; the roof room faces them all.  Where the averaged room's sum
+    is 0, its points score nothing whatever the factor, which is then 1.
+    Applied per test point by :func:`point_direction_factors`.
+    """
+    from .simulated_weights import DIRECTION_AZIMUTHS, DIRECTION_ROOMS, ROOF_ROOM
+    hoys_list = list(hoys)
+    P = fetch_tregenza_patch_directions(torch.device("cpu")).shape[0]
+    patch_dirs = fetch_tregenza_patch_directions(torch.device("cpu")).numpy().astype(np.float64)
+    reference = _simulated_patch_weights(epw_path, *averaged, hoys_list, 0.0, P, include_harm)
+    factors = np.ones(len(DIRECTION_ROOMS))
+    for index, name in enumerate(DIRECTION_ROOMS):
+        own = _simulated_patch_weights(epw_path, *directions[name], hoys_list, 0.0, P, include_harm)
+        if name == ROOF_ROOM:
+            facing = patch_dirs[:, 2] > 0.0
+        else:
+            azimuth = math.radians(DIRECTION_AZIMUTHS[name])
+            facing = patch_dirs @ np.array([math.sin(azimuth), math.cos(azimuth), 0.0]) > 0.0
+        total = float(reference[facing].sum())
+        if total > 0.0:
+            factors[index] = float(own[facing].sum()) / total
+    return factors
+
+
+# A test point takes the roof room's factor when its normal is within this angle of straight up.
+ROOF_FACTOR_MAX_TILT_DEG = 45.0
+
+
+def point_direction_factors(normals, factors, north_deg: float = 0.0) -> np.ndarray:
+    """The factor of each test point from its normal: (R,) float32.
+
+    *factors* are those of :func:`direction_factors` (the 8 facade rooms
+    from N clockwise to NW, then the roof room).  A normal within
+    ROOF_FACTOR_MAX_TILT_DEG of straight up takes the roof room's factor;
+    any other takes that of its planimetric direction (the azimuth of its
+    projection on the horizontal plane, whatever its tilt), linear between
+    the two nearest of the 8 directions.  *north_deg* is the model north,
+    degrees clockwise from +Y, so a normal of model azimuth a faces the
+    geographic azimuth a - north_deg.  A normal with no horizontal part that
+    points down (it faces no sky patch) or of zero length takes 1.
+    """
+    factors = np.asarray(factors, dtype=np.float64)
+    n = np.asarray(normals, dtype=np.float64).reshape(-1, 3)
+    length = np.linalg.norm(n, axis=1)
+    horizontal = np.hypot(n[:, 0], n[:, 1])
+    with np.errstate(invalid="ignore", divide="ignore"):
+        up = n[:, 2] / length >= math.cos(math.radians(ROOF_FACTOR_MAX_TILT_DEG))
+    azimuth = (np.degrees(np.arctan2(n[:, 0], n[:, 1])) - float(north_deg)) % 360.0
+    sector = azimuth / 45.0
+    lower = np.floor(sector).astype(np.int64) % 8
+    share = sector - np.floor(sector)
+    facade = (1.0 - share) * factors[lower] + share * factors[(lower + 1) % 8]
+    result = np.where(up, factors[8], facade)
+    result = np.where((length > 0.0) & (up | (horizontal > 1e-9 * length)), result, 1.0)
+    return result.astype(np.float32)
+
+
 # Main function: compute weights per sky patch
 
 def compute_EPW_based_weights(
@@ -703,15 +802,7 @@ def compute_EPW_based_weights(
             # hourly weight is 0 or 1.  Hours outside the analysis period get
             # weight 0 through period_mask.
             benefit_series, harm_series = simulated_weights
-            benefit_series = np.asarray(benefit_series, dtype=np.float64)
-            harm_series = np.asarray(harm_series, dtype=np.float64)
-            period_mask = np.zeros(8760)
-            for h in hoys_list:
-                if int(h) < 8760:
-                    period_mask[int(h)] = 1.0
-
-            w_ben = benefit_series * period_mask
-            if not w_ben.any():
+            if not (np.asarray(benefit_series, dtype=np.float64) * _period_mask(hoys_list)).any():
                 report_issue(
                     "zero_patch_weights",
                     "benefit mode (simulated_weights_path): the artifact's benefit "
@@ -720,25 +811,16 @@ def compute_EPW_based_weights(
                     "degenerate. Widen the period or check the artifact.",
                 )
                 return torch.zeros(P, device=device)
-
-            weights_np = _scaled_cumulative_matrix(epw_path, w_ben, lb_north, P)
-            if include_harm:
-                w_harm = harm_series * period_mask
-                if w_harm.any():
-                    weights_np = np.clip(
-                        weights_np
-                        - _scaled_cumulative_matrix(epw_path, w_harm,
-                                                    lb_north, P),
-                        0.0, None,
-                    )
-                    if not weights_np.any():
-                        report_issue(
-                            "zero_patch_weights",
-                            "benefit mode (simulated_weights_path, include_harm): "
-                            "harm exceeds benefit for every sky patch, so all "
-                            "weights are zero and the carve will be "
-                            "degenerate.",
-                        )
+            weights_np = _simulated_patch_weights(epw_path, benefit_series, harm_series, hoys_list,
+                                                  lb_north, P, include_harm)
+            if include_harm and not weights_np.any():
+                report_issue(
+                    "zero_patch_weights",
+                    "benefit mode (simulated_weights_path, include_harm): "
+                    "harm exceeds benefit for every sky patch, so all "
+                    "weights are zero and the carve will be "
+                    "degenerate.",
+                )
             return torch.from_numpy(
                 weights_np.astype(np.float32)).to(device)
 

@@ -2067,6 +2067,14 @@ export interface components {
             cooling_kwh_m2?: number | null;
             /** Counted Hours */
             counted_hours?: number | null;
+            /** Direction Factors */
+            direction_factors?: {
+                [key: string]: number;
+            } | null;
+            /** Direction Factors With Harm */
+            direction_factors_with_harm?: {
+                [key: string]: number;
+            } | null;
         };
         /**
          * TypicalBuildingRequest
