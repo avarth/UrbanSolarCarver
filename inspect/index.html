@@ -548,10 +548,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#design-simulate-and-inspect" class="md-nav__link">
+  <a href="#carve-simulate-and-inspect" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Design, Simulate and Inspect
+        Carve, Simulate and Inspect
       
     </span>
   </a>
@@ -1394,10 +1394,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#design-simulate-and-inspect" class="md-nav__link">
+  <a href="#carve-simulate-and-inspect" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Design, Simulate and Inspect
+        Carve, Simulate and Inspect
       
     </span>
   </a>
@@ -1544,14 +1544,14 @@
 <p>A test surface is read from one side only. A carving and a Simulate study see the side its normal points to: a surface that faces into a building, or a roof that faces down, sees nothing, so the criterion barely protects it and nothing else in the app says so. <strong>Inspect</strong> shows which way every test surface faces, lets you turn the ones that face the wrong way by clicking them, and gives a short summary of every input mesh file.</p>
 <p>Inspect is a workspace beside the pipeline, like <a href="../simulate/">Simulate</a>. It runs no engine step, changes no criterion or setting and makes nothing out of date by itself. Only <strong>Save</strong> and <strong>Restore original</strong> change a file, and only when you press them.</p>
 <p>USC does not decide which way a surface should face. Only you know whether a surface is a roof for PV, a facade, or a soffit that faces down on purpose. Inspect shows the orientation and leaves the choice to you.</p>
-<h2 id="design-simulate-and-inspect">Design, Simulate and Inspect<a class="headerlink" href="#design-simulate-and-inspect" title="Permanent link">&para;</a></h2>
-<p>The switch <strong>Design | Simulate | Inspect</strong> in the header, next to the project name, changes the workspace. Inspect hides the steps and gives the 3D view the whole window. Switching away keeps Design's step and scroll position and Simulate's selection as they were. The Layers menu and the viewer tools are the same in all three; Inspect adds one layer, <strong>Surface orientation</strong>.</p>
+<h2 id="carve-simulate-and-inspect">Carve, Simulate and Inspect<a class="headerlink" href="#carve-simulate-and-inspect" title="Permanent link">&para;</a></h2>
+<p>The switch <strong>Carve | Simulate | Inspect</strong> in the header, next to the project name, changes the workspace. Inspect hides the steps and gives the 3D view the whole window. Switching away keeps Carve's step and scroll position and Simulate's selection as they were. The Layers menu and the viewer tools are the same in all three; Inspect adds one layer, <strong>Surface orientation</strong>.</p>
 <p>Inspect works while a run of the project is going. Only Save and Restore original wait for it to end, as uploads do.</p>
 <h2 id="the-files-panel">The Files panel<a class="headerlink" href="#the-files-panel" title="Permanent link">&para;</a></h2>
 <p>The <strong>Files</strong> panel floats over the top left of the 3D view and collapses to an icon. It lists the input mesh files by role: maximum volume, test surfaces, existing surroundings and terrain. The weather file has no geometry and is not listed. Each row gives the file name, its triangle count and its area. A file that cannot be read stays in the list with its problem, for example a broken export, and has nothing to select.</p>
-<p>Pressing a row selects the file. The view frames it and draws the other test surface files faint, so you see what the selected one faces. The selected row also opens the file's summary:</p>
+<p>Pressing a row selects the file. The view frames it, in the part of the view the Files panel does not cover, and draws the other test surface files faint, so you see what the selected one faces. The selected row also opens the file's summary:</p>
 <ul>
-<li><strong>Bounds</strong>: the minimum and maximum corner in the file's own coordinates. When a corner is more than 10 km from zero, a note says the coordinates look georeferenced and how far they are. Under the list, the panel says which point the view is drawn around, since the view uses a local origin.</li>
+<li><strong>Bounds</strong>: the minimum and maximum corner in the file's own coordinates. When a corner is more than 10 km from zero, a note says the coordinates look georeferenced and how far they are. The info "i" beside the panel's title says which point the view is drawn around, since the view uses a local origin: "The view is drawn around x -141, y -91.72, z 0 of the files' coordinates."</li>
 <li><strong>Surfaces</strong>, for a test surface file: how many surfaces it has (below).</li>
 </ul>
 <p>An earlier version also counted closed bodies. It was dropped: CAD exports (Rhino's OBJ, for one) keep a corner per face, with that face's normal, so faces share no edges and every face counted as an open body (Allatini's maximum volume: 0 of 24). The voxelizer does not depend on it either: it fills by ray crossings along three axes with a two-of-three vote, so a missing floor or a T-junction does not change the voxels.</p>
@@ -1559,7 +1559,7 @@
 <h2 id="what-the-colours-and-face-normals-mean">What the colours and face normals mean<a class="headerlink" href="#what-the-colours-and-face-normals-mean" title="Permanent link">&para;</a></h2>
 <p>Test surfaces are drawn two-sided. The side the normal points to has the test surface colour of the viewport theme. The back side is orange. A surface that is the wrong way round therefore shows orange when you look at it from outside, whichever side of it the camera is on.</p>
 <p>The <strong>Face normals</strong> box in the panel draws one normal per surface, an arrow from its centre along its normal, 0.3 times the square root of its area long, between 1 m and 10 m. One per surface rather than per triangle keeps a large file readable. The normals do not take clicks. A surface you have turned and not saved is drawn, and its normal points, the new way.</p>
-<p>The maximum volume is drawn see-through, and the surroundings and the terrain grey, as in Design. Their orientation is not drawn: nothing reads the orientation of the surroundings and terrain, and the loader turns the closed bodies of the maximum volume outward by itself.</p>
+<p>The maximum volume is drawn see-through, and the surroundings and the terrain grey, as in Carve. Their orientation is not drawn: nothing reads the orientation of the surroundings and terrain, and the loader turns the closed bodies of the maximum volume outward by itself.</p>
 <h2 id="surfaces-and-why-a-click-turns-a-whole-surface">Surfaces, and why a click turns a whole surface<a class="headerlink" href="#surfaces-and-why-a-click-turns-a-whole-surface" title="Permanent link">&para;</a></h2>
 <p>A <strong>surface</strong> is a set of triangles joined by shared edges, as the engine's loader reads the file. A click in flip mode turns the whole surface under the pointer, not the single triangle. The loader makes neighbouring triangles agree in winding, so a lone triangle turned in the file would be turned back the next time the file is loaded.</p>
 <p>For the same reason a test surface file that is <strong>closed as a whole</strong> cannot be flipped. The loader turns every closed body outward, so its surfaces would come back the way they were. Such a file shows <strong>This file is closed as a whole, so its surfaces cannot be flipped.</strong> and its Flip mode and Flip all buttons are off.</p>
@@ -1610,7 +1610,7 @@
 <p>Before the first save of a file, the file as it was is kept in the project folder, in <code>inputs/originals/test_surfaces/</code>. <strong>Restore original</strong> puts it back byte for byte, with the same effects as a save, and removes the kept copy. The button shows on the selected row while an original is kept.</p>
 <p>The kept original is dropped when you upload a file with the same name, when you remove the file in the app, and when you replace the file by hand in the project folder. After that the stored file is the only version, and Restore original is not offered.</p>
 <h3 id="leaving-inspect-with-turns-not-saved">Leaving Inspect with turns not saved<a class="headerlink" href="#leaving-inspect-with-turns-not-saved" title="Permanent link">&para;</a></h3>
-<p>Switching to Design or Simulate while a file has staged turns, or while a save or restore is under way, asks <strong>Save the turned surfaces before leaving Inspect?</strong> with three answers: <strong>Save</strong> (writes every file with turns, then leaves), <strong>Discard</strong> (drops them and leaves) and <strong>Stay</strong>. While a save is under way the dialog says <strong>A save is under way.</strong>; Save and Discard wait for it, and when it is written with nothing left to save the dialog leaves by itself. If a save is refused, the one under way included, for example because a run is going or the file changed in the project folder, the dialog stays open with the reason, so a failed save is never left unseen in another workspace.</p>
+<p>Switching to Carve or Simulate while a file has staged turns, or while a save or restore is under way, asks <strong>Save the turned surfaces before leaving Inspect?</strong> with three answers: <strong>Save</strong> (writes every file with turns, then leaves), <strong>Discard</strong> (drops them and leaves) and <strong>Stay</strong>. While a save is under way the dialog says <strong>A save is under way.</strong>; Save and Discard wait for it, and when it is written with nothing left to save the dialog leaves by itself. If a save is refused, the one under way included, for example because a run is going or the file changed in the project folder, the dialog stays open with the reason, so a failed save is never left unseen in another workspace.</p>
 <p>If a file changed while turns were staged on it (a new version uploaded, or replaced in the project folder), the staged turns are dropped and the panel says <strong>The file changed, so its turns not saved were dropped.</strong> The surfaces of the new version are numbered anew, so the old turns would not mean the same surfaces.</p>
 <h2 id="where-the-service-keeps-things">Where the service keeps things<a class="headerlink" href="#where-the-service-keeps-things" title="Permanent link">&para;</a></h2>
 <p>The service computes all of this in <code>local_web_service/inspection.py</code>, with trimesh, from the stored files as the engine's loader returns them, so the view and a flip use the triangles the engine uses. No engine function is involved. Routes (all under <code>/api</code>):</p>
