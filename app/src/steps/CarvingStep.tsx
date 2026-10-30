@@ -24,7 +24,7 @@ import { NumberInput } from "../settings_form/widgets/NumberInput";
 import type { ThresholdSpec } from "../settings_form/widgets/ThresholdRule";
 import type { ScorePoints } from "../viewer/score_points_decoder";
 import { carveAmountAt, cutoffForCarveAmount, cutoffStep, keptShareAt, rankScorePoints, roundedToStep, type RankedScorePoints } from "./cutoff_preview";
-import { formatNumber, formattedNumber, withUnit } from "./format_numbers";
+import { formatNumber, formatPercent, formattedNumber, withUnit } from "./format_numbers";
 import { ScoreHistogram } from "./ScoreHistogram";
 import "./steps.css";
 
@@ -294,13 +294,14 @@ function CarvingRuleChoice({ mode, rule, disabled, onChoose }: CarvingRuleChoice
 
 /**
  * A key number on chrome (UX 5.5, 5.6): its label, with an "i" that says what it counts when *help* is given, then the value; the
- * unit may wrap under the value in a narrow tile.
+ * unit may wrap under the value in a narrow tile. A *note* under the value says what the number is a share of.
  */
-export function NumberTile({ label, value, unit, help }: { label: string; value: string; unit?: string; help?: string }) {
+export function NumberTile({ label, value, unit, help, note }: { label: string; value: string; unit?: string; help?: string; note?: string }) {
   return (
     <div className="number-tile">
       <span className="number-tile-label">{label}{help !== undefined && <> <SettingTooltip settingLabel={label} help={help} /></>}</span>
       <span className="number-tile-value">{value}{unit && <> <span className="number-tile-unit">{unit}</span></>}</span>
+      {note !== undefined && <span className="number-tile-note">{note}</span>}
     </div>
   );
 }
@@ -312,16 +313,19 @@ interface CarvingNumbersProps {
   lastAnalysisSeconds: number | null;
 }
 
-/** Volume kept, Volume carved, Kept volume, Obstruction removed (weighted modes) and the time of the last analysis, two per row. */
+/**
+ * Kept here (this criterion's kept volume, with its share of what reached it), Obstruction removed (weighted modes) and the time of
+ * the last analysis, two per row. What the chain kept in all is under the cards (chainSummaryLine), not here.
+ */
 export function CarvingNumbers({ summary, voxelSize, isWeighted, lastAnalysisSeconds }: CarvingNumbersProps) {
   const { units } = messages;
-  // Carved is 100 minus the kept percentage as shown, so the two whole numbers always add up to 100.
-  const keptPercent = Math.round(summary.retention_pct);
+  const keptShare = messages.keptHereShare(formatPercent(summary.retention_pct));
   return (
     <div className="number-tiles number-tiles-two">
-      <NumberTile label={messages.volumeKept} value={formatNumber(keptPercent)} unit={units.percent} />
-      <NumberTile label={messages.volumeCarved} value={formatNumber(100 - keptPercent)} unit={units.percent} />
-      {voxelSize !== null && <NumberTile label={messages.keptVolume} value={formatNumber(summary.voxels_kept * voxelSize ** 3)} unit={units.cubicMetres} />}
+      {voxelSize !== null
+        ? <NumberTile label={messages.keptHere} value={formatNumber(summary.voxels_kept * voxelSize ** 3)} unit={units.cubicMetres} note={keptShare} />
+        : <NumberTile label={messages.keptHere} value={formatNumber(Math.round(summary.retention_pct))} unit={units.percent}
+                      note={messages.keptHereOfWhatReached} />}
       {isWeighted && summary.obstruction_fraction_carved !== null && (
         <NumberTile label={messages.obstructionRemoved} value={formatNumber(summary.obstruction_fraction_carved * 100)} unit={units.percent} />
       )}

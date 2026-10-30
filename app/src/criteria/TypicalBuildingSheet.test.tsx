@@ -458,7 +458,7 @@ test("a criterion that counts harm shows benefit minus harm: blue where the sun 
 test("Calculate waits for a weather file; Escape closes the sheet", async () => {
   await openSheet({ hasWeatherFile: false });
   expect(calculateButton().disabled).toBe(true);
-  expect(find(".typical-building-calculate .run-button-reason")!.textContent).toBe("Add a weather file in Design (Inputs) to calculate the typical building");
+  expect(find(".typical-building-calculate .run-button-reason")!.textContent).toBe("Add a weather file in Carve (Inputs) to calculate the typical building");
   act(() => find(".typical-building-sheet")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
   expect(closed).toBe(1);
 });

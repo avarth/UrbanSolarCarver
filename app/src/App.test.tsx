@@ -634,14 +634,14 @@ test("the Design | Simulate | Inspect switch shows only with an open project and
   await openPlot7();
   expect(modeSwitch()!.getAttribute("role")).toBe("group");
   expect(modeSwitch()!.getAttribute("aria-label")).toBe("Workspace mode");
-  expect(modePressed()).toEqual([["Design", "true"], ["Simulate", "false"], ["Inspect", "false"]]);
+  expect(modePressed()).toEqual([["Carve", "true"], ["Simulate", "false"], ["Inspect", "false"]]);
   expect(workspaceMode()).toBe("design");
   click(modeButton("Simulate"));
   expect(workspaceMode()).toBe("simulate");
-  expect(modePressed()).toEqual([["Design", "false"], ["Simulate", "true"], ["Inspect", "false"]]);
+  expect(modePressed()).toEqual([["Carve", "false"], ["Simulate", "true"], ["Inspect", "false"]]);
   click(modeButton("Inspect"));
   expect(workspaceMode()).toBe("inspect");
-  expect(modePressed()).toEqual([["Design", "false"], ["Simulate", "false"], ["Inspect", "true"]]);
+  expect(modePressed()).toEqual([["Carve", "false"], ["Simulate", "false"], ["Inspect", "true"]]);
   click(buttonNamed("UrbanSolarCarver"));
   await settle();
   expect(modeSwitch()).toBeNull();
@@ -656,7 +656,7 @@ test("another project opens in Design, whatever mode the last one was left in", 
   await settle();
   await openPlot7();
   expect(workspaceMode()).toBe("design");
-  expect(modePressed()).toEqual([["Design", "true"], ["Simulate", "false"], ["Inspect", "false"]]);
+  expect(modePressed()).toEqual([["Carve", "true"], ["Simulate", "false"], ["Inspect", "false"]]);
 });
 
 test("the mode survives renaming the project", async () => {
@@ -670,7 +670,7 @@ test("the mode survives renaming the project", async () => {
   await settle();
   expect(workspaceMounts).toEqual(["Plot 7", "Plot 8"]);
   expect(workspaceMode()).toBe("simulate");
-  expect(modePressed()).toEqual([["Design", "false"], ["Simulate", "true"], ["Inspect", "false"]]);
+  expect(modePressed()).toEqual([["Carve", "false"], ["Simulate", "true"], ["Inspect", "false"]]);
 });
 
 test("a reset of the open project to its example opens it in Design, as it opens at the first step", async () => {
@@ -683,5 +683,5 @@ test("a reset of the open project to its example opens it in Design, as it opens
   await settle();
   expect(workspaceMounts).toEqual(["Plot 7", "Plot 7"]);
   expect(workspaceMode()).toBe("design");
-  expect(modePressed()).toEqual([["Design", "true"], ["Simulate", "false"], ["Inspect", "false"]]);
+  expect(modePressed()).toEqual([["Carve", "true"], ["Simulate", "false"], ["Inspect", "false"]]);
 });

@@ -57,7 +57,7 @@ test("a settings change saves; Run analysis starts a run; its events finish it; 
   expect(service.count("GET /run/summary")).toBe(1);
   expect(service.count("GET /stage-status")).toBe(2);
   expect(stepRow("Criteria").classList.contains("step-open")).toBe(true);    // a finished analysis opens Criteria
-  expect(stepRow("Criteria").textContent).toContain("Volume kept61 %");
+  expect(stepRow("Criteria").textContent).toContain("Kept here61 %of what reached this criterion");
   expect(dimmedCarvingLayers()).toEqual([]);
   openStep("Site and grid");
   expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Solar time-based, 61\u00a0% kept");
@@ -762,7 +762,7 @@ const NOT_RUN: CriterionStages = { preprocessing: "missing", thresholding: "miss
 const stageRows = () => [...pinnedBar().querySelectorAll(".run-stage")]
   .map((row) => `${row.querySelector(".run-stage-name")!.textContent} | ${row.querySelector(".run-stage-state")!.textContent}`);
 /** A card's result line of a mode that is not weighted, as formatNumber writes it (no-break spaces before the units). */
-const volumeLine = (percent: number, volume: number) => `${percent} % of the volume carved, ${volume} m³ removed`;
+const volumeLine = (percent: number, volume: number) => `Removes ${volume} m³, ${percent} % of what reached it`;
 /** How often *text* is on the page in *root*. */
 const timesShown = (root: Element, text: string) => (root.textContent ?? "").split(text).length - 1;
 

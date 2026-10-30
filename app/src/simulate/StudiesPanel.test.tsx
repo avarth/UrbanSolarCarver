@@ -87,10 +87,10 @@ test("the panel collapses to an icon and opens again", () => {
 });
 
 test("Run waits with its reason; Add study and the studies wait while a run of the project goes on", () => {
-  rendered = renderForTest(<StudiesPanel {...panelProps({ runDisabledReason: "A Design run is in progress", editDisabledReason: "A Design run is in progress" })} />);
+  rendered = renderForTest(<StudiesPanel {...panelProps({ runDisabledReason: "A carving run is in progress", editDisabledReason: "A carving run is in progress" })} />);
   const run = [...container().querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Run")!;
   expect(run.disabled).toBe(true);
-  expect(document.getElementById(run.getAttribute("aria-describedby")!)!.textContent).toBe("A Design run is in progress");
+  expect(document.getElementById(run.getAttribute("aria-describedby")!)!.textContent).toBe("A carving run is in progress");
   const add = [...container().querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Add study")!;
   expect(add.disabled).toBe(true);
 });

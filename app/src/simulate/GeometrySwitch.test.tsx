@@ -53,8 +53,8 @@ test("the geometry switch offers Envelope and Massing only once built and marks 
   expect(segment("Envelope").getAttribute("aria-disabled")).toBeNull();
   expect(segment("Envelope").getAttribute("aria-pressed")).toBe("true");
   expect(describedBy(segment("Envelope"))).toEqual([]);
-  expect(describedBy(segment("Massing"))).toEqual(["Out of date in Design"]);
-  expect(segment("Massing").title).toBe("Out of date in Design");
+  expect(describedBy(segment("Massing"))).toEqual(["Out of date in Carve"]);
+  expect(segment("Massing").title).toBe("Out of date in Carve");
   expect(segment("Massing").querySelector(".geometry-switch-stale")).not.toBeNull();
   click(segment("Massing"));
   expect(built.onChange).toHaveBeenCalledWith("massing");

@@ -24,8 +24,8 @@ test("two criteria show cards in order, each with its result, and the first is s
   await openChain([FACADES, WINDOWS]);
   expect(cardNames()).toEqual(["Winter sun on facades", "Spring sun on windows"]);
   expect(selectedCardName()).toBe("Winter sun on facades");
-  expect(cardLine("Winter sun on facades")).toBe("39 % of the volume carved, 390 m³ removed");
-  expect(cardLine("Spring sun on windows")).toBe("20 % of the volume carved, 200 m³ removed");
+  expect(cardLine("Winter sun on facades")).toBe("Removes 390 m³, 39 % of what reached it");
+  expect(cardLine("Spring sun on windows")).toBe("Removes 200 m³, 20 % of what reached it");
   openPanelSection("Test surfaces");
   expect(protectedFiles()).toEqual(["facades.obj"]);
   showCriterionCards();
@@ -360,7 +360,7 @@ const chainLine = () => (showCriterionCards(), container().querySelector(".chain
 
 test("the chain summary line under the cards: the last volume and its share of the maximum volume", async () => {
   await openChain([FACADES, WINDOWS], undefined, (chain) => { chain.summaryChain = { volume_after_each_m3: [610, 480], share_of_max_volume_kept: 0.4813 }; });
-  expect(chainLine()).toBe("Kept 480 m³, 48 % of the maximum volume");
+  expect(chainLine()).toBe("After all criteria: kept 480 m³, 48 % of the maximum volume");
   const list = container().querySelector(".criterion-list")!;
   expect(list.compareDocumentPosition(container().querySelector(".chain-summary")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(container().querySelector(".criterion-panel")).toBeNull();                       // the list shows no panel
@@ -368,7 +368,7 @@ test("the chain summary line under the cards: the last volume and its share of t
 
 test("the chain summary line says the volume alone when there is no share, and is not there while the summary has no chain", async () => {
   await openChain([FACADES, WINDOWS], undefined, (chain) => { chain.summaryChain = { volume_after_each_m3: [610, 1234], share_of_max_volume_kept: null }; });
-  expect(chainLine()).toBe("Kept 1 234 m³");
+  expect(chainLine()).toBe("After all criteria: kept 1 234 m³");
   unmountWorkspace();
   await openChain([FACADES, WINDOWS]);
   expect(chainLine()).toBeNull();

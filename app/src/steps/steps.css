@@ -981,6 +981,7 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 .number-tile-label { color: var(--colour-muted); font-size: var(--text-secondary); }
 .number-tile-value { font-size: var(--text-key-number); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
 .number-tile-unit { white-space: nowrap; }
+.number-tile-note { color: var(--colour-muted); font-size: var(--text-secondary); }
 
 /* The histogram (UX 5.5, screens): kept bars in accent, carved bars in the carved colour, the cutoff a dashed ink line. */
 .score-histogram { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); margin: 0; }

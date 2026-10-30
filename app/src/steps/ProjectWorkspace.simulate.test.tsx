@@ -164,7 +164,7 @@ test("Run is unavailable during a Design run, and Design's Run analysis during a
   await switchMode("simulate");
   await settle();
   expect(runButton().disabled).toBe(true);
-  expect(reasonOf(runButton())).toBe("A Design run is in progress");
+  expect(reasonOf(runButton())).toBe("A carving run is in progress");
 
   FakeWebSocket.opened[0].send({ type: "run_finished", stages: ["preprocessing", "thresholding"], files: [] });
   await settle();
@@ -401,7 +401,7 @@ test("the geometry shown uses Design's layers, without the criteria's test surfa
   }, { exporting: "out_of_date" });
   await selectStudy("Sun hours, 21 Dec");
   expect(geometrySegment("Envelope").getAttribute("aria-disabled")).toBeNull();
-  expect(geometrySegment("Envelope").title).toBe("Out of date in Design");
+  expect(geometrySegment("Envelope").title).toBe("Out of date in Carve");
   expect(geometrySegment("Massing").getAttribute("aria-disabled")).toBe("true");
   expect(geometrySegment("Massing").title).toBe("Build the massing first");
   expect([...scene().visibleLayers].sort()).toEqual(["max_volume", "study_values"]);
@@ -654,7 +654,7 @@ test("the clock of the Sun panel is local standard, local solar or local dayligh
 
 test("without a weather file the Sun panel says one is needed and reads nothing", async () => {
   await openSunPanel((service) => { service.hasWeatherFile = false; });
-  expect(sunPanel().textContent).toContain("Add a weather file in Design (Inputs) to see the sun");
+  expect(sunPanel().textContent).toContain("Add a weather file in Carve (Inputs) to see the sun");
   expect(simulateService.requests.some((request) => request.includes("/sun-"))).toBe(false);
 });
 

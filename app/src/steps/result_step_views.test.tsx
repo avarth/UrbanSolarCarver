@@ -85,7 +85,7 @@ test("Solar time-based: Shadow tolerated with its slider ends, the histogram, th
   expect(text).not.toContain("Update carving");
   expect(text).toContain("Scores of the voxels");
   expect([...rendered.container.querySelectorAll(".number-tile")].map((tile) => tile.textContent))
-    .toEqual(["Volume kept61 %", "Volume carved39 %", "Kept volume4 880 m³", "Last analysis took6.4 s"]);
+    .toEqual(["Kept here4 880 m³61 % of what reached this criterion", "Last analysis took6.4 s"]);
 });
 
 test("with auto-update on the threshold runs when the user leaves the field; off, it changes the form and Update carving runs", () => {
@@ -289,7 +289,7 @@ test("dimmed and greyed results keep their text at full opacity in the muted col
     act(() => carvingResults.querySelector("svg")!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
     expect(carvingResults.querySelector(".score-histogram-readout")).not.toBeNull();
     const carvingTexts = textBearingElementsIn(carvingResults);
-    expect(carvingTexts.map((element) => element.textContent)).toEqual(expect.arrayContaining(["Scores of the voxels", "Volume kept", "61 %", "Kept", "1.5"]));
+    expect(carvingTexts.map((element) => element.textContent)).toEqual(expect.arrayContaining(["Scores of the voxels", "Kept here", "61 % of what reached this criterion", "Kept", "1.5"]));
     expect(carvingTexts.flatMap((element) => fadingOpacitiesOf(element, carvingResults))).toEqual([]);
     expect(getComputedStyle(carvingResults).color).toBe("var(--colour-muted)");
     expect(Number(getComputedStyle(carvingResults.querySelector(".histogram-bar")!).opacity)).toBeLessThan(1);
@@ -711,10 +711,11 @@ test("the cutoff line cannot be moved while the threshold cannot be changed", ()
   expect(rendered.container.querySelector(".histogram-cutoff-label")!.textContent).toBe("1.5");
 });
 
-test("Volume carved is 100 minus Volume kept as shown, so the two add up to 100", () => {
+test("the carving rule's numbers are this criterion's: Kept here with its share of what reached it, no separate volume carved", () => {
   rendered = renderForTest(<CarvingStep {...carvingProps({ summary: { ...CARVING, retention_pct: 60.5 } })} />);
   const tiles = [...rendered.container.querySelectorAll(".number-tile")].map((tile) => tile.textContent);
-  expect(tiles.slice(0, 2)).toEqual(["Volume kept61 %", "Volume carved39 %"]);
+  expect(tiles[0]).toBe("Kept here4 880 m³61 % of what reached this criterion");
+  expect(tiles.join(" ")).not.toContain("carved");
 });
 
 test("a run report that cannot be read says so instead of an empty panel", async () => {

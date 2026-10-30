@@ -80,7 +80,7 @@ export const messages = {
   switchToDarkTheme: "Switch to the dark theme",
   switchToLightTheme: "Switch to the light theme",
   workspaceModeLabel: "Workspace mode",
-  workspaceModes: { design: "Design", simulate: "Simulate", inspect: "Inspect" },
+  workspaceModes: { design: "Carve", simulate: "Simulate", inspect: "Inspect" },
 
   // Simulate: the studies panel over the 3D view, a study's popover and Run (simulate design, sections 3, 4 and 7)
   studiesTitle: "Studies",
@@ -108,14 +108,14 @@ export const messages = {
   useFileOfProject: "Use a file of the project",
   deleteStudy: "Delete study",
   closeStudySettings: "Close",
-  designRunInProgress: "A Design run is in progress",
+  designRunInProgress: "A carving run is in progress",
   simulationInProgress: "A simulation is in progress",
   // Results on the view (simulate design, section 3): the geometry switch, the target legend and the result card
   geometrySwitch: "Geometry",
   studyGeometries: { max_volume: "Max volume", envelope: "Envelope", massing: "Massing" },
   buildGeometryFirst: { envelope: "Build the envelope first", massing: "Build the massing first" },
   runStudyAgainFor: { envelope: "Run the study again to see it on the envelope", massing: "Run the study again to see it on the massing" },
-  outOfDateInDesign: "Out of date in Design",
+  outOfDateInDesign: "Out of date in Carve",
   changeToggle: "Change",
   changeToggleHint: "Colours each point by its change from the maximum volume",
   changeNeedsGeometry: "Choose Envelope or Massing",
@@ -241,13 +241,14 @@ export const messages = {
   notRunYet: "Not run yet",
   outOfDateSummary: "Out of date",
   // A criterion's card (7.2): the result line of one that is current, else its status
-  criterionResultOfScore: (percentText: string, volumeText: string) => `${percentText} of the score carved, ${volumeText} removed`,
-  criterionResultOfVolume: (percentText: string, volumeText: string) => `${percentText} of the volume carved, ${volumeText} removed`,
-  criterionScoreCarved: (percentText: string) => `${percentText} of the score carved`,
-  criterionVolumeCarved: (percentText: string) => `${percentText} of the volume carved`,
+  // A weighted mode reports the share of the obstruction it removed; the others the share of the volume that reached the criterion.
+  criterionResultOfScore: (percentText: string, volumeText: string) => `Removes ${percentText} of the obstruction, ${volumeText}`,
+  criterionResultOfVolume: (percentText: string, volumeText: string) => `Removes ${volumeText}, ${percentText} of what reached it`,
+  criterionScoreCarved: (percentText: string) => `Removes ${percentText} of the obstruction`,
+  criterionVolumeCarved: (percentText: string) => `Removes ${percentText} of what reached it`,
   // Under the cards of two or more criteria (7.2): what the chain kept of the maximum volume; the volume alone without the share.
-  chainKept: (volumeText: string, percentText: string) => `Kept ${volumeText}, ${percentText} of the maximum volume`,
-  chainKeptVolume: (volumeText: string) => `Kept ${volumeText}`,
+  chainKept: (volumeText: string, percentText: string) => `After all criteria: kept ${volumeText}, ${percentText} of the maximum volume`,
+  chainKeptVolume: (volumeText: string) => `After all criteria: kept ${volumeText}`,
   criterionOutOfDate: "Out of date",
   criterionUpdatesFrom: (criterionName: string) => `Updates from ${criterionName}`,
   criterionRunning: "Running",
@@ -493,9 +494,10 @@ export const messages = {
   cutoffPreviewWithCarveAmount: (carveAmountText: string, cutoffText: string, keptText: string) =>
     `Preview: carve amount ${carveAmountText}, a cut at ${cutoffText}, keeps about ${keptText} of the volume, before the slope limit.`,
   slopeLimitNote: (count: number) => `The slope limit removed ${groupedDigits(count)} voxels below the cutoff.`,
-  volumeKept: "Volume kept",
-  volumeCarved: "Volume carved",
-  keptVolume: "Kept volume",
+  // The carving rule's numbers are this criterion's: what it kept of the volume that reached it (the maximum volume for the first).
+  keptHere: "Kept here",
+  keptHereShare: (percentText: string) => `${percentText} of what reached this criterion`,
+  keptHereOfWhatReached: "of what reached this criterion",
   obstructionRemoved: "Obstruction removed",
   lastAnalysisTook: "Last analysis took",
 
@@ -712,7 +714,7 @@ export const messages = {
   legend: "Legend",
   // Simulate's sun tool (the Sun panel) and the hours in shade on the view.
   sunToolTitle: "Sun",
-  sunToolNoWeatherFile: "Add a weather file in Design (Inputs) to see the sun: its location gives the sun's path.",
+  sunToolNoWeatherFile: "Add a weather file in Carve (Inputs) to see the sun: its location gives the sun's path.",
   sunToolDay: "Day",
   sunToolClock: "Clock",
   sunToolTimeBases: { standard: "Local standard time", solar: "Local solar time", daylight_saving: "Local daylight saving time" } as Record<string, string>,
@@ -839,7 +841,7 @@ export const messages = {
   calculateAgain: "Calculate again",
   calculating: "Calculating, about 10 s",
   // Why Calculate waits: one sentence without a final period, as the run buttons' reasons.
-  calculateNeedsWeatherFile: "Add a weather file in Design (Inputs) to calculate the typical building",
+  calculateNeedsWeatherFile: "Add a weather file in Carve (Inputs) to calculate the typical building",
   calculateWaitsForValues: "Fix the values marked above to calculate",
   typicalBuildingOutOfDate: "The building or the weather file changed since this was calculated.",
   // The chart of each hour: benefit minus harm (benefit alone when the criterion does not count harm), sun-down hours grey.

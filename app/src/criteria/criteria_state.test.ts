@@ -122,18 +122,18 @@ function summary(carving: CriterionCarvingSummary["carving"], volumeRemoved: num
   return { id: "1", name: "Criterion 1", colour: "#336699", mode: "daylight", carving, voxels_at_start: 1000, volume_kept_m3: 5000, volume_removed_m3: volumeRemoved };
 }
 
-test("the result line of a weighted mode gives the share of the score carved", () => {
+test("the result line of a weighted mode gives the share of the obstruction it removes", () => {
   const weighted = summary({ ...CARVING, obstruction_fraction_carved: 0.7 }, 18400);
-  expect(cardResultLine(weighted)).toBe("70 % of the score carved, 18 400 m³ removed");
+  expect(cardResultLine(weighted)).toBe("Removes 70 % of the obstruction, 18 400 m³");
 });
 
-test("the result line of an unweighted mode gives the share of the volume carved", () => {
-  expect(cardResultLine(summary(CARVING, 1250.4))).toBe("39 % of the volume carved, 1 250 m³ removed");
+test("the result line of an unweighted mode gives the volume it removes and its share of what reached it", () => {
+  expect(cardResultLine(summary(CARVING, 1250.4))).toBe("Removes 1 250 m³, 39 % of what reached it");
 });
 
 test("without the removed volume the result line gives the share alone", () => {
-  expect(cardResultLine(summary({ ...CARVING, obstruction_fraction_carved: 0.7 }, null))).toBe("70 % of the score carved");
-  expect(cardResultLine(summary(CARVING, null))).toBe("39 % of the volume carved");
+  expect(cardResultLine(summary({ ...CARVING, obstruction_fraction_carved: 0.7 }, null))).toBe("Removes 70 % of the obstruction");
+  expect(cardResultLine(summary(CARVING, null))).toBe("Removes 39 % of what reached it");
 });
 
 test("a criterion without numbers has no result line", () => {
