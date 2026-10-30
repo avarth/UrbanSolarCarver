@@ -6,9 +6,9 @@ Inspect is a workspace beside the pipeline, like [Simulate](simulate.md). It run
 
 USC does not decide which way a surface should face. Only you know whether a surface is a roof for PV, a facade, or a soffit that faces down on purpose. Inspect shows the orientation and leaves the choice to you.
 
-## Design, Simulate and Inspect
+## Carve, Simulate and Inspect
 
-The switch **Design | Simulate | Inspect** in the header, next to the project name, changes the workspace. Inspect hides the steps and gives the 3D view the whole window. Switching away keeps Design's step and scroll position and Simulate's selection as they were. The Layers menu and the viewer tools are the same in all three; Inspect adds one layer, **Surface orientation**.
+The switch **Carve | Simulate | Inspect** in the header, next to the project name, changes the workspace. Inspect hides the steps and gives the 3D view the whole window. Switching away keeps Carve's step and scroll position and Simulate's selection as they were. The Layers menu and the viewer tools are the same in all three; Inspect adds one layer, **Surface orientation**.
 
 Inspect works while a run of the project is going. Only Save and Restore original wait for it to end, as uploads do.
 
@@ -16,9 +16,9 @@ Inspect works while a run of the project is going. Only Save and Restore origina
 
 The **Files** panel floats over the top left of the 3D view and collapses to an icon. It lists the input mesh files by role: maximum volume, test surfaces, existing surroundings and terrain. The weather file has no geometry and is not listed. Each row gives the file name, its triangle count and its area. A file that cannot be read stays in the list with its problem, for example a broken export, and has nothing to select.
 
-Pressing a row selects the file. The view frames it and draws the other test surface files faint, so you see what the selected one faces. The selected row also opens the file's summary:
+Pressing a row selects the file. The view frames it, in the part of the view the Files panel does not cover, and draws the other test surface files faint, so you see what the selected one faces. The selected row also opens the file's summary:
 
-- **Bounds**: the minimum and maximum corner in the file's own coordinates. When a corner is more than 10 km from zero, a note says the coordinates look georeferenced and how far they are. Under the list, the panel says which point the view is drawn around, since the view uses a local origin.
+- **Bounds**: the minimum and maximum corner in the file's own coordinates. When a corner is more than 10 km from zero, a note says the coordinates look georeferenced and how far they are. The info "i" beside the panel's title says which point the view is drawn around, since the view uses a local origin: "The view is drawn around x -141, y -91.72, z 0 of the files' coordinates."
 - **Surfaces**, for a test surface file: how many surfaces it has (below).
 
 An earlier version also counted closed bodies. It was dropped: CAD exports (Rhino's OBJ, for one) keep a corner per face, with that face's normal, so faces share no edges and every face counted as an open body (Allatini's maximum volume: 0 of 24). The voxelizer does not depend on it either: it fills by ray crossings along three axes with a two-of-three vote, so a missing floor or a T-junction does not change the voxels.
@@ -31,7 +31,7 @@ Test surfaces are drawn two-sided. The side the normal points to has the test su
 
 The **Face normals** box in the panel draws one normal per surface, an arrow from its centre along its normal, 0.3 times the square root of its area long, between 1 m and 10 m. One per surface rather than per triangle keeps a large file readable. The normals do not take clicks. A surface you have turned and not saved is drawn, and its normal points, the new way.
 
-The maximum volume is drawn see-through, and the surroundings and the terrain grey, as in Design. Their orientation is not drawn: nothing reads the orientation of the surroundings and terrain, and the loader turns the closed bodies of the maximum volume outward by itself.
+The maximum volume is drawn see-through, and the surroundings and the terrain grey, as in Carve. Their orientation is not drawn: nothing reads the orientation of the surroundings and terrain, and the loader turns the closed bodies of the maximum volume outward by itself.
 
 ## Surfaces, and why a click turns a whole surface
 
@@ -84,7 +84,7 @@ The kept original is dropped when you upload a file with the same name, when you
 
 ### Leaving Inspect with turns not saved
 
-Switching to Design or Simulate while a file has staged turns, or while a save or restore is under way, asks **Save the turned surfaces before leaving Inspect?** with three answers: **Save** (writes every file with turns, then leaves), **Discard** (drops them and leaves) and **Stay**. While a save is under way the dialog says **A save is under way.**; Save and Discard wait for it, and when it is written with nothing left to save the dialog leaves by itself. If a save is refused, the one under way included, for example because a run is going or the file changed in the project folder, the dialog stays open with the reason, so a failed save is never left unseen in another workspace.
+Switching to Carve or Simulate while a file has staged turns, or while a save or restore is under way, asks **Save the turned surfaces before leaving Inspect?** with three answers: **Save** (writes every file with turns, then leaves), **Discard** (drops them and leaves) and **Stay**. While a save is under way the dialog says **A save is under way.**; Save and Discard wait for it, and when it is written with nothing left to save the dialog leaves by itself. If a save is refused, the one under way included, for example because a run is going or the file changed in the project folder, the dialog stays open with the reason, so a failed save is never left unseen in another workspace.
 
 If a file changed while turns were staged on it (a new version uploaded, or replaced in the project folder), the staged turns are dropped and the panel says **The file changed, so its turns not saved were dropped.** The surfaces of the new version are numbered anew, so the old turns would not mean the same surfaces.
 

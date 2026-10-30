@@ -4,15 +4,15 @@ A carving protects sun, sky or solar energy on test surfaces. **Simulate** shows
 
 Simulate is a workspace beside the pipeline. It changes no criterion, no shared setting and no pipeline step, and it starts nothing by itself: a study runs only when you press **Run**.
 
-## Design and Simulate
+## Carve and Simulate
 
-The switch **Design | Simulate** in the header, next to the project name, changes the workspace. Simulate hides the steps and gives the 3D view the whole window. Design shows the step you left, with its folds and scroll position. The Layers menu and the viewer tools are the same in both. The context and the terrain are drawn in Simulate; the test surfaces of criteria and of other studies are not, only those of the selected study.
+The switch **Carve | Simulate | Inspect** in the header, next to the project name, changes the workspace. Simulate hides the steps and gives the 3D view the whole window. Carve shows the step you left, with its folds and scroll position. The Layers menu and the viewer tools are the same in all three. The context and the terrain are drawn in Simulate; the test surfaces of criteria and of other studies are not, only those of the selected study.
 
-The **Sky dome** layer (Layers menu, off at first) is the selected study's, not Design's: each of the 145 sky patches coloured by the value it carried in the study's last run, the solar energy of the period from that patch for Solar energy and Useful solar gains (kWh/m²), its weight of the overcast sky, the night sky cooling or the sky for the three sky metrics. It changes with the study selected and is dimmed with it when the study is out of date. A sun hours study traces sun positions, not patches, so it has no dome; nor has a result run before the patch values were kept: the Layers menu then lists the Sky dome without a check box and says to run the study again.
+The **Sky dome** layer (Layers menu, off at first) is the selected study's, not Carve's: each of the 145 sky patches coloured by the value it carried in the study's last run, the solar energy of the period from that patch for Solar energy and Useful solar gains (kWh/m²), its weight of the overcast sky, the night sky cooling or the sky for the three sky metrics. It changes with the study selected and is dimmed with it when the study is out of date. A sun hours study traces sun positions, not patches, so it has no dome; nor has a result run before the patch values were kept: the Layers menu then lists the Sky dome without a check box and says to run the study again.
 
 ## Studies
 
-A study is a metric on **study surfaces** over a period. Simulate calls them study surfaces so they are not taken for the test surfaces of the criteria, which Design protects. The **Studies** panel floats over the top left of the 3D view and collapses to an icon. Each row has a colour swatch, the study's name and one line: its study surfaces while its result is current (its files, then the project's surfaces it samples, for example "facades.obj, the surroundings"), otherwise **Out of date**, **Not run yet** or the reason it cannot run (for example **Add study surfaces**). Pressing a row selects the study for the view: **one study is on the view at a time**, and its test surfaces are the ones coloured. When none is selected, the first study with a result is (or the first study), so a finished run shows its values without a press. The settings button of a row opens its popover.
+A study is a metric on **study surfaces** over a period. Simulate calls them study surfaces so they are not taken for the test surfaces of the criteria, which Carve protects. The **Studies** panel floats over the top left of the 3D view and collapses to an icon. Each row has a colour swatch, the study's name (whole, on up to two lines; the whole on hover) and one line: its study surfaces while its result is current (its files, then the project's surfaces it samples, for example "facades.obj, the surroundings"), otherwise **Out of date**, **Not run yet** or the reason it cannot run (for example **Add study surfaces**). Pressing a row selects the study for the view: **one study is on the view at a time**, and its test surfaces are the ones coloured. When none is selected, the first study with a result is (or the first study), so a finished run shows its values without a press. The settings button of a row opens its popover.
 
 **Add study** offers two kinds of entries in one menu:
 
@@ -30,7 +30,7 @@ The popover of a study holds:
 | Study surfaces | The files the study uses. You can add new files (button or drop) or use a file the project stores already, for example a criterion's. A stored file is kept while a criterion or a study lists it and goes to the recycle bin when none does. Under the files, check boxes add the project's own surfaces (see below) |
 | Delete study | Removes the study and moves its results to the recycle bin. Its number is not used again |
 
-Every change is saved at once. The studies are stored in `project.json` under `studies`, apart from the criteria. They cannot be changed while a Design run or a simulation is going.
+Every change is saved at once. The studies are stored in `project.json` under `studies`, apart from the criteria. They cannot be changed while a carving run or a simulation is going.
 
 Besides its files, a study can sample three surfaces of the project, for example to count the sun hours on the neighbours' facades or on the ground. A study needs files, one of these, or both:
 
@@ -83,15 +83,15 @@ The geometry switch at the top centre of the view chooses what the values are sh
 | **Envelope** | The envelope mesh that **Build envelope** wrote, clipped by the maximum volume |
 | **Massing** | The building massing mesh, clipped by the maximum volume |
 
-The context and the terrain block in all three. With several criteria the envelope is the result of the whole chain. **Envelope** and **Massing** wait, with the reason as a tooltip, until Design has built them, and also when the selected study ran before they were built (the tooltip says to run the study again). A geometry that Design shows out of date is marked; Simulate still traces the mesh on disk.
+The context and the terrain block in all three. With several criteria the envelope is the result of the whole chain. **Envelope** and **Massing** wait, with the reason as a tooltip, until Carve has built them, and also when the selected study ran before they were built (the tooltip says to run the study again). A geometry that Carve shows out of date is marked; Simulate still traces the mesh on disk.
 
-**Change** colours each test point by its change from the maximum volume (the baseline) on the geometry shown: gains in Viridis from no change (dark) to the largest gain (yellow), losses in the colour the carving uses for carved voxels, a change smaller than a thousandth of the highest value without any geometry as none. Change waits while Max volume is shown.
+**Difference** colours each test point by its difference from the maximum volume (the baseline) on the geometry shown: gains in Viridis from no change (dark) to the largest gain (yellow), losses in the colour the carving uses for carved voxels, a change smaller than a thousandth of the highest value without any geometry as none. Difference waits while Max volume is shown. Its legend reads "Difference from max volume" with the study's unit.
 
 ## Run
 
 **Run** runs every study that can run, for every geometry that is built: the maximum volume always, the envelope and the massing when they exist. Switching the geometry afterwards needs no new run. A study that cannot run says why on its row (no study surfaces, no surroundings or terrain file for a study that samples them, no maximum volume, no weather file for a metric that needs one, a setting the engine refuses). One that the engine refuses, for example for too many test points, keeps its message until its inputs change, and the other studies still run.
 
-There is one job at a time. While a Design run is going, Run shows "A Design run is in progress" and waits; while a simulation is going, Design's run buttons say so. Nothing is queued. The progress shows under Run with a Cancel button.
+There is one job at a time. While a carving run is going, Run shows "A carving run is in progress" and waits; while a simulation is going, Carve's run buttons say so. Nothing is queued. The progress shows under Run with a Cancel button.
 
 ## The legend, the colour range and the result card
 
@@ -102,22 +102,22 @@ The legend along the bottom of the view shows the scale the values are coloured 
 
 A study's values spread mostly with the way each surface faces: on Allatini's Solar energy study the roofs reach about 1,550 kWh/m² while the facades lie between 200 and 800. By value, move the high end down to the facades' range to see their differences (below); by share, every point is measured against its own no-build value, and the maximum volume keeps 78 % of the no-build value there and the envelope 99 %.
 
-**The colour range.** Two marks on the legend set the low and the high end of the colours. The palette runs between them, and a value beyond an end takes that end's colour, so the colours can spread over the values that matter (the facades between 200 and 800 kWh/m², say, rather than 0 to the roofs' 1,550). Drag a mark, or press on the bar to move the nearer one; or focus a mark and use the arrow keys (1 % of the bar), Page Up and Page Down (10 %) and Home and End; Delete puts it back to its default. The ends cannot pass each other. By value the low end is the study's **target** and the high end its upper end, both saved with the study (by default 0 and the highest value of the geometry shown); the result card's "at target" counts the points at or above the low end. By share the ends are percentages, 0 and 100 by default, kept for each study while the app is open.
+**The colour range.** Two marks on the legend set the low and the high end of the colours. The palette runs between them, and a value beyond an end takes that end's colour, so the colours can spread over the values that matter (the facades between 200 and 800 kWh/m², say, rather than 0 to the roofs' 1,550). Drag a mark, or press on the bar to move the nearer one; or focus a mark and use the arrow keys (1 % of the bar), Page Up and Page Down (10 %) and Home and End; Delete puts it back to its default. The ends cannot pass each other. By value the low end is the study's **target** and the high end its upper end, both saved with the study (by default 0 and the highest value of the geometry shown); the result card's last line, for example "92 % at or above the target", counts the points at or above the low end. By share the ends are percentages, 0 and 100 by default, kept for each study while the app is open.
 
-**The palettes** are fixed: Magma by value, Viridis by share and for Change. Both are matplotlib's perceptually even palettes, from dark to light without a grey middle (Viridis is the one most readable with the common colour vision deficiencies), so the two colourings do not look alike. In the Change view the legend shows the change ramp instead, without ends, and the loss colour when some point lost.
+**The palettes** are fixed: Magma by value, Viridis by share and for Difference. Both are matplotlib's perceptually even palettes, from dark to light without a grey middle (Viridis is the one most readable with the common colour vision deficiencies), so the two colourings do not look alike. In the Difference view the legend shows the change ramp instead, without ends, and the loss colour when some point lost.
 
 The **result card** in the bottom right corner is for the selected study on the geometry shown. It gives:
 
 - what the geometry keeps of the no-build value: the sum of its values over the sum with nothing built on the plot, for example "keeps 99 % of the no-build value (78)",
 - the mean,
 - the lowest tenth (10th percentile),
-- with a target (the low end by value), the share of points at or above it.
+- with a target (the low end by value), the share of points at or above it ("92 % at or above the target").
 
 On Envelope and Massing each line has the maximum volume's value in brackets, for example "mean 3.6 h (4.1)".
 
 ## Out of date
 
-A result is **out of date** when any of these changed since it was computed: the study's settings (including its metric, its period and the project's surfaces it samples), its study surface files, the weather file, the context, the terrain, the maximum volume, or the envelope or massing mesh it traced (including one built or removed). The surface tolerance of the envelope and massing, which follows the voxel size they were built with, counts too. So do the shared settings a study reads: north, the ray length, the test point spacing (the voxel size and the grid step) and the rays per patch of the first criterion that is on. Turning a criterion on or off in Design can therefore make every study out of date. The result stays on the view, dimmed, with the **Out of date** stamp at the top of the view, and the row says "Out of date". Nothing reruns by itself: press **Run**. Moving the project folder does not make a result out of date. Changing the target does not either. A file saved over an input file in the project folder counts as a change once the app has found it (see [Replacing a file in the project folder](ui.md#replacing-a-file-in-the-project-folder)).
+A result is **out of date** when any of these changed since it was computed: the study's settings (including its metric, its period and the project's surfaces it samples), its study surface files, the weather file, the context, the terrain, the maximum volume, or the envelope or massing mesh it traced (including one built or removed). The surface tolerance of the envelope and massing, which follows the voxel size they were built with, counts too. So do the shared settings a study reads: north, the ray length, the test point spacing (the voxel size and the grid step) and the rays per patch of the first criterion that is on. Turning a criterion on or off in Carve can therefore make every study out of date. The result stays on the view, dimmed, with the **Out of date** stamp at the top of the view, and the row says "Out of date". Nothing reruns by itself: press **Run**. Moving the project folder does not make a result out of date. Changing the target does not either. A file saved over an input file in the project folder counts as a change once the app has found it (see [Replacing a file in the project folder](ui.md#replacing-a-file-in-the-project-folder)).
 
 ## Where the results are kept
 

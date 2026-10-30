@@ -7,6 +7,32 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed (app: review follow-ups)
+
+- **The workspace switch reads Carve | Simulate | Inspect** (it read Design). Messages follow: "A carving run is in progress",
+  "Out of date in Carve", "Add a weather file in Carve (Inputs)".
+- **A criterion's numbers say what they are a share of.** The card reads "Removes 80 % of the obstruction, 500 256 m³" in the
+  weighted modes and "Removes 1 250 m³, 39 % of what reached it" in the others. The Carving rule's tiles are **Kept here**
+  (the volume kept, with "49 % of what reached this criterion": the first criterion receives the maximum volume, each later one what
+  the one before kept), **Obstruction removed** (weighted modes) and **Last analysis took**; the Volume kept / Volume carved
+  pair is gone. With two or more criteria the line under the cards reads "After all criteria: kept 188 073 m³, 19 % of the maximum volume".
+- **Folded settings open under a header with a chevron**, like the panel's sections, in place of an underlined link, with names
+  such as **More mode settings** (was Mode specific), **Detail settings** and **More carving settings**. The Carving rule's info
+  "i" sits beside Manual | Automatic.
+- **Score titles say "each voxel"** ("Shade each voxel casts", "Solar energy each voxel blocks", "Overcast sky each voxel hides"),
+  and a count of one reads "1 voxel". Under Energy-weighted the **Cold period from the weather file** preset is not offered: it
+  belongs to the cold hours rule.
+- **Sky dome in Carve** shows after a run where the step shows it, so a first sky-based run shows what it weighed; hidden in the
+  Layers menu, it stays hidden on this computer (kept in the browser) until shown again. The hemisphere of the sky dome, the sun
+  path and the compass ring is 0.75 times the larger horizontal side of the maximum volume and the test surfaces together (was
+  1.5), so it encloses them without dwarfing them.
+- **Frame all, the top view, the first framing and Inspect's framing of a file** fit and centre in the part of the 3D view that no
+  panel lies over (Simulate's Studies panel, Inspect's Files panel, or the step panel in a window under 1100 px wide).
+- **Simulate**: study names show whole on up to two lines; the toggle beside Max volume | Envelope | Massing is **Difference**
+  (was Change; legend "Difference from max volume"); the result card's last line reads "92 % at or above the target".
+  **Inspect**: the view's origin is in the info "i" beside the Files panel's title, not at the foot of the panel. A tooltip opens
+  over its "i" when opening under it would cover the pinned Run analysis bar.
+
 ### Changed (app: criterion editor)
 
 - **The Criteria step shows the list or one criterion's editor.** The list is the cards only: the whole name on up to two lines
