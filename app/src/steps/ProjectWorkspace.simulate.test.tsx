@@ -1,4 +1,4 @@
-// The Design | Simulate mode of the open workspace: Simulate hides the steps and gives the view the whole window; Design brings
+// The Carve | Simulate mode of the open workspace: Simulate hides the steps and gives the view the whole window; Design brings
 // them back as they were. The switch itself, and what the page does with the mode around opening and renaming, are in App.test.tsx.
 // Then the studies panel over the view in Simulate: the studies of the project, Add study, a study's popover and Run (the simulation
 // is a run of the run loop, one job at a time with the runs of Design).

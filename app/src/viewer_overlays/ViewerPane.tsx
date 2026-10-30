@@ -152,6 +152,11 @@ export interface ViewerPaneProps {
   missingLayerNotes?: Partial<Record<LayerName, string>>;
   /** How far the run under way is, 0 to 1; null without a run. */
   runProgress?: number | null;
+  /**
+   * Whether the sky dome shown is the analysis' (Carve), whose choice to hide it is remembered on this computer and applies; false
+   * for Simulate's study dome, which neither reads nor writes that choice. Absent: true.
+   */
+  skyDomeChoiceRemembered?: boolean;
   /** Shown over the view (the run report). A function is given the viewport theme (Simulate's legend colours follow it). */
   overlayContent?: ReactNode | ((theme: ViewportTheme) => ReactNode);
   /** The mode the form shows. */
@@ -205,7 +210,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
                              maxVolumeAppearance, shownByDefault,
                              northDegrees, framingRequest, centreContent, results = NO_VIEWER_RESULTS, localOrigin = NO_SHIFT, dimmedLayers = NO_LAYERS,
                              missingLayers = NO_LAYERS, missingLayerNotes, runProgress = null, overlayContent, mode = null,
-                             analysisCurrent = false, skyDomeTitle, study = null, studyOutOfDate = false, envelopeSeeThrough = false, inspect = null, sunStudy = null }: ViewerPaneProps) {
+                             analysisCurrent = false, skyDomeTitle, skyDomeChoiceRemembered = true, study = null, studyOutOfDate = false, envelopeSeeThrough = false, inspect = null, sunStudy = null }: ViewerPaneProps) {
   const container = useRef<HTMLDivElement>(null);
   const [scene, setScene] = useState<ViewerScene | null>(null);
   const [sceneUnavailable, setSceneUnavailable] = useState(false);
@@ -285,7 +290,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   // changes. It is a layer of up to a million cubes that starts hidden: it is built (and the voxels listed, thinned to the cap of the
   // score points) only while it is shown, and dropped when it is hidden again.
   const isVisible = (name: LayerName) => visibleByChoice[name]
-    ?? (name === "inspect_surfaces" || (shownByDefault.includes(name) && !(name === "sky_dome" && skyDomeHidden)));
+    ?? (name === "inspect_surfaces" || (shownByDefault.includes(name) && !(name === "sky_dome" && skyDomeChoiceRemembered && skyDomeHidden)));
   const showsCarvedByCriterion = carvedByCriterion !== null && isVisible("carved_by_criterion");
   const carvedVoxelsOfCriteria = useMemo(() => (carvedByCriterion !== null && showsCarvedByCriterion ? carvedVoxelsByCriterion(carvedByCriterion, localOrigin) : null),
                                          [carvedByCriterion, showsCarvedByCriterion, originKey]);
@@ -398,7 +403,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   ];
   const changeVisible = (name: LayerName, visible: boolean) => {
     setVisibleByChoice((choices) => ({ ...choices, [name]: visible }));
-    if (name === "sky_dome") {
+    if (name === "sky_dome" && skyDomeChoiceRemembered) {
       rememberSkyDomeHidden(!visible);
       setSkyDomeHidden(!visible);
     }

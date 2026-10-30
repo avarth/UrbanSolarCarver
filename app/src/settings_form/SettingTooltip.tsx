@@ -30,7 +30,7 @@ export interface TooltipPlacement {
 /**
  * Under the anchor (an "i", a mode tile), centred on it, moved sideways as little as keeps it inside the window; over the anchor
  * when under it would leave the window or cover a part that stays clear of tooltips (data-tooltips-stay-clear: the pinned run
- * bar, whose buttons must stay in view), and there is room over it.
+ * region under the steps, whose buttons must stay in view), and there is room over it; under it still when neither fits.
  */
 export function placementUnder(infoButton: HTMLElement, tooltip: HTMLElement): TooltipPlacement {
   const anchor = infoButton.getBoundingClientRect();

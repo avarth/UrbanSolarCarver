@@ -93,6 +93,17 @@ test("the sky dome shows after a run; hidden by the user it stays hidden, across
   expect(FakeViewerScene.latest!.visibleLayers.has("sky_dome")).toBe(true);
 });
 
+test("Simulate's study dome neither reads nor writes the choice to hide the analysis' sky dome", () => {
+  const skyDomeEntry = () => rendered!.container.querySelector<HTMLInputElement>(".viewer-layers-panel li input")!;
+  window.localStorage.setItem("usc.skyDomeHidden", "true");
+  rendered = renderForTest(<ViewerPane {...viewWithSkyDome("daylight")} skyDomeChoiceRemembered={false} />);
+  expect(FakeViewerScene.latest!.visibleLayers.has("sky_dome")).toBe(true);           // the step shows it: the stored choice is not read
+  openLayersMenu();
+  click(skyDomeEntry());
+  click(skyDomeEntry());
+  expect(window.localStorage.getItem("usc.skyDomeHidden")).toBe("true");             // nor written
+});
+
 test("an error of the scene that is not a missing WebGL is logged, and the view does not claim WebGL is missing", () => {
   const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => ({}) as RenderingContext);     // WebGL is there

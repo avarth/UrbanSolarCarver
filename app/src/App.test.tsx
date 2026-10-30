@@ -627,7 +627,7 @@ const modeButton = (name: string) => buttonNamed(name, modeSwitch()!);
 const workspaceMode = () => page().querySelector(".fake-workspace")!.getAttribute("data-mode");
 const modePressed = () => [...modeSwitch()!.querySelectorAll("button")].map((button) => [button.textContent, button.getAttribute("aria-pressed")]);
 
-test("the Design | Simulate | Inspect switch shows only with an open project and sets the workspace's mode", async () => {
+test("the Carve | Simulate | Inspect switch shows only with an open project and sets the workspace's mode", async () => {
   const service = new FakeService();
   await renderApp(service);
   expect(modeSwitch()).toBeNull();
@@ -647,7 +647,7 @@ test("the Design | Simulate | Inspect switch shows only with an open project and
   expect(modeSwitch()).toBeNull();
 });
 
-test("another project opens in Design, whatever mode the last one was left in", async () => {
+test("another project opens in Carve, whatever mode the last one was left in", async () => {
   const service = new FakeService();
   await renderApp(service);
   await openPlot7();
@@ -673,7 +673,7 @@ test("the mode survives renaming the project", async () => {
   expect(modePressed()).toEqual([["Carve", "false"], ["Simulate", "true"], ["Inspect", "false"]]);
 });
 
-test("a reset of the open project to its example opens it in Design, as it opens at the first step", async () => {
+test("a reset of the open project to its example opens it in Carve, as it opens at the first step", async () => {
   const service = new FakeService();
   await renderApp(service);
   await openPlot7();

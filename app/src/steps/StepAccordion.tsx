@@ -70,7 +70,7 @@ export function StepAccordion({ steps, openStep, onOpenStep, pinnedAction }: Ste
           <StepRow key={step.name} step={step} open={step.name === openStep} onToggle={() => onOpenStep(step.name === openStep ? null : step.name)} />
         ))}
       </ol>
-      {pinnedAction && <div className="step-pinned-action">{pinnedAction}</div>}
+      {pinnedAction && <div className="step-pinned-action" data-tooltips-stay-clear>{pinnedAction}</div>}
     </div>
   );
 }

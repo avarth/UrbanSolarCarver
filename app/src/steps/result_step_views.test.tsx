@@ -768,5 +768,8 @@ test("while the analysis is out of date, only a carving setting with an error st
 test("the carving rule's info sits beside Manual | Automatic on one row, not on a line of its own", () => {
   const css = readFileSync("src/steps/steps.css", "utf8");
   expect(css).toMatch(/\.setting-field\.carving-rule-choice\s*{[^}]*flex-direction: row;/);
-  expect(css).toMatch(/\.carving-rule-choice > \.setting-label-row\s*{\s*order: 2;/);
+  rendered = renderForTest(<CarvingStep {...weightedCarvingProps({})} />);
+  const choice = rendered.container.querySelector(".carving-rule-choice")!;
+  // The "i" comes after the radios in the page, so the reading and tab order are the order on the screen
+  expect([...choice.children].map((child) => child.getAttribute("role") ?? child.className)).toEqual(["setting-label visually-hidden", "radiogroup", "setting-info-anchor"]);
 });

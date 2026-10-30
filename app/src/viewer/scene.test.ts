@@ -215,3 +215,29 @@ test("frameBox puts the camera where frameAll would for a layer of that box: a b
   scene.frameBox([-10, -10, -10], [10, 10, 10]);
   expect(metresPerPixel[metresPerPixel.length - 1]).toBeCloseTo(wide);
 });
+
+test("framing beside a panel: the free part of the view sets the distance, the model is centred in it, and the panel counts for at most half", () => {
+  const { scene, canvas, cube } = viewerWithACube();
+  const metresPerPixel: number[] = [];
+  scene.onCameraChange((camera) => metresPerPixel.push(camera.metresPerPixel));
+  const framedWith = (insetPixels: number) => {
+    scene.setLeftInsetSource(() => insetPixels);
+    scene.frameAll(true);
+    return metresPerPixel[metresPerPixel.length - 1];
+  };
+  const clear = framedWith(0);
+  const beside = framedWith(VIEW_WIDTH * 0.375);
+  expect(beside).toBeGreaterThan(clear);                    // the cube fits the narrower free part
+  // The cube's centre is drawn at the middle of the free part, not of the whole view
+  const clicked: THREE.Intersection[] = [];
+  scene.onLayerClick("inspect_surfaces", (intersection) => clicked.push(intersection));
+  const freeMiddle = VIEW_WIDTH * 0.375 + (VIEW_WIDTH * 0.625) / 2;
+  pointer(canvas, "pointerdown", freeMiddle, VIEW_HEIGHT / 2);
+  pointer(canvas, "pointerup", freeMiddle, VIEW_HEIGHT / 2);
+  expect(clicked.map((hit) => hit.object)).toEqual([cube]);
+  pointer(canvas, "pointerdown", VIEW_WIDTH * 0.1, VIEW_HEIGHT / 2);
+  pointer(canvas, "pointerup", VIEW_WIDTH * 0.1, VIEW_HEIGHT / 2);
+  expect(clicked).toHaveLength(1);                          // under the panel there is nothing
+  // A panel wider than half the view counts as half
+  expect(framedWith(VIEW_WIDTH * 0.9)).toBeCloseTo(framedWith(VIEW_WIDTH * 0.5), 9);
+});

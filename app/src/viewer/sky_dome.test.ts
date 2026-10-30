@@ -8,8 +8,12 @@ function towards(altitudeDegrees: number, azimuthDegrees: number): [number, numb
   return [Math.cos(altitude) * Math.sin(azimuth), Math.cos(altitude) * Math.cos(azimuth), Math.sin(altitude)];
 }
 
+test("the scene hemisphere is at least as tall as the scene: a tower on a small plot stays inside its dome", () => {
+  expect(sceneHemisphere([[0, 0, 0], [20, 20, 40]])).toEqual({ centre: [10, 10, 0], radius: 40 });
+});
+
 test("the scene hemisphere is 0.75 times the larger horizontal side, centred on the footprint at the lowest z", () => {
-  expect(sceneHemisphere([[0, 0, 2], [40, 30, 35]])).toEqual({centre: [20, 15, 2], radius: 30});
+  expect(sceneHemisphere([[0, 0, 2], [40, 30, 20]])).toEqual({centre: [20, 15, 2], radius: 30});
 });
 
 test("the scene hemisphere takes in a test surface lying outside the maximum volume", () => {
@@ -18,7 +22,7 @@ test("the scene hemisphere takes in a test surface lying outside the maximum vol
   const sphere = sceneHemisphere(boundsOf([maxVolume, testSurface])!);
   expect(sphere.centre).toEqual([25, 5, -1]);
   expect(sphere.radius).toBe(37.5);                                                 // 0.75 times the 50 m of the scene along x
-  expect(sceneHemisphere(boundsOf([maxVolume, null])!)).toEqual({centre: [10, 5, 0], radius: 15});
+  expect(sceneHemisphere(boundsOf([maxVolume, null])!)).toEqual({centre: [10, 5, 0], radius: 30});     // its 30 m height, more than 0.75 x 20 m
 });
 
 test("a sky patch spans its Tregenza band and its share of the band's azimuth", () => {

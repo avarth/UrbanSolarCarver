@@ -23,7 +23,7 @@ export function CriteriaRunBar({ runBlocker, onRunAnalysis, buildBlocker, onBuil
   // reason (the analysis or a carving is not current) is said under the build only.
   const shared = runBlocker !== null && runBlocker === buildBlocker;
   return (
-    <div className="criteria-run-bar" data-tooltips-stay-clear>
+    <div className="criteria-run-bar">
       <div className="criteria-run-buttons">
         <RunAnalysisButton blocker={runBlocker} onRunAnalysis={onRunAnalysis} sharedReasonId={shared ? sharedReasonId : undefined} />
         <RunAnalysisButton blocker={buildBlocker} label={messages.buildEnvelopeAndMassing} onRunAnalysis={onBuild} secondary

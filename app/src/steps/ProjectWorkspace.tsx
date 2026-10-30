@@ -516,7 +516,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
       <section className="workspace-view">
         <ViewerPane maxVolume={maxVolume} testSurfaces={testSurfaceGroups} onTestSurfacesShownChange={setTestSurfacesShown}
                     criteria={active.map(({ id, name, colour }) => ({ id, name, colour }))} context={contextMesh.geometry} terrain={terrainMesh.geometry} sunPath={sunPath}
-                    hemisphere={sceneSphere}
+                    hemisphere={sceneSphere} skyDomeChoiceRemembered={props.mode === "design"}
                     maxVolumeAppearance={!inspecting && (simulating || STEPS_WITH_SOLID_MAX_VOLUME.includes(viewStep)) ? "solid" : "ghost"}
                     shownByDefault={shownByDefault} northDegrees={northDegrees} framingRequest={framingRequest}
                     centreContent={props.mode === "design" && emptyViewContent} localOrigin={origin} mode={form.mode}

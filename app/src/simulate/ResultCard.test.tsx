@@ -17,7 +17,7 @@ test("the result card shows the geometry's values with the maximum volume's besi
                                        baseline={{ mean: 4.1, lowestTenth: 1.2, shareAtTarget: 0.85, keptShare: 0.783 }} />);
   expect(rendered.container.querySelector(".result-card")!.getAttribute("aria-label")).toBe("Result");
   expect(heading()).toBe("Envelope (Max volume)");
-  expect(lines()).toEqual(["keeps 99 % of the no-build value (78)", "mean 3.6 h (4.1)", "lowest tenth 0.9 h (1.2)", "92 % at or above the target (85)"]);
+  expect(lines()).toEqual(["keeps 99 % of the no-build value (78)", "mean 3.6 h (4.1)", "lowest tenth 0.9 h (1.2)", "92 % (85) at or above the target"]);
 });
 
 test("a result without test points shows no card, not a mean of NaN", () => {

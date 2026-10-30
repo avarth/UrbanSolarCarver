@@ -140,7 +140,7 @@ export function FilesPanel({ inspection, origin, saveDisabledReason, notice }: F
         </button>
         {open && <h2 id={titleId} className="files-panel-title">{messages.inspectFilesTitle}</h2>}
         {open && inspection.reply !== null && (
-          <SettingTooltip settingLabel={messages.inspectFilesTitle} help={messages.inspectViewOrigin(number(origin[0]), number(origin[1]), number(origin[2]))} />
+          <SettingTooltip settingLabel={messages.inspectViewOriginLabel} help={messages.inspectViewOrigin(number(origin[0]), number(origin[1]), number(origin[2]))} />
         )}
       </div>
       {open && (

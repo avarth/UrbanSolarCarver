@@ -23,13 +23,14 @@ versioning follows [Semantic Versioning](https://semver.org/).
   and a count of one reads "1 voxel". Under Energy-weighted the **Cold period from the weather file** preset is not offered: it
   belongs to the cold hours rule.
 - **Sky dome in Carve** shows after a run where the step shows it, so a first sky-based run shows what it weighed; hidden in the
-  Layers menu, it stays hidden on this computer (kept in the browser) until shown again. The hemisphere of the sky dome, the sun
-  path and the compass ring is 0.75 times the larger horizontal side of the maximum volume and the test surfaces together (was
-  1.5), so it encloses them without dwarfing them.
+  Layers menu, it stays hidden on this computer (kept in the browser) until shown again; Simulate's study dome leaves that choice
+  alone. The hemisphere of the sky dome, the sun path and the compass ring is 0.75 times the larger horizontal side of the
+  maximum volume and the test surfaces together, and at least their height (was 1.5 times the side), so it encloses them without
+  dwarfing them.
 - **Frame all, the top view, the first framing and Inspect's framing of a file** fit and centre in the part of the 3D view that no
   panel lies over (Simulate's Studies panel, Inspect's Files panel, or the step panel in a window under 1100 px wide).
 - **Simulate**: study names show whole on up to two lines; the toggle beside Max volume | Envelope | Massing is **Difference**
-  (was Change; legend "Difference from max volume"); the result card's last line reads "92 % at or above the target".
+  (was Change; legend "Difference from max volume"); the result card's last line reads "92 % (85) at or above the target".
   **Inspect**: the view's origin is in the info "i" beside the Files panel's title, not at the foot of the panel. A tooltip opens
   over its "i" when opening under it would cover the pinned Run analysis bar.
 

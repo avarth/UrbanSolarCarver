@@ -15,7 +15,7 @@ const DAYLIGHT: CriterionEntry = {
   id: "2", name: "Daylight on windows", named_by_user: true, colour: "#cc6677", bypassed: false, energy_weighted: false, test_surface_files: ["windows.obj"],
   settings: { mode: "daylight" },
 };
-const LINE = "70 % of the score carved, 18 400 m³ removed, more than fits the line of the header";
+const LINE = "Removes 70 % of the obstruction, 18 400 m³, more than fits the line of the header";
 
 function headerProps(overrides: Partial<CriterionEditorHeaderProps> = {}): CriterionEditorHeaderProps {
   return {

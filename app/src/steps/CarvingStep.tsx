@@ -275,11 +275,8 @@ function CarvingRuleChoice({ mode, rule, disabled, onChoose }: CarvingRuleChoice
   const view = settingView("threshold", mode);
   return (
     <div className="setting-field carving-rule-choice" data-setting="threshold">
-      <div className="setting-label-row">
-        {/* The panel's section is titled Carving rule already: the label names the choice for screen readers. */}
-        <span id={labelId} className="setting-label visually-hidden">{view.label}</span>
-        <SettingTooltip settingLabel={view.label} help={view.help} configName="threshold" defaultText={messages.carvingRuleChoices.carve_fraction} />
-      </div>
+      {/* The panel's section is titled Carving rule already: the label names the choice for screen readers. */}
+      <span id={labelId} className="setting-label visually-hidden">{view.label}</span>
       <div role="radiogroup" aria-labelledby={labelId} className="carving-rule-options">
         {CARVING_RULES.map((choice) => (
           <label key={choice}>
@@ -288,6 +285,8 @@ function CarvingRuleChoice({ mode, rule, disabled, onChoose }: CarvingRuleChoice
           </label>
         ))}
       </div>
+      {/* Its "i" beside Manual | Automatic, after them in the reading and tab order as on the screen */}
+      <SettingTooltip settingLabel={view.label} help={view.help} configName="threshold" defaultText={messages.carvingRuleChoices.carve_fraction} />
     </div>
   );
 }

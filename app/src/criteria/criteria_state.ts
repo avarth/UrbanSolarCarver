@@ -101,14 +101,15 @@ export function cardStatusText(status: CardStatus): string | null {
 }
 
 /**
- * "70 % of the score carved, 18 400 m³ removed" for a weighted mode (it reports the obstruction fraction it carved), "39 % of the
- * volume carved, ..." for the others; null while the criterion has no numbers.
+ * "Removes 70 % of the obstruction, 18 400 m³" for a weighted mode (it reports the obstruction fraction it carved), "Removes
+ * 18 400 m³, 39 % of what reached it" for the others; null while the criterion has no numbers. The share removed is 100 minus the
+ * kept share as the Carving rule's Kept here shows it, so the two always add up to 100.
  */
 export function cardResultLine(summary: CriterionCarvingSummary): string | null {
   const carving = summary.carving;
   if (carving === null) return null;
   const isWeighted = carving.obstruction_fraction_carved !== null;
-  const percentText = formatPercent(isWeighted ? carving.obstruction_fraction_carved! * 100 : 100 - carving.retention_pct);
+  const percentText = formatPercent(isWeighted ? carving.obstruction_fraction_carved! * 100 : 100 - Math.round(carving.retention_pct));
   if (summary.volume_removed_m3 === null || summary.volume_removed_m3 === undefined) {
     return isWeighted ? messages.criterionScoreCarved(percentText) : messages.criterionVolumeCarved(percentText);
   }
@@ -117,7 +118,7 @@ export function cardResultLine(summary: CriterionCarvingSummary): string | null 
 }
 
 /**
- * "Kept 18 400 m³, 61 % of the maximum volume": the volume the last criterion kept and its share of the maximum volume (the volume
+ * "After all criteria: kept 18 400 m³, 61 % of the maximum volume": the volume the last criterion kept and its share of the maximum volume (the volume
  * alone when the share is unknown); null without a chain or with fewer than two criteria on, where the card says it.
  */
 export function chainSummaryLine(chain: ChainSummary | null | undefined, criteriaOn: number): string | null {

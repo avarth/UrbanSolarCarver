@@ -140,6 +140,7 @@ export const messages = {
   // Inspect: the Files panel over the 3D view, a file's summary, flipping its surfaces (inspect design, sections 3, 5 and 6). The
   // titles of the roles are the layers' (layerNames).
   inspectFilesTitle: "Files",
+  inspectViewOriginLabel: "View origin",
   inspectArrows: "Face normals",
   inspectFileLine: (triangles: number, areaSquareMetres: number) =>
     `${groupedDigits(triangles)} triangles, ${withUnit(formattedNumber(areaSquareMetres), "m²")}`,
@@ -484,7 +485,7 @@ export const messages = {
   histogramBinRange: (lowerText: string, upperText: string, unit: string) => `${lowerText} to ${upperText}${unit ? ` ${unit}` : ""}`,
   histogramBinCounts: (kept: number, carved: number) => `${groupedDigits(kept)} kept, ${groupedDigits(carved)} carved`,
   histogramDescription: (voxelCount: number, cutoffText: string) =>
-    `Histogram of the scores of ${groupedDigits(voxelCount)} voxels, cutoff at ${cutoffText}. Use the arrow keys to read each bar.`,
+    `Histogram of the scores of ${groupedDigits(voxelCount)} ${voxelCount === 1 ? "voxel" : "voxels"}, cutoff at ${cutoffText}. Use the arrow keys to read each bar.`,
   // The handle of the cutoff line on the histogram (a slider for the keyboard), and what it says of its value.
   cutoffHandle: "Cutoff",
   cutoffHandleValue: (cutoffText: string, keptText: string) => `${cutoffText}, keeps about ${keptText} of the volume`,
@@ -493,7 +494,7 @@ export const messages = {
     `Preview: a cut at ${cutoffText} keeps about ${keptText} of the volume, before the slope limit.`,
   cutoffPreviewWithCarveAmount: (carveAmountText: string, cutoffText: string, keptText: string) =>
     `Preview: carve amount ${carveAmountText}, a cut at ${cutoffText}, keeps about ${keptText} of the volume, before the slope limit.`,
-  slopeLimitNote: (count: number) => `The slope limit removed ${groupedDigits(count)} voxels below the cutoff.`,
+  slopeLimitNote: (count: number) => `The slope limit removed ${groupedDigits(count)} ${count === 1 ? "voxel" : "voxels"} below the cutoff.`,
   // The carving rule's numbers are this criterion's: what it kept of the volume that reached it (the maximum volume for the first).
   keptHere: "Kept here",
   keptHereShare: (percentText: string) => `${percentText} of what reached this criterion`,
@@ -680,7 +681,7 @@ export const messages = {
     "the graphics card is blocked. The steps on the left still work. To see the 3D view, open this page in another browser or at the computer itself.",
   layers: "Layers",
   skyDomeTransparency: "Transparency",
-  voxelCount: (count: number) => `${groupedDigits(count)} voxels`,
+  voxelCount: (count: number) => `${groupedDigits(count)} ${count === 1 ? "voxel" : "voxels"}`,
   storeyCount: (count: number) => `${count} ${count === 1 ? "storey" : "storeys"}`,
   sunPathDays: (dayCount: number) => `${dayCount} ${dayCount === 1 ? "day" : "days"}`,
   skyPatchCount: (count: number) => `${count} patches`,

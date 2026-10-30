@@ -29,7 +29,8 @@ export function ResultCard({ geometry, unit, statistics, baseline }: ResultCardP
   ];
   if (statistics.shareAtTarget !== null) {
     const baselineShare = baseline?.shareAtTarget ?? null;
-    lines.push(messages.resultAtTarget(percentOf(statistics.shareAtTarget)) + besideIt(baselineShare === null ? null : String(Math.round(baselineShare * 100))));
+    // The baseline beside its own number, before the words: "92 % (85) at or above the target"
+    lines.push(messages.resultAtTarget(percentOf(statistics.shareAtTarget) + besideIt(baselineShare === null ? null : String(Math.round(baselineShare * 100)))));
   }
   return (
     <section className="viewer-overlay result-card" aria-label={messages.resultCard}>
