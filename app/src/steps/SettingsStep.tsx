@@ -274,8 +274,6 @@ interface SettingsStepProps {
   coldPeriod?: ColdPeriodState | null;
   /** The hemisphere of the weather file, for the period's heating season preset; northern without one. */
   hemisphere?: Hemisphere;
-  /** The criterion counts its hours by the typical building: the cold period preset says it follows the cold hours rule. */
-  coldPeriodForColdHours?: boolean;
   /**
    * The notice of a weather file added or replaced in this session; null when there is none to show; absent: the notice is not
    * shown here (Site and grid, or a criterion's panel, which shows it over its folded settings, WeatherChangeRegion).
@@ -303,10 +301,10 @@ export function WeatherChangeRegion({ notice, form, onChange, disabled }: { noti
   );
 }
 
-export function SettingsStep({ form, onChange, disabledReason, coldPeriod = null, hemisphere = "northern", coldPeriodForColdHours = false,
+export function SettingsStep({ form, onChange, disabledReason, coldPeriod = null, hemisphere = "northern",
                                weatherChangeNotice, inputRoles = NO_INPUT_ROLES, settingShown, stepErrors = form.stepErrors,
                                showsDisabledReason = true }: SettingsStepProps) {
-  const fieldExtras = { voxel_size: voxelSizeExtras(form), [ANALYSIS_PERIOD_FIELDS[0]]: { coldPeriod, hemisphere, coldPeriodForColdHours } };
+  const fieldExtras = { voxel_size: voxelSizeExtras(form), [ANALYSIS_PERIOD_FIELDS[0]]: { coldPeriod, hemisphere } };
   return (
     <div className="settings-step">
       {disabledReason !== null && showsDisabledReason && <p className="step-reason">{disabledReason}</p>}

@@ -32,11 +32,11 @@ const STUDY_SKY_PATCH_VALUE_OF_METRIC: Record<string, string> = {
 // What the score of a voxel measures in each mode, for the histogram axis and the kept voxels legend (UX 5.5, 8.1). The unit is
 // the engine's (mode_registry score_unit, in the score points): m²·h, kWh, or m² of fully hidden sky.
 const SCORE_OF_MODE: Record<string, string> = {
-  "time-based": "Shade a voxel casts",
-  irradiance: "Solar energy a voxel blocks",
-  benefit: "Useful solar heat a voxel blocks",
-  daylight: "Overcast sky a voxel hides",
-  radiative_cooling: "Night sky cooling a voxel hides",
+  "time-based": "Shade each voxel casts",
+  irradiance: "Solar energy each voxel blocks",
+  benefit: "Useful solar heat each voxel blocks",
+  daylight: "Overcast sky each voxel hides",
+  radiative_cooling: "Night sky cooling each voxel hides",
 };
 
 /** The dates of a period: "21 Dec", "21 to 22 Dec" (one month written once), "1 Oct to 30 Apr", "22 Dec to 21 Dec". */
@@ -474,7 +474,7 @@ export const messages = {
   histogramScaleLabel: "Scale of the counts",
   logScale: "Log",
   linearScale: "Linear",
-  // The histogram axis and the kept voxels legend: "Solar energy a voxel blocks, kWh".
+  // The histogram axis and the kept voxels legend: "Solar energy each voxel blocks, kWh".
   scoreOfModeWithUnit: (mode: string | null, unit: string) => {
     const score = mode !== null && Object.hasOwn(SCORE_OF_MODE, mode) ? SCORE_OF_MODE[mode] : "Score of a voxel";
     return unit ? `${score}, ${unit}` : score;
@@ -607,7 +607,6 @@ export const messages = {
   coldPeriodNone: (baseText: string) => `No month-long stretch of the weather file has a mean below ${baseText} (balance temperature minus dead band).`,
   coldPeriodFailed: (reason: string) => `The cold period cannot be found. ${reason}`,
   // Said after the line above in an energy-weighted criterion, which does not count the cold hours.
-  coldPeriodOfColdHoursRule: "This period follows the cold hours rule (the balance temperature under Cold hours), not the typical building.",
   temperatureText: (degrees: number) => `${Number(degrees.toFixed(1))} °C`,
   periodPresetNames: { winter_solstice: "21 December", summer_solstice: "21 June", heating_season: "Heating season, October to April", whole_year: "Whole year" },
   // The heating season preset where the weather file is in the southern hemisphere.

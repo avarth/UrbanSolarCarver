@@ -236,6 +236,16 @@ function hoursCounted(overrides: Partial<HoursCountedProps> = {}): HoursCountedP
 
 const switchButtons = () => [...rendered!.container.querySelectorAll<HTMLButtonElement>(".hours-counted .segmented-switch button")];
 
+test("the cold period preset belongs to the cold hours rule: Cold hours offers it, Energy-weighted does not", () => {
+  const coldPeriod = { kind: "found" as const, dates: { startMonth: 10, startDay: 23, endMonth: 4, endDay: 29 }, baseTemperature: 15 };
+  const presetShown = () => [...rendered!.container.querySelectorAll("button")].some((button) => button.textContent === "Cold period from the weather file");
+  rendered = renderForTest(<CriterionPanel {...panelProps({ form: formFor("benefit"), coldPeriod, hoursCounted: hoursCounted() })} />);
+  expect(presetShown()).toBe(true);
+  rendered.rerender(<CriterionPanel {...panelProps({ form: formFor("benefit"), coldPeriod, hoursCounted: hoursCounted({ energyWeighted: true }) })} />);
+  expect(presetShown()).toBe(false);
+  expect(rendered.container.textContent).not.toContain("not the typical building");
+});
+
 test("in Solar usefulness, Settings starts with Which hours count: Cold hours shows the balance temperature, Energy-weighted the typical building", async () => {
   const onChange = vi.fn(async () => null);
   rendered = renderForTest(<CriterionPanel {...panelProps({ form: formFor("benefit"), hoursCounted: hoursCounted({ onChange }) })} />);

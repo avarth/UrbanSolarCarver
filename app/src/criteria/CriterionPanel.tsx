@@ -183,7 +183,7 @@ export function CriterionPanel(props: CriterionPanelProps) {
                              onToggleSheet={() => setSheetOpen((open) => !open)} editButton={editButton} />
           )}
           <SettingsStep form={form} stepErrors={props.stepErrors} onChange={onChange} disabledReason={disabledReason} inputRoles={props.inputRoles}
-                        coldPeriod={props.coldPeriod} hemisphere={props.hemisphere} coldPeriodForColdHours={energyWeighted}
+                        coldPeriod={energyWeighted ? null : props.coldPeriod} hemisphere={props.hemisphere}
                         settingShown={(name) => readKeys.has(name)}
                         showsDisabledReason={false} />
         </>

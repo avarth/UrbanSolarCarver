@@ -1061,6 +1061,9 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 .score-histogram-preview-note { color: var(--colour-accent); }
 
 /* The carving rule of the weighted modes, at the top of the step: three choices side by side. */
+/* Manual | Automatic with its "i" beside it on one row: the panel's section is titled Carving rule already. */
+.carving-rule-choice { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--space-unit) * 2); }
+.carving-rule-choice > .setting-label-row { order: 2; }
 .carving-rule-options { display: flex; flex-wrap: wrap; border: 1px solid var(--colour-line); border-radius: var(--radius-small); overflow: hidden; width: fit-content; }
 .carving-rule-options label {
   display: inline-flex;

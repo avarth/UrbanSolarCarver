@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import {
   fieldSettingOf, fromDisplayValue, presentedSettingOf, SETTING_PRESENTATIONS, settingIsShownIn, settingsForStep, settingsOfField, settingView,
-  shownSliderOf, toDisplayValue,
+  shownSliderOf, toDisplayValue, unitBesideValue,
 } from "./presentation";
 
 const names = (views: { name: string }[]) => views.map((view) => view.name);
@@ -145,4 +145,11 @@ test("Account for context blocking shows in Settings only for a project with sur
   expect(surroundings("daylight", [])).toBeUndefined();
   expect(surroundings("tilted_plane", ["context", "terrain"])).toBeUndefined();     // the angle rule traces no rays to the sky
   expect(settingsForStep("settings", "daylight").map((group) => group.title)).not.toContain("Surroundings");
+});
+
+test("a setting with a singular unit says it for a value of 1: 1 voxel, 2 voxels", () => {
+  const view = settingView("carve_above_min_consecutive", "time-based");
+  expect(unitBesideValue(view, 1)).toBe("voxel");
+  expect(unitBesideValue(view, 2)).toBe("voxels");
+  expect(unitBesideValue(view)).toBe("voxels");
 });

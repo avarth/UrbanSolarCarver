@@ -24,7 +24,7 @@ afterEach(() => {
 test("the legend shows the kept voxel range, its note and the thinning", () => {
   rendered = renderForTest(<Legend theme="light" content={{ keptVoxels: { title: messages.scoreOfModeWithUnit("time-based", "m²·h"), cutoff: 1.5, unit: "m²·h", thinningStep: 3 } }} />);
   const text = rendered.container.textContent;
-  expect(text).toContain("Shade a voxel casts, m²·h");
+  expect(text).toContain("Shade each voxel casts, m²·h");
   expect(text).toContain("Kept voxels. Carved voxels score above 1.5\u00a0m²·h.");
   expect(text).toContain("Showing 1 of every 3 voxels");
 });
@@ -41,11 +41,11 @@ test("a kept range of a single value reads 'All kept voxels' with the unit and d
 
 test("the kept voxels of a weighted mode are named by what they block, in the unit of the scores", () => {
   rendered = renderForTest(<Legend theme="light" content={{ keptVoxels: { title: messages.scoreOfModeWithUnit("irradiance", "kWh"), cutoff: 0, unit: "kWh", thinningStep: 1 } }} />);
-  expect(rendered.container.querySelector(".viewer-legend h3")!.textContent).toBe("Solar energy a voxel blocks, kWh");
+  expect(rendered.container.querySelector(".viewer-legend h3")!.textContent).toBe("Solar energy each voxel blocks, kWh");
   expect(rendered.container.querySelector(".viewer-legend-single-value")!.textContent).toBe("All kept voxels: 0\u00a0kWh");
-  expect(messages.scoreOfModeWithUnit("daylight", "m²")).toBe("Overcast sky a voxel hides, m²");
-  expect(messages.scoreOfModeWithUnit("radiative_cooling", "m²")).toBe("Night sky cooling a voxel hides, m²");
-  expect(messages.scoreOfModeWithUnit("benefit", "kWh")).toBe("Useful solar heat a voxel blocks, kWh");
+  expect(messages.scoreOfModeWithUnit("daylight", "m²")).toBe("Overcast sky each voxel hides, m²");
+  expect(messages.scoreOfModeWithUnit("radiative_cooling", "m²")).toBe("Night sky cooling each voxel hides, m²");
+  expect(messages.scoreOfModeWithUnit("benefit", "kWh")).toBe("Useful solar heat each voxel blocks, kWh");
   expect(messages.scoreOfModeWithUnit(null, "")).toBe("Score of a voxel");
 });
 

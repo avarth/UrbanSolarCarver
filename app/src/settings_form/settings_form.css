@@ -25,17 +25,32 @@
 }
 
 /* The fold reads as a link: accent text, no box. */
+/* A group's folded settings open under a header with a chevron, as the panel's sections do (PanelSection), one size down. */
 .setting-fold {
-  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-unit) * 2);
+  padding: var(--space-unit) 0;
   border: 0;
   background: transparent;
-  color: var(--colour-accent);
+  color: var(--colour-ink);
   font: inherit;
   font-size: var(--text-body);
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  font-weight: 600;
+  text-align: left;
   cursor: pointer;
 }
+.setting-fold::before {
+  content: "";
+  flex: none;
+  width: 5px;
+  height: 5px;
+  margin: 0 2px;
+  border-right: 2px solid var(--colour-muted);
+  border-bottom: 2px solid var(--colour-muted);
+  transform: rotate(-45deg);
+}
+.setting-fold[aria-expanded="true"]::before { transform: rotate(45deg); }
 
 .setting-field {
   display: flex;

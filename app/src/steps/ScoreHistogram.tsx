@@ -37,7 +37,7 @@ export interface ScoreHistogramProps {
   carvingCutoff: number;
   /** The line shows a cutoff not run yet: the bars are split at it by the compared scores. */
   cutoffIsPreview: boolean;
-  /** The score and its unit, for the axis title: "Solar energy a voxel blocks, kWh". */
+  /** The score and its unit, for the axis title: "Solar energy each voxel blocks, kWh". */
   axisTitle: string;
   /** The unit of the scores, written after a value ("kWh"). */
   unit: string;

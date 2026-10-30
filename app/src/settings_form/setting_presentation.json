@@ -154,7 +154,7 @@
       "step": "carving", "group": "How much to carve", "essential": false
     },
     "carve_above_min_consecutive": {
-      "label": "Cut voxels needed to remove above", "unit": "voxels",
+      "label": "Cut voxels needed to remove above", "unit": "voxels", "unit_one": "voxel",
       "help": "How many cut voxels in a row start the removal above. 2 or 3 ignores stray single voxels.",
       "step": "carving", "group": "How much to carve", "essential": false
     },

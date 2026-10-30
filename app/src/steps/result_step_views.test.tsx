@@ -181,14 +181,14 @@ test("auto-update is on unless switched off for the project on this computer", (
 
 test("the histogram: title, Log and Linear, the cutoff label, the key, the axis title, the slope-limit note and the readout", () => {
   rendered = renderForTest(<ScoreHistogram comparedScores={SCORE_POINTS.comparedScores!} kept={SCORE_POINTS.kept!} cutoff={1.5} carvingCutoff={1.5}
-                                           cutoffIsPreview={false} axisTitle="Shade a voxel casts, m²·h" unit="m²·h"
+                                           cutoffIsPreview={false} axisTitle="Shade each voxel casts, m²·h" unit="m²·h"
                                            cutoffValueText={(cutoff) => String(cutoff)} slopeLimitVoxelsRemoved={312} />);
   const text = rendered.container.textContent!;
   expect(rendered.container.querySelector("h3")!.textContent).toBe("Scores of the voxels");
   expect([...rendered.container.querySelectorAll(".segmented-switch button")].map((button) => [button.textContent, button.getAttribute("aria-pressed")]))
     .toEqual([["Log", "true"], ["Linear", "false"]]);
   expect(rendered.container.querySelector(".histogram-cutoff-label")!.textContent).toBe("1.5");
-  expect(text).toContain("Shade a voxel casts, m²·h");
+  expect(text).toContain("Shade each voxel casts, m²·h");
   expect(text).toContain("KeptCarved");
   expect(text).toContain("The slope limit removed 312 voxels below the cutoff.");
   const chart = rendered.container.querySelector("svg")!;
@@ -567,7 +567,7 @@ test("a weighted mode: Manual or Automatic at the top, the control of the rule u
       .toEqual([["Manual", threshold === null], ["Automatic", threshold !== null]]);
     expect(container.querySelector(".threshold-control label")?.textContent ?? null).toBe(controlLabel);
     expect(container.querySelector(".score-histogram")).not.toBeNull();
-    expect(container.querySelector(".score-histogram-axis-title")!.textContent).toBe("Overcast sky a voxel hides, m²");
+    expect(container.querySelector(".score-histogram-axis-title")!.textContent).toBe("Overcast sky each voxel hides, m²");
     // The rule is no longer in the fold, and the histogram comes before it.
     expect(container.querySelector('.carving-settings [data-setting="threshold"]')).toBeNull();
     expect(container.querySelector(".score-histogram")!.compareDocumentPosition(container.querySelector(".carving-settings")!))
@@ -654,7 +654,7 @@ test("the line sets Manual's carve amount, also over a cutoff the config holds; 
   pressHandleKey(rendered.container, "ArrowRight");
   releaseHandleKey(rendered.container, "ArrowRight");
   expect(onThresholdCommit).toHaveBeenLastCalledWith({ threshold: { method: "cutoff", value: 1.6 }, carve_fraction: null });
-  expect(rendered.container.querySelector(".score-histogram-axis-title")!.textContent).toBe("Shade a voxel casts, m²·h");
+  expect(rendered.container.querySelector(".score-histogram-axis-title")!.textContent).toBe("Shade each voxel casts, m²·h");
 });
 
 test("the line follows the pointer while it is dragged and is set when the pointer lets go", () => {

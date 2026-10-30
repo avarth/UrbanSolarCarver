@@ -222,6 +222,15 @@ test("the settings form styles take every colour from the tokens", () => {
   expect(formCss).toMatch(/\.setting-group-title\s*{[^}]*font-size: var\(--text-secondary\);[^}]*font-weight: 600;[^}]*color: var\(--colour-muted\)/);
 });
 
+test("a group's fold is a header with a chevron that turns when open, as the panel's sections, not an underlined link", () => {
+  const formCss = readFileSync("src/settings_form/settings_form.css", "utf8");
+  const fold = formCss.match(/\.setting-fold\s*{([^}]*)}/)![1];
+  expect(fold).not.toMatch(/text-decoration: underline/);
+  expect(fold).toMatch(/color: var\(--colour-ink\)/);
+  expect(formCss).toMatch(/\.setting-fold::before\s*{[^}]*transform: rotate\(-45deg\)/);
+  expect(formCss).toMatch(/\.setting-fold\[aria-expanded="true"\]::before\s*{\s*transform: rotate\(45deg\)/);
+});
+
 test("an invalid field is marked without the outline, which stays the focus mark", () => {
   const formCss = readFileSync("src/settings_form/settings_form.css", "utf8");
   const invalidRules = formCss.match(/[^}]*\[aria-invalid="true"\][^{]*{[^}]*}/g)!;

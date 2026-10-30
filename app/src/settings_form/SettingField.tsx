@@ -30,8 +30,6 @@ export interface SettingFieldExtras {
   coldPeriod?: ColdPeriodState | null;
   /** The hemisphere of the weather file, for the period control's heating season preset; northern when absent. */
   hemisphere?: Hemisphere;
-  /** The criterion counts its hours by the typical building: the cold period preset says it follows the cold hours rule. */
-  coldPeriodForColdHours?: boolean;
 }
 
 export interface SettingFieldProps {
@@ -123,13 +121,13 @@ export function automaticValueOf(view: SettingView, form: FormState): AutomaticV
 
 /** The default as the tooltip writes it ("1.0 m", "on", "21 Dec, 10 to 14 h", "automatic"). */
 export function defaultTextOf(view: SettingView, form: FormState, isShadowTolerated: boolean): string {
-  const unit = unitBesideValue(view);
   if (view.widget === "analysis_period") {
     const period = ANALYSIS_PERIOD_FIELDS.map((name) => defaultValue(form, name));
     return period.every((value) => typeof value === "number") ? messages.periodSummary(...(period as [number, number, number, number, number, number]))
       : messages.automatic;
   }
   const value = toDisplayValue(view.name, defaultValue(form, view.name), shownValue(form, "voxel_size"));
+  const unit = unitBesideValue(view, value);
   if (view.widget === "threshold" && value === null) return isShadowTolerated ? withUnit("0", unit) : messages.carvingRuleChoices.carve_fraction;
   if (value === null) return messages.automatic;
   if (typeof value === "boolean") return value ? messages.switchedOn : messages.switchedOff;
@@ -161,10 +159,10 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
                                   onRefusedInput: setRefusedInput };
   const property = form.schemaProperties[view.name];
   const types = typesOf(property);
-  const unit = unitBesideValue(view);
   const isShadowTolerated = thresholdIsShadowToleratedIn(form.mode);
   const voxelSize = shownValue(form, "voxel_size");
   const shown = toDisplayValue(view.name, shownValue(form, view.name), voxelSize);
+  const unit = unitBesideValue(view, shown);
   const changeTo = (value: unknown) => onChange({ [view.name]: fromDisplayValue(view.name, value, voxelSize) });
   // Controls made of several inputs are labelled as a group; the others are the target of their label.
   const isGroupOfInputs = view.widget === "analysis_period" || view.widget === "tilted_plane_angles" || view.widget === "mesh_format"
@@ -175,7 +173,6 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
     case "analysis_period":
       controlElement = (
         <AnalysisPeriod {...control} onChange={onChange} coldPeriod={extras?.coldPeriod ?? null} hemisphere={extras?.hemisphere}
-                        coldPeriodForColdHours={extras?.coldPeriodForColdHours}
                         values={Object.fromEntries(ANALYSIS_PERIOD_FIELDS.map((name) => [name, shownValue(form, name)])) as Record<AnalysisPeriodField, number | null>} />
       );
       break;

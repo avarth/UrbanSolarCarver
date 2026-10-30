@@ -46,6 +46,8 @@ export interface SettingPresentation {
   label_for_modes?: Record<string, string>;
   unit_for_modes?: Record<string, string>;
   help_for_modes?: Record<string, string>;
+  /** The unit for a value of exactly 1 ("voxel" beside "voxels"); absent, the unit is the same for every value. */
+  unit_one?: string;
 }
 
 /** A setting as the form draws it in one mode: the label, unit and help of that mode. */
@@ -53,6 +55,8 @@ export interface SettingView {
   name: string;
   label: string;
   unit: string;
+  /** The unit for a value of exactly 1; absent, *unit*. */
+  unitOne?: string;
   help: string;
   widget?: WidgetName;
   display?: DisplayConversion;
@@ -106,6 +110,7 @@ export function settingView(name: string, mode: string): SettingView {
     name,
     label: presentation.label_for_modes?.[mode] ?? presentation.label,
     unit: presentation.unit_for_modes?.[mode] ?? presentation.unit,
+    unitOne: presentation.unit_one,
     help: presentation.help_for_modes?.[mode] ?? presentation.help,
     widget: presentation.widget,
     display: presentation.display,
@@ -113,9 +118,13 @@ export function settingView(name: string, mode: string): SettingView {
   };
 }
 
-/** The unit written beside the value, or "" when the unit only names the kind of control (on/off, choice). */
-export function unitBesideValue(view: SettingView): string {
-  return UNITS_NAMING_THE_CONTROL.has(view.unit) ? "" : view.unit;
+/**
+ * The unit written beside *value*, or "" when the unit only names the kind of control (on/off, choice); the singular unit for a
+ * value of exactly 1 when the setting has one ("1 voxel").
+ */
+export function unitBesideValue(view: SettingView, value?: unknown): string {
+  if (UNITS_NAMING_THE_CONTROL.has(view.unit)) return "";
+  return value === 1 && view.unitOne !== undefined ? view.unitOne : view.unit;
 }
 
 

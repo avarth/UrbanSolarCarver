@@ -308,11 +308,6 @@ const FOUND: ColdPeriodState = { kind: "found", dates: { startMonth: 9, startDay
 const FOUND_TEXT = `Cold period of the weather file, where the mean of the month around each day is below 14.5${NBSP}°C: 21 Sep to 25 May.`;
 const coldTooltip = () => rendered!.container.querySelector<HTMLElement>(".period-preset-tooltip");
 
-test("in an energy-weighted criterion the cold period preset says it follows the cold hours rule, not the typical building", () => {
-  rendered = renderForTest(<SettingField view={periodView()} form={form()} disabled={false} onChange={() => {}}
-                                         extras={{ coldPeriod: FOUND, coldPeriodForColdHours: true }} />);
-  expect(coldLine()).toBe(`${FOUND_TEXT} This period follows the cold hours rule (the balance temperature under Cold hours), not the typical building.`);
-});
 
 // The pointer moves onto *target* from *from* (React's mouse enter and leave are read from mouseover and mouseout).
 function movePointer(from: Element, target: Element) {
