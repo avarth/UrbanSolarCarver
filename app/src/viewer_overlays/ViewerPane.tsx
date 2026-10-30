@@ -9,6 +9,7 @@
 // is reported, and a request to frame a box moves the camera. Simulate's sun tool draws the year's sun path with the chosen day and
 // the sun (the sun_study layer), the shadows at that time and the hours in shade over a range (the scene's setSunStudy).
 // Without WebGL (a remote desktop, a blocked graphics card) the scene cannot start: the view says so, and the steps go on working.
+// Framing leaves out the part of the view a panel lies over (leftInsetOf), so the model is never hidden behind it.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type * as THREE from "three";
 import type { RunSummary, SkyDome } from "../api_client/client";
@@ -37,6 +38,22 @@ import { Legend, type LegendContent } from "./Legend";
 import { ScaleBar } from "./ScaleBar";
 import { rememberedGroundAid, ViewToolbar } from "./ViewToolbar";
 import "./overlays.css";
+
+/**
+ * How many pixels of *view*'s left side a panel lies over: a floating panel marked data-covers-view-left (Simulate's studies, Inspect's
+ * files), or the step panel when a narrow window lays it over the view. A panel beside the view, or in its right half, covers nothing.
+ */
+export function leftInsetOf(view: HTMLElement): number {
+  const viewRect = view.getBoundingClientRect();
+  let inset = 0;
+  for (const panel of document.querySelectorAll<HTMLElement>("[data-covers-view-left], .workspace-panel")) {
+    if (panel.hidden) continue;
+    const rect = panel.getBoundingClientRect();
+    if (rect.width === 0 || rect.bottom <= viewRect.top || rect.top >= viewRect.bottom || rect.left > viewRect.left + viewRect.width / 2) continue;
+    inset = Math.max(inset, rect.right - viewRect.left);
+  }
+  return inset;
+}
 
 const SKY_DOME_HIDDEN_KEY = "usc.skyDomeHidden";
 
@@ -218,6 +235,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
       return;
     }
     const stopListening = viewer.onCameraChange(setCamera);
+    viewer.setLeftInsetSource(() => leftInsetOf(container.current!));
     setScene(viewer);
     return () => {
       stopListening();

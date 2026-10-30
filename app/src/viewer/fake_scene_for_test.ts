@@ -92,6 +92,10 @@ export class FakeViewerScene {
     this.envelopeSeeThrough = seeThrough;
   }
   setViewportTheme(_theme: ViewportTheme): void {}
+  leftInsetSource: (() => number) | null = null;
+  setLeftInsetSource(source: () => number): void {
+    this.leftInsetSource = source;
+  }
   frameAll(): void {}
 
   /** The boxes the pane asked the camera to frame, in order. */

@@ -3,7 +3,7 @@
 import * as THREE from "three";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { addStyleSheetForTest } from "../viewer_overlays/render_for_test";
-import { cameraOrientation, describeView, metresPerPixelAt, nextGroundAid, ViewerScene } from "./scene";
+import { cameraOrientation, describeView, metresPerPixelAt, nextGroundAid, targetBesideInset, ViewerScene } from "./scene";
 
 vi.mock("three", async (importOriginal) => {
   const three = await importOriginal<typeof import("three")>();
@@ -25,6 +25,19 @@ test("camera yaw is the clockwise turn from the top view with +Y up the screen",
   const level = cameraOrientation([-1, 0, 0], [0, 0, 1]);       // looking along -X
   expect(level.yawDegrees).toBeCloseTo(270);
   expect(level.elevationDegrees).toBeCloseTo(0);
+});
+
+test("a floating panel over the left of the view moves the framed centre right by half its width, in the camera's right direction", () => {
+  // Looking north from 100 m south: the screen's right is east (+x). 45° field, 800 px high: 2 * 100 * tan(22.5°) / 800 m per pixel.
+  const metresPerPixel = (2 * 100 * Math.tan(Math.PI / 8)) / 800;
+  const target = targetBesideInset([0, 0, 0], [0, -100, 0], 300, 45, 800, 0);
+  expect(target[0]).toBeCloseTo(-150 * metresPerPixel, 9);      // the camera looks left of the centre, so the centre appears right
+  expect(target[1]).toBeCloseTo(0, 9);
+  expect(targetBesideInset([1, 2, 3], [0, -100, 0], 0, 45, 800, 0)).toEqual([1, 2, 3]);
+  // Straight down with north at 90° (east up the screen): the screen's right is south (-y)
+  const down = targetBesideInset([0, 0, 0], [0, 0, 100], 300, 45, 800, 90);
+  expect(down[0]).toBeCloseTo(0, 9);
+  expect(down[1]).toBeCloseTo(150 * metresPerPixel, 9);
 });
 
 test("metres per pixel at the orbit target", () => {

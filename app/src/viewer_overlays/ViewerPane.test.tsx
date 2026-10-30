@@ -8,7 +8,7 @@ import { FakeViewerScene, pretendTheBrowserHasWebGl } from "../viewer/fake_scene
 import { Legend } from "./Legend";
 import { click, renderForTest, type RenderedOverlay } from "./render_for_test";
 import type { InspectLayerFile } from "../viewer/layers";
-import { NO_VIEWER_RESULTS, ViewerPane, type InspectView, type TestSurfaceGroup, type ViewerPaneProps } from "./ViewerPane";
+import { leftInsetOf, NO_VIEWER_RESULTS, ViewerPane, type InspectView, type TestSurfaceGroup, type ViewerPaneProps } from "./ViewerPane";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../viewer/scene")>()), ViewerScene: (await import("../viewer/fake_scene_for_test")).FakeViewerScene,
@@ -442,4 +442,32 @@ test("a new frame request moves the camera to the box once; the same request, or
   expect(scene.framedBoxes).toHaveLength(2);
   rendered.rerender(<ViewerPane {...inspectingView(inspectView({ files, frame: null }))} />);
   expect(scene.framedBoxes).toHaveLength(2);
+});
+
+test("framing leaves out what a panel covers on the left of the view: a floating panel or the step panel over a narrow window", () => {
+  const rect = (left: number, right: number, top = 0, bottom = 800) => ({ left, right, top, bottom, width: right - left, height: bottom - top, x: left, y: top, toJSON() {} }) as DOMRect;
+  const view = document.createElement("div"), floating = document.createElement("div"), stepPanel = document.createElement("div");
+  floating.setAttribute("data-covers-view-left", "");
+  stepPanel.className = "workspace-panel";
+  document.body.append(view, floating, stepPanel);
+  try {
+    view.getBoundingClientRect = () => rect(340, 1440);
+    floating.getBoundingClientRect = () => rect(352, 652);              // Studies, 12 px in from the view's left edge, 300 px wide
+    stepPanel.getBoundingClientRect = () => rect(0, 340);               // docked beside the view: covers nothing
+    expect(leftInsetOf(view)).toBe(312);
+    floating.hidden = true;
+    expect(leftInsetOf(view)).toBe(0);
+    view.getBoundingClientRect = () => rect(0, 1000);                   // a narrow window: the step panel lies over the view
+    expect(leftInsetOf(view)).toBe(340);
+    floating.hidden = false;
+    floating.getBoundingClientRect = () => rect(700, 990);              // a panel in the right half covers nothing on the left
+    expect(leftInsetOf(view)).toBe(340);
+  } finally {
+    view.remove(); floating.remove(); stepPanel.remove();
+  }
+});
+
+test("the scene asks the view how much of its left a panel covers, each time it frames", () => {
+  rendered = renderForTest(<ViewerPane {...viewWithSkyDome("daylight")} />);
+  expect(FakeViewerScene.latest!.leftInsetSource!()).toBe(0);
 });

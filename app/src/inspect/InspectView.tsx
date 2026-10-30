@@ -18,7 +18,7 @@ interface InspectViewProps {
 
 export function InspectView({ inspection, origin, saveDisabledReason, notice }: InspectViewProps) {
   return (
-    <div className="inspect-view">
+    <div className="inspect-view" data-covers-view-left>
       <FilesPanel inspection={inspection} origin={origin} saveDisabledReason={saveDisabledReason} notice={notice} />
     </div>
   );

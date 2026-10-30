@@ -124,7 +124,7 @@ export function SimulateView({ project, studies, criteria, storedTestSurfaces, h
   const { legend, card } = studyView;
   return (
     <>
-      <div ref={view} className="simulate-view">
+      <div ref={view} className="simulate-view" data-covers-view-left>
         <StudiesPanel studies={studies.studies} selectedId={studies.selectedId} criteria={criteria} metrics={studies.metrics}
                       runDisabledReason={runDisabledReason} editDisabledReason={editDisabledReason} popoverStudyId={shown === null ? null : popoverStudyId}
                       popoverId={popoverId} onSelect={studies.select} onAdd={add} onRun={() => void runs.startSimulation(project)}

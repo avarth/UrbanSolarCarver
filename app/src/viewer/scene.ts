@@ -86,6 +86,26 @@ export function metresPerPixelAt(distanceMetres: number, fieldOfViewDegrees: num
   return (2 * distanceMetres * Math.tan((fieldOfViewDegrees * Math.PI) / 360)) / viewportHeightPixels;
 }
 
+/**
+ * Where the camera looks so a framed sphere sits in the middle of the part of the view a floating panel leaves free: *centre* moved
+ * toward the screen's left by half the panel's width (*insetPixels*) at the camera's distance (the length of *offset*, from the
+ * target to the camera), so the sphere appears that much to the right. Looking straight down, the screen's right is east of the
+ * north the view puts up.
+ */
+export function targetBesideInset(centre: Point3, offset: Point3, insetPixels: number, fieldOfViewDegrees: number, viewportHeightPixels: number,
+                                  northDegrees: number): Point3 {
+  if (insetPixels <= 0) return [centre[0], centre[1], centre[2]];
+  const forward = new THREE.Vector3(...offset).negate().normalize();
+  let right = forward.clone().cross(new THREE.Vector3(0, 0, 1));
+  if (right.lengthSq() < 1e-9) {
+    const [northX, northY] = northDirection(northDegrees);
+    right = new THREE.Vector3(northY, -northX, 0);
+  }
+  right.normalize();
+  const shift = (insetPixels / 2) * metresPerPixelAt(new THREE.Vector3(...offset).length(), fieldOfViewDegrees, viewportHeightPixels);
+  return new THREE.Vector3(...centre).addScaledVector(right, -shift).toArray() as Point3;
+}
+
 /** The view's accessible name (UX 12): the layers on screen, with their counts and whether they are out of date. */
 export function describeView(layers: LayerDescription[]): string {
   if (!layers.length) return messages.viewEmpty;
@@ -153,6 +173,8 @@ export class ViewerScene {
   private hasFramedContent = false;
   private cameraMove: CameraMove | null = null;
   private frameRequest: number | null = null;
+  // How many pixels of the view's left side a floating panel covers, asked each time the camera frames something.
+  private leftInset: () => number = () => 0;
   private pendingHover: { x: number; y: number } | null = null;
   private press: Press | null = null;
   private readonly clickListeners = new Map<LayerName, Set<(intersection: THREE.Intersection) => void>>();
@@ -303,6 +325,14 @@ export class ViewerScene {
     this.requestRender();
   }
 
+  /**
+   * Gives the scene the function that says how many pixels of the view's left side a floating panel covers (the Studies or Files
+   * panel, the step panel lying over a narrow window); framing then fits and centres things in the rest of the view.
+   */
+  setLeftInsetSource(source: () => number): void {
+    this.leftInset = source;
+  }
+
   /** Moves the camera, in its current direction, so every visible layer fits the view. */
   frameAll(instant = false): void {
     const { centre, radius } = this.contentSphere();
@@ -320,7 +350,8 @@ export class ViewerScene {
     const { centre, radius } = this.contentSphere();
     const [northX, northY] = northDirection(this.northDegrees);
     const offset = new THREE.Vector3(-northX * Math.sin(TOP_VIEW_TILT_RADIANS), -northY * Math.sin(TOP_VIEW_TILT_RADIANS), Math.cos(TOP_VIEW_TILT_RADIANS));
-    this.moveCamera(centre, offset.multiplyScalar(this.fittingDistance(radius)));
+    offset.multiplyScalar(this.fittingDistance(radius));
+    this.moveCamera(this.targetBesideInset(centre, offset), offset);
   }
 
   /** Calls *listener* now and after every camera change; returns the function that stops the calls. */
@@ -368,8 +399,19 @@ export class ViewerScene {
   // ------------------------------------------------------------------------------------------------------------------------
 
   private frameSphere(centre: THREE.Vector3, radius: number, instant = false): void {
-    const direction = this.camera.position.clone().sub(this.controls.target).normalize();
-    this.moveCamera(centre, direction.multiplyScalar(this.fittingDistance(radius)), instant);
+    const offset = this.camera.position.clone().sub(this.controls.target).normalize().multiplyScalar(this.fittingDistance(radius));
+    this.moveCamera(this.targetBesideInset(centre, offset), offset, instant);
+  }
+
+  /** The covered width on the left, at most half the view, so a wide panel never leaves nothing to frame in. */
+  private insetPixels(): number {
+    return Math.min(Math.max(0, this.leftInset()), Math.max(1, this.container.clientWidth) / 2);
+  }
+
+  private targetBesideInset(centre: THREE.Vector3, offset: THREE.Vector3): THREE.Vector3 {
+    const target = targetBesideInset(centre.toArray() as Point3, offset.toArray() as Point3, this.insetPixels(), this.camera.fov,
+                                     Math.max(1, this.container.clientHeight), this.northDegrees);
+    return new THREE.Vector3(...target);
   }
 
   private refreshLayers(): void {
@@ -447,10 +489,11 @@ export class ViewerScene {
     return { centre: sphere.center, radius: Math.max(sphere.radius, 0.5) };
   }
 
-  /** The camera distance at which a sphere of *radius* fills the narrower side of the view. */
+  /** The camera distance at which a sphere of *radius* fills the narrower side of the part of the view no floating panel covers. */
   private fittingDistance(radius: number): number {
     const verticalHalfAngle = (this.camera.fov * Math.PI) / 360;
-    const horizontalHalfAngle = Math.atan(Math.tan(verticalHalfAngle) * this.camera.aspect);
+    const freeShare = 1 - this.insetPixels() / Math.max(1, this.container.clientWidth);
+    const horizontalHalfAngle = Math.atan(Math.tan(verticalHalfAngle) * this.camera.aspect * freeShare);
     return (FRAME_MARGIN * radius) / Math.sin(Math.min(verticalHalfAngle, horizontalHalfAngle));
   }
 
