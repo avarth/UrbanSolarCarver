@@ -100,7 +100,7 @@ The sheet's values (`local_web_service/typical_building.py`, `archetype_of`) bec
 
 The three cases of use are examples of hours, not an editor: gains and fresh air are on in the hours of the case and off outside them, with no holidays. The project's values (project.json, the library's YAML files) use the keys of `typical_building.VALUE_KEYS`: `schedule` (`residential`, `office`, `always`), `t_set_heating`, `t_set_cooling`, `gains_w_m2`, `fresh_air_m3h_m2`, `heat_recovery`, `u_wall`, `u_window`, `g_value`, `mass_capacity_kj_m2k`, `shading_factor` (null for none), `shading_start`, `shading_end` ("MM-DD"), `room` (`average` with `depth`, or `box` with `width`, `length`, `orientation`), `height`, `wwr`, `roof_exposed`, `u_roof`, `floor_exposed`, `u_floor`, `ach_infiltration`.
 
-**The default room.** The weights do not depend on the size of the room, only on its ratios: facade and window per m² of floor, volume per m² of floor. The default room ("average") is a square plan turned 45° with all four walls exposed and the same window share on each, so its windows face NE, SE, SW and NW and no direction is favoured. Its side is four times the room depth, which gives it the facade per m² of floor of a room that deep with one facade: 6 m deep is a 24 × 24 m square. An average room of depth d is the box of width and length 4d at orientation 45° whose north, east, south and west shares are the NE, SE, SW and NW ones. The explicit box (width, length, orientation, a share per wall) is the other kind of room, used by the ASHRAE 140 boxes.
+**The default room.** The weights do not depend on the size of the room, only on its ratios: facade and window per m² of floor, volume per m² of floor. The default room ("average") is a square plan turned 45° with all four walls exposed and the same window share on each, so its windows face NE, SE, SW and NW and no direction is favoured. Its side is four times the room depth, which gives it the facade per m² of floor of a room that deep with one facade: 6 m deep is a 24 × 24 m square. An average room of depth d is the box of width and length 4d at orientation 45° whose north, east, south and west shares are the NE, SE, SW and NW ones. The explicit box (width, length, orientation, a share per wall) is the other kind of room.
 
 **Roof and floor are adiabatic by default**: the room stands for a storey between others, and no heat passes through its ceiling and floor. A top storey or a floor over pilotis is turned on under Advanced, Roof and floor, with its own U.
 
@@ -141,8 +141,6 @@ The same for all eight: whole-window g 0.55 (glass 0.76 at normal incidence, × 
 
 The office lighting gain counts the reference building's full installed power, 16 W/m², in every hour of use. Daylight would lower it in a real office, so the office examples overstate the internal gains of sunny hours, and so the cooling and the harm.
 
-**ASHRAE 140 test cases.** "ASHRAE 140 case 600 (light)" and "ASHRAE 140 case 900 (heavy)" are the test boxes of ANSI/ASHRAE Standard 140 (BESTEST): a free-standing box 8 × 6 × 2.7 m, walls and roof exposed, 12 m² of glass on the south wall (window share 0.556), the floor over outdoor air, 200 W of constant gains (4.17 W/m², every hour), infiltration 0.5 air changes per hour, set points 20 / 27 °C, no fresh air, no shading. The layers are those of the Modelica Buildings library's BESTEST data (LBNL); the U values were computed from them: walls 0.514 (600) and 0.512 (900), roof 0.318, floor 0.039 W/m²K. Case 600 has a thermal capacity of 80 kJ/m²K, the ISO 13790 very light class (its layers inside the insulation hold about 40 kJ/m²K), case 900 260 kJ/m²K, the heavy class (about 305 kJ/m²K). Some of their values are **not confirmed** against the standard's text, which could not be reached: the window U of 3.0 W/m²K (Modelica's ISO 13790 model uses 3.1), the glass SHGC of 0.787 (Modelica's uses 0.769), the × 0.9 that makes it the whole-window g of 0.71 (the app's choice, as for the KENAK g), and the surface coefficients used for the wall and roof U values. As a loose check on the Golden, CO weather (BESTEST uses Denver), the heating of case 600 falls in the range of the reference programs (ranges quoted from memory), while the cooling of both boxes is lower and the heating of case 900 higher. Treat the two boxes as a check of the model's behaviour, not as a validated BESTEST result.
-
 On the bundled Golden, CO weather file the examples give (heating and cooling of the base run, and the hours with the sun up whose benefit weight is above 0.01, of 4,438):
 
 | Example | Heating, kWh/m² a year | Cooling, kWh/m² a year | Hours that count |
@@ -155,8 +153,6 @@ On the bundled Golden, CO weather file the examples give (heating and cooling of
 | Office, zone Β | 28.9 | 42.5 | 1,954 |
 | Office, zone Γ | 25.5 | 46.6 | 1,899 |
 | Office, zone Δ | 22.2 | 48.9 | 1,791 |
-| ASHRAE 140 case 600 | 94.9 | 77.6 | 2,958 |
-| ASHRAE 140 case 900 | 61.7 | 37.8 | 2,469 |
 
 ### Calculate
 

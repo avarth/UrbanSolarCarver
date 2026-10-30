@@ -27,9 +27,16 @@ pytestmark = pytest.mark.skipif(not GOLDEN_EPW.is_file(), reason="the bundled we
 
 DEFAULT = typical_building.EXAMPLES["kenak-apartment-b"].values
 OFFICE = typical_building.EXAMPLES["kenak-office-b"].values
-BOX = typical_building.EXAMPLES["ashrae140-600"].values
+# a box room: 8 x 6 x 2.7 m, windows on the south wall only, roof and floor exposed, in use every hour
+BOX = typical_building.validate({
+    "schedule": "always", "t_set_heating": 20.0, "t_set_cooling": 26.0, "gains_w_m2": 4.0, "fresh_air_m3h_m2": 0.0,
+    "heat_recovery": 0.0, "u_wall": 0.5, "u_window": 2.8, "g_value": 0.6, "mass_capacity_kj_m2k": 165.0,
+    "shading_factor": None, "shading_start": "06-01", "shading_end": "08-31",
+    "room": "box", "height": 2.7, "width": 8.0, "length": 6.0, "orientation": 0.0,
+    "wwr": {"north": 0.0, "east": 0.0, "south": 0.5, "west": 0.0},
+    "roof_exposed": True, "u_roof": 0.3, "floor_exposed": True, "u_floor": 0.3, "ach_infiltration": 0.5})
 EXAMPLE_IDS = ["kenak-apartment-a", "kenak-apartment-b", "kenak-apartment-c", "kenak-apartment-d",
-               "kenak-office-a", "kenak-office-b", "kenak-office-c", "kenak-office-d", "ashrae140-600", "ashrae140-900"]
+               "kenak-office-a", "kenak-office-b", "kenak-office-c", "kenak-office-d"]
 
 
 @pytest.fixture(autouse=True)
@@ -123,12 +130,10 @@ def test_the_examples_are_valid_and_stored_as_given():
     assert [entry.id for entry in entries] == EXAMPLE_IDS
     assert [entry.name for entry in entries[:5]] == ["Apartment, zone Α", "Apartment, zone Β", "Apartment, zone Γ", "Apartment, zone Δ",
                                                      "Office, zone Α"]
-    assert [entry.name for entry in entries[-2:]] == ["ASHRAE 140 case 600 (light)", "ASHRAE 140 case 900 (heavy)"]
-    assert [entry.group for entry in entries] == ["Greece, KENAK reference building"] * 8 + ["ASHRAE 140 test cases"] * 2
+    assert [entry.group for entry in entries] == ["Greece, KENAK reference building"] * 8
     assert all(entry.read_only and entry.source for entry in entries)
     assert entries[0].source.startswith("ΤΟΤΕΕ 20701-1/2017 (ΦΕΚ Β' 4003/17.11.2017), reference building, zone Α: U values table 3.4α")
     assert "Infiltration 5.5 m³/h per m² of window (§4.4.1), 0.37 air changes per hour in this room." in entries[0].source
-    assert "the capacity 80 kJ/m²K" in entries[-2].source and "the capacity 260 kJ/m²K" in entries[-1].source
     for entry in entries:
         assert typical_building.validate(entry.values) == entry.values
 
@@ -148,8 +153,6 @@ def test_the_kenak_examples_have_the_values_of_the_reference_building():
     # 5.5 m³/h per m² of window: 115.2 m² of window in the 24 x 24 x 3 m room of 1,728 m³
     assert DEFAULT["ach_infiltration"] == round(5.5 * 0.4 * 4 * 24 * 3 / (24 * 24 * 3), 2)
     assert (DEFAULT["g_value"], DEFAULT["shading_factor"]) == (0.55, 0.77)
-    assert [(entry.values["mass_capacity_kj_m2k"], entry.values["ach_infiltration"]) for entry in typical_building.library()[-2:]] == [
-        (80.0, 0.5), (260.0, 0.5)]
     assert (DEFAULT["room"], DEFAULT["depth"], DEFAULT["height"], DEFAULT["wwr"]) == (
         "average", 6.0, 3.0, {"ne": 0.4, "se": 0.4, "sw": 0.4, "nw": 0.4})
     assert (DEFAULT["roof_exposed"], DEFAULT["floor_exposed"]) == (False, False)
@@ -195,15 +198,16 @@ def test_the_mass_and_the_shading_become_engine_keys():
 
 
 def test_a_capacity_of_a_class_gives_the_zone_of_that_class():
-    """The ASHRAE boxes' capacities are those of the ISO classes they were given before, so their zones are unchanged."""
+    """80 and 260 kJ/m²K are the capacities of the ISO 13790 classes very light and heavy, so a box given one has the zone of its
+    class."""
     def zone(archetype):
         expanded = simulated_weights.expand_shoebox({key: value for key, value in archetype.items()
                                                      if key not in ("internal_gains_w_m2", "shading_hot", "shading_hot_period")})
         expanded.pop("windows")
         return simulated_weights.ZoneParams.from_archetype(**expanded)
 
-    for entry_id, mass_class in (("ashrae140-600", "very_light"), ("ashrae140-900", "heavy")):
-        archetype = typical_building.archetype_of(typical_building.EXAMPLES[entry_id].values)
+    for capacity, mass_class in ((80.0, "very_light"), (260.0, "heavy")):
+        archetype = typical_building.archetype_of(changed(BOX, mass_capacity_kj_m2k=capacity))
         by_class = {key: value for key, value in archetype.items() if key != "mass_capacity_kj_m2k"} | {"mass_class": mass_class}
         assert zone(archetype) == zone(by_class)
 
@@ -322,7 +326,7 @@ def test_an_own_entry_is_renamed_changed_and_deleted(client):
 def test_the_examples_are_read_only(client):
     refused = client.put("/api/typical-building-library/kenak-office-a", json={"name": "Mine"})
     assert refused.status_code == 409 and "example" in refused.json()["detail"]
-    assert client.delete("/api/typical-building-library/ashrae140-600").status_code == 409
+    assert client.delete("/api/typical-building-library/kenak-apartment-c").status_code == 409
     assert client.delete("/api/typical-building-library/..%5Cui").status_code == 404
     assert typical_building.EXAMPLES["kenak-office-a"].name == "Office, zone Α"
 
@@ -430,8 +434,8 @@ def test_a_building_of_an_earlier_form_reads_as_none_chosen(tmp_path, stored_val
     assert typical_building.building_of(store.read_project_json(name)) is None
     assert typical_building.reply(store, name).state == "not_chosen"
     assert typical_building.current_key(store, name) == typical_building.NO_BUILDING_KEY
-    chosen = typical_building.save(store, name, BOX, "ashrae140-600")      # choosing one replaces it
-    assert (chosen.values, chosen.library_id, chosen.state) == (BOX, "ashrae140-600", "missing")
+    chosen = typical_building.save(store, name, OFFICE, "kenak-office-b")      # choosing one replaces it
+    assert (chosen.values, chosen.library_id, chosen.state) == (OFFICE, "kenak-office-b", "missing")
     assert store.read_project_json(name).typical_building.calculated_key is None
 
 
@@ -664,4 +668,3 @@ def test_every_example_calculates_on_the_bundled_weather_file(tmp_path):
     for use in ("apartment", "office"):
         heating = [numbers[f"kenak-{use}-{zone}"][0] for zone in "abcd"]
         assert heating == sorted(heating, reverse=True)     # the colder zones' walls are better insulated
-    assert numbers["ashrae140-900"][0] < numbers["ashrae140-600"][0]        # the heavy box stores the sun of the day

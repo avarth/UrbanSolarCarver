@@ -10,9 +10,9 @@ simulated_weights_path for every such criterion (criteria.engine_settings).
 The values describe one room in the app's words (a schedule, set points, U values, window shares, ...); archetype_of turns them
 into the engine's shoebox archetype. The default room ("average") is a square plan of side 4 x depth turned 45° with the same
 window share on its four walls (NE, SE, SW, NW), the roof and the floor adiabatic; "box" is the explicit box of width, length and
-orientation (the ASHRAE 140 test boxes). An average room equals the box of width and length 4 x depth, orientation 45, whose
-north, east, south and west shares are the ne, se, sw and nw ones. The thermal mass is a thermal capacity per m² of floor; the
-infiltration is in air changes per hour.
+orientation, with a window share on each of its north, east, south and west walls. An average room equals the box of width and
+length 4 x depth, orientation 45, whose north, east, south and west shares are the ne, se, sw and nw ones. The thermal mass is a
+thermal capacity per m² of floor; the infiltration is in air changes per hour.
 
 The library is apart from projects: the built-in examples (EXAMPLES, read-only, in groups named by the source of their values) and
 one YAML file per own entry in library_folder(), beside the user preferences file, so the entries serve every projects folder.
@@ -322,7 +322,7 @@ class LibraryEntry:
                                            values=copy.deepcopy(self.values))
 
 
-# ---- The examples: the KENAK reference building (Greece) and the ASHRAE 140 test boxes ----
+# ---- The examples: the KENAK reference building (Greece) ----
 
 KENAK_GROUP = "Greece, KENAK reference building"
 TOTEE_SOURCE = "ΤΟΤΕΕ 20701-1/2017 (ΦΕΚ Β' 4003/17.11.2017)"
@@ -379,43 +379,12 @@ def _kenak_source(letter: str) -> str:
             f"(§4.4.1), {_kenak_air_changes():g} air changes per hour in this room.")
 
 
-ASHRAE_GROUP = "ASHRAE 140 test cases"
-ASHRAE_SOURCE = ("ANSI/ASHRAE Standard 140 (BESTEST), case {case}: 8 x 6 x 2.7 m box, 12 m² of double clear glass on the south wall, "
-                 "U walls {u_wall}, roof 0.318, floor 0.039 (over outdoor air), window 3.0 W/m²K, glass SHGC 0.787 x 0.9 mean over the "
-                 "angles, 200 W constant gains, infiltration 0.5 air changes per hour, 20 / 27 °C. {construction}. Layers from the "
-                 "Modelica Buildings library's BESTEST data (LBNL); the U values computed from them with the standard's surface "
-                 "coefficients; the window U and SHGC are not checked against the standard's text.")
-
-
-def _ashrae_values(u_wall: float, capacity: float) -> dict:
-    """The values of an ASHRAE 140 box: as ASHRAE_SOURCE, the gains 200 W over 48 m², no fresh air, no shading, the thermal capacity
-    *capacity* kJ/m²K."""
-    return {"schedule": "always", "t_set_heating": 20.0, "t_set_cooling": 27.0, "gains_w_m2": round(200.0 / 48.0, 4),
-            "fresh_air_m3h_m2": 0.0, "heat_recovery": 0.0, "u_wall": u_wall, "u_window": 3.0, "g_value": 0.71,
-            "mass_capacity_kj_m2k": capacity,
-            "shading_factor": None, "shading_start": "06-01", "shading_end": "08-31",
-            "room": "box", "height": 2.7, "width": 8.0, "length": 6.0, "orientation": 0.0,
-            "wwr": {"north": 0.0, "east": 0.0, "south": round(12.0 / 21.6, 4), "west": 0.0},
-            "roof_exposed": True, "u_roof": 0.318, "floor_exposed": True, "u_floor": 0.039,
-            "ach_infiltration": 0.5}
-
-
 def _examples() -> dict[str, LibraryEntry]:
     examples = {}
     for use, (label, *_rest) in KENAK_USES.items():
         for zone, (letter, *_zone_rest) in KENAK_ZONES.items():
             examples[f"kenak-{use}-{zone}"] = LibraryEntry(
                 f"kenak-{use}-{zone}", f"{label}, zone {letter}", KENAK_GROUP, validate(_kenak_values(use, zone)), _kenak_source(letter))
-    examples["ashrae140-600"] = LibraryEntry(
-        "ashrae140-600", "ASHRAE 140 case 600 (light)", ASHRAE_GROUP, validate(_ashrae_values(0.514, 80.0)),
-        ASHRAE_SOURCE.format(case=600, u_wall=0.514, construction="Lightweight: timber siding, glass fibre, plasterboard; about "
-                                                                   "40 kJ/m²K; the capacity 80 kJ/m²K, the very light class of "
-                                                                   "ISO 13790"))
-    examples["ashrae140-900"] = LibraryEntry(
-        "ashrae140-900", "ASHRAE 140 case 900 (heavy)", ASHRAE_GROUP, validate(_ashrae_values(0.512, 260.0)),
-        ASHRAE_SOURCE.format(case=900, u_wall=0.512, construction="Heavyweight: 100 mm concrete block walls and an 80 mm concrete "
-                                                                   "floor inside the insulation; about 305 kJ/m²K; the capacity 260 "
-                                                                   "kJ/m²K, the heavy class of ISO 13790"))
     return examples
 
 

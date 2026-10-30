@@ -72,10 +72,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
   room"). Energy-weighted hides the balance temperature, whose values are kept for Cold hours; the cold period preset says it
   follows the cold hours rule. `PATCH /projects/{name}/criteria/{id}` takes `energy_weighted`.
 - **The typical building**, one per project, shared by its energy-weighted criteria, in a sheet beside the criterion panel (**Edit
-  building**), chosen from a **library** apart from projects: read-only examples grouped by the source of their values ("Greece,
+  building**), chosen from a **library** apart from projects: read-only examples of the KENAK reference building ("Greece,
   KENAK reference building": an apartment and an office in climate zones Α to Δ, the tables of the regulation named in each
-  example's source text; "ASHRAE 140 test cases": cases 600 and 900, some of their values not confirmed against the
-  standard's text), and the user's own entries (**Save to library**, **Save as new**, rename, delete; one file each in
+  example's source text), and the user's own entries (**Save to library**, **Save as new**, rename, delete; one file each in
   `~/.urbansolarcarver/typical_buildings/`). A new project has no typical building until one is chosen ("None chosen", **Choose
   building**); a run with an energy-weighted criterion that is on is refused as a missing input until then. The project keeps a
   copy and says "Changed from" the entry once it differs. The values: Use (the hours in use as one of three example cases,

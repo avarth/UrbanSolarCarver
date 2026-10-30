@@ -19,20 +19,19 @@ function kenak(uWall: number, uRoof: number, uWindow: number, shading: [string, 
 
 const ZONE_A = kenak(0.6, 0.5, 3.2, ["05-15", "09-15"]);
 const ZONE_B = kenak(0.5, 0.45, 3, ["05-15", "09-15"]);
-const CASE_600: TypicalBuildingValues = {
-  schedule: "always", t_set_heating: 20, t_set_cooling: 27, gains_w_m2: 4.1667, fresh_air_m3h_m2: 0, heat_recovery: 0, u_wall: 0.514, u_window: 3,
-  g_value: 0.71, mass_capacity_kj_m2k: 80, shading_factor: null, shading_start: "06-01", shading_end: "08-31",
-  room: "box", height: 2.7, width: 8, length: 6, orientation: 0, wwr: { north: 0, east: 0, south: 0.5556, west: 0 }, roof_exposed: true, u_roof: 0.318,
-  floor_exposed: true, u_floor: 0.039, ach_infiltration: 0.5,
+/** A box room in use every hour, windows on the south wall only, roof and floor exposed, no summer shading. */
+const BOX: TypicalBuildingValues = {
+  schedule: "always", t_set_heating: 20, t_set_cooling: 26, gains_w_m2: 4, fresh_air_m3h_m2: 0, heat_recovery: 0, u_wall: 0.5, u_window: 2.8,
+  g_value: 0.6, mass_capacity_kj_m2k: 165, shading_factor: null, shading_start: "06-01", shading_end: "08-31",
+  room: "box", height: 2.7, width: 8, length: 6, orientation: 0, wwr: { north: 0, east: 0, south: 0.5556, west: 0 }, roof_exposed: true, u_roof: 0.3,
+  floor_exposed: true, u_floor: 0.25, ach_infiltration: 0.5,
 };
 const SOURCE_B = "ΤΟΤΕΕ 20701-1/2017 (ΦΕΚ Β' 4003/17.11.2017), reference building, zone Β";
 const KENAK_GROUP = "Greece, KENAK reference building";
-const ASHRAE_GROUP = "ASHRAE 140 test cases";
 const EXAMPLES: TypicalBuildingLibraryEntry[] = [
   { id: "kenak-apartment-a", name: "Apartment, zone Α", group: KENAK_GROUP, read_only: true, source: "zone Α source", values: ZONE_A },
   { id: "kenak-apartment-b", name: "Apartment, zone Β", group: KENAK_GROUP, read_only: true, source: SOURCE_B, values: ZONE_B },
   { id: "kenak-office-b", name: "Office, zone Β", group: KENAK_GROUP, read_only: true, source: "office source", values: { ...ZONE_B, schedule: "office" } },
-  { id: "ashrae140-600", name: "ASHRAE 140 case 600 (light)", group: ASHRAE_GROUP, read_only: true, source: "ASHRAE source", values: CASE_600 },
 ];
 
 /** The value with its object keys sorted, so two values compare by their JSON. */
@@ -232,18 +231,24 @@ test("the sheet names the library entry and its source, says each basic group in
 });
 
 test("the library lists the examples in the groups the service names; choosing one replaces the project's copy with its values and id", async () => {
+  service.own = [{ id: "own-1", name: "Box room", group: null, read_only: false, source: null, values: BOX }];
   await openSheet();
   openGroup("library");
   expect([...group("library").querySelectorAll(".typical-building-library-group-name")].map((name) => name.textContent))
-    .toEqual([KENAK_GROUP, ASHRAE_GROUP]);
+    .toEqual([KENAK_GROUP, "Your buildings"]);
   expect(entryButton("kenak-apartment-b").getAttribute("aria-pressed")).toBe("true");
   expect(group("library").querySelector('[data-library-entry="kenak-apartment-b"] .link-button')).toBeNull();     // an example is read-only
-  click(entryButton("ashrae140-600"));
+  click(entryButton("own-1"));
   await settle();
-  expect(lastSaved()).toEqual({ values: CASE_600, library_id: "ashrae140-600" });
-  expect(entryButton("ashrae140-600").getAttribute("aria-pressed")).toBe("true");
-  expect(find(".typical-building-source")!.textContent).toBe("ASHRAE source");
+  expect(lastSaved()).toEqual({ values: BOX, library_id: "own-1" });
+  expect(entryButton("own-1").getAttribute("aria-pressed")).toBe("true");
+  expect(find(".typical-building-source")).toBeNull();      // an own entry has no source
   expect(summaryOf("shading")).toBe("None");
+  click(entryButton("kenak-apartment-a"));
+  await settle();
+  expect(lastSaved()).toEqual({ values: ZONE_A, library_id: "kenak-apartment-a" });
+  expect(entryButton("kenak-apartment-a").getAttribute("aria-pressed")).toBe("true");
+  expect(find(".typical-building-source")!.textContent).toBe("zone Α source");
 });
 
 test("a changed value is saved without the entry; the library says Changed from it, and an example can only be saved as new", async () => {
@@ -466,12 +471,12 @@ test("Calculate waits for a weather file; Escape closes the sheet", async () => 
 test("the average room is the box 4 times its depth turned 45°, and a box the average room with its facade per m² of floor", () => {
   const box = withRoom(ZONE_B, "box");
   expect(withRoom(box, "average")).toEqual(ZONE_B);
-  const average = withRoom(CASE_600, "average");
+  const average = withRoom(BOX, "average");
   expect(average).toMatchObject({ room: "average", depth: 1.71, wwr: { ne: 0, se: 0, sw: 0.5556, nw: 0 } });
   expect(Object.keys(average)).not.toContain("width");
-  expect(buildingGroupSummary("room", CASE_600)).toBe(`Box 8 × 6 × 2.7${NBSP}m, 0° from north; S 0.556`);
-  expect(buildingGroupSummary("roof_and_floor", CASE_600)).toBe(`Roof U 0.318, floor U 0.039${NBSP}W/m²K`);
-  expect(buildingGroupSummary("use", CASE_600)).toBe(`Every hour, 20 to 27${NBSP}°C, gains 4.17${NBSP}W/m²`);
+  expect(buildingGroupSummary("room", BOX)).toBe(`Box 8 × 6 × 2.7${NBSP}m, 0° from north; S 0.556`);
+  expect(buildingGroupSummary("roof_and_floor", BOX)).toBe(`Roof U 0.3, floor U 0.25${NBSP}W/m²K`);
+  expect(buildingGroupSummary("use", BOX)).toBe(`Every hour, 20 to 26${NBSP}°C, gains 4${NBSP}W/m²`);
 });
 
 test("the colours run from white to red and to blue; a project from no entry, or from one gone, says so", () => {
@@ -489,7 +494,7 @@ test("the colours run from white to red and to blue; a project from no entry, or
   expect(libraryLineOf(reply, EXAMPLES)).toBe("Old flat, no longer in the library");
   expect(libraryLineOf({ values: null, library_id: null, library_name: null, changed: false, state: "not_chosen" }, EXAMPLES)).toBe("None chosen");
   const own = { id: "own-1", name: "Mine", group: null, read_only: false, source: null, values: ZONE_B };
-  expect(libraryGroupsOf([own, ...EXAMPLES]).map(({ name, entries }) => [name, entries.length])).toEqual([[KENAK_GROUP, 3], [ASHRAE_GROUP, 1], ["Your buildings", 1]]);
+  expect(libraryGroupsOf([own, ...EXAMPLES]).map(({ name, entries }) => [name, entries.length])).toEqual([[KENAK_GROUP, 3], ["Your buildings", 1]]);
 });
 
 test("the typical building opens as a modal window: aria-modal, its title takes the focus, × and Done close it", async () => {
