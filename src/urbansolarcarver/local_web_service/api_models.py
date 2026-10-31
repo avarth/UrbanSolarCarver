@@ -590,8 +590,12 @@ class TypicalBuildingReply(BaseModel):
     # current: calculated for these values and weather file; out_of_date: for others; missing: never calculated; not_chosen: the
     # project has no building yet (choose one from the library)
     state: Literal["current", "out_of_date", "missing", "not_chosen"]
-    heating_kwh_m2: float | None = None     # the building's heating demand in a year, kWh per m² of floor
+    heating_kwh_m2: float | None = None     # a conditioned room's heating demand in a year, kWh per m² of floor (older weights)
     cooling_kwh_m2: float | None = None     # its cooling demand
+    underheating_kh: float | None = None    # the free-running room's degree-hours below the comfort band in a year, K·h
+    overheating_kh: float | None = None     # its degree-hours above the band
+    hours_below: int | None = None          # its hours below the band in a year
+    hours_above: int | None = None          # its hours above the band
     counted_hours: int | None = None        # the hours with the sun up whose benefit weight is above 0.01
     # With one room per facade direction: each direction's factor over the whole year (N, NE, E, SE, S, SW, W, NW, roof), from the
     # benefit alone and from benefit minus harm; None without rooms per direction
@@ -601,8 +605,8 @@ class TypicalBuildingReply(BaseModel):
 
 class TypicalBuildingWeightsReply(BaseModel):
     """The hourly weights of the typical building, 8,760 each from 1 January 0:00, to 3 decimals."""
-    benefit: list[float]                # the share of an hour's sun that saves heating, 0 to 1
-    harm: list[float]                   # the share that becomes cooling load, 0 to 1
+    benefit: list[float]                # the share of an hour's sun that warms the room while below the comfort band, 0 to 1
+    harm: list[float]                   # the share that warms it above the band, 0 to 1
     sun_up: list[int]                   # 1 for the hours with the sun above the horizon, 0 for the others
 
 

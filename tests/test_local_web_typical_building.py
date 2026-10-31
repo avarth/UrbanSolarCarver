@@ -72,7 +72,7 @@ class FakeGenerator:
         benefit = np.where(hours < 1000, 0.5, 0.0)          # 1,000 hours above 0.01, 500 of them with the sun up
         harm = np.where(hours > 8000, 0.2345, 0.0)
         sun_up = [int(hour >= 500) for hour in hours]
-        meta = {"heating_kwh_m2": 41.5, "cooling_kwh_m2": 12.25, "sun_up": sun_up}
+        meta = {"underheating_kh": 12957.1, "overheating_kh": 5110.0, "hours_below": 3201, "hours_above": 2083, "sun_up": sun_up}
         directions = None
         if archetype.get("direction_rooms"):
             directions = {room: (benefit, harm) for room in simulated_weights.DIRECTION_ROOMS}
@@ -215,7 +215,8 @@ def test_a_capacity_of_a_class_gives_the_zone_of_that_class():
     class."""
     def zone(archetype):
         expanded = simulated_weights.expand_shoebox({key: value for key, value in archetype.items()
-                                                     if key not in ("internal_gains_w_m2", "shading_hot", "shading_hot_period")})
+                                                     if key not in ("internal_gains_w_m2", "shading_hot", "shading_hot_period",
+                                                                    "operation", "vent_above", "vent_ach")})
         expanded.pop("windows")
         return simulated_weights.ZoneParams.from_archetype(**expanded)
 
@@ -389,7 +390,8 @@ def test_a_new_project_has_no_building_until_one_is_chosen(client):
     create_project(client, "p", "benefit")
     reply = client.get("/api/projects/p/typical-building").json()
     assert reply == {"values": None, "library_id": None, "library_name": None, "changed": False,
-                     "state": "not_chosen", "heating_kwh_m2": None, "cooling_kwh_m2": None, "counted_hours": None,
+                     "state": "not_chosen", "heating_kwh_m2": None, "cooling_kwh_m2": None, "underheating_kh": None,
+                     "overheating_kh": None, "hours_below": None, "hours_above": None, "counted_hours": None,
                      "direction_factors": None, "direction_factors_with_harm": None}
     assert client.get("/api/projects/p/typical-building/weights").status_code == 404
     chosen = choose_building(client)
@@ -470,7 +472,9 @@ def test_calculate_writes_the_weights_and_answers_the_numbers(client, fake_gener
     reply = client.post("/api/projects/p/typical-building/calculate")
     assert reply.status_code == 200, reply.text
     assert reply.json() | {"values": None} == {"values": None, "library_id": "kenak-apartment-b", "library_name": "Apartment, zone Β",
-                                               "changed": True, "state": "current", "heating_kwh_m2": 41.5, "cooling_kwh_m2": 12.25,
+                                               "changed": True, "state": "current", "heating_kwh_m2": None, "cooling_kwh_m2": None,
+                                               "underheating_kh": 12957.1, "overheating_kh": 5110.0, "hours_below": 3201,
+                                               "hours_above": 2083,
                                                "counted_hours": 500,       # the hours with the sun up only
                                                "direction_factors": None, "direction_factors_with_harm": None}
     assert json.dumps(fake_generator.archetypes) == json.dumps([typical_building.archetype_of(WITHOUT_DIRECTIONS, GOLDEN_EPW)])
@@ -681,9 +685,12 @@ def test_calculate_with_the_engine_gives_the_numbers_of_its_file(client, project
     assert upload(client, "p", "weather", ("golden.epw", GOLDEN_EPW.read_bytes())).status_code == 200
     reply = client.post("/api/projects/p/typical-building/calculate").json()
     assert reply["state"] == "current"
-    assert 0 < reply["heating_kwh_m2"] < 300 and 0 < reply["cooling_kwh_m2"] < 300
+    assert 0 < reply["underheating_kh"] < 8760 * 30 and 0 < reply["overheating_kh"] < 8760 * 30
+    assert 0 < reply["hours_below"] < 8760 and 0 < reply["hours_above"] < 8760
+    assert reply["heating_kwh_m2"] is None and reply["cooling_kwh_m2"] is None
     benefit, _harm, meta = simulated_weights.read_simulated_weights(projects_folder / "p" / typical_building.WEIGHTS_PATH)
-    assert (reply["heating_kwh_m2"], reply["cooling_kwh_m2"]) == (meta["heating_kwh_m2"], meta["cooling_kwh_m2"])
+    assert meta["operation"] == "free_running"
+    assert (reply["underheating_kh"], reply["overheating_kh"]) == (meta["underheating_kh"], meta["overheating_kh"])
     assert reply["counted_hours"] == int(((benefit > 0.01) & np.asarray(meta["sun_up"], dtype=bool)).sum())
     weights = client.get("/api/projects/p/typical-building/weights").json()
     january, july = slice(0, 31 * 24), slice(181 * 24, 212 * 24)
@@ -701,14 +708,14 @@ def test_every_example_calculates_on_the_bundled_weather_file(tmp_path):
         out = simulated_weights.generate_simulated_weights(str(GOLDEN_EPW), archetype, tmp_path / f"{entry.id}.json")
         benefit, harm, meta = simulated_weights.read_simulated_weights(out)
         sun_up = np.asarray(meta["sun_up"], dtype=bool)
-        numbers[entry.id] = (meta["heating_kwh_m2"], meta["cooling_kwh_m2"], int(((benefit > 0.01) & sun_up).sum()))
-        print(f"{entry.id}: heating {numbers[entry.id][0]:.1f}, cooling {numbers[entry.id][1]:.1f} kWh/m², "
+        numbers[entry.id] = (meta["underheating_kh"], meta["overheating_kh"], int(((benefit > 0.01) & sun_up).sum()))
+        print(f"{entry.id}: below the band {numbers[entry.id][0]:.0f}, above it {numbers[entry.id][1]:.0f} K·h, "
               f"hours that count {numbers[entry.id][2]}")
         assert numbers[entry.id][0] > 0 and numbers[entry.id][1] > 0 and 0 < numbers[entry.id][2] <= sun_up.sum()
         assert not (benefit[~sun_up] > 0.5).all()           # the mass carries some of the day's sun into the night
     for use in ("apartment", "office"):
-        heating = [numbers[f"kenak-{use}-{zone}"][0] for zone in "abcd"]
-        assert heating == sorted(heating, reverse=True)     # the colder zones' walls are better insulated
+        underheating = [numbers[f"kenak-{use}-{zone}"][0] for zone in "abcd"]
+        assert underheating == sorted(underheating, reverse=True)     # the colder zones' walls are better insulated
 
 
 # ---- One room per facade direction ----

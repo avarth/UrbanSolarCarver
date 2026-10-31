@@ -47,8 +47,8 @@ import numpy as np
 import yaml
 
 from ..errors import ConfigError, ConfigFieldError
-from ..simulated_weights import (DIRECTION_ROOMS, HOURS, ZoneParams, _shading_factors, direction_archetypes, expand_shoebox,
-                                 read_simulated_weights)
+from ..simulated_weights import (DIRECTION_ROOMS, FREE_RUNNING_DEFAULTS, HOURS, ZoneParams, _shading_factors, direction_archetypes,
+                                 expand_shoebox, read_simulated_weights)
 from . import user_preferences
 from .api_models import ProjectJson, TypicalBuildingEntry, TypicalBuildingLibraryEntry, TypicalBuildingReply, TypicalBuildingWeightsReply
 from .project_names import ProjectError
@@ -83,9 +83,14 @@ VALUE_KEYS = ("schedule", "t_set_heating", "t_set_cooling", "gains_w_m2", "fresh
               "shading_factor", "shading_start", "shading_end",
               "room", "height", "wwr", "by_direction",
               "roof_exposed", "u_roof", "floor_exposed", "u_floor",
-              "ach_infiltration")
-# The value of a key that came later, for a building stored before it: one averaged room for all facades.
-LATER_VALUE_DEFAULTS = {"by_direction": False}
+              "ach_infiltration", "vent_above", "vent_ach")
+# The value of a key that came later, for a building stored before it: one averaged room for all facades, and the engine's window
+# opening of a free-running zone.
+LATER_VALUE_DEFAULTS = {"by_direction": False, **FREE_RUNNING_DEFAULTS}
+# How the weights are calculated: the room free running against the comfort band of t_set_heating to t_set_cooling, its windows
+# opened by vent_above and vent_ach. Part of every weights key, so the weights of the conditioned room calculated before
+# (2026-10-31) are out of date.
+WEIGHTS_METHOD = "free_running"
 DATE_PATTERN = re.compile(r"^(\d{2})-(\d{2})$")
 DAY_NAMES = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 
@@ -135,6 +140,9 @@ def room_box(values: dict) -> tuple[float, float, float, dict]:
 def archetype_of(values: dict, epw_path: Path | str | None = None) -> dict:
     """The engine's shoebox archetype for the values of the form; the weather file gives the weekday of 1 January (Monday without it).
 
+    The room runs free (operation free_running): the set points are the limits of its comfort band, vent_above and vent_ach open its
+    windows.
+
     Fresh air (m³/h per m² of floor) over the storey height gives the ventilation in air changes per hour; the gains and the fresh
     air apply in the hours of the schedule (8,760 values each), or as one value when the schedule is every hour, and the
     infiltration in every hour. A side without windows is left out; the summer shading is the hot shading of the engine over the
@@ -151,6 +159,7 @@ def archetype_of(values: dict, epw_path: Path | str | None = None) -> dict:
                  "ach_infiltration": values["ach_infiltration"],
                  "heat_recovery": values["heat_recovery"],
                  "t_set_heating": values["t_set_heating"], "t_set_cooling": values["t_set_cooling"],
+                 "operation": WEIGHTS_METHOD, "vent_above": values["vent_above"], "vent_ach": values["vent_ach"],
                  "mass_capacity_kj_m2k": values["mass_capacity_kj_m2k"]}
     ach_vent = values["fresh_air_m3h_m2"] / height
     in_use = hours_in_use(values["schedule"], first_weekday(epw_path))
@@ -275,9 +284,13 @@ def validate(values) -> dict:
         "floor_exposed": _checked_bool(values["floor_exposed"], "floor_exposed", errors),
         "u_floor": _checked_number(values["u_floor"], "u_floor", errors, above=0.0),
         "ach_infiltration": _checked_number(values["ach_infiltration"], "ach_infiltration", errors, low=0.0),
+        "vent_above": _checked_number(values["vent_above"], "vent_above", errors),
+        "vent_ach": _checked_number(values["vent_ach"], "vent_ach", errors, low=0.0),
     })
     if None not in (checked["t_set_heating"], checked["t_set_cooling"]) and checked["t_set_cooling"] <= checked["t_set_heating"]:
-        errors.append(ConfigFieldError("t_set_cooling", "The cooling set point must be above the heating set point."))
+        errors.append(ConfigFieldError("t_set_cooling", "The upper limit of the comfort band must be above its lower limit."))
+    if None not in (checked["t_set_heating"], checked["vent_above"]) and checked["vent_above"] <= checked["t_set_heating"]:
+        errors.append(ConfigFieldError("vent_above", "Windows must open above the lower limit of the comfort band."))
     if errors:
         raise ConfigError("The typical building's values are not valid.", errors)
     _check_with_the_engine(checked)
@@ -289,7 +302,8 @@ def _check_with_the_engine(values: dict) -> None:
     archetype = archetype_of(values)
     try:
         expanded = expand_shoebox({key: value for key, value in archetype.items()
-                                   if key not in ("internal_gains_w_m2", "shading_hot", "shading_hot_period", "direction_rooms")})
+                                   if key not in ("internal_gains_w_m2", "shading_hot", "shading_hot_period", "direction_rooms",
+                                                  "operation", *FREE_RUNNING_DEFAULTS)})
     except ValueError as error:
         message = "Give at least one side a window share." if "no windows" in str(error) else str(error)
         raise ConfigError(str(error), [ConfigFieldError("wwr", message)]) from error
@@ -377,7 +391,8 @@ def _kenak_values(use: str, zone: str) -> dict:
     x 0.9 mean over the angles x 0.8 for a 20 % frame, §4.2.7), the infiltration of _kenak_air_changes, summer shading 0.77 (the mean
     of the reference building's NE, SE, SW and NW factors 0.80, 0.73, 0.73, 0.80, §4.3.1), the thermal capacity KENAK_CAPACITY and the
     average room 6 m deep with a 3 m storey, 40 %
-    windows on each side, one room per facade direction, roof and floor not exposed."""
+    windows on each side, one room per facade direction, roof and floor not exposed. The set points 20 and 26 °C are the comfort
+    band of the free-running room; its windows open as the engine's FREE_RUNNING_DEFAULTS (not KENAK values)."""
     _letter, u_wall, u_roof_and_floor, u_window, (shading_start, shading_end) = KENAK_ZONES[zone]
     _label, schedule, fresh_air, heat_recovery, gains = KENAK_USES[use]
     return {"schedule": schedule, "t_set_heating": 20.0, "t_set_cooling": 26.0, "gains_w_m2": gains, "fresh_air_m3h_m2": fresh_air,
@@ -387,7 +402,7 @@ def _kenak_values(use: str, zone: str) -> dict:
             "room": "average", "height": KENAK_ROOM["height"], "depth": KENAK_ROOM["depth"],
             "wwr": {side: KENAK_ROOM["share"] for side in WWR_SIDES["average"]}, "by_direction": True,
             "roof_exposed": False, "u_roof": u_roof_and_floor, "floor_exposed": False, "u_floor": u_roof_and_floor,
-            "ach_infiltration": _kenak_air_changes()}
+            "ach_infiltration": _kenak_air_changes(), **FREE_RUNNING_DEFAULTS}
 
 
 def _kenak_source(letter: str) -> str:
@@ -549,11 +564,12 @@ def _file_digest(path: Path) -> str:
 
 
 def weights_key(values: dict, weather_path: Path | str | None) -> str:
-    """The key of the weights these values and this weather file give: the sha256 of the values as sorted JSON and of the
-    weather file's bytes (a project without a weather file has a key of its own, which no calculation gives). A key of
+    """The key of the weights these values and this weather file give: the sha256 of the values as sorted JSON, of WEIGHTS_METHOD
+    and of the weather file's bytes (a project without a weather file has a key of its own, which no calculation gives). A key of
     LATER_VALUE_DEFAULTS at its default is left out, so a building stored before it keeps its key."""
     hashed = {key: value for key, value in values.items() if key not in LATER_VALUE_DEFAULTS or value != LATER_VALUE_DEFAULTS[key]}
     digest = hashlib.sha256(json.dumps(hashed, sort_keys=True).encode("utf-8"))
+    digest.update(b"\0method:" + WEIGHTS_METHOD.encode("ascii"))
     digest.update(b"\0weather:")
     digest.update(_file_digest(Path(weather_path)).encode("ascii") if weather_path is not None else b"none")
     return digest.hexdigest()
@@ -591,6 +607,10 @@ def _direction_factors_of(meta: dict, label: str) -> dict[str, float] | None:
     return {name: float(factors[name]) for name in DIRECTION_ROOMS}
 
 
+# The free-running room's numbers that the weights file's meta holds and the reply passes on.
+FREE_RUNNING_REPLY_KEYS = ("underheating_kh", "overheating_kh", "hours_below", "hours_above")
+
+
 def reply(store, name: str) -> TypicalBuildingReply:
     """The building, the library entry it came from (changed when the copy differs from the entry; the entry's name now, or the name
     the project kept when the entry is gone), the state of its weights and, when the weights file exists, the numbers it holds. Without
@@ -602,6 +622,7 @@ def reply(store, name: str) -> TypicalBuildingReply:
             return TypicalBuildingReply(values=None, library_id=None, library_name=None, changed=False, state="not_chosen")
         path = weights_file(store.open(name))
         heating = cooling = counted = factors = factors_with_harm = None
+        free = {}
         if not path.is_file():
             state = "missing"
         else:
@@ -612,13 +633,14 @@ def reply(store, name: str) -> TypicalBuildingReply:
                 state = "missing"
             else:
                 heating, cooling = meta.get("heating_kwh_m2"), meta.get("cooling_kwh_m2")
+                free = {key: meta.get(key) for key in FREE_RUNNING_REPLY_KEYS}
                 counted = int(((benefit > COUNTED_WEIGHT) & _sun_up(meta)).sum())
                 factors, factors_with_harm = (_direction_factors_of(meta, label) for label in ("benefit", "benefit_minus_harm"))
     entry = library_entry(building.library_id)
     return TypicalBuildingReply(values=building.values, library_id=building.library_id,
                                 library_name=entry.name if entry is not None else building.library_name,
                                 changed=entry is not None and entry.values != {**LATER_VALUE_DEFAULTS, **building.values},
-                                state=state, heating_kwh_m2=heating, cooling_kwh_m2=cooling, counted_hours=counted,
+                                state=state, heating_kwh_m2=heating, cooling_kwh_m2=cooling, **free, counted_hours=counted,
                                 direction_factors=factors, direction_factors_with_harm=factors_with_harm)
 
 

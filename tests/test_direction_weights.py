@@ -112,7 +112,7 @@ def test_the_generator_calculates_the_rooms_per_direction_and_records_them(tmp_p
     below)."""
     rooms = []
 
-    def room_weights(epw_path, arch, gains, eps, outdoor_temperature, progress=None):
+    def room_weights(epw_path, arch, gains, eps, outdoor_temperature, progress=None, operation="conditioned"):
         rooms.append(arch)
         level = 0.5 if len(arch["windows"]) > 1 else 0.1 + 0.01 * len(rooms)
         return {"benefit": np.full(HOURS, level), "harm": np.zeros(HOURS), "archetype": dict(arch),
@@ -136,7 +136,7 @@ def test_the_generator_calculates_the_rooms_per_direction_and_records_them(tmp_p
 
 
 def test_the_generator_without_rooms_per_direction_writes_none(tmp_path, monkeypatch):
-    monkeypatch.setattr(sw, "_room_weights", lambda epw, arch, gains, eps, outdoor, progress=None: {
+    monkeypatch.setattr(sw, "_room_weights", lambda epw, arch, gains, eps, outdoor, progress=None, operation="conditioned": {
         "benefit": np.full(HOURS, 0.5), "harm": np.zeros(HOURS), "archetype": dict(arch), "heating_kwh_m2": 1.0, "cooling_kwh_m2": 1.0})
     monkeypatch.setattr(sw, "sun_up_hours", lambda epw: np.zeros(HOURS, dtype=np.int8))
     path = sw.generate_simulated_weights("weather.epw", AVERAGE_ROOM, tmp_path / "w.json")
@@ -147,14 +147,14 @@ def test_the_generator_without_rooms_per_direction_writes_none(tmp_path, monkeyp
 
 def _rooms_reporting_halfway(monkeypatch):
     """Stands in for the room simulation: each room reports half done, then done."""
-    def room_weights(epw_path, arch, gains, eps, outdoor_temperature, progress=None):
+    def room_weights(epw_path, arch, gains, eps, outdoor_temperature, progress=None, operation="conditioned"):
         progress(0.5)
         progress(1.0)
         return {"benefit": np.full(HOURS, 0.5), "harm": np.zeros(HOURS), "archetype": dict(arch),
                 "heating_kwh_m2": 1.0, "cooling_kwh_m2": 1.0}
     monkeypatch.setattr(sw, "_room_weights", room_weights)
     monkeypatch.setattr(sw, "sun_up_hours", lambda epw: np.zeros(HOURS, dtype=np.int8))
-    monkeypatch.setattr(sw, "_save_heatmaps", lambda benefit, harm, path: None)
+    monkeypatch.setattr(sw, "_save_heatmaps", lambda benefit, harm, path, operation="conditioned": None)
 
 
 def test_the_generator_reports_the_share_of_one_room_done(tmp_path, monkeypatch):

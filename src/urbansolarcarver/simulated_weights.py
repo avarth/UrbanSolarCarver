@@ -37,7 +37,7 @@ from __future__ import annotations
 import functools
 import json
 import logging
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace
 from pathlib import Path
 from typing import Sequence, Tuple
 
@@ -440,6 +440,166 @@ def attribute_solar_gains(p: ZoneParams, t_out, phi_int, phi_sol,
                 "attribute_solar_gains: %s outside [0, 1] beyond switching "
                 "tolerance (min %.3f, max %.3f); check inputs.", name, low, high,
             )
+    return np.clip(benefit, 0.0, 1.0), np.clip(harm, 0.0, 1.0)
+
+
+# ---------------------------------------------------------------------------
+# Free running: no heating or cooling, windows opened for natural ventilation
+# ---------------------------------------------------------------------------
+
+# How the zone is run (archetype key ``operation``): with ideal heating and
+# cooling to its set points, or free running against a comfort band whose
+# limits are the two set points.
+OPERATIONS = ("conditioned", "free_running")
+# The window opening of a free-running zone (archetype keys): windows open in
+# an hour when the air would be above vent_above [°C] with them closed and
+# opening them cools it, as far as needed to bring it to vent_above, up to
+# vent_ach extra air changes per hour.
+FREE_RUNNING_DEFAULTS = {"vent_above": 25.0, "vent_ach": 4.0}
+
+
+@dataclass
+class FreeRunningResult:
+    """Annual outcome of :func:`simulate_free_running` (single trajectory)."""
+    underheating_kh: float   # degree-hours below the lower limit of the comfort band [K·h]
+    overheating_kh: float    # degree-hours above its upper limit [K·h]
+    hours_below: int         # hours below the lower limit
+    hours_above: int         # hours above the upper limit
+    t_air: np.ndarray        # (8760,) air temperature [°C]
+    t_m: np.ndarray          # (8760,) mass temperature at the end of each hour [°C]
+    window_share: np.ndarray  # (8760,) share of the window opening used, 0 (closed) to 1 (vent_ach)
+
+
+def window_conductance(volume: float, vent_ach: float) -> float:
+    """The extra ventilation conductance [W/K] of windows opened fully: 1200 J/(m³K), the volumetric heat capacity of air, x the
+    volume [m³] x vent_ach [1/h] / 3600."""
+    return 1200.0 * float(volume) * float(vent_ach) / 3600.0
+
+
+def loss_coefficient(p: ZoneParams) -> float:
+    """The zone's steady-state heat loss coefficient [W/K] with its windows closed: the windows, the opaque fabric (H_tr,em in
+    series with H_tr,ms) and the ventilation (its mean over the year when it follows a schedule)."""
+    h_tr_op = 1.0 / (1.0 / p.h_tr_em + 1.0 / p.h_tr_ms)
+    return float(p.h_tr_w + h_tr_op + np.mean(p.h_ve))
+
+
+def _march_free(p, t_out, phi_int, phi_sol_base, h_open: float, vent_above: float, *, deltas: float | None = None,
+                t_m_init: float = 20.0, record_series: bool = False, progress=None):
+    """Step through the 8760 hours of the year free running (no heating or cooling), vectorized over trajectories as
+    :func:`_march` is (``deltas`` gives the 1 + 2·8760 perturbed rows).
+
+    In each hour the air temperature is evaluated with the windows closed and with them fully open (``h_open`` [W/K] added to the
+    ventilation). When the closed air is above ``vent_above`` and opening cools it, the windows open as far as needed to bring
+    it to ``vent_above``, at most fully: the hour's air and mass temperatures are interpolated between the two evaluations by
+    that share. The comfort band runs from the zone's heating to its cooling set point.
+
+    Returns (under, over, hours_below, hours_above, series_air, series_tm, series_share): degree-hours below and above the band
+    [K·h] and the hours outside it per trajectory (shape (N,)), and, when ``record_series`` is true, the hourly air and mass
+    temperatures and window share of row 0 (otherwise None).
+    """
+    open_p = replace(p, h_ve=p.h_ve + h_open)
+    closed, opened = _hourly_constants(p), _hourly_constants(open_p)
+    closed_by_hour, opened_by_hour = _constants_by_hour(closed), _constants_by_hour(opened)
+    n = 1 if deltas is None else 1 + 2 * HOURS
+    t_m = np.full(n, float(t_m_init))
+    under, over = np.zeros(n), np.zeros(n)
+    below, above = np.zeros(n, dtype=np.int64), np.zeros(n, dtype=np.int64)
+    series_air = np.empty(HOURS) if record_series else None
+    series_tm = np.empty(HOURS) if record_series else None
+    series_share = np.empty(HOURS) if record_series else None
+    low, high = p.t_set_heating, p.t_set_cooling
+
+    for h in range(HOURS):
+        if progress is not None and h and h % _PROGRESS_HOURS == 0:
+            progress(h / HOURS)
+        c = closed_by_hour[h] if closed_by_hour is not None else closed
+        o = opened_by_hour[h] if opened_by_hour is not None else opened
+        t_e = float(t_out[h])
+        p_int = float(phi_int[h])
+        phi_sol = np.full(n, float(phi_sol_base[h]))
+        if deltas is not None:
+            phi_sol[1 + 2 * h] += deltas
+            phi_sol[2 + 2 * h] -= deltas
+        t_closed, tm_closed = _air_temperature(p, c, t_m, t_e, p_int, phi_sol, 0.0)
+        t_open, tm_open = _air_temperature(open_p, o, t_m, t_e, p_int, phi_sol, 0.0)
+        drop = t_closed - t_open
+        cools = drop > 0.0
+        share = np.where((t_closed > vent_above) & cools,
+                         np.clip((t_closed - vent_above) / np.where(cools, drop, 1.0), 0.0, 1.0), 0.0)
+        t_air = t_closed - share * drop
+        t_m = tm_closed - share * (tm_closed - tm_open)
+        under += np.maximum(low - t_air, 0.0)
+        over += np.maximum(t_air - high, 0.0)
+        below += t_air < low
+        above += t_air > high
+        if record_series:
+            series_air[h], series_tm[h], series_share[h] = t_air[0], t_m[0], share[0]
+
+    if progress is not None:
+        progress(1.0)
+    return under, over, below, above, series_air, series_tm, series_share
+
+
+def _hourly_arrays(t_out, phi_int, phi_sol):
+    """The three hourly inputs as float arrays; ValueError if one does not have shape (8760,)."""
+    arrays = [np.asarray(a, dtype=np.float64) for a in (t_out, phi_int, phi_sol)]
+    for name, arr in zip(("t_out", "phi_int", "phi_sol"), arrays):
+        if arr.shape != (HOURS,):
+            raise ValueError(f"{name} must have shape ({HOURS},), got {arr.shape}")
+    return arrays
+
+
+def _periodic_start(p, t_out, phi_int, phi_sol, h_open: float, vent_above: float) -> float:
+    """The mass temperature at the end of a free-running year started at 20 °C: the start of a year in a periodic steady state
+    (the mass of a free-running zone keeps the winter's state for weeks, so a fixed start would bias January)."""
+    *_, series_tm, _ = _march_free(p, t_out, phi_int, phi_sol, h_open, vent_above, record_series=True)
+    return float(series_tm[-1])
+
+
+def simulate_free_running(p: ZoneParams, t_out, phi_int, phi_sol, h_open: float = 0.0,
+                          vent_above: float = FREE_RUNNING_DEFAULTS["vent_above"],
+                          t_m_init: "float | None" = None) -> FreeRunningResult:
+    """Annual simulation of a free-running zone: no heating or cooling, windows opened as :func:`_march_free` describes, the
+    comfort band from the zone's heating to its cooling set point. ``h_open`` [W/K] is the extra ventilation of the windows
+    fully open (:func:`window_conductance`; 0, the default, keeps them closed). ``t_m_init`` is the mass temperature at the start
+    of the year [°C]; None (the default) starts from a periodic steady state (:func:`_periodic_start`). The other arguments are as
+    in :func:`simulate`; ValueError if an array does not have shape (8760,)."""
+    t_out, phi_int, phi_sol = _hourly_arrays(t_out, phi_int, phi_sol)
+    if t_m_init is None:
+        t_m_init = _periodic_start(p, t_out, phi_int, phi_sol, h_open, vent_above)
+    under, over, below, above, s_air, s_tm, s_share = _march_free(
+        p, t_out, phi_int, phi_sol, h_open, vent_above, t_m_init=t_m_init, record_series=True)
+    return FreeRunningResult(underheating_kh=float(under[0]), overheating_kh=float(over[0]), hours_below=int(below[0]),
+                             hours_above=int(above[0]), t_air=s_air, t_m=s_tm, window_share=s_share)
+
+
+def attribute_free_running(p: ZoneParams, t_out, phi_int, phi_sol, h_open: float = 0.0,
+                           vent_above: float = FREE_RUNNING_DEFAULTS["vent_above"], eps: float = 10.0,
+                           t_m_init: "float | None" = None, progress=None) -> Tuple[np.ndarray, np.ndarray]:
+    """Marginal hourly benefit/harm of solar gain in a free-running zone, by central-difference perturbation (``eps`` [W] in one
+    hour at a time).
+
+    Returns ``(benefit, harm)``, each (8760,) in [0, 1]: the degree-hours below the comfort band that one extra watt-hour of
+    solar gain at hour t removes over the year, and the degree-hours above it that it adds, each times the zone's heat loss
+    coefficient (:func:`loss_coefficient`). The product is a share of the watt-hour: in steady state, a watt-hour that all goes
+    into warming a zone below the band removes 1/H degree-hours, which counts 1. Out-of-range values up to 0.02 are clipped
+    silently, larger ones with a warning (as in :func:`attribute_solar_gains`). The other arguments are as in
+    :func:`simulate_free_running`; ``progress`` as in :func:`attribute_solar_gains`.
+    """
+    t_out, phi_int, phi_sol = _hourly_arrays(t_out, phi_int, phi_sol)
+    if t_m_init is None:
+        t_m_init = _periodic_start(p, t_out, phi_int, phi_sol, h_open, vent_above)
+    under, over, *_ = _march_free(p, t_out, phi_int, phi_sol, h_open, vent_above, deltas=float(eps), t_m_init=t_m_init,
+                                  progress=progress)
+    scale = loss_coefficient(p) / (2.0 * eps)
+    benefit = (under[2::2] - under[1::2]) * scale       # −eps rows minus +eps rows: the underheating one more Wh removes
+    harm = (over[1::2] - over[2::2]) * scale
+    tol = 0.02
+    for name, arr in (("benefit", benefit), ("harm", harm)):
+        low, high = float(arr.min()), float(arr.max())
+        if low < -tol or high > 1.0 + tol:
+            log.warning("attribute_free_running: %s outside [0, 1] beyond tolerance (min %.3f, max %.3f); check inputs.",
+                        name, low, high)
     return np.clip(benefit, 0.0, 1.0), np.clip(harm, 0.0, 1.0)
 
 
@@ -952,8 +1112,15 @@ def direction_archetypes(archetype: dict) -> dict:
     return rooms
 
 
-def _save_heatmaps(benefit: np.ndarray, harm: np.ndarray, path) -> "Path | None":
-    """Save the benefit/harm hourly series as day x hour heatmaps.
+_HEATMAP_TITLES = {
+    "conditioned": ("benefit: marginal solar offsets HEATING", "harm: marginal solar becomes COOLING load"),
+    "free_running": ("benefit: marginal solar removes UNDERHEATING", "harm: marginal solar adds OVERHEATING"),
+}
+
+
+def _save_heatmaps(benefit: np.ndarray, harm: np.ndarray, path, operation: str = "conditioned") -> "Path | None":
+    """Save the benefit/harm hourly series as day x hour heatmaps, titled for
+    the *operation* of the zone.
 
     Companion preview for the artifact. Returns the PNG path, or None
     when matplotlib is unavailable.
@@ -969,9 +1136,10 @@ def _save_heatmaps(benefit: np.ndarray, harm: np.ndarray, path) -> "Path | None"
     days = HOURS // 24
     fig = Figure(figsize=(13, 3.6))
     ax1, ax2 = fig.subplots(1, 2, sharey=True)
+    benefit_title, harm_title = _HEATMAP_TITLES[operation]
     for ax, series, title, cmap in (
-        (ax1, benefit, "benefit: marginal solar offsets HEATING", "YlOrRd"),
-        (ax2, harm, "harm: marginal solar becomes COOLING load", "PuBu"),
+        (ax1, benefit, benefit_title, "YlOrRd"),
+        (ax2, harm, harm_title, "PuBu"),
     ):
         im = ax.imshow(series.reshape(days, 24).T, aspect="auto",
                        origin="lower", cmap=cmap, vmin=0.0, vmax=1.0)
@@ -996,16 +1164,24 @@ _FACTORS_FIRST_SHARE = 1 / 3
 
 
 def _room_weights(epw_path: str, arch: dict, internal_gains_w_m2, eps: float, outdoor_temperature,
-                  progress=None) -> dict:
+                  progress=None, operation: str = "conditioned") -> dict:
     """The benefit and harm series of one room, its explicit archetype *arch*
-    (after :func:`expand_shoebox`), with the annual demand of its base run
-    and its archetype as the artifact's meta records it.  See
-    :func:`generate_simulated_weights` for the keys and the gains;
-    *outdoor_temperature* returns the weather file's dry-bulb series, read
-    once the archetype has passed its checks.  *progress*, when given, is
-    called with the share of the room done (0 to 1)."""
+    (after :func:`expand_shoebox`), with the outcome of its base run (keys
+    _OUTCOME_KEYS[operation]) and its archetype as the artifact's meta
+    records it.  See :func:`generate_simulated_weights` for the keys, the
+    gains and *operation*; *outdoor_temperature* returns the weather file's
+    dry-bulb series, read once the archetype has passed its checks.
+    *progress*, when given, is called with the share of the room done (0 to
+    1)."""
     report = progress if progress is not None else (lambda share: None)
     arch = dict(arch)
+    vent = {key: arch.pop(key) for key in FREE_RUNNING_DEFAULTS if key in arch}
+    if operation == "free_running":
+        vent = {key: float(vent.get(key, default)) for key, default in FREE_RUNNING_DEFAULTS.items()}
+        if vent["vent_ach"] < 0.0:
+            raise ValueError(f"vent_ach must not be negative, got {vent['vent_ach']:g}")
+    elif vent:
+        raise ValueError(f"archetype: {', '.join(sorted(vent))} apply to a free-running zone only (operation: free_running)")
     profile = arch.pop("internal_gains_profile_w_m2", None)
     flat = arch.pop("internal_gains_w_m2", None)
     if internal_gains_w_m2 is None:
@@ -1058,12 +1234,26 @@ def _room_weights(epw_path: str, arch: dict, internal_gains_w_m2, eps: float, ou
             f"daily profile or {HOURS} hourly values, got shape {gains.shape}"
         )
 
-    benefit, harm = attribute_solar_gains(
-        params, t_out, phi_int, phi_sol, eps=eps,
-        progress=lambda share: report(_ROOM_STEP_SHARES["windows"] + _ROOM_STEP_SHARES["attribution"] * share))
-    # The annual demand of the zone as given (shaded solar and internal gains),
-    # recorded so a reader need not simulate again.
-    base = simulate(params, t_out, phi_int, phi_sol)
+    def attribution_progress(share: float) -> None:
+        report(_ROOM_STEP_SHARES["windows"] + _ROOM_STEP_SHARES["attribution"] * share)
+
+    if operation == "free_running":
+        h_open = window_conductance(arch["volume"], vent["vent_ach"])
+        benefit, harm = attribute_free_running(params, t_out, phi_int, phi_sol, h_open, vent["vent_above"],
+                                               eps=_FREE_RUNNING_EPS, progress=attribution_progress)
+        # The degree-hours of the zone as given, recorded so a reader need not simulate again.
+        free = simulate_free_running(params, t_out, phi_int, phi_sol, h_open, vent["vent_above"])
+        outcome = {"underheating_kh": free.underheating_kh, "overheating_kh": free.overheating_kh,
+                   "hours_below": free.hours_below, "hours_above": free.hours_above,
+                   "comfort_band_c": [params.t_set_heating, params.t_set_cooling],
+                   "loss_coefficient_w_k": loss_coefficient(params)}
+    else:
+        benefit, harm = attribute_solar_gains(params, t_out, phi_int, phi_sol, eps=eps, progress=attribution_progress)
+        # The annual demand of the zone as given (shaded solar and internal gains),
+        # recorded so a reader need not simulate again.
+        base = simulate(params, t_out, phi_int, phi_sol)
+        outcome = {"heating_kwh_m2": base.q_heating_wh / 1000.0 / params.floor_area,
+                   "cooling_kwh_m2": base.q_cooling_wh / 1000.0 / params.floor_area}
     report(1.0)
     if shading is not None:
         # Only the fraction f_eff of an extra unshaded watt-hour reaches the
@@ -1086,9 +1276,19 @@ def _room_weights(epw_path: str, arch: dict, internal_gains_w_m2, eps: float, ou
             arch_meta["hot_months"] = [int(m) for m in hot_months]
         else:
             arch_meta["shading_hot_period"] = [int(d) for d in hot_period]
-    return {"benefit": benefit, "harm": harm, "archetype": arch_meta,
-            "heating_kwh_m2": base.q_heating_wh / 1000.0 / params.floor_area,
-            "cooling_kwh_m2": base.q_cooling_wh / 1000.0 / params.floor_area}
+    if operation == "free_running":
+        arch_meta.update(vent)
+    return {"benefit": benefit, "harm": harm, "archetype": arch_meta, **outcome}
+
+
+# The outcome of a room's base run that the artifact's meta records, by operation.
+_OUTCOME_KEYS = {"conditioned": ("heating_kwh_m2", "cooling_kwh_m2"),
+                 "free_running": ("underheating_kh", "overheating_kh", "hours_below", "hours_above", "comfort_band_c",
+                                  "loss_coefficient_w_k")}
+_METHODS = {"conditioned": "iso13790-5r1c-perturbation", "free_running": "iso13790-5r1c-free-running-perturbation"}
+# The perturbation of the free-running attribution [W]: its degree-hours change in steps where the air crosses a limit of the
+# band, so a larger step than the conditioned eps averages over them.
+_FREE_RUNNING_EPS = 10.0
 
 
 # The geometry of a room per direction that the artifact's meta records.
@@ -1115,6 +1315,14 @@ def generate_simulated_weights(
     ``direction_rooms`` (true or false, default false; shoebox form only).
     ``ach_vent`` may be 8760 hourly values (see
     :meth:`ZoneParams.from_archetype`).
+
+    ``operation`` (one of OPERATIONS, default ``"conditioned"``) says how
+    the zone is run. Conditioned: ideal heating and cooling to the set
+    points, the weights by :func:`attribute_solar_gains`. Free running: no
+    heating or cooling, the comfort band from ``t_set_heating`` to
+    ``t_set_cooling``, windows opened for natural ventilation by the keys
+    ``vent_above`` [°C] and ``vent_ach`` [1/h] (FREE_RUNNING_DEFAULTS; free
+    running only), the weights by :func:`attribute_free_running`.
 
     Internal gains are either a single flat value [W/m²], a 24-value
     daily occupancy profile [W/m² per hour of day], tiled over the year,
@@ -1144,9 +1352,17 @@ def generate_simulated_weights(
     cooling demand per m² of floor (``heating_kwh_m2``, ``cooling_kwh_m2``,
     in kWh/m²), from :func:`simulate` with the same gains, and ``sun_up``,
     8760 values of 0 or 1 marking the hours with the sun above the horizon
-    (:func:`sun_up_hours`).
+    (:func:`sun_up_hours`).  Free running, it holds ``operation`` and, in
+    place of the demands, the zone's degree-hours below and above the band
+    (``underheating_kh``, ``overheating_kh``, in K·h), its hours outside it
+    (``hours_below``, ``hours_above``), the band (``comfort_band_c``) and the
+    loss coefficient the weights are scaled by (``loss_coefficient_w_k``),
+    from :func:`simulate_free_running`.
     """
     archetype = dict(archetype)
+    operation = archetype.pop("operation", "conditioned")
+    if operation not in OPERATIONS:
+        raise ValueError(f"operation must be one of {', '.join(OPERATIONS)}, got {operation!r}")
     by_direction = archetype.pop("direction_rooms", False)
     if not isinstance(by_direction, bool):
         raise ValueError(f"direction_rooms must be true or false, got {by_direction!r}")
@@ -1167,17 +1383,17 @@ def generate_simulated_weights(
     done = {}
     for index, (name, arch) in enumerate(rooms.items()):
         done[name] = _room_weights(epw_path, arch, internal_gains_w_m2, eps, outdoor_temperature,
-                                   progress=lambda share, index=index: report(index + share))
+                                   progress=lambda share, index=index: report(index + share), operation=operation)
     main = done.pop("room")
 
     from datetime import datetime, timezone
     meta = {
-        "method": "iso13790-5r1c-perturbation",
+        "method": _METHODS[operation],
+        "operation": operation,
         "epw": str(epw_path),
         "archetype": main["archetype"],
-        "eps_w": eps,
-        "heating_kwh_m2": main["heating_kwh_m2"],
-        "cooling_kwh_m2": main["cooling_kwh_m2"],
+        "eps_w": eps if operation == "conditioned" else _FREE_RUNNING_EPS,
+        **{key: main[key] for key in _OUTCOME_KEYS[operation]},
         "sun_up": [int(v) for v in sun_up_hours(epw_path)],
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "generator": "usc simulate-weights (iso13790-5r1c)",
@@ -1187,7 +1403,7 @@ def generate_simulated_weights(
         directions = {name: (done[name]["benefit"], done[name]["harm"]) for name in DIRECTION_ROOMS}
         meta["direction_rooms"] = {
             name: {**{key: done[name]["archetype"][key] for key in _DIRECTION_ROOM_META_KEYS},
-                   "heating_kwh_m2": done[name]["heating_kwh_m2"], "cooling_kwh_m2": done[name]["cooling_kwh_m2"]}
+                   **{key: done[name][key] for key in _OUTCOME_KEYS[operation]}}
             for name in DIRECTION_ROOMS}
         from .sky_patches import direction_factors
         averaged = (main["benefit"], main["harm"])
@@ -1198,6 +1414,6 @@ def generate_simulated_weights(
             report(len(rooms) + _FACTORS_IN_ROOMS * (_FACTORS_FIRST_SHARE if not harm else 1.0))
     artifact = write_simulated_weights(out_path, main["benefit"], main["harm"], meta, directions)
     # Companion preview so users can inspect the weights without writing code.
-    _save_heatmaps(main["benefit"], main["harm"], artifact.with_suffix(".png"))
+    _save_heatmaps(main["benefit"], main["harm"], artifact.with_suffix(".png"), operation)
     report(total)
     return artifact
