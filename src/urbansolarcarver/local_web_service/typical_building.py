@@ -12,10 +12,7 @@ into the engine's shoebox archetype. The default room ("average") is a square pl
 window share on its four walls (NE, SE, SW, NW), the roof and the floor adiabatic; "box" is the explicit box of width, length and
 orientation, with a window share on each of its north, east, south and west walls. An average room equals the box of width and
 length 4 x depth, orientation 45, whose north, east, south and west shares are the ne, se, sw and nw ones. The thermal mass is a
-thermal capacity per m² of floor; the infiltration is in air changes per hour. With ``by_direction`` (one room per facade direction,
-on in the library examples) the engine also calculates a room behind one facade turned to each of 8 directions and a top-floor room
-under a skylight, each with the room's facade and glass per m² of floor (simulated_weights.direction_archetypes), and benefit mode
-scales each test point by its direction's factor.
+thermal capacity per m² of floor; the infiltration is in air changes per hour.
 
 The library is apart from projects: the built-in examples (EXAMPLES, read-only, in groups named by the source of their values) and
 one YAML file per own entry in library_folder(), beside the user preferences file, so the entries serve every projects folder.
@@ -47,8 +44,8 @@ import numpy as np
 import yaml
 
 from ..errors import ConfigError, ConfigFieldError
-from ..simulated_weights import (DIRECTION_ROOMS, FREE_RUNNING_DEFAULTS, HOURS, ZoneParams, _shading_factors, direction_archetypes,
-                                 expand_shoebox, read_simulated_weights)
+from ..simulated_weights import (FREE_RUNNING_DEFAULTS, HOURS, ZoneParams, _shading_factors, expand_shoebox,
+                                 read_simulated_weights)
 from . import user_preferences
 from .api_models import ProjectJson, TypicalBuildingEntry, TypicalBuildingLibraryEntry, TypicalBuildingReply, TypicalBuildingWeightsReply
 from .project_names import ProjectError
@@ -81,12 +78,14 @@ AVERAGE_ROOM_TURN = 45.0
 VALUE_KEYS = ("schedule", "t_set_heating", "t_set_cooling", "gains_w_m2", "fresh_air_m3h_m2", "heat_recovery",
               "u_wall", "u_window", "g_value", "mass_capacity_kj_m2k",
               "shading_factor", "shading_start", "shading_end",
-              "room", "height", "wwr", "by_direction",
+              "room", "height", "wwr",
               "roof_exposed", "u_roof", "floor_exposed", "u_floor",
               "ach_infiltration", "vent_above", "vent_ach")
-# The value of a key that came later, for a building stored before it: one averaged room for all facades, and the engine's window
-# opening of a free-running zone.
-LATER_VALUE_DEFAULTS = {"by_direction": False, **FREE_RUNNING_DEFAULTS}
+# The value of a key that came later, for a building stored before it: the engine's window opening of a free-running zone.
+LATER_VALUE_DEFAULTS = {**FREE_RUNNING_DEFAULTS}
+# Keys that buildings stored before their removal may hold, dropped when read: by_direction, one room per facade direction
+# (2026-10-30 to 31). A building that had it on gets a new weights key, so its weights are calculated again.
+RETIRED_VALUE_KEYS = ("by_direction",)
 # How the weights are calculated: the room free running against the comfort band of t_set_heating to t_set_cooling, its windows
 # opened by vent_above and vent_ach. Part of every weights key, so the weights of the conditioned room calculated before
 # (2026-10-31) are out of date.
@@ -146,14 +145,12 @@ def archetype_of(values: dict, epw_path: Path | str | None = None) -> dict:
     Fresh air (m³/h per m² of floor) over the storey height gives the ventilation in air changes per hour; the gains and the fresh
     air apply in the hours of the schedule (8,760 values each), or as one value when the schedule is every hour, and the
     infiltration in every hour. A side without windows is left out; the summer shading is the hot shading of the engine over the
-    period of its dates. With by_direction the archetype has direction_rooms (the rooms per facade direction). A key of
-    LATER_VALUE_DEFAULTS that a building stored before it lacks takes its default.
+    period of its dates. A key of LATER_VALUE_DEFAULTS that a building stored before it lacks takes its default.
     """
     values = {**LATER_VALUE_DEFAULTS, **values}
     width, length, orientation, wwr = room_box(values)
     height = values["height"]
     archetype = {"width": width, "length": length, "height": height, "orientation": orientation,
-                 **({"direction_rooms": True} if values.get("by_direction") else {}),
                  "wwr": {side: share for side, share in wwr.items() if share > 0},
                  "g_value": values["g_value"], "u_wall": values["u_wall"], "u_window": values["u_window"],
                  "roof_exposed": values["roof_exposed"], "u_roof": values["u_roof"],
@@ -230,14 +227,14 @@ def validate(values) -> dict:
     """The values checked and in their stored form (numbers as floats, every side of the room in wwr).
 
     Every building has the keys of VALUE_KEYS and those of its room (ROOM_KEYS); a key of LATER_VALUE_DEFAULTS that is missing (a
-    building stored before it) takes its default. Raises ConfigError with an error per field (the
+    building stored before it) takes its default, and a key of RETIRED_VALUE_KEYS is dropped. Raises ConfigError with an error per field (the
     field is the value's key, "wwr.<side>" for a window share): each value's type and range (window shares 0 to 0.9, factors 0 to
     1, dates "MM-DD", the choices of schedule and room), then the engine's own checks of the archetype
     (expand_shoebox, ZoneParams.from_archetype).
     """
     if not isinstance(values, dict):
         raise ConfigError("The typical building's values must be a mapping.", [ConfigFieldError(None, "The values must be a mapping.")])
-    values = {**LATER_VALUE_DEFAULTS, **values}
+    values = {key: value for key, value in {**LATER_VALUE_DEFAULTS, **values}.items() if key not in RETIRED_VALUE_KEYS}
     room = values.get("room")
     all_room_keys = {key for keys in ROOM_KEYS.values() for key in keys}
     known_room = isinstance(room, str) and room in ROOMS
@@ -280,7 +277,6 @@ def validate(values) -> dict:
         # a side left out has no window
         checked["wwr"] = {side: _checked_number(wwr.get(side, 0.0), f"wwr.{side}", errors, 0.0, MAX_WINDOW_SHARE) for side in sides}
     checked.update({
-        "by_direction": _checked_bool(values["by_direction"], "by_direction", errors),
         "roof_exposed": _checked_bool(values["roof_exposed"], "roof_exposed", errors),
         "u_roof": _checked_number(values["u_roof"], "u_roof", errors, above=0.0),
         "floor_exposed": _checked_bool(values["floor_exposed"], "floor_exposed", errors),
@@ -304,8 +300,8 @@ def _check_with_the_engine(values: dict) -> None:
     archetype = archetype_of(values)
     try:
         expanded = expand_shoebox({key: value for key, value in archetype.items()
-                                   if key not in ("internal_gains_w_m2", "shading_hot", "shading_hot_period", "direction_rooms",
-                                                  "operation", *FREE_RUNNING_DEFAULTS)})
+                                   if key not in ("internal_gains_w_m2", "shading_hot", "shading_hot_period", "operation",
+                                                  *FREE_RUNNING_DEFAULTS)})
     except ValueError as error:
         message = "Give at least one side a window share." if "no windows" in str(error) else str(error)
         raise ConfigError(str(error), [ConfigFieldError("wwr", message)]) from error
@@ -326,14 +322,6 @@ def _check_with_the_engine(values: dict) -> None:
         _shading_factors(windows, None, archetype.get("shading_hot"), None, archetype.get("shading_hot_period"))
     except ValueError as error:
         raise ConfigError(str(error), [ConfigFieldError("shading_factor", str(error))]) from error
-    if archetype.get("direction_rooms"):
-        try:
-            direction_archetypes({key: value for key, value in archetype.items() if key != "direction_rooms"})
-        except ValueError as error:
-            raise ConfigError(str(error), [ConfigFieldError("wwr", "With one room per facade direction, the roof room's skylight has "
-                                                                   "the room's window area, which must be smaller than its floor: "
-                                                                   "lower the window shares or the storey height, or give a deeper "
-                                                                   "room.")]) from error
 
 
 # ---- The library ----
@@ -393,7 +381,7 @@ def _kenak_values(use: str, zone: str) -> dict:
     x 0.9 mean over the angles x 0.8 for a 20 % frame, §4.2.7), the infiltration of _kenak_air_changes, summer shading 0.77 (the mean
     of the reference building's NE, SE, SW and NW factors 0.80, 0.73, 0.73, 0.80, §4.3.1), the thermal capacity KENAK_CAPACITY and the
     average room 6 m deep with a 3 m storey, 40 %
-    windows on each side, one room per facade direction, roof and floor not exposed. The set points 20 and 26 °C are the comfort
+    windows on each side, roof and floor not exposed. The set points 20 and 26 °C are the comfort
     band of the free-running room; its windows open as the engine's FREE_RUNNING_DEFAULTS (not KENAK values)."""
     _letter, u_wall, u_roof_and_floor, u_window, (shading_start, shading_end) = KENAK_ZONES[zone]
     _label, schedule, fresh_air, heat_recovery, gains = KENAK_USES[use]
@@ -402,7 +390,7 @@ def _kenak_values(use: str, zone: str) -> dict:
             "mass_capacity_kj_m2k": KENAK_CAPACITY,
             "shading_factor": 0.77, "shading_start": shading_start, "shading_end": shading_end,
             "room": "average", "height": KENAK_ROOM["height"], "depth": KENAK_ROOM["depth"],
-            "wwr": {side: KENAK_ROOM["share"] for side in WWR_SIDES["average"]}, "by_direction": True,
+            "wwr": {side: KENAK_ROOM["share"] for side in WWR_SIDES["average"]},
             "roof_exposed": False, "u_roof": u_roof_and_floor, "floor_exposed": False, "u_floor": u_roof_and_floor,
             "ach_infiltration": _kenak_air_changes(), **FREE_RUNNING_DEFAULTS}
 
@@ -550,12 +538,17 @@ def _valid_values_text(values_text: str) -> bool:
 
 def building_of(project_json: ProjectJson) -> TypicalBuildingEntry | None:
     """The project's building; None when none was chosen, or when the stored values no longer validate (the keys of an earlier
-    form of them), so the user chooses one again. A key of LATER_VALUE_DEFAULTS that the stored values lack takes its default."""
+    form of them), so the user chooses one again. A key of LATER_VALUE_DEFAULTS that the stored values lack takes its default; a key of
+    RETIRED_VALUE_KEYS is dropped."""
     building = project_json.typical_building
     if building is None or not _valid_values_text(json.dumps(building.values, sort_keys=True)):
         return None
     missing = {key: value for key, value in LATER_VALUE_DEFAULTS.items() if key not in building.values}
-    return building.model_copy(update={"values": {**building.values, **missing}}) if missing else building
+    retired = set(RETIRED_VALUE_KEYS) & set(building.values)
+    if not missing and not retired:
+        return building
+    values = {key: value for key, value in {**building.values, **missing}.items() if key not in retired}
+    return building.model_copy(update={"values": values})
 
 
 def _file_digest(path: Path) -> str:
@@ -601,15 +594,6 @@ def _sun_up(meta: dict) -> np.ndarray:
     return sun_up if sun_up.shape == (HOURS,) else np.ones(HOURS, dtype=bool)
 
 
-def _direction_factors_of(meta: dict, label: str) -> dict[str, float] | None:
-    """The factors per facade direction the weights file's meta records under *label* (simulated_weights.generate_simulated_weights);
-    None for a file without rooms per direction."""
-    factors = (meta.get("direction_factors") or {}).get(label)
-    if not isinstance(factors, dict) or set(factors) != set(DIRECTION_ROOMS):
-        return None
-    return {name: float(factors[name]) for name in DIRECTION_ROOMS}
-
-
 # The free-running room's numbers that the weights file's meta holds and the reply passes on.
 FREE_RUNNING_REPLY_KEYS = ("underheating_kh", "overheating_kh", "hours_below", "hours_above")
 
@@ -624,7 +608,7 @@ def reply(store, name: str) -> TypicalBuildingReply:
         if building is None:
             return TypicalBuildingReply(values=None, library_id=None, library_name=None, changed=False, state="not_chosen")
         path = weights_file(store.open(name))
-        heating = cooling = counted = factors = factors_with_harm = None
+        heating = cooling = counted = None
         free = {}
         if not path.is_file():
             state = "missing"
@@ -638,13 +622,11 @@ def reply(store, name: str) -> TypicalBuildingReply:
                 heating, cooling = meta.get("heating_kwh_m2"), meta.get("cooling_kwh_m2")
                 free = {key: meta.get(key) for key in FREE_RUNNING_REPLY_KEYS}
                 counted = int(((benefit > COUNTED_WEIGHT) & _sun_up(meta)).sum())
-                factors, factors_with_harm = (_direction_factors_of(meta, label) for label in ("benefit", "benefit_minus_harm"))
     entry = library_entry(building.library_id)
     return TypicalBuildingReply(values=building.values, library_id=building.library_id,
                                 library_name=entry.name if entry is not None else building.library_name,
                                 changed=entry is not None and entry.values != {**LATER_VALUE_DEFAULTS, **building.values},
-                                state=state, heating_kwh_m2=heating, cooling_kwh_m2=cooling, **free, counted_hours=counted,
-                                direction_factors=factors, direction_factors_with_harm=factors_with_harm)
+                                state=state, heating_kwh_m2=heating, cooling_kwh_m2=cooling, **free, counted_hours=counted)
 
 
 def weights_reply(store, name: str) -> TypicalBuildingWeightsReply:
@@ -707,7 +689,7 @@ def calculate(store, name: str, values: dict | None = None, progress=None) -> st
 
     The generator writes into a new folder beside WEIGHTS_PATH, and the files replace the earlier ones together with the record of the
     key, under the project lock, so the file and its key always belong together. The lock is not held while the generator runs (about
-    7 s, about 60 s with one room per facade direction). ProjectError: 404 without a building (NO_BUILDING_MESSAGE) or a weather file (NO_WEATHER_FILE_MESSAGE), 422 when the
+    7 s). ProjectError: 404 without a building (NO_BUILDING_MESSAGE) or a weather file (NO_WEATHER_FILE_MESSAGE), 422 when the
     generator fails.
     """
     from ..simulated_weights import generate_simulated_weights

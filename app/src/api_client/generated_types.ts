@@ -669,9 +669,9 @@ export interface paths {
         put?: never;
         /**
          * Calculate Typical Building
-         * @description Calculate the hourly weights of the stored typical building with the project's weather file (about 7 s, about a minute
-         *     with one room per facade direction; GET .../progress tells how far it has come); 404 without a building or a weather file,
-         *     409 while a run of the project is active.
+         * @description Calculate the hourly weights of the stored typical building with the project's weather file (about 7 s; GET
+         *     .../progress tells how far it has come); 404 without a building or a weather file, 409 while a run of the project is
+         *     active.
          */
         post: operations["calculate_typical_building"];
         delete?: never;
@@ -2105,14 +2105,6 @@ export interface components {
             hours_above?: number | null;
             /** Counted Hours */
             counted_hours?: number | null;
-            /** Direction Factors */
-            direction_factors?: {
-                [key: string]: number;
-            } | null;
-            /** Direction Factors With Harm */
-            direction_factors_with_harm?: {
-                [key: string]: number;
-            } | null;
         };
         /**
          * TypicalBuildingRequest

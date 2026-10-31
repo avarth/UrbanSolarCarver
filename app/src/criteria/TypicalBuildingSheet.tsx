@@ -13,7 +13,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import type { TypicalBuildingLibraryEntry, TypicalBuildingReply, TypicalBuildingWeightsReply } from "../api_client/client";
-import { dayAndMonth, listedWithAnd, messages } from "../messages";
+import { dayAndMonth, messages } from "../messages";
 import { WarningIcon } from "../settings_form/SettingField";
 import { SettingTooltip } from "../settings_form/SettingTooltip";
 import { formatNumber, formattedNumber, groupedDigits } from "../steps/format_numbers";
@@ -35,7 +35,7 @@ const VALUES_OF_GROUP: Record<BuildingGroupId, readonly string[]> = {
   use: ["schedule", "t_set_heating", "t_set_cooling", "gains_w_m2", "fresh_air_m3h_m2", "heat_recovery"],
   fabric: ["u_wall", "u_window", "g_value", "mass_capacity_kj_m2k"],
   shading: ["shading_factor", "shading_start", "shading_end"],
-  room: ["room", "by_direction", "height", "depth", "width", "length", "orientation", "wwr"],
+  room: ["room", "height", "depth", "width", "length", "orientation", "wwr"],
   roof_and_floor: ["roof_exposed", "u_roof", "floor_exposed", "u_floor"],
   air: ["ach_infiltration", "vent_above", "vent_ach"],
 };
@@ -107,11 +107,9 @@ export function buildingGroupSummary(group: BuildingGroupId, values: TypicalBuil
       if (factor === null) return messages.noShading;
       return messages.shadingSummary(formattedNumber(factor), dayAndMonth(String(values.shading_start)), dayAndMonth(String(values.shading_end)));
     }
-    case "room": {
-      const room = roomOf(values) === "average" ? messages.averageRoomSummary(text("depth"), text("height"), sharesSummary(values))
+    case "room":
+      return roomOf(values) === "average" ? messages.averageRoomSummary(text("depth"), text("height"), sharesSummary(values))
         : messages.boxRoomSummary(text("width"), text("length"), text("height"), text("orientation"), sharesSummary(values));
-      return values.by_direction === true ? messages.byDirectionSummary(room) : room;
-    }
     case "roof_and_floor":
       return messages.roofAndFloorSummary(values.roof_exposed === true ? text("u_roof") : null, values.floor_exposed === true ? text("u_floor") : null);
     case "air": return messages.airSummary(text("ach_infiltration"), text("vent_above"), text("vent_ach"));
@@ -317,30 +315,6 @@ function CalculationProgress({ share }: { share: number }) {
     <div className="typical-building-progress" role="progressbar" aria-label={messages.calculationProgress} aria-valuemin={0}
          aria-valuemax={100} aria-valuenow={percent}>
       <div className="typical-building-progress-bar" style={{ width: `${percent}%` }} />
-    </div>
-  );
-}
-
-/** The factor of each facade direction (typical_building.reply), from benefit minus harm when the criterion counts harm; nothing
- *  without rooms per direction. A direction whose factor is 0 is named below the grid. */
-export function DirectionFactors({ factors, countsHarm }: { factors: Record<string, number> | null; countsHarm: boolean }) {
-  if (factors === null) return null;
-  const directions = Object.keys(messages.directionNames).filter((direction) => direction in factors);
-  const zero = directions.filter((direction) => factors[direction] === 0);
-  return (
-    <div className="typical-building-factors">
-      <div className="typical-building-factors-title">
-        {messages.directionFactorsTitle}
-        <SettingTooltip settingLabel={messages.directionFactorsTitle} help={messages.directionFactorsNote} />
-      </div>
-      <dl className="typical-building-factors-grid">
-        {directions.map((direction) => (
-          <div key={direction}><dt>{messages.directionNames[direction]}</dt><dd>{formatNumber(factors[direction], undefined, 2)}</dd></div>
-        ))}
-      </dl>
-      {zero.length > 0 && (
-        <p className="setting-note">{messages.zeroFactorNote(listedWithAnd(zero.map((direction) => messages.directionNames[direction])), zero.length, countsHarm)}</p>
-      )}
     </div>
   );
 }
@@ -686,9 +660,6 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
         <BuildingSwitch name="room" value={room} options={ROOMS} optionNames={messages.roomKinds} error={fieldErrors.room} disabled={disabled}
                         onChoose={(kind) => building.change(withRoom(values, kind))} />
         {room === "average" && <p className="setting-note">{notes.average}</p>}
-        <BuildingOnOff name="by_direction" value={values.by_direction === true} error={fieldErrors.by_direction} disabled={disabled}
-                       onChange={(on) => change("by_direction", on)} />
-        <p className="setting-note">{notes.by_direction}</p>
         {field("height", units.metres)}
         {room === "average" ? field("depth", units.metres)
           : <>{field("width", units.metres)}{field("length", units.metres)}{field("orientation", units.degrees, notes.orientation)}</>}
@@ -781,8 +752,7 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
           <div className="typical-building-calculate">
             <button type="button" className="primary-button" disabled={building.calculating || calculateBlocker !== null} aria-busy={building.calculating || undefined}
                     aria-describedby={calculateBlocker === null ? undefined : reasonId} onClick={building.calculate}>
-              {building.calculating ? <><span className="spinner" aria-hidden="true" />
-                {values.by_direction === true ? messages.calculatingByDirection : messages.calculating}</>
+              {building.calculating ? <><span className="spinner" aria-hidden="true" />{messages.calculating}</>
                 : outOfDate ? messages.calculateAgain : messages.calculate}
             </button>
             {building.calculating && <CalculationProgress share={building.calculationShare ?? 0} />}
@@ -818,8 +788,6 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
                       : messages.countedHoursOfDaytime(stored.counted_hours, daytimeHours)}</dd>
                   </div>
                 </dl>
-                <DirectionFactors factors={includesHarm ? stored.direction_factors_with_harm ?? null : stored.direction_factors ?? null}
-                                  countsHarm={includesHarm} />
               </div>
             </div>
           )}

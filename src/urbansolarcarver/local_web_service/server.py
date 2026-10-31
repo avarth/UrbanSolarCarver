@@ -673,9 +673,9 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
                                                                             f"{typical_building.NO_BUILDING_MESSAGE}"},
                             **_ERROR_RESPONSES})
     def calculate_typical_building(name: str) -> TypicalBuildingReply:
-        """Calculate the hourly weights of the stored typical building with the project's weather file (about 7 s, about a minute
-        with one room per facade direction; GET .../progress tells how far it has come); 404 without a building or a weather file,
-        409 while a run of the project is active."""
+        """Calculate the hourly weights of the stored typical building with the project's weather file (about 7 s; GET
+        .../progress tells how far it has come); 404 without a building or a weather file, 409 while a run of the project is
+        active."""
         store = folder_in_use.store
         with store.project_lock(name):      # not held while the weights are calculated: calculate takes it to put them in place
             refuse_while_running(name)

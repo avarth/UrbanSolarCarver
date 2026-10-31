@@ -187,7 +187,7 @@ None of these changes `inputs_revision`, `config.yaml` or a stage record.
 | `DELETE /typical-building-library/{id}` | 204; 409 for an example. Projects keep their copies |
 | `GET /projects/{name}/typical-building` | The `TypicalBuildingReply`: `values`, `library_id`, `library_name` (the entry's name now, or the name kept when it is gone), `changed` (the copy differs from its entry), `state` (`current`, `out_of_date`, `missing`, or `not_chosen` with null `values` while the project has no building) and, from the weights file, `heating_kwh_m2`, `cooling_kwh_m2` and `counted_hours` (hours with the sun up and benefit above 0.01) |
 | `PUT /projects/{name}/typical-building` | Body `values` and, when sent, `library_id` (null: from none; left out: the entry stays); a bad value is a 422 `ConfigErrorReply` at its field (`wwr.<side>` for a window share, `library_id` for no such entry) |
-| `POST /projects/{name}/typical-building/calculate` | Calculate the weights of the stored building into `inputs/typical_building/weights.json` (about 7 s, about a minute with one room per facade direction); 404 without a building or a weather file |
+| `POST /projects/{name}/typical-building/calculate` | Calculate the weights of the stored building into `inputs/typical_building/weights.json` (about 7 s); 404 without a building or a weather file |
 | `GET /projects/{name}/typical-building/progress` | `share_done`, 0 to 1, of the calculation under way (Calculate's or a run's), null when none is; the app asks it every half second while Calculate waits |
 | `GET /projects/{name}/typical-building/weights` | `benefit` and `harm`, 8,760 values each to 3 decimals, and `sun_up` (0 or 1); 404 before a calculation |
 

@@ -715,14 +715,6 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 .typical-building-numbers dt { display: flex; align-items: center; gap: var(--space-unit); color: var(--colour-muted); }
 .typical-building-numbers dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
 
-/* The factor of each facade direction: the 8 directions and the roof in a grid of small cells. */
-.typical-building-factors { display: flex; flex-direction: column; gap: var(--space-unit); }
-.typical-building-factors-title { display: flex; align-items: center; gap: var(--space-unit); color: var(--colour-muted); }
-.typical-building-factors-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: var(--space-unit); margin: 0; }
-.typical-building-factors-grid > div { display: flex; flex-direction: column; align-items: center; }
-.typical-building-factors-grid dt { color: var(--colour-muted); font-size: var(--text-secondary); }
-.typical-building-factors-grid dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
-
 /* The weight of each hour of the year: the days across, the hours down, each hour one cell of the canvas, drawn without smoothing. */
 .weights-chart { display: flex; flex-direction: column; gap: var(--space-unit); margin: 0; }
 .weights-chart-title { font-size: var(--text-secondary); font-weight: 600; }

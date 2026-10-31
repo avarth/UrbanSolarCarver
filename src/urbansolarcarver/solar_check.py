@@ -183,22 +183,6 @@ def _patch_radiation(settings: CheckSettings) -> np.ndarray:
     return weights.cpu().numpy().astype(np.float64)
 
 
-def _direction_point_factors(settings: CheckSettings, normals) -> Optional[np.ndarray]:
-    """For useful_solar_energy with a simulated-weights file that has rooms per facade direction, each test point's factor of
-    its direction (as the carving scales its rays, sky_patches.point_direction_factors); None otherwise.  The factor is the
-    ratio of the patch sums without the cosine, applied to the point's cosine-weighted sum."""
-    if settings.metric != "useful_solar_energy" or not settings.simulated_weights_path:
-        return None
-    from .scoring import get_direction_factors
-    from .sky_patches import point_direction_factors
-    from .sun import sample_period
-    _datetimes, hoys = sample_period(settings, steps_per_hour=1)
-    factors = get_direction_factors(settings.epw_path, list(hoys), bool(settings.include_harm), settings.simulated_weights_path)
-    if factors is None:
-        return None
-    return point_direction_factors(normals, factors, settings.north_deg).astype(np.float64)
-
-
 def evaluate_test_points(
     points,
     normals,
@@ -459,9 +443,7 @@ def solar_check(
     ``settings.sample_spacing`` meters (:func:`sample_test_surfaces`, in
     *sampling_frame*) and
     traces each geometry with :func:`evaluate_test_points`, clipped by its
-    ``clip`` mesh and with its own surface tolerance.  For useful solar
-    energy with rooms per facade direction in the simulated-weights file,
-    every column is multiplied by each point's direction factor.  *blocking* (meshes or
+    ``clip`` mesh and with its own surface tolerance.  *blocking* (meshes or
     mesh files, or None: the context and terrain), joined into one mesh,
     blocks in every column, "open" included.  The summary compares the
     other columns with the geometry named ``max_volume``.
@@ -517,10 +499,6 @@ def solar_check(
             progress=lambda launch, done_before=done_before: report_progress(done_before + launch, total),
         )
         timings[name] = time.perf_counter() - started
-
-    by_direction = _direction_point_factors(settings, check_points.normals)
-    if by_direction is not None:
-        values = {name: column * by_direction for name, column in values.items()}
 
     open_values = values[OPEN_VARIANT]
     change_tolerance = 1e-3 * max(float(np.max(open_values)) if len(open_values) else 0.0, 1e-9)

@@ -607,16 +607,6 @@ def _run_preprocessing(settings: PreprocessingSettings, options: RunOptions, out
             "generated": u_meta.get("generated"),
             "archetype": u_meta.get("archetype"),
         }
-        # With rooms per facade direction, the factors this run scaled each direction's test points by (inside a
-        # CarverSession the ones the rays used, from the cache; otherwise computed again, a few seconds).
-        from ..scoring import get_direction_factors
-        from ..simulated_weights import DIRECTION_ROOMS
-        _datetimes, hoys = sample_period(settings, steps_per_hour=1)
-        factors = get_direction_factors(settings.epw_path, list(hoys), bool(settings.include_harm),
-                                        settings.simulated_weights_path)
-        if factors is not None:
-            summary["simulated_weights"]["direction_factors"] = {
-                name: round(float(value), 4) for name, value in zip(DIRECTION_ROOMS, factors)}
     summary["device"] = device_info
     _mark("build_summary")
     weight_unit, score_unit = MODES[mode].weight_unit, MODES[mode].score_unit

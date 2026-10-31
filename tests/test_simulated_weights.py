@@ -679,3 +679,52 @@ def test_hourly_gains_and_ventilation_equal_the_flat_values(tmp_path, shoebox_ru
     np.testing.assert_array_equal(h, harm)
     assert (m["heating_kwh_m2"], m["cooling_kwh_m2"]) == (meta["heating_kwh_m2"], meta["cooling_kwh_m2"])
     assert len(m["archetype"]["ach_vent"]) == HOURS
+
+
+# ---- Files written with rooms per facade direction, and progress ----
+
+def _flat_series(value):
+    return np.full(HOURS, value), np.full(HOURS, value / 2)
+
+
+def test_a_version_1_file_and_one_with_rooms_per_direction_are_read(tmp_path):
+    """Version 1 has no rooms per direction; a version 2 file written 2026-10-30 to 31 may hold their series
+    (hourly.directions), which are ignored: the room's own series are read."""
+    import urbansolarcarver.simulated_weights as sw
+    path = write_simulated_weights(tmp_path / "w.json", *_flat_series(0.5), {"x": 1})
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == sw.SCHEMA_VERSION == 2 and "directions" not in payload["hourly"]
+    (tmp_path / "v1.json").write_text(json.dumps(payload | {"schema_version": 1}), encoding="utf-8")
+    assert read_simulated_weights(tmp_path / "v1.json")[0][0] == 0.5
+    north = {"benefit": [0.9] * HOURS, "harm": [0.1] * HOURS}
+    payload["hourly"]["directions"] = {"N": north}
+    (tmp_path / "rooms.json").write_text(json.dumps(payload), encoding="utf-8")
+    benefit, harm, meta = read_simulated_weights(tmp_path / "rooms.json")
+    assert (benefit[0], harm[0], meta) == (0.5, 0.25, {"x": 1})
+
+
+def test_the_generator_reports_the_share_done(tmp_path, monkeypatch):
+    import urbansolarcarver.simulated_weights as sw
+
+    def room_weights(epw_path, arch, gains, eps, outdoor_temperature, progress=None, operation="conditioned"):
+        progress(0.5)
+        progress(1.0)
+        return {"benefit": np.full(HOURS, 0.5), "harm": np.zeros(HOURS), "archetype": dict(arch),
+                "heating_kwh_m2": 1.0, "cooling_kwh_m2": 1.0}
+    monkeypatch.setattr(sw, "_room_weights", room_weights)
+    monkeypatch.setattr(sw, "sun_up_hours", lambda epw: np.zeros(HOURS, dtype=np.int8))
+    monkeypatch.setattr(sw, "_save_heatmaps", lambda benefit, harm, path, operation="conditioned": None)
+    shares = []
+    sw.generate_simulated_weights("weather.epw", {"width": 10.0, "length": 10.0, "height": 3.0, "wwr": {"south": 0.4}},
+                                  tmp_path / "w.json", progress=shares.append)
+    assert shares == [0.5, 1.0, 1.0]
+
+
+def test_the_hourly_march_reports_the_share_of_the_year_done():
+    import urbansolarcarver.simulated_weights as sw
+    p = ZoneParams.from_archetype(floor_area=24.0, volume=72.0, u_opaque=0.5, area_opaque=20.0, u_window=2.8, area_window=4.0,
+                                  ach_vent=0.5, ach_infiltration=0.2)
+    shares = []
+    sw._march(p, np.full(HOURS, 5.0), np.zeros(HOURS), np.zeros(HOURS), progress=shares.append)
+    assert len(shares) == 20 and shares[0] == pytest.approx(438 / HOURS) and shares[-1] == 1.0
+    assert shares == sorted(shares)

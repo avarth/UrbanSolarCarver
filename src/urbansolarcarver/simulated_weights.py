@@ -66,17 +66,6 @@ MASS_CLASSES = {
     "very_heavy": (3.5, 370_000.0),
 }
 
-# The rooms of the weights per facade direction (archetype key
-# ``direction_rooms``, see :func:`direction_archetypes`): a room behind one
-# facade turned to each of 8 directions (azimuth in degrees clockwise from
-# north) and a top-floor room under a horizontal skylight.
-DIRECTION_AZIMUTHS = {"N": 0.0, "NE": 45.0, "E": 90.0, "SE": 135.0,
-                      "S": 180.0, "SW": 225.0, "W": 270.0, "NW": 315.0}
-ROOF_ROOM = "roof"
-DIRECTION_ROOMS = (*DIRECTION_AZIMUTHS, ROOF_ROOM)
-# The skylight's azimuth: the side whose declared shading factors it takes.
-_SKYLIGHT_AZIMUTH = 180.0
-
 
 def nearest_mass_class(capacity_kj_m2k: float) -> str:
     """The Table-12 class whose C_m per m² floor is nearest to the given
@@ -784,38 +773,27 @@ def _shading_factors(windows, shading_permanent, shading_hot, hot_months,
 # ---------------------------------------------------------------------------
 
 SCHEMA_VERSION = 2
-READABLE_SCHEMA_VERSIONS = (1, 2)   # version 2 adds the optional series of the rooms per direction
+# Version 2 (2026-10-30) added the series of the rooms per facade direction (hourly.directions), no longer
+# written since 2026-10-31 and ignored when read; a free-running zone's files are version 2 as well.
+READABLE_SCHEMA_VERSIONS = (1, 2)
 
 
 def _rounded(series) -> list:
     return [round(float(v), 6) for v in series]
 
 
-def write_simulated_weights(path, benefit, harm, meta: dict, directions: "dict | None" = None) -> Path:
+def write_simulated_weights(path, benefit, harm, meta: dict) -> Path:
     """Write the simulated_weights.json artifact and return its path.
 
     The schema is described in ``design/simulated-weights.md``.  Values are
-    rounded to 6 decimals.  ``directions`` holds the series of the rooms
-    per facade direction (see :func:`direction_archetypes`) as
-    ``{name: (benefit, harm)}`` for every name of DIRECTION_ROOMS, written
-    under ``hourly.directions``.  Raises ValueError if a series is not 8760
-    finite values in [0, 1], or if ``directions`` does not name exactly the
-    rooms of DIRECTION_ROOMS.
+    rounded to 6 decimals.  Raises ValueError if a series is not 8760
+    finite values in [0, 1].
     """
     benefit = np.asarray(benefit, dtype=np.float64)
     harm = np.asarray(harm, dtype=np.float64)
     _validate_series("benefit", benefit)
     _validate_series("harm", harm)
     hourly = {"benefit": _rounded(benefit), "harm": _rounded(harm)}
-    if directions is not None:
-        if set(directions) != set(DIRECTION_ROOMS):
-            raise ValueError(f"directions must name the rooms {list(DIRECTION_ROOMS)}, got {sorted(directions)}")
-        hourly["directions"] = {}
-        for name in DIRECTION_ROOMS:
-            room_benefit, room_harm = (np.asarray(series, dtype=np.float64) for series in directions[name])
-            _validate_series(f"{name}: benefit", room_benefit)
-            _validate_series(f"{name}: harm", room_harm)
-            hourly["directions"][name] = {"benefit": _rounded(room_benefit), "harm": _rounded(room_harm)}
     payload = {
         "schema_version": SCHEMA_VERSION,
         "meta": meta,
@@ -845,8 +823,8 @@ def read_simulated_weights(path) -> Tuple[np.ndarray, np.ndarray, dict]:
     """Read and validate a simulated_weights.json artifact.
 
     Returns (benefit, harm, meta): two (8760,) float64 arrays and the
-    metadata dict; with rooms per facade direction these are the averaged
-    room's (:func:`read_direction_weights` reads the others).  Raises
+    metadata dict (a file that also holds rooms per facade direction gives
+    the averaged room's).  Raises
     ValueError if the file cannot be read or parsed, has an unsupported
     schema_version, or holds invalid series.
     """
@@ -858,31 +836,6 @@ def read_simulated_weights(path) -> Tuple[np.ndarray, np.ndarray, dict]:
     _validate_series(f"{path}: benefit", benefit)
     _validate_series(f"{path}: harm", harm)
     return benefit, harm, dict(payload.get("meta") or {})
-
-
-def read_direction_weights(path) -> "dict | None":
-    """The series of the rooms per facade direction of a simulated_weights.json
-    artifact, as ``{name: (benefit, harm)}`` in the order of DIRECTION_ROOMS;
-    None when it has none (generated without ``direction_rooms``, or of
-    schema_version 1).  Raises ValueError as :func:`read_simulated_weights`
-    does, and when the series do not name exactly the rooms of
-    DIRECTION_ROOMS.
-    """
-    path = Path(path)
-    directions = (_read_payload(path).get("hourly") or {}).get("directions")
-    if directions is None:
-        return None
-    if not isinstance(directions, dict) or set(directions) != set(DIRECTION_ROOMS):
-        raise ValueError(f"{path}: hourly.directions must name the rooms {list(DIRECTION_ROOMS)}")
-    series = {}
-    for name in DIRECTION_ROOMS:
-        room = directions[name] if isinstance(directions[name], dict) else {}
-        benefit = np.asarray(room.get("benefit", ()), dtype=np.float64)
-        harm = np.asarray(room.get("harm", ()), dtype=np.float64)
-        _validate_series(f"{path}: {name} benefit", benefit)
-        _validate_series(f"{path}: {name} harm", harm)
-        series[name] = (benefit, harm)
-    return series
 
 
 def _validate_series(name: str, arr: np.ndarray) -> None:
@@ -1040,70 +993,6 @@ def expand_shoebox(archetype: dict) -> dict:
     return arch
 
 
-def direction_archetypes(archetype: dict) -> dict:
-    """The explicit archetypes of the rooms per facade direction of a shoebox archetype.
-
-    Each room has the shoebox's floor area, volume and storey height, its
-    facade per m² of floor and its glass per m² of floor, and all the other
-    values of the archetype (fabric, gains, ventilation, shading):
-
-    - the 8 facade rooms (DIRECTION_AZIMUTHS): all of the shoebox's wall
-      area (2 x (width + length) x height) as one facade turned to the
-      direction, with all of its glass, at the wall U; the roof and the
-      floor exposed as the shoebox's are;
-    - the roof room (ROOF_ROOM): no walls; the roof exposed, at the roof U,
-      with all of the shoebox's glass as a horizontal skylight (altitude
-      90, taking the south side's declared shading factors); the floor
-      exposed as the shoebox's is.
-
-    For the app's average room of depth d (a square of side 4d) a facade
-    room is a room d deep behind one facade. The weights do not depend on
-    the size of the room, only on these ratios.
-
-    Raises ValueError when the archetype is not of the shoebox form, when
-    expand_shoebox refuses it, when it gives u_wall without u_roof (the
-    roof room needs it), or when its glass area is not smaller than its
-    floor area (the skylight would not fit in the roof).
-    """
-    if not set(archetype) >= _SHOEBOX_KEYS:
-        raise ValueError("direction_rooms needs the shoebox form of the archetype (width, length, height, wwr)")
-    expanded = expand_shoebox(archetype)
-    width, length, height = (float(archetype[key]) for key in ("width", "length", "height"))
-    floor = width * length
-    walls = 2.0 * (width + length) * height
-    glass = float(expanded["area_window"])
-    g_value = float(archetype.get("g_value", ARCHETYPE_DEFAULTS["g_value"]))
-    exposed = {part: archetype.get(f"{part}_exposed", SHOEBOX_EXPOSURE_DEFAULTS[f"{part}_exposed"])
-               for part in ("roof", "floor")}
-    if "u_wall" in archetype:
-        u_wall, u_roof, u_floor = (archetype.get(key) for key in ("u_wall", "u_roof", "u_floor"))
-        if u_roof is None:
-            raise ValueError("direction_rooms needs u_roof for the roof room")
-    else:
-        u_wall = u_roof = u_floor = archetype["u_opaque"]
-    if glass >= floor:
-        raise ValueError(f"direction_rooms: the roof room's skylight ({glass:g} m², the room's window area) must be "
-                         f"smaller than its roof ({floor:g} m²)")
-    shared = {key: value for key, value in expanded.items() if key not in _EXPLICIT_KEYS and key != "u_opaque"}
-
-    def room(opaque_area: float, conductance: float, window: list) -> dict:
-        # the exposed floor of the shoebox loses heat in every room
-        if exposed["floor"]:
-            opaque_area += floor
-            conductance += float(u_floor) * floor
-        return {**shared, "floor_area": floor, "volume": floor * height, "area_opaque": opaque_area,
-                "area_window": glass, "u_opaque": conductance / opaque_area, "windows": [window]}
-
-    rooms = {}
-    for name, azimuth in DIRECTION_AZIMUTHS.items():
-        opaque, conductance = walls - glass, float(u_wall) * (walls - glass)
-        if exposed["roof"]:
-            opaque, conductance = opaque + floor, conductance + float(u_roof) * floor
-        rooms[name] = room(opaque, conductance, [azimuth, glass, g_value])
-    rooms[ROOF_ROOM] = room(floor - glass, float(u_roof) * (floor - glass), [_SKYLIGHT_AZIMUTH, glass, g_value, 90.0])
-    return rooms
-
-
 _HEATMAP_TITLES = {
     "conditioned": ("benefit: marginal solar offsets HEATING", "harm: marginal solar becomes COOLING load"),
     "free_running": ("benefit: marginal solar removes UNDERHEATING", "harm: marginal solar adds OVERHEATING"),
@@ -1149,10 +1038,6 @@ def _save_heatmaps(benefit: np.ndarray, harm: np.ndarray, path, operation: str =
 # the windows' irradiance, 4.3 s for the attribution, 0.75 s for the base
 # run), for the progress it reports.
 _ROOM_STEP_SHARES = {"windows": 0.06, "attribution": 0.8, "base": 0.14}
-# The time of the factors per facade direction, in rooms (6 s against 5.4 s
-# a room), and the share of it before the second of their two calls.
-_FACTORS_IN_ROOMS = 1.1
-_FACTORS_FIRST_SHARE = 1 / 3
 
 
 def _room_weights(epw_path: str, arch: dict, internal_gains_w_m2, eps: float, outdoor_temperature,
@@ -1283,9 +1168,6 @@ _METHODS = {"conditioned": "iso13790-5r1c-perturbation", "free_running": "iso137
 _FREE_RUNNING_EPS = 10.0
 
 
-# The geometry of a room per direction that the artifact's meta records.
-_DIRECTION_ROOM_META_KEYS = ("floor_area", "volume", "area_opaque", "area_window", "u_opaque", "windows")
-
 
 def generate_simulated_weights(
     epw_path: str,
@@ -1303,8 +1185,7 @@ def generate_simulated_weights(
     geometry shorthand, see :func:`expand_shoebox`).
     Optional keys: ``shading_permanent``, ``shading_hot`` and
     ``hot_months`` or ``shading_hot_period`` (transmission multipliers,
-    see :func:`_shading_factors`), the internal-gain keys below, and
-    ``direction_rooms`` (true or false, default false; shoebox form only).
+    see :func:`_shading_factors`) and the internal-gain keys below.
     ``ach_vent`` may be 8760 hourly values (see
     :meth:`ZoneParams.from_archetype`).
 
@@ -1323,23 +1204,13 @@ def generate_simulated_weights(
     ``internal_gains_profile_w_m2`` archetype keys, or be passed as the
     ``internal_gains_w_m2`` argument (which takes precedence). Default 5.0.
 
-    With ``direction_rooms``, the rooms per facade direction of
-    :func:`direction_archetypes` are calculated as well, and the artifact
-    holds their series beside the room's own (``hourly.directions``, read
-    by :func:`read_direction_weights`); benefit mode then scales each test
-    point by the factor of its direction (:func:`sky_patches.direction_factors`).
-    The meta records each such room's geometry and annual demand
-    (``direction_rooms``) and the factors over the whole year without and
-    with harm (``direction_factors``, keys ``benefit`` and
-    ``benefit_minus_harm``; computing them imports torch).
-
     ``eps`` is the solar-gain perturbation [W] used by
     :func:`attribute_solar_gains`.  ``progress``, when given, is called
     with the share of the calculation done (0 to 1, rising, by the
-    measured time of each step), about 20 times a room, and with 1 once
+    measured time of each step), about 20 times, and with 1 once
     the artifact is written.  Writes the JSON artifact to
     ``out_path`` and, if matplotlib is installed, a heatmap PNG of the
-    room's own series next to it with the same name; returns the artifact
+    series next to it with the same name; returns the artifact
     path.  The artifact's meta also holds the zone's annual heating and
     cooling demand per m² of floor (``heating_kwh_m2``, ``cooling_kwh_m2``,
     in kWh/m²), from :func:`simulate` with the same gains, and ``sun_up``,
@@ -1355,28 +1226,14 @@ def generate_simulated_weights(
     operation = archetype.pop("operation", "conditioned")
     if operation not in OPERATIONS:
         raise ValueError(f"operation must be one of {', '.join(OPERATIONS)}, got {operation!r}")
-    by_direction = archetype.pop("direction_rooms", False)
-    if not isinstance(by_direction, bool):
-        raise ValueError(f"direction_rooms must be true or false, got {by_direction!r}")
-    rooms = {"room": expand_shoebox(archetype)}
-    if by_direction:
-        rooms.update(direction_archetypes(archetype))
 
-    # The time of the whole calculation in rooms, for the progress.
-    total = len(rooms) + (_FACTORS_IN_ROOMS if by_direction else 0.0)
-
-    def report(rooms_done: float) -> None:
+    def report(share: float) -> None:
         if progress is not None:
-            progress(min(rooms_done / total, 1.0))
+            progress(min(share, 1.0))
 
-    # One after the other: about 6 s a room (threads are slower, the year's
-    # hourly loop holds the GIL).
     outdoor_temperature = functools.lru_cache(maxsize=1)(lambda: read_weather_file(epw_path).dry_bulb_temperature())
-    done = {}
-    for index, (name, arch) in enumerate(rooms.items()):
-        done[name] = _room_weights(epw_path, arch, internal_gains_w_m2, eps, outdoor_temperature,
-                                   progress=lambda share, index=index: report(index + share), operation=operation)
-    main = done.pop("room")
+    main = _room_weights(epw_path, expand_shoebox(archetype), internal_gains_w_m2, eps, outdoor_temperature,
+                         progress=report, operation=operation)
 
     from datetime import datetime, timezone
     meta = {
@@ -1390,22 +1247,8 @@ def generate_simulated_weights(
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "generator": "usc simulate-weights (iso13790-5r1c)",
     }
-    directions = None
-    if by_direction:
-        directions = {name: (done[name]["benefit"], done[name]["harm"]) for name in DIRECTION_ROOMS}
-        meta["direction_rooms"] = {
-            name: {**{key: done[name]["archetype"][key] for key in _DIRECTION_ROOM_META_KEYS},
-                   **{key: done[name][key] for key in _OUTCOME_KEYS[operation]}}
-            for name in DIRECTION_ROOMS}
-        from .sky_patches import direction_factors
-        averaged = (main["benefit"], main["harm"])
-        meta["direction_factors"] = {}
-        for label, harm in (("benefit", False), ("benefit_minus_harm", True)):
-            meta["direction_factors"][label] = dict(zip(DIRECTION_ROOMS, (round(float(f), 4) for f in direction_factors(
-                str(epw_path), averaged, directions, range(HOURS), include_harm=harm))))
-            report(len(rooms) + _FACTORS_IN_ROOMS * (_FACTORS_FIRST_SHARE if not harm else 1.0))
-    artifact = write_simulated_weights(out_path, main["benefit"], main["harm"], meta, directions)
+    artifact = write_simulated_weights(out_path, main["benefit"], main["harm"], meta)
     # Companion preview so users can inspect the weights without writing code.
     _save_heatmaps(main["benefit"], main["harm"], artifact.with_suffix(".png"), operation)
-    report(total)
+    report(1.0)
     return artifact

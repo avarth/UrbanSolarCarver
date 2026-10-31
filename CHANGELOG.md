@@ -9,13 +9,8 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **Weights per facade direction** for energy-weighted Solar usefulness: with the archetype key `direction_rooms`
-  (in the app, **One room per facade direction** under Room, on in the library examples) the weights are also
-  calculated for a room behind one facade turned to each of 8 directions and for a roof room with a skylight, and each
-  test point counts with the factor of its direction (south facades about half as much as with one averaged room in
-  Thessaloniki, north a fifth more). The typical building window shows the factors. The weights file is now schema
-  version 2 (version 1 is still read); windows may have an altitude (90 for a skylight). Calculate takes about a minute
-  with rooms per direction.
+- **Windows with an altitude** in an explicit archetype: a window may carry the altitude of its normal (90 for a
+  skylight). The weights file is now schema version 2 (version 1 is still read; 0.10.0 refuses version 2).
 - **Progress of Calculate** in the typical building window: a bar under the button fills as the weights are calculated
   (`GET /projects/{name}/typical-building/progress`; `generate_simulated_weights` takes a `progress` callback). A run
   that calculates the weights first reports the same progress, in percent.
@@ -43,6 +38,11 @@ versioning follows [Semantic Versioning](https://semver.org/).
   On the bundled examples, full year in Golden, carve fraction 0.7: 4.5 to 9.0 % of the voxels are decided differently
   and 0.6 to 1.5 % less volume is kept; scores fall to 58 to 67 % of before, so a numeric threshold of these modes
   carves less. `daylight` and `radiative_cooling` are unchanged. `ModeSpec.incidence` says which modes take the term.
+- **One averaged room values the sun for every facade**: the rooms per facade direction (archetype key
+  `direction_rooms`, the app's **One room per facade direction**, between 0.10.0 and this change) are removed. What
+  lies behind a test surface is not known, and with the angle of incidence above a facade counts the absolute gains
+  it receives. A typical building stored with `by_direction` reads without it (its weights are calculated again when
+  it was on); a weights file that holds `hourly.directions` is read for the room's own series.
 
 ## [0.10.0] - 2026-10-30
 

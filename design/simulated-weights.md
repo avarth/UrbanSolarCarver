@@ -210,24 +210,19 @@ clamped with a tolerance check rather than asserted exactly.
     "cooling_kwh_m2": "<annual cooling demand, kWh per m² of floor>",
     "sun_up": [8760 values 0 or 1],
     "generated": "<iso timestamp>",
-    "generator": "usc simulate-weights (iso13790-5r1c)",
-    "direction_rooms": { "N": { "floor_area": ..., "windows": [[0, ..., ...]], "heating_kwh_m2": ..., "cooling_kwh_m2": ... }, "...": "NE ... NW, roof" },
-    "direction_factors": { "benefit": { "N": ..., "...": "..." }, "benefit_minus_harm": { "N": ..., "...": "..." } }
+    "generator": "usc simulate-weights (iso13790-5r1c)"
   },
   "hourly": {
     "benefit": [8760 floats in [0,1]],
-    "harm":    [8760 floats in [0,1]],
-    "directions": { "N": { "benefit": [8760], "harm": [8760] }, "...": "NE, E, SE, S, SW, W, NW, roof" }
+    "harm":    [8760 floats in [0,1]]
   }
 }
 ```
 
-Version 2 (2026-10-30) adds the rooms per facade direction, present only when the archetype has
-`direction_rooms: true` (`direction_archetypes`): `hourly.directions` holds their series
-(`read_direction_weights`), `meta.direction_rooms` their geometry and annual demand, and
-`meta.direction_factors` the factors over the whole year (north 0) for display; a carve computes
-its own over its analysis period (`sky_patches.direction_factors`, `scoring.get_direction_factors`).
-Version 1 files are still read. `hourly.benefit` and `harm` are always the room's own series.
+Version 2 (2026-10-30) added the rooms per facade direction (`hourly.directions`,
+`meta.direction_rooms`, `meta.direction_factors`), removed on 2026-10-31: they are no longer
+written, and a file that holds them is read for the room's own `hourly.benefit` and `harm`.
+A free-running zone's files are version 2 as well. Version 1 files are still read.
 
 8760 hourly values (TMY, non-leap), index = hour of year, timestep 1.
 `heating_kwh_m2` and `cooling_kwh_m2` are the zone's own run (`simulate()` with the
