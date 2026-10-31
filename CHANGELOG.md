@@ -20,6 +20,18 @@ versioning follows [Semantic Versioning](https://semver.org/).
   (`GET /projects/{name}/typical-building/progress`; `generate_simulated_weights` takes a `progress` callback). A run
   that calculates the weights first reports the same progress, in percent.
 
+### Changed
+
+- **The typical building runs free**: the energy-weighted Solar usefulness weights now measure passive performance.
+  The room has no heating or cooling; its two set points are the limits of a **comfort band**, its windows open for
+  natural ventilation (above **Open the windows above**, 25 °C in the examples, when outdoors is cooler, up to **Open
+  windows let in at most**, 4 air changes per hour), and each hour's sun counts by the degree-hours below the band it
+  removes (benefit) and above it it adds (harm), times the room's heat loss coefficient so the weights stay shares of a
+  watt-hour. The window shows the room's degree-hours below and above the band. In the engine this is
+  `operation: free_running` with `vent_above` and `vent_ach` (`simulate_free_running`, `attribute_free_running`);
+  `conditioned`, the earlier ideal heating and cooling, stays the engine's default. Weights calculated before are out of
+  date and are calculated again. Study and decision: `design/utilization-weights.md`, `design/free-running-weights.md`.
+
 ## [0.10.0] - 2026-10-30
 
 ### Highlights
