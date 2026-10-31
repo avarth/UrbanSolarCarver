@@ -305,4 +305,5 @@ def test_rooms_per_direction_on_the_bundled_weather_file(tmp_path):
     print(meta["direction_factors"])
     assert factors["S"] < 1.0 < factors["N"] and factors["SE"] < factors["E"] and factors[ROOF_ROOM] < 1.0
     rooms = meta["direction_rooms"]
-    assert rooms["S"]["heating_kwh_m2"] < meta["heating_kwh_m2"] < rooms["N"]["heating_kwh_m2"]
+    # The typical building runs free: its rooms count degree-hours below the comfort band, not heating.
+    assert rooms["S"]["underheating_kh"] < meta["underheating_kh"] < rooms["N"]["underheating_kh"]
