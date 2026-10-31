@@ -243,13 +243,10 @@ export const messages = {
   outOfDateSummary: "Out of date",
   // A criterion's card (7.2): the result line of one that is current, else its status
   // A weighted mode reports the share of the obstruction it removed; the others the share of the volume that reached the criterion.
-  criterionResultOfScore: (percentText: string, volumeText: string) => `Removes ${percentText} of the obstruction, ${volumeText}`,
-  criterionResultOfVolume: (percentText: string, volumeText: string) => `Removes ${volumeText}, ${percentText} of what reached it`,
   criterionScoreCarved: (percentText: string) => `Removes ${percentText} of the obstruction`,
   criterionVolumeCarved: (percentText: string) => `Removes ${percentText} of what reached it`,
-  // Under the cards of two or more criteria (7.2): what the chain kept of the maximum volume; the volume alone without the share.
-  chainKept: (volumeText: string, percentText: string) => `After all criteria: kept ${volumeText}, ${percentText} of the maximum volume`,
-  chainKeptVolume: (volumeText: string) => `After all criteria: kept ${volumeText}`,
+  // Under the cards of two or more criteria (7.2): the share of the maximum volume the chain kept.
+  chainKept: (percentText: string) => `After all criteria: kept ${percentText} of the maximum volume`,
   criterionOutOfDate: "Out of date",
   criterionUpdatesFrom: (criterionName: string) => `Updates from ${criterionName}`,
   criterionRunning: "Running",
@@ -373,6 +370,8 @@ export const messages = {
   gpuWarmUpHint: "You can open a project and add files now. The run buttons wait until the GPU is ready.",
   gpuReady: "GPU ready",
   gpuReadyWithDevice: (deviceName: string) => `GPU ready: ${deviceName}`,
+  // Beside the device status, after a run of the open project in this page: how long the last one took.
+  lastRun: (secondsText: string) => `Last run ${secondsText}`,
   cpuMode: "CPU mode",
   gpuNotAvailable: "GPU not available",
   noCudaGpuFound: "No CUDA-enabled GPU found. USC runs on the CPU, which is slower.",
@@ -495,12 +494,6 @@ export const messages = {
   cutoffPreviewWithCarveAmount: (carveAmountText: string, cutoffText: string, keptText: string) =>
     `Preview: carve amount ${carveAmountText}, a cut at ${cutoffText}, keeps about ${keptText} of the volume, before the slope limit.`,
   slopeLimitNote: (count: number) => `The slope limit removed ${groupedDigits(count)} ${count === 1 ? "voxel" : "voxels"} below the cutoff.`,
-  // The carving rule's numbers are this criterion's: what it kept of the volume that reached it (the maximum volume for the first).
-  keptHere: "Kept here",
-  keptHereShare: (percentText: string) => `${percentText} of what reached this criterion`,
-  keptHereOfWhatReached: "of what reached this criterion",
-  obstructionRemoved: "Obstruction removed",
-  lastAnalysisTook: "Last analysis took",
 
   // Envelope and massing (5.6; R2 5: two parts, each built on its own)
   buildEnvelope: "Build envelope",

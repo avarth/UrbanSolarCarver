@@ -1,5 +1,6 @@
 // The page (UX 4, 5.1, 6.1, 11, R2 7): the top bar with the device status, then the start screen or the open project. The device
-// status is polled every second while the GPU warms up. A request that finds no engine is checked against GET health a few
+// status is polled every second while the GPU warms up; beside it, once a run of the open project has finished in this page, how
+// long the last one took (a pipeline run or a simulation). A request that finds no engine is checked against GET health a few
 // times before the page says the engine stopped, so one lost request does not end the session. The runs are followed here, one
 // at a time as the engine runs them, so a run goes on being followed while the start screen or another project is open. The
 // projects folder and the project menus (on the start screen and on the project name in the top bar) send their requests here:
@@ -21,7 +22,8 @@ import { projectFolderPath, sameProjectName } from "./steps/ProjectDialogs";
 import { ProjectMenu, type ProjectActions } from "./steps/ProjectMenu";
 import { moveAutoUpdateChoice } from "./steps/CarvingStep";
 import { ProjectWorkspace, type OpenProjectSettingsSaver, type WorkspaceSteps } from "./steps/ProjectWorkspace";
-import { useRunLoop } from "./steps/run_state";
+import { useRunLoop, type RunRecord } from "./steps/run_state";
+import { secondsText } from "./steps/RunProgress";
 import { WorkspaceModeSwitch, type WorkspaceMode } from "./steps/WorkspaceModeSwitch";
 import { cpuChosenAtLaunch, exampleTitleOf, isWarmingUp, Spinner, StartScreen, type ProjectsFolderChange } from "./steps/StartScreen";
 import { AppThemeProvider, rememberedTheme, showTheme, ThemeButton, type AppTheme } from "./theme/app_theme";
@@ -115,6 +117,23 @@ export function DeviceStatus({ warmUp }: { warmUp: HealthReply["warm_up"] }) {
   );
 }
 
+/**
+ * The time of the last finished run of each project in this page (a pipeline run or a simulation), in seconds, by the project's
+ * name in lower case: *times* with *record*'s once it has finished, else *times* itself.
+ */
+export function lastRunSecondsWith(times: ReadonlyMap<string, number>, record: RunRecord | null): ReadonlyMap<string, number> {
+  if (record === null || record.state.final !== "finished" || record.state.endedAt === null) return times;
+  const project = record.project.toLowerCase();
+  const seconds = (record.state.endedAt - record.state.startedAt) / 1000;
+  return times.get(project) === seconds ? times : new Map(times).set(project, seconds);
+}
+
+/** "Last run 7.0 s", muted like the device status; nothing before a run of the open project has finished in this page. */
+export function LastRunTime({ seconds }: { seconds: number | undefined }) {
+  if (seconds === undefined) return null;
+  return <span className="device-status last-run-time">{messages.lastRun(secondsText(seconds))}</span>;
+}
+
 export function App() {
   const [theme, setTheme] = useState<AppTheme>(rememberedTheme);
   const [health, setHealth] = useState<HealthReply | null>(null);
@@ -139,6 +158,8 @@ export function App() {
   const openProjectSettings = useRef<OpenProjectSettingsSaver | null>(null);
   const engineCheck = useRef<(() => void) | null>(null);
   const runs = useRunLoop(accessToken, (error) => handleServiceProblem(error));
+  const [lastRunSeconds, setLastRunSeconds] = useState<ReadonlyMap<string, number>>(new Map());
+  useEffect(() => setLastRunSeconds((times) => lastRunSecondsWith(times, runs.current)), [runs.current]);
   // Save in the dialog waits, as Save in the Files panel does, while a run of the open project goes on.
   const openProjectRunActive = openProject !== null && runs.activeRun !== null && sameProjectName(runs.activeRun.project, openProject.name);
   const leavingInspect = useLeavingInspect(workspaceMode, openProjectRunActive ? messages.runInProgress : null);
@@ -236,6 +257,13 @@ export function App() {
     if (isOpenProject(name)) openProjectSettings.current?.cancel();
     runs.forget(name);
     moveAutoUpdateChoice(name, keepsAutoUpdate ? newName : null);
+    setLastRunSeconds((times) => {
+      const moved = new Map(times);
+      const seconds = moved.get(name.toLowerCase());
+      moved.delete(name.toLowerCase());
+      if (keepsAutoUpdate && newName !== null && seconds !== undefined) moved.set(newName.toLowerCase(), seconds);
+      return moved;
+    });
   };
 
   /**
@@ -291,6 +319,7 @@ export function App() {
         // as does the last run: a project of the same name in the new folder does not show that run's failure or warnings.
         openProjectSettings.current?.cancel();
         if (runs.current !== null) runs.forget(runs.current.project);
+        setLastRunSeconds(new Map());
         setOpenProject(null);
         readStartScreenLists();
       }
@@ -327,7 +356,10 @@ export function App() {
               }} />
             </>
           )}
-          <span className="top-bar-device">{health && <DeviceStatus warmUp={health.warm_up} />}</span>
+          <span className="top-bar-device">
+            {health && <DeviceStatus warmUp={health.warm_up} />}
+            {openProject && <LastRunTime seconds={lastRunSeconds.get(openProject.name.toLowerCase())} />}
+          </span>
           <ThemeButton theme={theme} onChange={setTheme} />
         </header>
         {openProject === null && (

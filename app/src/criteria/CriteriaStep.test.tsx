@@ -33,10 +33,10 @@ const buttonNamed = (label: string) =>
 const menuItem = (name: string) => [...step().querySelectorAll<HTMLElement>('.add-criterion [role="menuitem"]')].find((item) => item.querySelector(".mode-menu-name")!.textContent === name)!;
 
 test("the list view shows the cards, Add criterion and the chain line, and no panel", () => {
-  rendered = renderForTest(<CriteriaStep panel={PANEL} shows="list" onShowsChange={() => {}} chainLine="Kept 188 073 m³, 19 % of the maximum volume"
+  rendered = renderForTest(<CriteriaStep panel={PANEL} shows="list" onShowsChange={() => {}} chainLine="After all criteria: kept 19 % of the maximum volume"
                                          list={listProps([entry("1", "Daylight on windows"), entry("2", "Solar energy on roofs")])} />);
   expect(step().querySelectorAll(".criterion-card")).toHaveLength(2);
-  expect(step().querySelector(".chain-summary")!.textContent).toBe("Kept 188 073 m³, 19 % of the maximum volume");
+  expect(step().querySelector(".chain-summary")!.textContent).toBe("After all criteria: kept 19 % of the maximum volume");
   expect(buttonNamed("Add criterion")!.classList.contains("link-button")).toBe(true);
   expect(step().querySelector(".criterion-panel-frame")).toBeNull();
   expect(step().querySelector(".criterion-editor-header")).toBeNull();

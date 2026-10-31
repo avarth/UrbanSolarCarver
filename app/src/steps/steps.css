@@ -970,7 +970,7 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 
 .switch-row { display: flex; align-items: center; gap: calc(var(--space-unit) * 2); }
 
-/* Number tiles on chrome: the label 12 px muted, the value 20 px bold (UX 5.5, 5.6, screens). */
+/* Number tiles on chrome: the label 12 px muted, the value 20 px bold (UX 5.6, screens). */
 .number-tiles { display: grid; gap: calc(var(--space-unit) * 2); }
 .number-tiles-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
@@ -987,7 +987,6 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 .number-tile-label { color: var(--colour-muted); font-size: var(--text-secondary); }
 .number-tile-value { font-size: var(--text-key-number); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
 .number-tile-unit { white-space: nowrap; }
-.number-tile-note { color: var(--colour-muted); font-size: var(--text-secondary); }
 
 /* The histogram (UX 5.5, screens): kept bars in accent, carved bars in the carved colour, the cutoff a dashed ink line. */
 .score-histogram { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); margin: 0; }

@@ -43,6 +43,12 @@ versioning follows [Semantic Versioning](https://semver.org/).
   lies behind a test surface is not known, and with the angle of incidence above a facade counts the absolute gains
   it receives. A typical building stored with `by_direction` reads without it (its weights are calculated again when
   it was on); a weights file that holds `hourly.directions` is read for the room's own series.
+- **App: fewer numbers on the carving, the last run's time in the top bar.** The Carving rule no longer has the tiles
+  under its histogram (Kept here, Obstruction removed, Last analysis took): the criterion's card says what it removes, now
+  without a volume, "Removes 80 % of the obstruction" in the weighted modes and "Removes 39 % of what reached it" in
+  the others. The line under two or more criteria reads "After all criteria: kept 61 % of the maximum volume", and is not
+  shown without that share. The time of the last run of the open project, a pipeline run or a simulation, is in the top
+  bar beside the device status, "Last run 7.0 s", after a run in this page; a narrow window leaves it out.
 
 ## [0.10.0] - 2026-10-30
 

@@ -35,7 +35,18 @@
 
 .top-bar-home:hover { background: var(--colour-chrome); color: var(--colour-accent); }
 
-.top-bar-device { position: relative; margin-left: auto; }
+/* The device status, then the time of the last run, which is dropped on a narrow page. */
+.top-bar-device {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--space-unit) * 4);
+  margin-left: auto;
+}
+
+@media (max-width: 799px) {
+  .last-run-time { display: none; }
+}
 
 /* The theme button at the right end of the top bar. */
 .top-bar-icon-button {

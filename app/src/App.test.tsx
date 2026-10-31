@@ -3,9 +3,10 @@ import { afterEach, expect, test, vi } from "vitest";
 import {
   ApiError, type ExampleInfo, type HealthReply, type ProjectDetail, type ProjectsFolderReply, type ProjectSummary,
 } from "./api_client/client";
-import { App, DeviceStatus, freeProjectName, pollHealth } from "./App";
+import { App, DeviceStatus, freeProjectName, LastRunTime, lastRunSecondsWith, pollHealth } from "./App";
+import { FakeWebSocket } from "./api_client/fake_websocket_for_test";
 import type { WorkspaceSteps } from "./steps/ProjectWorkspace";
-import type { RunLoop } from "./steps/run_state";
+import { initialRunState, runReducer, type RunLoop, type RunOrigin, type RunRecord } from "./steps/run_state";
 import { click, renderForTest, type RenderedOverlay } from "./viewer_overlays/render_for_test";
 
 // The open project stands in for the workspace here: the page's own part is which project it opens, when it opens it afresh,
@@ -172,6 +173,8 @@ class FakeService {
   openFolderReply: (() => Response) | null = null;
   /** The reply to the criterion keys; null: the keys are answered. */
   criterionKeysReply: (() => Response) | null = null;
+  /** A run asked for starts (its events come through FakeWebSocket); false: it is refused for a missing maximum volume. */
+  runsStart = false;
 
   answer = async (address: string, init?: RequestInit): Promise<Response> => {
     const method = init?.method ?? "GET";
@@ -207,7 +210,10 @@ class FakeService {
       if (this.openFolderReply !== null) return this.openFolderReply();
       throw new TypeError("Failed to fetch");      // the engine is not reached
     }
-    if (method === "POST" && rest === "/runs") return json({ detail: "The maximum volume is missing." }, 422);
+    if (method === "POST" && rest === "/runs") {
+      if (this.runsStart) return json({ status: "started", run_id: "r1", stages: ["thresholding"] });
+      return json({ detail: "The maximum volume is missing." }, 422);
+    }
     if (method === "POST" && rest === "/rename") return json(projectDetail(JSON.parse(String(init!.body)).new_name));
     if (method === "POST" && rest === "/reset-to-example") return json(projectDetail(name, "2026-10-18T10:30:00", "perimeter_block"));
     if (method === "POST" && rest.startsWith("/examples/")) return json(projectDetail(name, "2026-10-18T10:30:00", "perimeter_block"));
@@ -620,6 +626,62 @@ test("the top bar names the GPU on hover once it is ready", () => {
   const status = rendered.container.querySelector(".device-status")!;
   expect(status.textContent).toBe("GPU ready");
   expect(status.getAttribute("title")).toBe("GPU ready: NVIDIA RTX 4070");
+});
+
+/** A run of *project* that started at 0 s and ended as *final* at *endedAtSeconds*. */
+function endedRun(project: string, final: "finished" | "failed", endedAtSeconds: number, origin: RunOrigin = "carving_update"): RunRecord {
+  const state = runReducer(initialRunState(["thresholding"], 0), final === "finished" ? { type: "run_finished", stages: ["thresholding"], files: [] }
+    : { type: "run_failed", error_type: "RuntimeError", message: "Out of memory", field_errors: [] }, endedAtSeconds * 1000);
+  return { serial: 1, project, origin, runId: "r1", state, refusal: null };
+}
+
+test("the last run's time is kept by project once the run has finished, simulations included; a run that failed or goes on keeps the one before", () => {
+  const empty = new Map<string, number>();
+  const afterRun = lastRunSecondsWith(empty, endedRun("Plot 7", "finished", 7.04));
+  expect([...afterRun]).toEqual([["plot 7", 7.04]]);
+  expect(lastRunSecondsWith(afterRun, endedRun("plot 7", "finished", 7.04))).toBe(afterRun);     // the same run seen again
+  expect(lastRunSecondsWith(afterRun, endedRun("Plot 7", "failed", 2))).toBe(afterRun);
+  expect(lastRunSecondsWith(afterRun, { ...endedRun("Plot 7", "finished", 1), state: initialRunState(["thresholding"], 0) })).toBe(afterRun);
+  expect(lastRunSecondsWith(afterRun, null)).toBe(afterRun);
+  expect(lastRunSecondsWith(afterRun, endedRun("Plot 7", "finished", 12.5, "simulate")).get("plot 7")).toBe(12.5);
+  expect(lastRunSecondsWith(afterRun, endedRun("Other", "finished", 3)).get("plot 7")).toBe(7.04);
+});
+
+test("the last run's time reads Last run with one decimal, and is not there before a run", () => {
+  rendered = renderForTest(<LastRunTime seconds={7.04} />);
+  const time = rendered.container.querySelector(".last-run-time")!;
+  expect(time.textContent).toBe("Last run 7.0 s");
+  expect(time.classList.contains("device-status")).toBe(true);       // the size and colour of the device status
+  rendered.unmount();
+  rendered = renderForTest(<LastRunTime seconds={undefined} />);
+  expect(rendered.container.innerHTML).toBe("");
+});
+
+test("the top bar shows the last run's time beside the device status once a run of the open project has finished in this page", async () => {
+  const service = new FakeService();
+  service.runsStart = true;
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  FakeWebSocket.opened = [];
+  await renderApp(service);
+  const lastRun = () => page().querySelector(".top-bar .top-bar-device .last-run-time");
+  await openPlot7();
+  expect(lastRun()).toBeNull();
+  const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+  let finished: Promise<unknown> = Promise.resolve();
+  await act(async () => { finished = workspaceSteps.runs!.start("Plot 7", ["thresholding"], "carving_run_analysis"); });
+  await settle();
+  expect(lastRun()).toBeNull();                                     // not while it runs
+  now.mockReturnValue(8_040);
+  FakeWebSocket.opened[0].send({ type: "run_finished", stages: ["thresholding"], files: [] });
+  await act(async () => { await finished; });
+  now.mockRestore();
+  expect(lastRun()!.textContent).toBe("Last run 7.0 s");
+  expect(lastRun()!.previousElementSibling!.textContent).toBe("GPU ready");
+  click(buttonNamed("UrbanSolarCarver"));                           // the start screen has no open project to time
+  await settle();
+  expect(lastRun()).toBeNull();
+  await openPlot7();
+  expect(lastRun()!.textContent).toBe("Last run 7.0 s");
 });
 
 const modeSwitch = () => page().querySelector<HTMLElement>(".top-bar .workspace-mode-switch");

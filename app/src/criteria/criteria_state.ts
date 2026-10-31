@@ -2,7 +2,7 @@
 // line, where the selection goes when a card is removed, the order after a card is moved, and the files of the other criteria.
 import type { ChainSummary, CriterionCarvingSummary, CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
-import { formatNumber, formatPercent } from "../steps/format_numbers";
+import { formatPercent } from "../steps/format_numbers";
 import type { StageRunState } from "../steps/run_state";
 import type { StageState } from "../steps/step_summaries";
 
@@ -101,32 +101,24 @@ export function cardStatusText(status: CardStatus): string | null {
 }
 
 /**
- * "Removes 70 % of the obstruction, 18 400 m³" for a weighted mode (it reports the obstruction fraction it carved), "Removes
- * 18 400 m³, 39 % of what reached it" for the others; null while the criterion has no numbers. The share removed is 100 minus the
- * kept share as the Carving rule's Kept here shows it, so the two always add up to 100.
+ * "Removes 70 % of the obstruction" for a weighted mode (it reports the obstruction fraction it carved), "Removes 39 % of what
+ * reached it" for the others; null while the criterion has no numbers. The share removed is 100 minus the kept share rounded to a
+ * whole percent, so the two add up to 100.
  */
 export function cardResultLine(summary: CriterionCarvingSummary): string | null {
   const carving = summary.carving;
   if (carving === null) return null;
-  const isWeighted = carving.obstruction_fraction_carved !== null;
-  const percentText = formatPercent(isWeighted ? carving.obstruction_fraction_carved! * 100 : 100 - Math.round(carving.retention_pct));
-  if (summary.volume_removed_m3 === null || summary.volume_removed_m3 === undefined) {
-    return isWeighted ? messages.criterionScoreCarved(percentText) : messages.criterionVolumeCarved(percentText);
-  }
-  const volumeText = formatNumber(summary.volume_removed_m3, "m³");
-  return isWeighted ? messages.criterionResultOfScore(percentText, volumeText) : messages.criterionResultOfVolume(percentText, volumeText);
+  if (carving.obstruction_fraction_carved !== null) return messages.criterionScoreCarved(formatPercent(carving.obstruction_fraction_carved * 100));
+  return messages.criterionVolumeCarved(formatPercent(100 - Math.round(carving.retention_pct)));
 }
 
 /**
- * "After all criteria: kept 18 400 m³, 61 % of the maximum volume": the volume the last criterion kept and its share of the maximum volume (the volume
- * alone when the share is unknown); null without a chain or with fewer than two criteria on, where the card says it.
+ * "After all criteria: kept 61 % of the maximum volume"; null without a chain, with fewer than two criteria on (the card says it)
+ * or when the share is unknown.
  */
 export function chainSummaryLine(chain: ChainSummary | null | undefined, criteriaOn: number): string | null {
-  const volumes = chain?.volume_after_each_m3 ?? [];
-  if (chain === null || chain === undefined || criteriaOn < 2 || volumes.length === 0) return null;
-  const volumeText = formatNumber(volumes[volumes.length - 1], "m³");
-  return chain.share_of_max_volume_kept === null ? messages.chainKeptVolume(volumeText)
-    : messages.chainKept(volumeText, formatPercent(chain.share_of_max_volume_kept * 100));
+  if (chain === null || chain === undefined || criteriaOn < 2 || chain.share_of_max_volume_kept === null) return null;
+  return messages.chainKept(formatPercent(chain.share_of_max_volume_kept * 100));
 }
 
 /**

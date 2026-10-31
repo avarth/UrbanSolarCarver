@@ -65,7 +65,7 @@ function carvingProps(overrides: Partial<CarvingStepProps> = {}): CarvingStepPro
     form: formFor("time-based", { threshold: { method: "cutoff", value: 1.5 } }), isWeightedMode: false, summary: CARVING, scorePoints: SCORE_POINTS,
     analysisOutOfDate: false, carvingDimmed: false, autoUpdate: true, onAutoUpdateChange: vi.fn(), thresholdDisabledReason: null,
     settingsDisabledReason: null, runBlocker: null, onChange: vi.fn(), onThresholdCommit: vi.fn(), onCarvingSettingCommit: vi.fn(),
-    onUpdateCarving: vi.fn(), lastAnalysisSeconds: 6.4, ...overrides,
+    onUpdateCarving: vi.fn(), ...overrides,
   };
 }
 
@@ -76,7 +76,7 @@ function typeInto(input: HTMLInputElement, text: string) {
   });
 }
 
-test("Solar time-based: Shadow tolerated with its slider ends, the histogram, the tiles two per row", () => {
+test("Solar time-based: Shadow tolerated with its slider ends and the histogram, with no number tiles under it", () => {
   rendered = renderForTest(<CarvingStep {...carvingProps()} />);
   const text = rendered.container.textContent!;
   expect(rendered.container.querySelector(".threshold-control label")!.textContent).toBe("Shadow tolerated");
@@ -85,8 +85,9 @@ test("Solar time-based: Shadow tolerated with its slider ends, the histogram, th
   expect(text).toContain("Update when I change the threshold");
   expect(text).not.toContain("Update carving");
   expect(text).toContain("Scores of the voxels");
-  expect([...rendered.container.querySelectorAll(".number-tile")].map((tile) => tile.textContent))
-    .toEqual(["Kept here4 880 m³61 % of what reached this criterion", "Last analysis took6.4 s"]);
+  expect(rendered.container.querySelector(".number-tile")).toBeNull();     // the card says what it removed, the top bar the last run's time
+  expect(text).not.toContain("Kept here");
+  expect(text).not.toContain("Last");
 });
 
 test("with auto-update on the threshold runs when the user leaves the field; off, it changes the form and Update carving runs", () => {
@@ -152,11 +153,11 @@ test("leaving the threshold field at the stored number submits nothing after the
   expect(field().value).toBe("3");
 });
 
-test("a weighted mode shows Carve amount in % and Obstruction removed; the angle rule says it has no threshold and no histogram", () => {
+test("a weighted mode shows Carve amount in % and no number tiles; the angle rule says it has no threshold and no histogram", () => {
   rendered = renderForTest(<CarvingStep {...carvingProps({ form: formFor("daylight"), isWeightedMode: true })} />);
   expect(rendered.container.querySelector(".threshold-control label")!.textContent).toBe("Carve amount");
   expect(rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!.value).toBe("70");
-  expect(rendered.container.textContent).toContain("Obstruction removed42 %");
+  expect(rendered.container.textContent).not.toContain("Obstruction removed");
   rendered.unmount();
   rendered = renderForTest(<CarvingStep {...carvingProps({ form: formFor("tilted_plane") })} />);
   expect(rendered.container.textContent).toContain("The angle rule has no threshold: everything above the planes is removed. Change the angle above.");
@@ -290,7 +291,7 @@ test("dimmed and greyed results keep their text at full opacity in the muted col
     act(() => carvingResults.querySelector("svg")!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
     expect(carvingResults.querySelector(".score-histogram-readout")).not.toBeNull();
     const carvingTexts = textBearingElementsIn(carvingResults);
-    expect(carvingTexts.map((element) => element.textContent)).toEqual(expect.arrayContaining(["Scores of the voxels", "Kept here", "61 % of what reached this criterion", "Kept", "1.5"]));
+    expect(carvingTexts.map((element) => element.textContent)).toEqual(expect.arrayContaining(["Scores of the voxels", "Kept", "1.5"]));
     expect(carvingTexts.flatMap((element) => fadingOpacitiesOf(element, carvingResults))).toEqual([]);
     expect(getComputedStyle(carvingResults).color).toBe("var(--colour-muted)");
     expect(Number(getComputedStyle(carvingResults.querySelector(".histogram-bar")!).opacity)).toBeLessThan(1);
@@ -710,13 +711,6 @@ test("the cutoff line cannot be moved while the threshold cannot be changed", ()
   releaseHandleKey(rendered.container, "PageUp");
   expect(onThresholdCommit).not.toHaveBeenCalled();
   expect(rendered.container.querySelector(".histogram-cutoff-label")!.textContent).toBe("1.5");
-});
-
-test("the carving rule's numbers are this criterion's: Kept here with its share of what reached it, no separate volume carved", () => {
-  rendered = renderForTest(<CarvingStep {...carvingProps({ summary: { ...CARVING, retention_pct: 60.5 } })} />);
-  const tiles = [...rendered.container.querySelectorAll(".number-tile")].map((tile) => tile.textContent);
-  expect(tiles[0]).toBe("Kept here4 880 m³61 % of what reached this criterion");
-  expect(tiles.join(" ")).not.toContain("carved");
 });
 
 test("a run report that cannot be read says so instead of an empty panel", async () => {

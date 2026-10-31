@@ -4,7 +4,7 @@ import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   CURRENT, FACADES, OUT_OF_DATE, ROOFS, WINDOWS, card, cardLine, cardNames, chooseFromMenu, criteriaSummary, criterion, deleteCriterion, expectNoProblemShown,
-  expectResultsOfCriterion, keptTile, openChain, panel, panelFrame, periodFieldText, protectedFiles, select, selectButtonOf, selectedCardName, service,
+  expectResultsOfCriterion, openChain, panel, panelFrame, periodFieldText, protectedFiles, select, selectButtonOf, selectedCardName, service,
   settingsSaves,
 } from "./chain_service_for_test";
 import {
@@ -24,8 +24,8 @@ test("two criteria show cards in order, each with its result, and the first is s
   await openChain([FACADES, WINDOWS]);
   expect(cardNames()).toEqual(["Winter sun on facades", "Spring sun on windows"]);
   expect(selectedCardName()).toBe("Winter sun on facades");
-  expect(cardLine("Winter sun on facades")).toBe("Removes 390 m³, 39 % of what reached it");
-  expect(cardLine("Spring sun on windows")).toBe("Removes 200 m³, 20 % of what reached it");
+  expect(cardLine("Winter sun on facades")).toBe("Removes 39 % of what reached it");
+  expect(cardLine("Spring sun on windows")).toBe("Removes 20 % of what reached it");
   openPanelSection("Test surfaces");
   expect(protectedFiles()).toEqual(["facades.obj"]);
   showCriterionCards();
@@ -45,13 +45,12 @@ test("selecting a card shows its settings, its test surfaces and its results", a
   await openChain([FACADES, WINDOWS]);
   expect(periodFieldText()).toContain("21 Dec");
   expect(thresholdField().value).toBe("1.5");
-  expect(keptTile()).toContain("61");
+  expectResultsOfCriterion("1");
   await select("Spring sun on windows");
   expect(selectedCardName()).toBe("Spring sun on windows");
   expect(service.requests).toContain("GET /criteria/2/settings");
   expect(periodFieldText()).toContain("21 Mar");
   expect(thresholdField().value).toBe("3");
-  expect(keptTile()).toContain("80");
   openPanelSection("Test surfaces");
   expect(protectedFiles()).toEqual(["windows.obj"]);
   expect(service.requests).toContain("GET /run/score-points?criterion=2");
@@ -141,7 +140,6 @@ test("deleting the selected criterion selects the next one, and the last one the
   expect(document.activeElement).toBe(selectButtonOf("Spring sun on windows"));     // the focus goes to the card selected now
   expect(periodFieldText()).toContain("21 Mar");
   expect(thresholdField().value).toBe("3");
-  expect(keptTile()).toContain("80");
   expectResultsOfCriterion("2");
   expectNoProblemShown();
   await select("Daylight on roofs");
@@ -358,17 +356,17 @@ test("duplicating a card adds the copy after the last card and selects it", asyn
 
 const chainLine = () => (showCriterionCards(), container().querySelector(".chain-summary"))?.textContent?.replace(/[  ]/g, " ") ?? null;
 
-test("the chain summary line under the cards: the last volume and its share of the maximum volume", async () => {
+test("the chain summary line under the cards: the share of the maximum volume kept, with no volume", async () => {
   await openChain([FACADES, WINDOWS], undefined, (chain) => { chain.summaryChain = { volume_after_each_m3: [610, 480], share_of_max_volume_kept: 0.4813 }; });
-  expect(chainLine()).toBe("After all criteria: kept 480 m³, 48 % of the maximum volume");
+  expect(chainLine()).toBe("After all criteria: kept 48 % of the maximum volume");
   const list = container().querySelector(".criterion-list")!;
   expect(list.compareDocumentPosition(container().querySelector(".chain-summary")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(container().querySelector(".criterion-panel")).toBeNull();                       // the list shows no panel
 });
 
-test("the chain summary line says the volume alone when there is no share, and is not there while the summary has no chain", async () => {
+test("the chain summary line is not there without a share, nor while the summary has no chain", async () => {
   await openChain([FACADES, WINDOWS], undefined, (chain) => { chain.summaryChain = { volume_after_each_m3: [610, 1234], share_of_max_volume_kept: null }; });
-  expect(chainLine()).toBe("After all criteria: kept 1 234 m³");
+  expect(chainLine()).toBeNull();
   unmountWorkspace();
   await openChain([FACADES, WINDOWS]);
   expect(chainLine()).toBeNull();

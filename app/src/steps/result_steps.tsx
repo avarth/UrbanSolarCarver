@@ -238,7 +238,6 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     stagesWithResults: (Object.keys(stages) as PipelineStage[]).filter((stage) => stages[stage] !== "missing"),
   });
   const [autoUpdate, setAutoUpdate] = useAutoUpdate(project);
-  const [lastAnalysisSeconds, setLastAnalysisSeconds] = useState<number | null>(null);
   const [runReportOpen, setRunReportOpen] = useState(false);
   const [downloadProblem, setDownloadProblem] = useState<string | null>(null);
   const [fetchesUnderWay, setFetchesUnderWay] = useState<Partial<Record<PipelineStage, number>>>({});
@@ -249,9 +248,6 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     const { state } = endedRun;
     const superseded = endedRun.isSuperseded?.() ?? false;     // its results were not fetched, so its stages are not shown as current
     context.refreshStageStatus(state.final === "finished" && !superseded ? runStages(state) : []);
-    if (state.final === "finished" && runStages(state).includes("preprocessing") && state.endedAt !== null) {
-      setLastAnalysisSeconds((state.endedAt - state.startedAt) / 1000);
-    }
     // A setting the run found invalid is marked in the form, as a refused save would mark it; a start refused for a criterion's
     // settings marks them in that criterion's panel, which it selects.
     if (state.failure !== null && state.failure.field_errors.length > 0) {
@@ -423,7 +419,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
                    onThresholdCommit={submitThreshold}
                    onCarvingSettingCommit={() => { if (thresholdView !== null) submitThreshold({}); }}
                    onUpdateCarving={() => void updateCarvingAfterSaving()}
-                   lastAnalysisSeconds={lastAnalysisSeconds} showsDisabledReason={false} />
+                   showsDisabledReason={false} />
     </>
   );
   // Criteria's pinned bar: Run analysis and the build, with the progress and outcome of Run analysis and of a carving update (whose

@@ -2,8 +2,8 @@ import { expect, test } from "vitest";
 import type { CriterionCarvingSummary, CriterionEntry } from "../api_client/client";
 import type { StageState } from "../steps/step_summaries";
 import {
-  activeCriteria, cardLineOf, cardResultLine, cardStatusText, criterionStatus, filesOfOtherCriteria, orderAfterDropping, orderAfterMoving, selectionAfterRemoving,
-  criteriaProtectingNothing, stagesByCriterionOf, stagesDuringRun,
+  activeCriteria, cardLineOf, cardResultLine, cardStatusText, chainSummaryLine, criterionStatus, filesOfOtherCriteria, orderAfterDropping, orderAfterMoving,
+  selectionAfterRemoving, criteriaProtectingNothing, stagesByCriterionOf, stagesDuringRun,
 } from "./criteria_state";
 
 function entry(id: string, overrides: Partial<CriterionEntry> = {}): CriterionEntry {
@@ -122,18 +122,23 @@ function summary(carving: CriterionCarvingSummary["carving"], volumeRemoved: num
   return { id: "1", name: "Criterion 1", colour: "#336699", mode: "daylight", carving, voxels_at_start: 1000, volume_kept_m3: 5000, volume_removed_m3: volumeRemoved };
 }
 
-test("the result line of a weighted mode gives the share of the obstruction it removes", () => {
-  const weighted = summary({ ...CARVING, obstruction_fraction_carved: 0.7 }, 18400);
-  expect(cardResultLine(weighted)).toBe("Removes 70 % of the obstruction, 18 400 m³");
-});
-
-test("the result line of an unweighted mode gives the volume it removes and its share of what reached it", () => {
-  expect(cardResultLine(summary(CARVING, 1250.4))).toBe("Removes 1 250 m³, 39 % of what reached it");
-});
-
-test("without the removed volume the result line gives the share alone", () => {
+test("the result line of a weighted mode gives the share of the obstruction it removes, with no volume", () => {
+  expect(cardResultLine(summary({ ...CARVING, obstruction_fraction_carved: 0.7 }, 18400))).toBe("Removes 70 % of the obstruction");
   expect(cardResultLine(summary({ ...CARVING, obstruction_fraction_carved: 0.7 }, null))).toBe("Removes 70 % of the obstruction");
+});
+
+test("the result line of an unweighted mode gives the share it removes of what reached it, with no volume", () => {
+  expect(cardResultLine(summary(CARVING, 1250.4))).toBe("Removes 39 % of what reached it");
   expect(cardResultLine(summary(CARVING, null))).toBe("Removes 39 % of what reached it");
+  expect(cardResultLine(summary({ ...CARVING, retention_pct: 60.5 }, null))).toBe("Removes 39 % of what reached it");     // 100 minus the kept 61 %
+});
+
+test("under two or more criteria the chain line gives the share of the maximum volume kept, with no volume; none when the share is unknown", () => {
+  const chain = { volume_after_each_m3: [4800, 2900], share_of_max_volume_kept: 0.612 };
+  expect(chainSummaryLine(chain, 2)).toBe("After all criteria: kept 61 % of the maximum volume");
+  expect(chainSummaryLine(chain, 1)).toBeNull();
+  expect(chainSummaryLine({ ...chain, share_of_max_volume_kept: null }, 2)).toBeNull();
+  expect(chainSummaryLine(null, 2)).toBeNull();
 });
 
 test("a criterion without numbers has no result line", () => {

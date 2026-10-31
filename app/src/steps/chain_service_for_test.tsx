@@ -234,7 +234,6 @@ export function periodFieldText() {
   openPanelSection("Settings");
   return container().querySelector('[data-setting="start_month"]')!.textContent;
 }
-export const keptTile = () => panel().querySelector(".number-tile-value")!.textContent;
 export const criteriaSummary = () => stepRow("Criteria").querySelector(".step-summary")!.textContent;
 export const settingsSaves = () => service.requests.filter((request) => request.startsWith("PATCH") || request.startsWith("PUT /shared"));
 export const selectButtonOf = (name: string) => card(name).querySelector(".criterion-card-select");

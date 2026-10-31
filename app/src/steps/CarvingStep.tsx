@@ -1,8 +1,8 @@
 // A criterion's carving rule (UX 5.5, 11; once the Carving step, now in the criterion's panel, CriterionPanel): in the weighted
 // modes the carving rule at the top (Manual or Automatic), then the control of the
 // rule (Shadow tolerated in m²·h for Solar time-based, Carve amount in % under Manual, a line for Automatic; the angle rule's
-// message), the "Update when I change the threshold" switch, remembered per project, the histogram with its cutoff line, the
-// numbers of the last carving, and the other carving settings folded last.
+// message), the "Update when I change the threshold" switch, remembered per project, the histogram with its cutoff line, and the
+// other carving settings folded last. What the carving removed is on the criterion's card (cardResultLine).
 // With the switch on, letting go of the slider, of the line on the histogram or leaving the number field reruns the carving, as
 // does a change of another carving setting (a switch or a choice at once, a number field when the user leaves it, a slider when it
 // is let go); off, Update carving does.
@@ -10,7 +10,7 @@
 // score points, and sets the carve amount that cutoff stands for (Manual; Automatic turns into Manual, which the step says), or
 // the cutoff itself (Shadow tolerated). A cutoff a weighted mode's config holds (from the command line or an earlier version) is
 // shown as Manual, at the carve amount it stands for.
-// When the analysis is out of date the histogram and numbers of the last carving are shown dimmed, its controls disabled, with a
+// When the analysis is out of date the histogram of the last carving is shown dimmed, its controls disabled, with a
 // line that says so (Run analysis is in the bar pinned under the Criteria step).
 import { useEffect, useId, useMemo, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type PointerEvent } from "react";
 import type { RunSummary } from "../api_client/client";
@@ -24,7 +24,7 @@ import { NumberInput } from "../settings_form/widgets/NumberInput";
 import type { ThresholdSpec } from "../settings_form/widgets/ThresholdRule";
 import type { ScorePoints } from "../viewer/score_points_decoder";
 import { carveAmountAt, cutoffForCarveAmount, cutoffStep, keptShareAt, rankScorePoints, roundedToStep, type RankedScorePoints } from "./cutoff_preview";
-import { formatNumber, formatPercent, formattedNumber, withUnit } from "./format_numbers";
+import { formatNumber, formattedNumber, withUnit } from "./format_numbers";
 import { ScoreHistogram } from "./ScoreHistogram";
 import "./steps.css";
 
@@ -292,45 +292,14 @@ function CarvingRuleChoice({ mode, rule, disabled, onChoose }: CarvingRuleChoice
 }
 
 /**
- * A key number on chrome (UX 5.5, 5.6): its label, with an "i" that says what it counts when *help* is given, then the value; the
- * unit may wrap under the value in a narrow tile. A *note* under the value says what the number is a share of.
+ * A key number on chrome (UX 5.6): its label, with an "i" that says what it counts when *help* is given, then the value; the
+ * unit may wrap under the value in a narrow tile.
  */
-export function NumberTile({ label, value, unit, help, note }: { label: string; value: string; unit?: string; help?: string; note?: string }) {
+export function NumberTile({ label, value, unit, help }: { label: string; value: string; unit?: string; help?: string }) {
   return (
     <div className="number-tile">
       <span className="number-tile-label">{label}{help !== undefined && <> <SettingTooltip settingLabel={label} help={help} /></>}</span>
       <span className="number-tile-value">{value}{unit && <> <span className="number-tile-unit">{unit}</span></>}</span>
-      {note !== undefined && <span className="number-tile-note">{note}</span>}
-    </div>
-  );
-}
-
-interface CarvingNumbersProps {
-  summary: CarvingSummary;
-  voxelSize: number | null;
-  isWeighted: boolean;
-  lastAnalysisSeconds: number | null;
-}
-
-/**
- * Kept here (this criterion's kept volume, with its share of what reached it), Obstruction removed (weighted modes) and the time of
- * the last analysis, two per row. What the chain kept in all is under the cards (chainSummaryLine), not here.
- */
-export function CarvingNumbers({ summary, voxelSize, isWeighted, lastAnalysisSeconds }: CarvingNumbersProps) {
-  const { units } = messages;
-  const keptShare = messages.keptHereShare(formatPercent(summary.retention_pct));
-  return (
-    <div className="number-tiles number-tiles-two">
-      {voxelSize !== null
-        ? <NumberTile label={messages.keptHere} value={formatNumber(summary.voxels_kept * voxelSize ** 3)} unit={units.cubicMetres} note={keptShare} />
-        : <NumberTile label={messages.keptHere} value={formatNumber(Math.round(summary.retention_pct))} unit={units.percent}
-                      note={messages.keptHereOfWhatReached} />}
-      {isWeighted && summary.obstruction_fraction_carved !== null && (
-        <NumberTile label={messages.obstructionRemoved} value={formatNumber(summary.obstruction_fraction_carved * 100)} unit={units.percent} />
-      )}
-      {lastAnalysisSeconds !== null && (
-        <NumberTile label={messages.lastAnalysisTook} value={formatNumber(lastAnalysisSeconds, undefined, 1)} unit={units.seconds} />
-      )}
     </div>
   );
 }
@@ -358,7 +327,6 @@ export interface CarvingStepProps {
   /** A carving setting was changed with auto-update on and the user is done with it: the carving reruns with it. */
   onCarvingSettingCommit: () => void;
   onUpdateCarving: () => void;
-  lastAnalysisSeconds: number | null;
   /** Whether the reason the controls are disabled is written over them; false where Run analysis says it (the Criteria step's pinned bar). */
   showsDisabledReason?: boolean;
 }
@@ -524,8 +492,6 @@ export function CarvingStep(props: CarvingStepProps) {
                             cutoffValueText={(cutoff) => messages.cutoffHandleValue(cutoffText(cutoff), keptText(cutoff))}
                             cutoffDisabled={thresholdLocked || ranked === null} onCutoffMove={setDraggedCutoff} onCutoffRelease={releaseCutoff} />
           )}
-          <CarvingNumbers summary={summary} voxelSize={scorePoints?.header.voxel_size ?? null} isWeighted={isWeightedMode}
-                          lastAnalysisSeconds={props.lastAnalysisSeconds} />
         </div>
       )}
       <div className="carving-settings" onChange={commitChoice} onBlur={commitNumberOnLeave} onKeyDown={commitNumberOnEnter}

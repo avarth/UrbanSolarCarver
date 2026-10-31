@@ -19,7 +19,7 @@ const DAYLIGHT: CriterionEntry = {
 
 function cardProps(overrides: Partial<CriterionCardProps> = {}): CriterionCardProps {
   return {
-    entry: DAYLIGHT, line: "Removes 70 % of the obstruction, 18 400 m³", selected: false, reorderable: true, deleteDisabledReason: null, disabledReason: null,
+    entry: DAYLIGHT, line: "Removes 70 % of the obstruction", selected: false, reorderable: true, deleteDisabledReason: null, disabledReason: null,
     onSelect: () => {}, onMove: () => {}, onSetBypassed: () => {}, onChoose: () => {}, ...overrides,
   };
 }
@@ -42,7 +42,7 @@ test("a card shows the criterion's colour, name, mode symbol and its line", () =
   expect(card().querySelector<HTMLElement>(".criterion-card-swatch")!.style.background).toBe("rgb(204, 102, 119)");
   expect(card().querySelector(".criterion-card-name")!.textContent).toBe("Daylight on windows");
   expect(card().querySelector(".mode-tile-symbol")).not.toBeNull();
-  expect(card().querySelector(".criterion-card-line")!.textContent).toBe("Removes 70 % of the obstruction, 18 400 m³");
+  expect(card().querySelector(".criterion-card-line")!.textContent).toBe("Removes 70 % of the obstruction");
   expect(card().getAttribute("aria-current")).toBeNull();
 });
 

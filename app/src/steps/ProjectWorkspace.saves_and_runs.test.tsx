@@ -57,7 +57,8 @@ test("a settings change saves; Run analysis starts a run; its events finish it; 
   expect(service.count("GET /run/summary")).toBe(1);
   expect(service.count("GET /stage-status")).toBe(2);
   expect(stepRow("Criteria").classList.contains("step-open")).toBe(true);    // a finished analysis opens Criteria
-  expect(stepRow("Criteria").textContent).toContain("Kept here61 %of what reached this criterion");
+  expect(stepRow("Criteria").textContent).toContain("Update when I change the threshold");     // the carving rule, no longer waiting
+  expect(stepRow("Criteria").textContent).not.toContain("Run the analysis to see the carving");
   expect(dimmedCarvingLayers()).toEqual([]);
   openStep("Site and grid");
   expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Solar time-based, 61\u00a0% kept");
@@ -775,7 +776,7 @@ const NOT_RUN: CriterionStages = { preprocessing: "missing", thresholding: "miss
 const stageRows = () => [...pinnedBar().querySelectorAll(".run-stage")]
   .map((row) => `${row.querySelector(".run-stage-name")!.textContent} | ${row.querySelector(".run-stage-state")!.textContent}`);
 /** A card's result line of a mode that is not weighted, as formatNumber writes it (no-break spaces before the units). */
-const volumeLine = (percent: number, volume: number) => `Removes ${volume} m³, ${percent} % of what reached it`;
+const volumeLine = (percent: number) => `Removes ${percent} % of what reached it`;
 /** How often *text* is on the page in *root*. */
 const timesShown = (root: Element, text: string) => (root.textContent ?? "").split(text).length - 1;
 
@@ -812,14 +813,14 @@ test("a run of two criteria shows each one's stages by name; its card says Runni
   expect(cardLine("Winter sun on facades")).toBe("Running");          // its new numbers are on their way, not the ones from before
   expect(card("Winter sun on facades").getAttribute("aria-busy")).toBeNull();
   await settle();
-  expect(cardLine("Winter sun on facades")).toBe(volumeLine(30, 300));
+  expect(cardLine("Winter sun on facades")).toBe(volumeLine(30));
   expect(cardLine("Spring sun on windows")).toBe("Running");
 
   chainService.criterionStages = { 1: CURRENT, 2: CURRENT };
   chainService.summaryCriteria = [carvingSummaryOf(FACADES, 70), carvingSummaryOf(WINDOWS, 75)];
   run.send({ type: "run_finished", stages: ["preprocessing", "thresholding"], files: [] });
   await settle();
-  expect(cardLine("Spring sun on windows")).toBe(volumeLine(25, 250));
+  expect(cardLine("Spring sun on windows")).toBe(volumeLine(25));
 });
 
 test("the pinned bar scrolls when the run progress is long, and the step stays on the page", async () => {
@@ -957,7 +958,7 @@ test("moving an earlier cutoff with auto update runs once, rethresholds the late
   expect(scorePointRequests).toEqual(["GET /run/score-points?criterion=1", "GET /run/score-points?criterion=1"]);     // at open, after the run
   expect(selectedCardName()).toBe("Winter sun on facades");
   expect(thresholdField().value).toBe("1");
-  expect(cardLine("Spring sun on windows")).toBe(volumeLine(25, 250));
+  expect(cardLine("Spring sun on windows")).toBe(volumeLine(25));
 });
 
 test("cutoffs moved quickly on two criteria: each value is saved to its own criterion, and neither replaces the other's", async () => {
