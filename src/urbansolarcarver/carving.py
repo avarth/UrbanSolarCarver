@@ -64,6 +64,7 @@ import torch
 import numpy as np
 
 from .scoring import get_direction_factors, get_weights
+from .mode_registry import MODES, canonical_mode_name
 from .stage_settings import PreprocessingSettings
 from .sky_patches import fetch_tregenza_patch_cells, fetch_tregenza_patch_directions, patch_facing_margin, point_direction_factors
 from .sun import get_sun_vectors
@@ -345,6 +346,7 @@ class SkyPatchRaySet(NamedTuple):
     point_weights: "torch.Tensor | None"     # (P,) edge_taper weight per sample point, or None
     patch_weights: torch.Tensor              # (145,) weight per sky patch for the mode
     sub_rays: "SkySubRays | None" = None     # jittered sub-rays per ray, or None: trace the patch centres
+    incidence: bool = False                  # each ray counts its weight times cos θ to its surface (MODES[mode].incidence)
 
 
 def direction_point_weights(settings: PreprocessingSettings, hoys, sample_normals) -> "np.ndarray | None":
@@ -370,7 +372,9 @@ def sky_patch_ray_set(device, sample_points, sample_normals, settings: Preproces
     (edge_taper) entry is 0 are dropped.  In benefit mode with rooms per
     facade direction, the point weights are multiplied by each point's
     direction factor (:func:`direction_point_weights`).  The patch weights are those of
-    ``settings.mode`` over the hours *hoys*.
+    ``settings.mode`` over the hours *hoys*; in the modes whose ``incidence``
+    is set (irradiance, benefit) each traced ray counts its patch weight times
+    cos θ to its surface's normal, which the kernels apply per ray or sub-ray.
 
     With ``settings.rays_per_patch`` above 1, the kernels trace each ray as
     that many jittered sub-rays (``sub_rays``), and a ray is kept for every
@@ -446,7 +450,14 @@ def sky_patch_ray_set(device, sample_points, sample_normals, settings: Preproces
         simulated_weights_path=settings.simulated_weights_path,
     )
     return SkyPatchRaySet(ray_origins, ray_directions, patch_ids, point_idx.to(torch.int32),
-                          surface_normals, pw_t, patch_weights, sub_rays)
+                          surface_normals, pw_t, patch_weights, sub_rays,
+                          MODES[canonical_mode_name(settings.mode)].incidence)
+
+
+def _incidence_cosines(directions: torch.Tensor, surface_normals: torch.Tensor, point_ids: torch.Tensor) -> torch.Tensor:
+    """cos θ between each ray and its source surface's normal (R,), float64, at least 0: the kernels' incidence term."""
+    normals = surface_normals[point_ids.long()].to(torch.float64)
+    return (directions.to(torch.float64) * normals).sum(dim=1).clamp_min(0.0)
 
 
 _facing_margin_cache: "float | None" = None
@@ -712,7 +723,7 @@ def carve_with_sky_patch_rays(
     ray_origins, ray_directions, patch_ids, ray_point_ids = (
         rays.origins, rays.directions, rays.patch_ids, rays.point_ids)
     surface_normals, pw_t, patch_weights = rays.surface_normals, rays.point_weights, rays.patch_weights
-    sub_rays = rays.sub_rays
+    sub_rays, incidence = rays.sub_rays, rays.incidence
     per_ray = 1 if sub_rays is None else sub_rays.count  # traced rays (threads) per ray of the set
     ray_drop, skip = None, None
     if blocking_mesh is not None and sub_rays is not None:
@@ -720,11 +731,13 @@ def carve_with_sky_patch_rays(
         # sub-ray and leaves a skip mask instead of shortening the ray set.
         skip, ray_drop = drop_blocked_sky_sub_rays(
             blocking_mesh, ray_origins, patch_ids, ray_point_ids, surface_normals, sub_rays,
-            patch_weights, float(settings.ray_length), point_weights=pw_t)
+            patch_weights, float(settings.ray_length), point_weights=pw_t, incidence=incidence)
     elif blocking_mesh is not None:
         ray_weights = patch_weights.to(torch.float64)[patch_ids.long()]
         if pw_t is not None:
             ray_weights = ray_weights * pw_t.to(torch.float64)[ray_point_ids.long()]
+        if incidence:
+            ray_weights = ray_weights * _incidence_cosines(ray_directions, surface_normals, ray_point_ids)
         keep, ray_drop = drop_blocked_rays(blocking_mesh, ray_origins, ray_directions, ray_point_ids,
                                            surface_normals, float(settings.ray_length), ray_weights)
         ray_origins, ray_directions = ray_origins[keep], ray_directions[keep]
@@ -754,6 +767,7 @@ def carve_with_sky_patch_rays(
             occupancy=occupancy,
             sub_rays=sub_rays,
             skip=None if skip is None else skip[start * per_ray:end * per_ray],
+            incidence=incidence,
         )
 
     batch_ranges = [

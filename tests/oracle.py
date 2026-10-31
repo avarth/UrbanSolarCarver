@@ -313,19 +313,27 @@ def sky_rays(run: Run, dirs: np.ndarray, pw: np.ndarray):
     faces. Otherwise every (point, patch) pair becomes ``rays_per_patch``
     sub-rays (sky_patches.sub_ray_directions, the NumPy definition the
     kernels follow), each carrying that share of the patch weight, of which
-    those the surface faces are kept.
+    those the surface faces are kept. In the modes with ``incidence``
+    (irradiance, benefit) each weight is also multiplied by the cosine
+    between the ray and its surface's normal.
     """
+    from urbansolarcarver.mode_registry import MODES, canonical_mode_name
     from urbansolarcarver.sky_patches import sub_ray_directions, tregenza_patch_cells
+    incidence = MODES[canonical_mode_name(run.cfg["mode"])].incidence
     count = int(run.cfg.get("rays_per_patch", 4))
     if count == 1:
         o, n, d, _, di = pairs(run.points, run.normals, dirs)
-        return o, n, d, pw[di]
-    side = math.isqrt(count)
-    pi, di = (a.ravel() for a in np.meshgrid(np.arange(len(run.points)), np.arange(len(dirs)), indexing="ij"))
-    d = sub_ray_directions(pi, di, side, tregenza_patch_cells())
-    pi, di = np.repeat(pi, count), np.repeat(di, count)
-    facing = np.einsum("ij,ij->i", run.normals[pi], d) > 0
-    return run.points[pi][facing], run.normals[pi][facing], d[facing], pw[di][facing] / count
+        w = pw[di]
+    else:
+        side = math.isqrt(count)
+        pi, di = (a.ravel() for a in np.meshgrid(np.arange(len(run.points)), np.arange(len(dirs)), indexing="ij"))
+        d = sub_ray_directions(pi, di, side, tregenza_patch_cells())
+        pi, di = np.repeat(pi, count), np.repeat(di, count)
+        facing = np.einsum("ij,ij->i", run.normals[pi], d) > 0
+        o, n, d, w = run.points[pi][facing], run.normals[pi][facing], d[facing], pw[di][facing] / count
+    if incidence:
+        w = w * np.einsum("ij,ij->i", n, d)
+    return o, n, d, w
 
 
 def sky_scores(run: Run, substeps: int = 10) -> np.ndarray:

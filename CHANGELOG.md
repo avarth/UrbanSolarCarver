@@ -36,6 +36,13 @@ versioning follows [Semantic Versioning](https://semver.org/).
   over by USC_SyncCanvas stay in place; the setpoints are the comfort band of a free-running room. After a sync, a canvas
   that leaves `free_running` unwired gets free-running weights. `OPERATIONS` and `FREE_RUNNING_DEFAULTS` move to
   `archetype_defaults.py` (still importable from `simulated_weights`).
+- **Irradiance and benefit rays count the angle of incidence**: each ray (each sub-ray with `rays_per_patch` above 1)
+  counts its patch weight times cos θ to its test surface's normal, so a score is the energy the protected surface
+  receives, as Simulate's solar energy and useful solar gains count it. Before, a ray counted its patch's radiation as
+  if the surface faced the patch. The same weight goes into the context drop figures and `test_point_access_evaluation`.
+  On the bundled examples, full year in Golden, carve fraction 0.7: 4.5 to 9.0 % of the voxels are decided differently
+  and 0.6 to 1.5 % less volume is kept; scores fall to 58 to 67 % of before, so a numeric threshold of these modes
+  carves less. `daylight` and `radiative_cooling` are unchanged. `ModeSpec.incidence` says which modes take the term.
 
 ## [0.10.0] - 2026-10-30
 

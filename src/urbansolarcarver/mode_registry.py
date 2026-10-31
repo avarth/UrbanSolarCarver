@@ -53,6 +53,12 @@ class ModeSpec:
         Values that differ from the schema defaults and fill a new config
         for this mode (``configs/config_<mode>.yaml`` carries the same
         values).  Empty when the schema defaults already fit.
+    incidence : bool
+        Each sky-patch ray counts its weight times cos θ, the cosine
+        between the ray and its test surface's normal.  The patch weights
+        of these modes are radiation per m² facing the patch, so the
+        cosine makes a ray's weight the radiation its surface receives
+        from that direction.
     """
 
     name: str
@@ -65,6 +71,7 @@ class ModeSpec:
     experimental: bool = False
     description: str = ""
     starting_values: Mapping[str, object] = field(default_factory=dict)
+    incidence: bool = False
 
     def __post_init__(self):
         # A read-only copy: the registry is shared by every caller.
@@ -121,6 +128,7 @@ MODES: Dict[str, ModeSpec] = {
             "analysis period."
         ),
         starting_values=_period_values(1, 1, 0, 12, 31, 23),
+        incidence=True,
     ),
     "benefit": ModeSpec(
         name="benefit",
@@ -141,6 +149,7 @@ MODES: Dict[str, ModeSpec] = {
             "optional."
         ),
         starting_values=_period_values(10, 15, 7, 4, 15, 19),
+        incidence=True,
     ),
     "daylight": ModeSpec(
         name="daylight",

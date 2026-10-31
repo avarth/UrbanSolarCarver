@@ -117,6 +117,12 @@ def _sub_ray_args(sub_rays: Optional[SkySubRays], skip, num_rays: int, surface_n
     return dim, side, cells, 1, wp.from_torch(skip.contiguous(), dtype=wp.uint8)
 
 
+def _require_normals_for_incidence(incidence: bool, surface_normals, caller: str) -> None:
+    """Raise when *incidence* is asked for without the surface normals its cosine needs."""
+    if incidence and surface_normals is None:
+        raise ValueError(f"{caller}: incidence needs surface_normals")
+
+
 def trace_and_score_dda(
     min_corner: Tuple[float, float, float],
     scale: float,
@@ -133,6 +139,7 @@ def trace_and_score_dda(
     occupancy: "torch.Tensor | None" = None,
     sub_rays: "SkySubRays | None" = None,
     skip: "torch.Tensor | None" = None,
+    incidence: bool = False,
 ) -> None:
     """Trace rays with the Warp DDA kernel and add each ray's weight to every
     voxel it visits, directly into ``scores``.
@@ -184,6 +191,10 @@ def trace_and_score_dda(
     skip : torch.Tensor, optional
         uint8, one entry per traced ray (R, or R * sub_rays.count): rays
         whose entry is nonzero are not traced (the context blocks them).
+    incidence : bool, default False
+        Multiply each ray's weight by cos θ, the cosine between its traced
+        direction (the sub-ray's, with *sub_rays*) and its source surface's
+        normal; requires ``surface_normals``.
 
     Raises
     ------
@@ -192,7 +203,7 @@ def trace_and_score_dda(
         write into a copy), if ``point_ids`` is given with neither
         ``point_weights`` nor ``surface_normals``, or if either of those
         is given without ``point_ids``, or if ``occupancy`` is given
-        without ``surface_normals``, or *sub_rays* without
+        without ``surface_normals``, or *sub_rays* or *incidence* without
         ``surface_normals``, or *skip* of another length.
     """
     num_rays = origins.shape[0]
@@ -208,6 +219,7 @@ def trace_and_score_dda(
             "trace_and_score_dda: point_ids and point_weights must be "
             "provided together"
         )
+    _require_normals_for_incidence(incidence, surface_normals, "trace_and_score_dda")
     # Warp requires explicit device index (e.g. "cuda:0", not just "cuda")
     device_str = warp_device_name(origins.device)
     cell_size = scale / resolution
@@ -234,7 +246,7 @@ def trace_and_score_dda(
             _dda_fused_score_pw_kernel,
             dim=dim,
             inputs=[
-                wp_origins, wp_dirs, wp_patch_ids, wp_point_ids, wp_normals, front,
+                wp_origins, wp_dirs, wp_patch_ids, wp_point_ids, wp_normals, front, int(incidence),
                 skin_rule, wp_occ, side, cells, use_skip, wp_skip,
                 grid_origin_wp, float(cell_size), int(resolution), float(ray_length),
                 wp_scores, wp_weights, wp_point_weights,
@@ -247,7 +259,7 @@ def trace_and_score_dda(
         _dda_fused_score_kernel,
         dim=dim,
         inputs=[
-            wp_origins, wp_dirs, wp_patch_ids, wp_point_ids, wp_normals, front,
+            wp_origins, wp_dirs, wp_patch_ids, wp_point_ids, wp_normals, front, int(incidence),
             skin_rule, wp_occ, side, cells, use_skip, wp_skip,
             grid_origin_wp, float(cell_size), int(resolution), float(ray_length),
             wp_scores, wp_weights,
@@ -272,6 +284,7 @@ def trace_point_access_dda(
     surface_normals: "torch.Tensor | None" = None,
     skin_occupancy: "torch.Tensor | None" = None,
     sub_rays: "SkySubRays | None" = None,
+    incidence: bool = False,
 ) -> None:
     """Trace rays until the first occupied voxel and add each ray's weight
     to its sample point's accessible or blocked weight in ``access``.
@@ -296,11 +309,14 @@ def trace_point_access_dda(
     sub_rays : SkySubRays, optional
         As in :func:`trace_and_score_dda`: a sub-ray the surface does not
         face counts as neither accessible nor blocked.
+    incidence : bool, default False
+        As in :func:`trace_and_score_dda`.
 
     Raises
     ------
     ValueError
-        If ``access`` is not a contiguous float64 tensor of even length.
+        If ``access`` is not a contiguous float64 tensor of even length, or
+        *incidence* is given without ``surface_normals``.
     """
     num_rays = origins.shape[0]
     if num_rays == 0:
@@ -310,6 +326,7 @@ def trace_point_access_dda(
             "trace_point_access_dda: access must be a contiguous float64 tensor "
             "of 2 * num_points entries"
         )
+    _require_normals_for_incidence(incidence, surface_normals, "trace_point_access_dda")
     device_str = warp_device_name(origins.device)
     wp_point_ids, wp_normals, front, skin_rule, _ = _surface_args(
         num_rays, point_ids, surface_normals,
@@ -328,7 +345,7 @@ def trace_point_access_dda(
         inputs=[
             wp.from_torch(origins.contiguous().float(), dtype=wp.vec3),
             wp.from_torch(ray_dirs.contiguous().float(), dtype=wp.vec3),
-            wp.from_torch(patch_ids.contiguous().int()), wp_point_ids, wp_normals, front, skin_rule,
+            wp.from_torch(patch_ids.contiguous().int()), wp_point_ids, wp_normals, front, int(incidence), skin_rule,
             _occupancy_array(occupancy),
             _occupancy_array(occupancy if skin_occupancy is None else skin_occupancy),
             side, cells,
@@ -582,6 +599,7 @@ def mesh_blocks_sky_sub_rays(
     point_weights: "torch.Tensor | None" = None,
     origin_offset: float = 0.01,
     min_hit: float = 1e-3,
+    incidence: bool = False,
 ) -> SkySubRayBlocking:
     """:func:`mesh_blocks_rays` for the sky sub-rays of *sub_rays*.
 
@@ -589,8 +607,8 @@ def mesh_blocks_sky_sub_rays(
     ``sub_rays.count`` sub-rays, tested one thread each in launches of
     about 16 million.  Returns each sub-ray's status and, per test point,
     how many sub-rays it faces and their weight (``patch_weights[patch] /
-    count``, times *point_weights* when given), and how much of that the
-    mesh blocks.
+    count``, times *point_weights* when given, times cos θ to the point's
+    normal with *incidence*), and how much of that the mesh blocks.
     """
     num_rays = origins.shape[0]
     num_points = int(surface_normals.shape[0])
@@ -622,7 +640,7 @@ def mesh_blocks_sky_sub_rays(
                 wp.from_torch(origins[start:end].contiguous().float(), dtype=wp.vec3),
                 wp.from_torch(patch_ids[start:end].contiguous().int()),
                 wp.from_torch(point_ids[start:end].contiguous().int()),
-                normals, int(sub_rays.side), cells, weights, use_pw, wp_point_weights,
+                normals, int(sub_rays.side), cells, weights, use_pw, wp_point_weights, int(incidence),
                 float(origin_offset), float(min_hit), float(max_t),
                 wp.from_torch(status[start * count:end * count], dtype=wp.uint8),
                 *outputs,

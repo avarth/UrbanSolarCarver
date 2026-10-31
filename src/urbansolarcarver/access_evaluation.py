@@ -135,12 +135,12 @@ def test_point_access_evaluation(
         origins, directions, point_ids, normals = rays
         patch_ids = torch.zeros(origins.shape[0], dtype=torch.int32, device=device)
         patch_weights = torch.tensor([1.0 / settings.sun_steps_per_hour], dtype=torch.float32, device=device)
-        pw, unit, sub_rays = None, "h", None
+        pw, unit, sub_rays, incidence = None, "h", None, False
     else:
         rays = sky_patch_ray_set(device, sample_points, sample_normals, settings, hoys, point_weights)
         origins, directions, patch_ids, point_ids = rays.origins, rays.directions, rays.patch_ids, rays.point_ids
         normals, pw, patch_weights = rays.surface_normals, rays.point_weights, rays.patch_weights
-        unit, sub_rays = MODES[mode].weight_unit, rays.sub_rays
+        unit, sub_rays, incidence = MODES[mode].weight_unit, rays.sub_rays, rays.incidence
 
     min_corner = (float(grid_origin[0]), float(grid_origin[1]), float(grid_origin[2]))
     total_rays = origins.shape[0]
@@ -153,7 +153,7 @@ def test_point_access_evaluation(
             min_corner, float(grid_extent), res, origins[start:end], directions[start:end],
             patch_ids[start:end], patch_weights, buf, float(settings.ray_length), occ,
             point_ids[start:end], point_weights=pw, surface_normals=normals, skin_occupancy=skin_occ,
-            sub_rays=sub_rays,
+            sub_rays=sub_rays, incidence=incidence,
         )
 
     with torch.no_grad():

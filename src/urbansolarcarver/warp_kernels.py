@@ -539,6 +539,7 @@ if _warp_available:
         ray_point_ids: wp.array(dtype=int),
         point_normals: wp.array(dtype=wp.vec3),
         front_test: int,                        # 1 = skip voxels behind the source surface
+        incidence: int,                         # 1 = weight times cos θ to the source surface (needs front_test)
         skin_rule: int,                         # 1 = count skin voxels with no mass behind them
         occupancy: wp.array(dtype=wp.uint8),    # max volume occupancy [res^3] (placeholder if skin_rule == 0)
         # Sky sub-rays (see the note above _lowbias32)
@@ -581,6 +582,8 @@ if _warp_available:
         d = _traced_direction(ray_dirs, r, sub_side, patch_cells, pt, pid, k)
         if sub_side > 0 and wp.dot(n, d) <= 0.0:
             return  # the surface does not face this part of the patch
+        if incidence == 1:
+            w = w * wp.max(wp.dot(n, d), 0.0)  # cos θ: the share of the patch's radiation the surface receives
         res_sq = resolution * resolution
         s = _dda_init(o, d, grid_origin,
                       cell_size, resolution, max_t)
@@ -611,6 +614,7 @@ if _warp_available:
         ray_point_ids: wp.array(dtype=int),
         point_normals: wp.array(dtype=wp.vec3),
         front_test: int,                        # 1 = skip voxels behind the source surface
+        incidence: int,                         # 1 = weight times cos θ to the source surface (needs front_test)
         skin_rule: int,                         # 1 = count skin voxels with no mass behind them
         occupancy: wp.array(dtype=wp.uint8),    # max volume occupancy [res^3] (placeholder if skin_rule == 0)
         # Sky sub-rays, as in _dda_fused_score_kernel
@@ -654,6 +658,8 @@ if _warp_available:
         d = _traced_direction(ray_dirs, r, sub_side, patch_cells, pt, pid, k)
         if sub_side > 0 and wp.dot(n, d) <= 0.0:
             return
+        if incidence == 1:
+            w = w * wp.max(wp.dot(n, d), 0.0)  # cos θ: the share of the patch's radiation the surface receives
         res_sq = resolution * resolution
         s = _dda_init(o, d, grid_origin,
                       cell_size, resolution, max_t)
@@ -728,6 +734,7 @@ if _warp_available:
         ray_point_ids: wp.array(dtype=int),
         point_normals: wp.array(dtype=wp.vec3),
         front_test: int,                        # 1 = skip voxels behind the source surface
+        incidence: int,                         # 1 = weight times cos θ to the source surface (needs front_test)
         skin_rule: int,                         # 1 = count skin voxels with no mass behind them
         occupancy: wp.array(dtype=wp.uint8),    # occupancy grid to evaluate [res^3]
         skin_occupancy: wp.array(dtype=wp.uint8),  # max volume the skin rule reads [res^3]
@@ -776,6 +783,8 @@ if _warp_available:
         d = _traced_direction(ray_dirs, r, sub_side, patch_cells, pt, pid, k)
         if sub_side > 0 and wp.dot(n, d) <= 0.0:
             return  # not a ray of this point: it neither reaches the sky nor is blocked
+        if incidence == 1:
+            w = w * wp.max(wp.dot(n, d), 0.0)  # cos θ: the share of the patch's radiation the surface receives
         res_sq = resolution * resolution
         s = _dda_init(o, d, grid_origin, cell_size, resolution, max_t)
         max_steps = 3 * resolution
@@ -1065,6 +1074,7 @@ if _warp_available:
         patch_weights: wp.array(dtype=float),     # weight per patch
         use_point_weights: int,                   # 1 = multiply by point_weights (edge_taper)
         point_weights: wp.array(dtype=float),     # weight per test point (placeholder otherwise)
+        incidence: int,                           # 1 = weight times cos θ to the test point's normal
         origin_offset: float,
         min_hit: float,
         max_t: float,
@@ -1091,6 +1101,8 @@ if _warp_available:
         w = patch_weights[pid] / float(sub)
         if use_point_weights == 1:
             w = w * point_weights[pt]
+        if incidence == 1:
+            w = w * wp.max(wp.dot(n, d), 0.0)  # cos θ: the share of the patch's radiation the surface receives
         hit = _mesh_blocks_ray(mesh_id, origins[r] + n * origin_offset, d, min_hit, max_t)
         status[r * sub + k] = hit
         wp.atomic_add(rays_of_point, pt, 1)
