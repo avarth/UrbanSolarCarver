@@ -742,6 +742,23 @@ def test_a_building_stored_before_rooms_per_direction_has_one_room_and_keeps_its
     assert reply.state == "missing" and reply.changed is False
 
 
+def test_a_building_stored_before_the_window_opening_calculates_with_its_defaults(tmp_path, fake_generator):
+    """A building stored before vent_above and vent_ach existed takes the engine's window opening (25 °C, 4 per hour); its key
+    is that of the same values with them, and both differ from the conditioned weights' key of before."""
+    earlier = {key: value for key, value in WITHOUT_DIRECTIONS.items() if key not in ("vent_above", "vent_ach")}
+    archetype = typical_building.archetype_of(earlier)
+    assert (archetype["operation"], archetype["vent_above"], archetype["vent_ach"]) == ("free_running", 25.0, 4.0)
+    assert typical_building.weights_key(earlier, GOLDEN_EPW) == typical_building.weights_key(WITHOUT_DIRECTIONS, GOLDEN_EPW)
+    store, name = benefit_project(tmp_path)
+    project_json = store.read_project_json(name)
+    project_json.typical_building = TypicalBuildingEntry(values=earlier, library_id=None, library_name=None, calculated_key=None)
+    store.write_project_json(name, project_json)
+    assert (typical_building.reply(store, name).values["vent_above"], typical_building.reply(store, name).values["vent_ach"]) == (25.0, 4.0)
+    typical_building.calculate(store, name)
+    assert fake_generator.archetypes[-1]["vent_above"] == 25.0
+    assert typical_building.reply(store, name).state == "current"
+
+
 def test_by_direction_must_be_true_or_false():
     with pytest.raises(ConfigError) as refused:
         typical_building.validate({**DEFAULT, "by_direction": "yes"})

@@ -146,8 +146,10 @@ def archetype_of(values: dict, epw_path: Path | str | None = None) -> dict:
     Fresh air (m³/h per m² of floor) over the storey height gives the ventilation in air changes per hour; the gains and the fresh
     air apply in the hours of the schedule (8,760 values each), or as one value when the schedule is every hour, and the
     infiltration in every hour. A side without windows is left out; the summer shading is the hot shading of the engine over the
-    period of its dates. With by_direction the archetype has direction_rooms (the rooms per facade direction).
+    period of its dates. With by_direction the archetype has direction_rooms (the rooms per facade direction). A key of
+    LATER_VALUE_DEFAULTS that a building stored before it lacks takes its default.
     """
+    values = {**LATER_VALUE_DEFAULTS, **values}
     width, length, orientation, wwr = room_box(values)
     height = values["height"]
     archetype = {"width": width, "length": length, "height": height, "orientation": orientation,
@@ -548,11 +550,12 @@ def _valid_values_text(values_text: str) -> bool:
 
 def building_of(project_json: ProjectJson) -> TypicalBuildingEntry | None:
     """The project's building; None when none was chosen, or when the stored values no longer validate (the keys of an earlier
-    form of them), so the user chooses one again."""
+    form of them), so the user chooses one again. A key of LATER_VALUE_DEFAULTS that the stored values lack takes its default."""
     building = project_json.typical_building
     if building is None or not _valid_values_text(json.dumps(building.values, sort_keys=True)):
         return None
-    return building
+    missing = {key: value for key, value in LATER_VALUE_DEFAULTS.items() if key not in building.values}
+    return building.model_copy(update={"values": {**building.values, **missing}}) if missing else building
 
 
 def _file_digest(path: Path) -> str:
