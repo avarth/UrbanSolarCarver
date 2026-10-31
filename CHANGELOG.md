@@ -29,8 +29,13 @@ versioning follows [Semantic Versioning](https://semver.org/).
   removes (benefit) and above it it adds (harm), times the room's heat loss coefficient so the weights stay shares of a
   watt-hour. The window shows the room's degree-hours below and above the band. In the engine this is
   `operation: free_running` with `vent_above` and `vent_ach` (`simulate_free_running`, `attribute_free_running`);
-  `conditioned`, the earlier ideal heating and cooling, stays the engine's default. Weights calculated before are out of
-  date and are calculated again. Study and decision: `design/utilization-weights.md`, `design/free-running-weights.md`.
+  `conditioned`, the earlier ideal heating and cooling, stays the engine's default (and `usc archetype`'s). Weights
+  calculated before are out of date and are calculated again.
+- **Grasshopper: USC_Archetype's room runs free** by default, as the app's. USC_ZoneOperation takes `free_running`
+  (False for the heated and cooled room), `vent_above` and `vent_ach`, added after its earlier inputs so wires carried
+  over by USC_SyncCanvas stay in place; the setpoints are the comfort band of a free-running room. After a sync, a canvas
+  that leaves `free_running` unwired gets free-running weights. `OPERATIONS` and `FREE_RUNNING_DEFAULTS` move to
+  `archetype_defaults.py` (still importable from `simulated_weights`).
 
 ## [0.10.0] - 2026-10-30
 

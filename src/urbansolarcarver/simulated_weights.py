@@ -43,7 +43,7 @@ from typing import Sequence, Tuple
 
 import numpy as np
 
-from .archetype_defaults import ARCHETYPE_DEFAULTS, SHOEBOX_EXPOSURE_DEFAULTS
+from .archetype_defaults import ARCHETYPE_DEFAULTS, FREE_RUNNING_DEFAULTS, OPERATIONS, SHOEBOX_EXPOSURE_DEFAULTS
 from .weather_file import read_weather_file
 
 log = logging.getLogger(__name__)
@@ -447,15 +447,7 @@ def attribute_solar_gains(p: ZoneParams, t_out, phi_int, phi_sol,
 # Free running: no heating or cooling, windows opened for natural ventilation
 # ---------------------------------------------------------------------------
 
-# How the zone is run (archetype key ``operation``): with ideal heating and
-# cooling to its set points, or free running against a comfort band whose
-# limits are the two set points.
-OPERATIONS = ("conditioned", "free_running")
-# The window opening of a free-running zone (archetype keys): windows open in
-# an hour when the air would be above vent_above [°C] with them closed and
-# opening them cools it, as far as needed to bring it to vent_above, up to
-# vent_ach extra air changes per hour.
-FREE_RUNNING_DEFAULTS = {"vent_above": 25.0, "vent_ach": 4.0}
+# OPERATIONS and FREE_RUNNING_DEFAULTS (the window opening) live in archetype_defaults.
 
 
 @dataclass

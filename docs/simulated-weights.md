@@ -94,7 +94,7 @@ usc archetype -o my_building.yaml -s width=12 -s wwr_south=0.4 -s mass_class=hea
 usc archetype --from my_building.yaml -o variant.yaml -s mass_class=light   # derive a variant
 ```
 
-In Grasshopper, **USC_Archetype** assembles the archetype from five family feeder components (USC_ZoneGeometry / Fabric / Ventilation / Operation / Shading, one wire each), feeding **USC_SimulateWeights**, whose output path wires into **USC_BenefitParams**.
+In Grasshopper, **USC_Archetype** assembles the archetype from five family feeder components (USC_ZoneGeometry / Fabric / Ventilation / Operation / Shading, one wire each), feeding **USC_SimulateWeights**, whose output path wires into **USC_BenefitParams**. Its room runs free unless USC_ZoneOperation's `free_running` is False, which also takes `vent_above` and `vent_ach`; `usc archetype` and an archetype file without `operation` give a conditioned zone.
 
 ## In the app
 

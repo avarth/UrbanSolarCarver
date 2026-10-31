@@ -1,10 +1,13 @@
 """USC Simulate Weights: generate simulated benefit weights.
 
 Runs USC's ISO 13790 5R1C hourly building simulation (in the daemon; no
-GPU needed) to derive, for every hour of the year, what fraction of a
-marginal joule of solar gain offsets heating (benefit) and what fraction
-becomes cooling load (harm). Writes a simulated_weights.json artifact
-plus a .png heatmap preview next to it.
+GPU needed) to derive, for every hour of the year, how useful a marginal
+joule of solar gain is (benefit) and how harmful (harm). For a
+free-running room (USC_ZoneOperation's default) these are the
+degree-hours below the comfort band it removes and above the band it
+adds; for a heated and cooled room, the heating it offsets and the
+cooling load it adds. Writes a simulated_weights.json artifact plus a
+.png heatmap preview next to it.
 
 Wire the weights_path output into USC_BenefitParams'
 simulated_weights_path input to drive a benefit-mode carve with the
@@ -24,7 +27,8 @@ out_path : str, optional
     Artifact output path. Default: simulated_weights.json next to the
     saved .gh file, or in ~/.urbansolarcarver if the .gh file is unsaved.
 eps : float, optional
-    Perturbation size in W (central differences). Default: 1.0
+    Perturbation size in W (central differences) for a heated and cooled
+    room. Default: 1.0. A free-running room always uses 10 W.
 run : bool
     True to execute. False to idle.
 
@@ -47,7 +51,7 @@ from pathlib import Path
 try:
     ghenv.Component.Name = "USC Simulate Weights"
     ghenv.Component.NickName = "USC_SimWeights"
-    ghenv.Component.Description = "Generates simulated benefit weights: an ISO 13790 5R1C hourly simulation of a typical building (USC_Archetype) derives when a marginal joule of solar gain is thermally useful, accounting for thermal lag, mass state and gain saturation. Writes simulated_weights.json + a .png preview. Wire weights_path into USC_BenefitParams to drive a benefit carve."
+    ghenv.Component.Description = "Generates simulated benefit weights: an ISO 13790 5R1C hourly simulation of a typical building (USC_Archetype) derives when a marginal joule of solar gain is thermally useful (free running: degree-hours below the comfort band removed; heated and cooled: heating saved), accounting for thermal lag, mass state and gain saturation. Writes simulated_weights.json + a .png preview. Wire weights_path into USC_BenefitParams to drive a benefit carve."
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     for i, (n, d) in enumerate([
@@ -55,7 +59,7 @@ try:
         ("epw_path", "Path to the EPW weather file for the site. A relative path is taken relative to the saved .gh file."),
         ("archetype", "Archetype from USC_Archetype, or a path to an archetype YAML file (see configs/archetype_example.yaml)."),
         ("out_path", "Optional output path for the artifact. Default: simulated_weights.json next to the saved .gh file, or in ~/.urbansolarcarver if the .gh file is unsaved. The carve reads the artifact again on every run, so overwriting it does not leave stale results."),
-        ("eps", "Perturbation size in watts for the central-difference attribution. Default 1.0; rarely needs changing."),
+        ("eps", "Perturbation size in watts for the central-difference attribution of a heated and cooled room. Default 1.0; rarely needs changing. A free-running room always uses 10 W."),
         ("run", "Boolean toggle to execute. The simulation runs 17 521 year-long trajectories at once (1 base + 2 per hour of the year)."),
     ]):
         if i < len(ii):

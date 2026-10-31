@@ -21,6 +21,19 @@ ARCHETYPE_DEFAULTS = {
 # Window-to-wall ratio per facade; a facade at 0.0 gets no window.
 WINDOW_TO_WALL_DEFAULTS = {"south": 0.35, "east": 0.15, "west": 0.15, "north": 0.0}
 
+# How the zone is run (archetype key ``operation``): with ideal heating and
+# cooling to its set points, or free running against a comfort band whose
+# limits are the two set points.  An archetype without the key is conditioned;
+# the Grasshopper archetype component and the browser app's typical building
+# run free.
+OPERATIONS = ("conditioned", "free_running")
+
+# The window opening of a free-running zone (archetype keys): windows open in
+# an hour when the air would be above vent_above [°C] with them closed and
+# opening them cools it, as far as needed to bring it to vent_above, up to
+# vent_ach extra air changes per hour.  A conditioned zone takes neither.
+FREE_RUNNING_DEFAULTS = {"vent_above": 25.0, "vent_ach": 4.0}
+
 # Optional keys with no default (absent = feature off).
 ARCHETYPE_OPTIONAL_KEYS = ("shading_permanent", "shading_hot", "hot_months")
 

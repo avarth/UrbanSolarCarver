@@ -4,7 +4,8 @@ Collects the five parameter families into one archetype handle for
 USC_SimulateWeights. Wire in only the families you want to customise:
 every input is optional, and anything not provided keeps USC's neutral
 defaults (a 10 x 10 x 3 m medium-mass shoebox with window-to-wall ratios
-(WWR) south 0.35 / east 0.15 / west 0.15, no shading). The archetype
+(WWR) south 0.35 / east 0.15 / west 0.15, no shading, running free with a
+20-26 deg C comfort band and windows opened above 25 deg C). The archetype
 describes a *typical* building of the surrounding stock, not any one
 design; take real numbers from TABULA (EU), DOE prototypes (US), or
 national code tables.
@@ -18,7 +19,8 @@ fabric : USCZoneParams, optional
 ventilation : USCZoneParams, optional
     From USC_ZoneVent: air-change rates, heat recovery.
 operation : USCZoneParams, optional
-    From USC_ZoneOperation: setpoints, internal gains.
+    From USC_ZoneOperation: free running or heated and cooled, comfort
+    band or setpoints, internal gains, window opening.
 shading : USCZoneParams, optional
     From USC_ZoneShading: declared shading coefficients.
 
@@ -40,9 +42,9 @@ class USCArchetype:
 
     def __repr__(self):
         d = self.data
-        return "USCArchetype({}x{}x{} m, {})".format(
+        return "USCArchetype({}x{}x{} m, {}, {})".format(
             d.get("width"), d.get("length"), d.get("height"),
-            d.get("mass_class"))
+            d.get("mass_class"), d.get("operation", "conditioned"))
 
 
 # -- GH UI --------------------------------------------------------------------
@@ -56,7 +58,7 @@ try:
         ("geometry", "Geometry family from USC_ZoneGeometry: shoebox dimensions, orientation, per-facade window-to-wall ratios. Optional."),
         ("fabric", "Fabric family from USC_ZoneFabric: opaque and glazing U-values, g-value, ISO 13790 thermal mass class. Optional."),
         ("ventilation", "Ventilation family from USC_ZoneVent: intentional and infiltration air-change rates, heat-recovery efficiency. Optional."),
-        ("operation", "Operation family from USC_ZoneOperation: heating/cooling setpoints and flat internal gains. Optional."),
+        ("operation", "Operation family from USC_ZoneOperation: free running (default) or heated and cooled, the comfort band or setpoints, flat internal gains and the window opening. Optional."),
         ("shading", "Shading family from USC_ZoneShading: declared permanent and hot-months transmission multipliers. Optional (no shading by default)."),
     ]):
         if i < len(ii):
@@ -134,6 +136,9 @@ else:
     # Values used for every family that is not wired.
     data = dict(engine_defaults.ARCHETYPE_DEFAULTS)
     wwr = dict(engine_defaults.WINDOW_TO_WALL_DEFAULTS)
+    # The engine's default is a heated and cooled room; this component's is a
+    # free-running one with the engine's window opening.
+    data.update(operation="free_running", **engine_defaults.FREE_RUNNING_DEFAULTS)
 for index, name in enumerate(() if summary else _FAMILIES):
     handle = globals().get(name)
     if handle is None:
@@ -162,8 +167,17 @@ for index, name in enumerate(() if summary else _FAMILIES):
     data.update(family)
 
 if not summary:
+    if data["operation"] == "conditioned":
+        # USC_ZoneOperation refuses a window opening it was given for a
+        # conditioned room, so these are the free-running defaults.
+        for key in engine_defaults.FREE_RUNNING_DEFAULTS:
+            data.pop(key, None)
     wwr = {side: v for side, v in wwr.items() if v > 0.0}
-    if not wwr:
+    if data["operation"] == "free_running" and data["vent_above"] <= data["t_set_heating"]:
+        summary = _add_error(
+            f"vent_above ({data['vent_above']:g} deg C) must be above the lower edge of the "
+            f"comfort band, t_set_heating ({data['t_set_heating']:g} deg C)")
+    elif not wwr:
         summary = _add_error("All WWR values are zero: the archetype needs "
                              "at least one window to receive solar gains.")
     else:
