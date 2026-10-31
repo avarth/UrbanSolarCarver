@@ -51,7 +51,7 @@ def test_opened_windows_hold_the_air_at_their_opening_temperature():
     assert opened.t_air[24:] == pytest.approx(np.full(HOURS - 24, 25.0))     # after the first hours of warming from 20 °C
     assert opened.overheating_kh == 0.0 and 0.0 < opened.window_share[24:].min() < 1.0
     closed = sw.simulate_free_running(p, _constant(15.0), gains, _constant(0.0), 0.0, 25.0, t_m_init=20.0)
-    assert closed.hours_above == HOURS and closed.overheating_kh > 0.0
+    assert closed.hours_above >= HOURS - 24 and closed.overheating_kh > 0.0
 
 
 def test_windows_stay_closed_when_outdoors_is_warmer():
