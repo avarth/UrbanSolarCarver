@@ -2095,6 +2095,14 @@ export interface components {
             heating_kwh_m2?: number | null;
             /** Cooling Kwh M2 */
             cooling_kwh_m2?: number | null;
+            /** Underheating Kh */
+            underheating_kh?: number | null;
+            /** Overheating Kh */
+            overheating_kh?: number | null;
+            /** Hours Below */
+            hours_below?: number | null;
+            /** Hours Above */
+            hours_above?: number | null;
             /** Counted Hours */
             counted_hours?: number | null;
             /** Direction Factors */

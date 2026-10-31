@@ -14,7 +14,7 @@ function kenak(uWall: number, uRoof: number, uWindow: number, shading: [string, 
   return { schedule: "residential", t_set_heating: 20, t_set_cooling: 26, gains_w_m2: 6, fresh_air_m3h_m2: 0.75, heat_recovery: 0, u_wall: uWall,
            u_window: uWindow, g_value: 0.55, mass_capacity_kj_m2k: 250, shading_factor: 0.77, shading_start: shading[0], shading_end: shading[1],
            room: "average", height: 3, depth: 6, wwr: { ne: 0.4, se: 0.4, sw: 0.4, nw: 0.4 }, roof_exposed: false, u_roof: uRoof, floor_exposed: false,
-           u_floor: uRoof, ach_infiltration: 0.37 };
+           u_floor: uRoof, ach_infiltration: 0.37, vent_above: 25, vent_ach: 4 };
 }
 
 const ZONE_A = kenak(0.6, 0.5, 3.2, ["05-15", "09-15"]);
@@ -24,7 +24,7 @@ const BOX: TypicalBuildingValues = {
   schedule: "always", t_set_heating: 20, t_set_cooling: 26, gains_w_m2: 4, fresh_air_m3h_m2: 0, heat_recovery: 0, u_wall: 0.5, u_window: 2.8,
   g_value: 0.6, mass_capacity_kj_m2k: 165, shading_factor: null, shading_start: "06-01", shading_end: "08-31",
   room: "box", height: 2.7, width: 8, length: 6, orientation: 0, wwr: { north: 0, east: 0, south: 0.5556, west: 0 }, roof_exposed: true, u_roof: 0.3,
-  floor_exposed: true, u_floor: 0.25, ach_infiltration: 0.5,
+  floor_exposed: true, u_floor: 0.25, ach_infiltration: 0.5, vent_above: 25, vent_ach: 4,
 };
 const SOURCE_B = "ΤΟΤΕΕ 20701-1/2017 (ΦΕΚ Β' 4003/17.11.2017), reference building, zone Β";
 const KENAK_GROUP = "Greece, KENAK reference building";
@@ -74,7 +74,7 @@ class FakeBuildingService {
     const entry = this.library().find((each) => each.id === this.libraryId);
     return { values: this.values, library_id: this.libraryId, library_name: entry?.name ?? this.libraryName,
              changed: entry !== undefined && !same(entry.values, this.values), state,
-             ...(this.calculated === null ? {} : { heating_kwh_m2: 43.71, cooling_kwh_m2: 24.06, counted_hours: 2386 }) };
+             ...(this.calculated === null ? {} : { underheating_kh: 12957.1, overheating_kh: 5110, hours_below: 3201, hours_above: 2083, counted_hours: 2386 }) };
   }
 
   handle(method: string, address: string, body: unknown): Response | Promise<Response> {
@@ -224,7 +224,7 @@ test("the sheet names the library entry and its source, says each basic group in
   expect(find(".typical-building-source")!.textContent).toBe(SOURCE_B);
   expect([...find(".typical-building-groups + .typical-building-library-actions + .typical-building-groups")!.querySelectorAll(".panel-section-title")]
     .map((title) => title.textContent)).toEqual(["Use", "Fabric", "Summer shading"]);
-  expect(summaryOf("use")).toBe(`Residential hours, 20 to 26${NBSP}°C, gains 6${NBSP}W/m²`);
+  expect(summaryOf("use")).toBe(`Residential hours, comfort 20 to 26${NBSP}°C, gains 6${NBSP}W/m²`);
   expect(summaryOf("fabric")).toBe(`U 0.5 and 3${NBSP}W/m²K, g 0.55, mass 250${NBSP}kJ/m²K`);
   expect(summaryOf("shading")).toBe("0.77 from 15 May to 15 Sep");
   expect(advancedToggle().getAttribute("aria-expanded")).toBe("false");
@@ -232,7 +232,7 @@ test("the sheet names the library entry and its source, says each basic group in
   click(advancedToggle());
   expect(summaryOf("room")).toBe(`Average, 6${NBSP}m deep, 3${NBSP}m storey; windows 0.4 on each side`);
   expect(summaryOf("roof_and_floor")).toBe("Both adiabatic");
-  expect(summaryOf("air")).toBe(`Infiltration 0.37${NBSP}air changes per hour`);
+  expect(summaryOf("air")).toBe(`Infiltration 0.37${NBSP}air changes per hour; windows open above 25${NBSP}°C, up to 4${NBSP}per hour`);
   expect(calculateButton().textContent).toBe("Calculate");
   expect(find(".weights-chart")).toBeNull();      // nothing calculated yet
   expect(find(".typical-building-sheet")!.textContent).not.toMatch(/5R1C/);
@@ -340,6 +340,8 @@ test("thermal mass is one number, the thermal capacity; the schedule is one of t
   click(advancedToggle());
   for (const id of ["room", "roof_and_floor", "air"]) openGroup(id);
   expect(group("air").querySelector('[data-building-field="ach_infiltration"] .setting-unit')!.textContent).toBe("1/h");
+  expect(group("air").querySelector('[data-building-field="vent_above"] .setting-unit')!.textContent).toBe("°C");
+  expect(group("air").querySelector('[data-building-field="vent_ach"] .setting-unit')!.textContent).toBe("1/h");
   // The form's labels, options and notes name no standard or table; the sources are in the examples' source text only.
   const formText = [...document.querySelectorAll(".typical-building-groups .setting-field, .typical-building-groups .setting-note")]
     .map((element) => element.textContent).join(" ");
@@ -453,8 +455,9 @@ test("Calculate draws the effect of each hour's sun, grey with the sun down, and
   expect(document.querySelectorAll(".weights-chart")).toHaveLength(1);
   expect(find(".weights-chart-title")!.textContent).toBe("Effect of sunlight, by hour");
   expect(find(".weights-chart canvas")!.getAttribute("aria-label")).toBe("Effect of sunlight, by hour: day of the year across, hour of the day down; " +
-    "red where the sun offsets heating, grey with the sun down");
-  expect([...find(".weights-chart-legend")!.children].map((part) => part.textContent)).toEqual(["no effect", "", "offsets heating", "sun down"]);
+    "red where the sun warms the room below the comfort band, grey with the sun down");
+  expect([...find(".weights-chart-legend")!.children].map((part) => part.textContent))
+    .toEqual(["no effect", "", "warms it below the band", "sun down"]);
   const image = drawn.at(-1)!;
   expect([image.width, image.height]).toEqual([365, 24]);
   const pixel = (day: number, hour: number) => [...image.data.slice((hour * 365 + day) * 4, (hour * 365 + day) * 4 + 3)];
@@ -462,7 +465,8 @@ test("Calculate draws the effect of each hour's sun, grey with the sun down, and
   expect(pixel(0, 10)).toEqual([244, 165, 130]);         // 0.5 of offsets heating
   expect(pixel(340, 10)).toEqual([255, 255, 255]);       // no effect: harm is not counted
   expect([...document.querySelectorAll(".typical-building-numbers dd")].map((value) => value.textContent))
-    .toEqual([`43.7${NBSP}kWh/m² a year`, `24.1${NBSP}kWh/m² a year`, `2${DIGIT_GROUP}386 of 2${DIGIT_GROUP}920 daytime hours`]);
+    .toEqual([`12${DIGIT_GROUP}957 K·h a year, in 3${DIGIT_GROUP}201 hours`, `5${DIGIT_GROUP}110 K·h a year, in 2${DIGIT_GROUP}083 hours`,
+              `2${DIGIT_GROUP}386 of 2${DIGIT_GROUP}920 daytime hours`]);
   expect(find(".typical-building-results-out-of-date")).toBeNull();
 
   openGroup("use");
@@ -476,11 +480,12 @@ test("Calculate draws the effect of each hour's sun, grey with the sun down, and
   expect(find(".typical-building-results-out-of-date")).toBeNull();
 });
 
-test("a criterion that counts harm shows benefit minus harm: blue where the sun adds to cooling", async () => {
+test("a criterion that counts harm shows benefit minus harm: blue where the sun warms the room above the band", async () => {
   service.calculated = ZONE_B;
   await openSheet({ includesHarm: true });
   await settle();
-  expect([...find(".weights-chart-legend")!.children].map((part) => part.textContent)).toEqual(["adds to cooling", "", "offsets heating", "sun down"]);
+  expect([...find(".weights-chart-legend")!.children].map((part) => part.textContent))
+    .toEqual(["warms it above the band", "", "warms it below the band", "sun down"]);
   const image = drawn.at(-1)!;
   const offset = (10 * 365 + 340) * 4;      // 7 December, 10:00: harm 0.25
   expect([...image.data.slice(offset, offset + 3)]).toEqual(effectColour(-0.25));
@@ -503,7 +508,7 @@ test("the average room is the box 4 times its depth turned 45°, and a box the a
   expect(Object.keys(average)).not.toContain("width");
   expect(buildingGroupSummary("room", BOX)).toBe(`Box 8 × 6 × 2.7${NBSP}m, 0° from north; S 0.556`);
   expect(buildingGroupSummary("roof_and_floor", BOX)).toBe(`Roof U 0.3, floor U 0.25${NBSP}W/m²K`);
-  expect(buildingGroupSummary("use", BOX)).toBe(`Every hour, 20 to 26${NBSP}°C, gains 4${NBSP}W/m²`);
+  expect(buildingGroupSummary("use", BOX)).toBe(`Every hour, comfort 20 to 26${NBSP}°C, gains 4${NBSP}W/m²`);
 });
 
 test("the colours run from white to red and to blue; a project from no entry, or from one gone, says so", () => {

@@ -37,7 +37,7 @@ const VALUES_OF_GROUP: Record<BuildingGroupId, readonly string[]> = {
   shading: ["shading_factor", "shading_start", "shading_end"],
   room: ["room", "by_direction", "height", "depth", "width", "length", "orientation", "wwr"],
   roof_and_floor: ["roof_exposed", "u_roof", "floor_exposed", "u_floor"],
-  air: ["ach_infiltration"],
+  air: ["ach_infiltration", "vent_above", "vent_ach"],
 };
 const SCHEDULES = ["residential", "office", "always"];
 const ROOMS = ["average", "box"];
@@ -114,7 +114,7 @@ export function buildingGroupSummary(group: BuildingGroupId, values: TypicalBuil
     }
     case "roof_and_floor":
       return messages.roofAndFloorSummary(values.roof_exposed === true ? text("u_roof") : null, values.floor_exposed === true ? text("u_floor") : null);
-    case "air": return messages.airSummary(text("ach_infiltration"));
+    case "air": return messages.airSummary(text("ach_infiltration"), text("vent_above"), text("vent_ach"));
   }
 }
 
@@ -656,7 +656,7 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
     use: (
       <>
         {choice("schedule", SCHEDULES, messages.schedules, notes.schedule)}
-        {field("t_set_heating", units.celsius)}{field("t_set_cooling", units.celsius)}
+        {field("t_set_heating", units.celsius)}{field("t_set_cooling", units.celsius, notes.comfort_band)}
         {field("gains_w_m2", units.wattsPerSquareMetre, notes.gains_w_m2)}{field("fresh_air_m3h_m2", units.airPerFloor, notes.fresh_air_m3h_m2)}
         {field("heat_recovery", undefined, notes.heat_recovery)}
       </>
@@ -721,7 +721,12 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
         <p className="setting-note">{notes.roof_and_floor}</p>
       </>
     ),
-    air: field("ach_infiltration", units.airChanges, notes.ach_infiltration),
+    air: (
+      <>
+        {field("ach_infiltration", units.airChanges, notes.ach_infiltration)}
+        {field("vent_above", units.celsius, notes.vent_above)}{field("vent_ach", units.airChanges, notes.vent_ach)}
+      </>
+    ),
   };
   const group = (id: BuildingGroupId) => (
     <PanelSection key={id} id={id} title={messages.typicalBuildingGroups[id]} summary={buildingGroupSummary(id, values)} open={openGroups.has(id)}
@@ -790,8 +795,23 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
               <div className={outOfDate ? "typical-building-results typical-building-results-out-of-date" : "typical-building-results"}>
                 <EffectChart weights={weights} countsHarm={includesHarm} />
                 <dl className="typical-building-numbers">
-                  <div><dt>{messages.heatingDemand}</dt><dd>{messages.demandPerYear(oneDecimal(stored.heating_kwh_m2))}</dd></div>
-                  <div><dt>{messages.coolingDemand}</dt><dd>{messages.demandPerYear(oneDecimal(stored.cooling_kwh_m2))}</dd></div>
+                  {stored.underheating_kh != null ? (
+                    <>
+                      <div>
+                        <dt>{messages.belowBand}<SettingTooltip settingLabel={messages.belowBand} help={messages.degreeHoursNote} /></dt>
+                        <dd>{messages.degreeHoursPerYear(groupedDigits(Math.round(stored.underheating_kh)), groupedDigits(stored.hours_below ?? 0))}</dd>
+                      </div>
+                      <div>
+                        <dt>{messages.aboveBand}</dt>
+                        <dd>{messages.degreeHoursPerYear(groupedDigits(Math.round(stored.overheating_kh ?? 0)), groupedDigits(stored.hours_above ?? 0))}</dd>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div><dt>{messages.heatingDemand}</dt><dd>{messages.demandPerYear(oneDecimal(stored.heating_kwh_m2))}</dd></div>
+                      <div><dt>{messages.coolingDemand}</dt><dd>{messages.demandPerYear(oneDecimal(stored.cooling_kwh_m2))}</dd></div>
+                    </>
+                  )}
                   <div>
                     <dt>{messages.countedHours}<SettingTooltip settingLabel={messages.countedHours} help={messages.countedHoursNote} /></dt>
                     <dd>{stored.counted_hours == null ? "?" : daytimeHours === null ? groupedDigits(stored.counted_hours)

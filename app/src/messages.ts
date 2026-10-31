@@ -781,14 +781,14 @@ export const messages = {
   } as Record<string, string>,
   typicalBuildingAdvanced: "Advanced",
   typicalBuildingFields: {
-    schedule: "Hours in use", t_set_heating: "Heating set point", t_set_cooling: "Cooling set point", gains_w_m2: "Internal gains while in use",
+    schedule: "Hours in use", t_set_heating: "Comfort band, from", t_set_cooling: "Comfort band, to", gains_w_m2: "Internal gains while in use",
     fresh_air_m3h_m2: "Fresh air while in use", heat_recovery: "Heat recovery", u_wall: "U of the walls", u_window: "U of the windows",
     g_value: "Window solar transmittance (g)", mass_capacity_kj_m2k: "Thermal capacity",
     shading_factor: "Shading factor", shading_start: "From", shading_end: "To", room: "Kind of room", height: "Storey height", depth: "Room depth",
     width: "Width, east to west", length: "Length, north to south", orientation: "Orientation", wwr: "Window share of each wall",
     by_direction: "One room per facade direction",
     roof_exposed: "Roof exposed", u_roof: "U of the roof", floor_exposed: "Floor exposed", u_floor: "U of the floor",
-    ach_infiltration: "Infiltration",
+    ach_infiltration: "Infiltration", vent_above: "Open the windows above", vent_ach: "Open windows let in at most",
   } as Record<string, string>,
   // The cases of use the hours come from (typical_building.SCHEDULES).
   schedules: { residential: "Residential: 6:00 to 24:00 every day", office: "Office: 8:00 to 18:00, Monday to Friday", always: "Always" } as Record<string, string>,
@@ -806,6 +806,8 @@ export const messages = {
   },
   typicalBuildingNotes: {
     schedule: "Internal gains and fresh air apply in these hours, infiltration in every hour.",
+    comfort_band: "The room runs free, with no heating or cooling. The sun counts for it where it warms the room while the room " +
+      "is colder than this band, and against it where it warms the room above the band.",
     gains_w_m2: "People, equipment and lighting, per m² of floor.",
     fresh_air_m3h_m2: "Per m² of floor.",
     heat_recovery: "The share of the exhaust heat the ventilation recovers, 0 to 1.",
@@ -824,10 +826,13 @@ export const messages = {
     wwr: "The glazed share of each wall, 0 to 0.9.",
     roof_and_floor: "Off, no heat passes through it (adiabatic), as for a storey between others.",
     ach_infiltration: "Outdoor air leaking in, in room volumes per hour, in every hour.",
+    vent_above: "When the room would be warmer than this and outdoors is cooler, the windows open, as far as needed to bring it " +
+      "back to this temperature.",
+    vent_ach: "The most outdoor air open windows let in, in room volumes per hour.",
   },
   // The one line of each group of the sheet while it is closed.
   useSummary: (scheduleText: string, heatingText: string, coolingText: string, gainsText: string) =>
-    `${scheduleText}, ${heatingText} to ${coolingText} °C, gains ${gainsText} W/m²`,
+    `${scheduleText}, comfort ${heatingText} to ${coolingText} °C, gains ${gainsText} W/m²`,
   fabricSummary: (wallText: string, windowText: string, gText: string, capacityText: string) =>
     `U ${wallText} and ${windowText} W/m²K, g ${gText}, mass ${capacityText} kJ/m²K`,
   shadingSummary: (factorText: string, startText: string, endText: string) => `${factorText} from ${startText} to ${endText}`,
@@ -842,7 +847,8 @@ export const messages = {
     roofText === null && floorText === null ? "Both adiabatic"
       : roofText === null ? `Roof adiabatic, floor U ${floorText} W/m²K`
         : floorText === null ? `Roof U ${roofText} W/m²K, floor adiabatic` : `Roof U ${roofText}, floor U ${floorText} W/m²K`,
-  airSummary: (infiltrationText: string) => `Infiltration ${infiltrationText} air changes per hour`,
+  airSummary: (infiltrationText: string, ventAboveText: string, ventAchText: string) =>
+    `Infiltration ${infiltrationText} air changes per hour; windows open above ${ventAboveText} °C, up to ${ventAchText} per hour`,
   monthAbbreviations: MONTH_ABBREVIATIONS,
   calculate: "Calculate",
   calculateAgain: "Calculate again",
@@ -856,13 +862,17 @@ export const messages = {
   // The chart of each hour: benefit minus harm (benefit alone when the criterion does not count harm), sun-down hours grey.
   effectChartTitle: "Effect of sunlight, by hour",
   effectChartLabel: (countsHarm: boolean) =>
-    "Effect of sunlight, by hour: day of the year across, hour of the day down; red where the sun offsets heating" +
-    `${countsHarm ? ", blue where it adds to cooling" : ""}, grey with the sun down`,
-  effectLegend: { heating: "offsets heating", cooling: "adds to cooling", none: "no effect", sunDown: "sun down" },
+    "Effect of sunlight, by hour: day of the year across, hour of the day down; red where the sun warms the room below the " +
+    `comfort band${countsHarm ? ", blue where it warms it above the band" : ""}, grey with the sun down`,
+  effectLegend: { heating: "warms it below the band", cooling: "warms it above the band", none: "no effect", sunDown: "sun down" },
   weightsChartWaits: "Reading the weights",
   heatingDemand: "Heating",
   coolingDemand: "Cooling",
   demandPerYear: (valueText: string) => `${valueText} kWh/m² a year`,
+  belowBand: "Below the comfort band",
+  aboveBand: "Above the comfort band",
+  degreeHoursPerYear: (degreeHoursText: string, hoursText: string) => `${degreeHoursText} K·h a year, in ${hoursText} hours`,
+  degreeHoursNote: "Degree-hours: in each hour, how many degrees the room is outside the band, added over the year.",
   countedHours: "Hours that count",
   countedHoursOfDaytime: (count: number, daytimeCount: number) => `${groupedDigits(count)} of ${groupedDigits(daytimeCount)} daytime hours`,
   countedHoursNote: "Hours with the sun up whose weight is above 0.01.",
