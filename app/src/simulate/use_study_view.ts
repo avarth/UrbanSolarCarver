@@ -183,7 +183,8 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
   // The colour range on the scale shown.
   const byShare = colourBy === "share";
   const shareRange = (selectedId !== null ? shareRanges[selectedId] : undefined) ?? FULL_SHARE;
-  const valueHigh = targetMax ?? highest;
+  // A saved high end at or below the target (an earlier legend let the two meet) counts as none.
+  const valueHigh = targetMax !== null && targetMax > (target ?? 0) ? targetMax : highest;
   const [low, high]: [number, number] = byShare ? shareRange : [target ?? 0, valueHigh];
   const scale: [number, number] = change ? [0, changeScale?.highest ?? 0] : byShare ? FULL_SHARE : [0, Math.max(highest, valueHigh, target ?? 0)];
 

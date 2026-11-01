@@ -477,6 +477,18 @@ test("dragging the target mark or pressing arrow keys moves the target and saves
   expect(cardLines()).toHaveLength(3);
 });
 
+test("a saved high end at or below the target counts as none: the colours run from the target to the highest value", async () => {
+  await openSimulate(undefined, (service) => {
+    service.studies = [{ ...study("1", "sun_hours", ["facades.obj"], "current"), entry: { ...study("1", "sun_hours", ["facades.obj"]).entry, target: 0, target_max: 0 } }];
+    service.valuesOf = { 1: studyValuesOf({ open: [8, 8, 8, 8], max_volume: [0, 2, 6, 8] }) };
+  });
+  await selectStudy("Sun hours, 21 Dec");
+  colourByValue();
+  const highMark = container().querySelector<HTMLElement>('.target-legend [role="slider"][data-end="high"]')!;
+  expect(highMark.getAttribute("aria-valuenow")).toBe("8");
+  expect(highMark.style.left).toBe("100%");
+});
+
 test("a study run before the envelope was built waits on Envelope with the reason, shows the maximum volume, and keeps the stamp", async () => {
   await openSimulate(undefined, (service) => {
     service.summary = BUILT_ENVELOPE;

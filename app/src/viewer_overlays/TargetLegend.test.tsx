@@ -42,8 +42,9 @@ test("the legend shows the scale and the two ends of the colour range as sliders
   expect(container().querySelector(".target-legend-title")!.textContent).toBe("Sun hours (h)");
   expect([...container().querySelectorAll(".target-legend-ends > span")].map((end) => end.textContent)).toEqual(["0", "8"]);
   expect(mark("low")!.getAttribute("aria-label")).toBe("Low end of the colours (target)");
-  expect([mark("low")!.getAttribute("aria-valuemin"), mark("low")!.getAttribute("aria-valuemax")]).toEqual(["0", "6"]);   // not past the high end
-  expect([mark("high")!.getAttribute("aria-valuemin"), mark("high")!.getAttribute("aria-valuemax")]).toEqual(["2", "8"]);
+  // An end stays 1 % of the bar (0.08 h) short of the other.
+  expect([mark("low")!.getAttribute("aria-valuemin"), mark("low")!.getAttribute("aria-valuemax")]).toEqual(["0", "5.92"]);
+  expect([mark("high")!.getAttribute("aria-valuemin"), mark("high")!.getAttribute("aria-valuemax")]).toEqual(["2.08", "8"]);
   expect(mark("low")!.getAttribute("aria-valuetext")).toBe("2 h");
   expect([mark("low")!.style.left, mark("high")!.style.left]).toEqual(["25%", "75%"]);
 });
@@ -69,9 +70,17 @@ test("a press moves the nearer end; the drag gives its value once, at the releas
   pointer("pointerup", 175);
   expect(onRangeEndChange).toHaveBeenCalledWith("high", 7);
   pointer("pointerdown", 40);                    // 1.6 h: the low end
-  pointer("pointermove", 190);                   // past the high end (6): stops there
+  pointer("pointermove", 190);                   // past the high end (6): stops a step short of it
   pointer("pointerup", 190);
-  expect(onRangeEndChange).toHaveBeenLastCalledWith("low", 6);
+  expect(onRangeEndChange).toHaveBeenLastCalledWith("low", 5.92);
+});
+
+test("the high end dragged onto the low end stops a step above it, so the range never shrinks to one value", () => {
+  const onRangeEndChange = renderLegend({ low: 0 });
+  pointer("pointerdown", 150);                   // the high end
+  pointer("pointermove", -50);                   // beyond the left of the bar
+  pointer("pointerup", -50);
+  expect(onRangeEndChange).toHaveBeenLastCalledWith("high", 0.08);
 });
 
 test("arrow keys move an end by 1 % of the bar, Home and End to its limits, Delete puts it back to its default", () => {
@@ -81,7 +90,7 @@ test("arrow keys move an end by 1 % of the bar, Home and End to its limits, Dele
   keyDown(mark("high")!, "PageUp");
   expect(onRangeEndChange).toHaveBeenLastCalledWith("high", 6.8);
   keyDown(mark("low")!, "End");
-  expect(onRangeEndChange).toHaveBeenLastCalledWith("low", 6);          // up to the high end
+  expect(onRangeEndChange).toHaveBeenLastCalledWith("low", 5.92);       // up to a step short of the high end
   keyDown(mark("high")!, "Delete");
   expect(onRangeEndChange).toHaveBeenLastCalledWith("high", null);
   expect(keyDown(mark("low")!, "a")).toBe(false);

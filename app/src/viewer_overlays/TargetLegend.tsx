@@ -66,8 +66,11 @@ export function TargetLegend({ label, unit, mode, scale, low, high, palette, onR
   const shareOf = (value: number) => Math.min(1, Math.max(0, (value - scaleLow) / span));
   const byShare = mode === "share";
   const format = (value: number) => (byShare ? withUnit(formattedNumber(value), "%") : formattedNumber(value));
-  // An end stays on its side of the other one.
-  const limitsOf = (end: End): [number, number] => (end === "low" ? [scaleLow, shownHigh] : [shownLow, scaleHigh]);
+  // An end stays a key step (1 % of the bar) short of the other, so the range never shrinks to one value (two marks on one spot
+  // hide the high end, and the palette would span one unit).
+  const gap = KEY_STEP_SHARE * span;
+  const limitsOf = (end: End): [number, number] => (end === "low"
+    ? [scaleLow, kept(shownHigh - gap, scaleLow, scaleHigh)] : [kept(shownLow + gap, scaleLow, scaleHigh), scaleHigh]);
 
   const valueAt = (clientX: number, end: End) => {
     const bounds = bar.current!.getBoundingClientRect();

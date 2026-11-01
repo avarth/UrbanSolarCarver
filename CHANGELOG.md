@@ -50,6 +50,16 @@ versioning follows [Semantic Versioning](https://semver.org/).
   shown without that share. The time of the last run of the open project, a pipeline run or a simulation, is in the top
   bar beside the device status, "Last run 7.0 s", after a run in this page; a narrow window leaves it out.
 
+### Fixed
+
+- **Simulate drew some test points' patches in the wrong place.** On a panel whose sampling plane had to be turned to face outward, each
+  point's patch was mirrored through the panel's centre, so it showed another point's value (on the Allatini example about a third
+  of the patches; a facade could read darker at the top than at the bottom). The test points, their values and the carving
+  did not change. A study run before this fix shows the old patches until it is run again.
+- **The legend's two ends can no longer meet.** Dragging the high end onto the low end saved both at one value: the high mark hid
+  under the low one and the palette spanned one unit (0 to 1 kWh/m², with nearly everything in the top colour). An end now stays
+  1 % of the bar short of the other, and a saved high end at or below the target counts as none.
+
 ## [0.10.0] - 2026-10-30
 
 ### Highlights
