@@ -13,7 +13,7 @@
 // Before the engine, a run that analyses an energy-weighted criterion calculates the typical building's weights when they are
 // missing or out of date: progress of the stage "typical_building", of no criterion, which the run's reply does not list. Its
 // first event puts it at the front of the run's order; it is not a pipeline stage (runStages leaves it out).
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ApiError, cancelRun, failureTextOf, serviceProblemOf, startRun, startSimulation as postSimulation } from "../api_client/client";
 import { subscribeToRunEvents, type RunEvent } from "../api_client/events";
 import { messages } from "../messages";
@@ -348,7 +348,9 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
   const stopEvents = useRef<(() => void) | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const reportProblem = useRef(onServiceProblem);
-  reportProblem.current = onServiceProblem;
+  useLayoutEffect(() => {
+    reportProblem.current = onServiceProblem;
+  });
 
   useEffect(() => () => {
     stopEvents.current?.();
@@ -369,6 +371,22 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
     setNotice({ project, origin, message });
     noticeTimer.current = setTimeout(() => setNotice(null), NOTICE_MILLISECONDS);
   };
+
+  /** Follows the events of the run shown last until its last event, then lets the next run start. */
+  const followEvents = useCallback((runId: string) => new Promise<RunOutcome>((resolve) => {
+    stopEvents.current = subscribeToRunEvents(runId, token, (event) => {
+      const record = latestRecord.current!;
+      const state = runReducer(record.state, event);
+      if (state === record.state) return;
+      show({ ...record, state });
+      if (state.final === null) return;
+      stopEvents.current?.();
+      stopEvents.current = null;
+      release();
+      if (event.type === "connection_lost") reportProblem.current(problemOfLostConnection(event.code));
+      resolve(state.final);
+    });
+  }), [token]);
 
   const start = useCallback(async (project: string, produce: string[], origin: RunOrigin, options: RunStartOptions = {}): Promise<RunOutcome> => {
     const { isSuperseded } = options;
@@ -408,23 +426,7 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
     show({ serial, project, origin, runId: reply.run_id, state: initialRunState(runOrderOf(reply.stages, reply.criterion_stages, options.chainOrder)),
            refusal: null, isSuperseded });
     return followEvents(reply.run_id);
-  }, [token]);
-
-  /** Follows the events of the run shown last until its last event, then lets the next run start. */
-  const followEvents = (runId: string) => new Promise<RunOutcome>((resolve) => {
-    stopEvents.current = subscribeToRunEvents(runId, token, (event) => {
-      const record = latestRecord.current!;
-      const state = runReducer(record.state, event);
-      if (state === record.state) return;
-      show({ ...record, state });
-      if (state.final === null) return;
-      stopEvents.current?.();
-      stopEvents.current = null;
-      release();
-      if (event.type === "connection_lost") reportProblem.current(problemOfLostConnection(event.code));
-      resolve(state.final);
-    });
-  });
+  }, [token, followEvents]);
 
   // A simulation holds the engine as a run does, but is not a run of the project's stages: busyProject and the count of the
   // project's runs stay as they were, so a stage status read meanwhile still holds.
@@ -453,7 +455,7 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
     }
     show({ serial, project, origin, runId: reply.run_id, state: initialRunState(reply.stages), refusal: null });
     return followEvents(reply.run_id);
-  }, [token]);
+  }, [token, followEvents]);
 
   const cancel = useCallback(() => {
     const record = latestRecord.current;

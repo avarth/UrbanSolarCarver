@@ -10,7 +10,7 @@
 // the sun (the sun_study layer), the shadows at that time and the hours in shade over a range (the scene's setSunStudy).
 // Without WebGL (a remote desktop, a blocked graphics card) the scene cannot start: the view says so, and the steps go on working.
 // Framing leaves out the part of the view a panel lies over (leftInsetOf), so the model is never hidden behind it.
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from "react";
 import type * as THREE from "three";
 import type { RunSummary, SkyDome } from "../api_client/client";
 import { messages } from "../messages";
@@ -36,6 +36,7 @@ import { Compass } from "./Compass";
 import { LayersMenu, type LayersMenuEntry } from "./LayersMenu";
 import { Legend, type LegendContent } from "./Legend";
 import { ScaleBar } from "./ScaleBar";
+import { useKeyedValue } from "./use_keyed_value";
 import { rememberedGroundAid, ViewToolbar } from "./ViewToolbar";
 import "./overlays.css";
 
@@ -213,7 +214,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
                              analysisCurrent = false, skyDomeTitle, skyDomeChoiceRemembered = true, study = null, studyOutOfDate = false, envelopeSeeThrough = false, inspect = null, sunStudy = null }: ViewerPaneProps) {
   const container = useRef<HTMLDivElement>(null);
   const [scene, setScene] = useState<ViewerScene | null>(null);
-  const [sceneUnavailable, setSceneUnavailable] = useState(false);
+  const [sceneUnavailable] = useState(() => !browserHasWebGl());
   const [camera, setCamera] = useState<CameraState>(NO_CAMERA);
   const theme: ViewportTheme = useAppTheme();
   const [groundAid, setGroundAid] = useState<GroundAid>(rememberedGroundAid);
@@ -222,15 +223,18 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   // (across steps, projects and launches on this computer) until shown again.
   const [skyDomeHidden, setSkyDomeHidden] = useState(rememberedSkyDomeHidden);
   const [skyDomeOpacity, setSkyDomeOpacity] = useState(DEFAULT_SKY_DOME_OPACITY);
+  // A change of step brings back its layers: the choices made in the menu are dropped.
   const defaultsKey = shownByDefault.join(",");
+  const [choicesMadeFor, setChoicesMadeFor] = useState(defaultsKey);
+  if (choicesMadeFor !== defaultsKey) {
+    setChoicesMadeFor(defaultsKey);
+    setVisibleByChoice({});
+  }
   const { scorePoints, carving, skyDome, envelope, massing, carvedByCriterion } = results;
-  const originKey = localOrigin.join(",");
+  const origin = useKeyedValue(localOrigin, localOrigin.join(","));
 
   useEffect(() => {
-    if (!browserHasWebGl()) {
-      setSceneUnavailable(true);
-      return;
-    }
+    if (sceneUnavailable) return;
     let viewer: ViewerScene;
     try {
       viewer = new ViewerScene(container.current!);
@@ -247,14 +251,13 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
       viewer.dispose();
       setScene(null);
     };
-  }, []);
+  }, [sceneUnavailable]);
 
   useEffect(() => scene?.setViewportTheme(theme), [scene, theme]);
   useEffect(() => scene?.setGroundAid(groundAid), [scene, groundAid]);
   useEffect(() => scene?.setNorth(northDegrees), [scene, northDegrees]);
   useEffect(() => scene?.setSceneHemisphere(hemisphere), [scene, hemisphere]);
   useEffect(() => scene?.setSkyDomeOpacity(skyDomeOpacity), [scene, skyDomeOpacity]);
-  useEffect(() => setVisibleByChoice({}), [defaultsKey]);
 
   // Every layer gets its own copy of the geometry: the scene disposes a layer's geometry when the layer is replaced.
   useEffect(() => scene?.setLayer("max_volume", maxVolume && maxVolumeLayer(maxVolume.clone(), maxVolumeAppearance)), [scene, maxVolume, maxVolumeAppearance]);
@@ -272,34 +275,34 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   // The voxels need the mask and the cutoff of a carving: score points without them (the carving did not run) are not drawn.
   const voxels = useMemo(() => {
     if (scorePoints === null || scorePoints.kept === null || carving === null) return null;
-    return splitScorePoints(scorePoints, voxelCentres(scorePoints.header, scorePoints.indices, localOrigin));
-  }, [scorePoints, carving, originKey]);
+    return splitScorePoints(scorePoints, voxelCentres(scorePoints.header, scorePoints.indices, origin));
+  }, [scorePoints, carving, origin]);
   const outline = useMemo(() => (maxVolume ? volumeOutline(maxVolume) : EMPTY_OUTLINE), [maxVolume]);
   useEffect(() => {
     scene?.setLayer("kept_voxels", voxels && carving && scorePoints && keptVoxelsLayer({
       voxels: voxels.kept, voxelSize: scorePoints.header.voxel_size, colourRange: keptScoreRange(carving.threshold_value), voxelCount: carving.voxels_kept,
     }));
-  }, [scene, voxels]);
+  }, [scene, voxels, carving, scorePoints]);
   useEffect(() => {
     scene?.setLayer("carved_voxels", voxels && carving && scorePoints && carvedVoxelsLayer({
       voxels: voxels.carved, voxelSize: scorePoints.header.voxel_size, voxelCount: carving.voxels_removed, outline,
-      keptTopAt: keptColumnTops(scorePoints, localOrigin),
+      keptTopAt: keptColumnTops(scorePoints, origin),
     }));
-  }, [scene, voxels, outline]);
+  }, [scene, voxels, carving, scorePoints, outline, origin]);
   // Each carved voxel in the colour of the criterion that removed it, whose id the layer names; the layer is drawn again when a colour
   // changes. It is a layer of up to a million cubes that starts hidden: it is built (and the voxels listed, thinned to the cap of the
   // score points) only while it is shown, and dropped when it is hidden again.
   const isVisible = (name: LayerName) => visibleByChoice[name]
     ?? (name === "inspect_surfaces" || (shownByDefault.includes(name) && !(name === "sky_dome" && skyDomeChoiceRemembered && skyDomeHidden)));
   const showsCarvedByCriterion = carvedByCriterion !== null && isVisible("carved_by_criterion");
-  const carvedVoxelsOfCriteria = useMemo(() => (carvedByCriterion !== null && showsCarvedByCriterion ? carvedVoxelsByCriterion(carvedByCriterion, localOrigin) : null),
-                                         [carvedByCriterion, showsCarvedByCriterion, originKey]);
-  const criterionColours = carvedByCriterion === null ? [] : carvedByCriterion.criterionIds.map((id) => criteria.find((entry) => entry.id === id)?.colour ?? colourToken("carved"));
-  const criterionColoursKey = criterionColours.join(",");
+  const carvedVoxelsOfCriteria = useMemo(() => (carvedByCriterion !== null && showsCarvedByCriterion ? carvedVoxelsByCriterion(carvedByCriterion, origin) : null),
+                                         [carvedByCriterion, showsCarvedByCriterion, origin]);
+  const listedColours = carvedByCriterion === null ? [] : carvedByCriterion.criterionIds.map((id) => criteria.find((entry) => entry.id === id)?.colour ?? colourToken("carved"));
+  const criterionColours = useKeyedValue(listedColours, listedColours.join(","));
   useEffect(() => {
     scene?.setLayer("carved_by_criterion", carvedByCriterion && carvedVoxelsOfCriteria
       && carvedByCriterionLayer({ voxels: carvedVoxelsOfCriteria, colours: criterionColours, voxelSize: carvedByCriterion.voxelSize }));
-  }, [scene, carvedVoxelsOfCriteria, criterionColoursKey]);
+  }, [scene, carvedByCriterion, carvedVoxelsOfCriteria, criterionColours]);
   useEffect(() => scene?.setLayer("sky_dome", skyDome && hemisphere && skyDomeLayer(skyDome, hemisphere)), [scene, skyDome, hemisphere]);
   useEffect(() => scene?.setLayer("envelope", envelope && envelopeLayer(envelope.clone())), [scene, envelope]);
   useEffect(() => scene?.setLayer("building_massing", massing && buildingMassingLayer(massing.clone())), [scene, massing]);
@@ -308,18 +311,22 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   // The study's patches are placed once per set of values and made into a layer once per geometry (the scene disposes the layer it
   // replaces: its geometry and material; the corners stay, held here); a new target or Change recolours that layer in place.
   const studyValues = study?.values ?? null;
-  const studyCorners = useMemo(() => (studyValues === null ? null : patchCorners(studyValues, localOrigin)), [studyValues, originKey]);
+  const studyCorners = useMemo(() => (studyValues === null ? null : patchCorners(studyValues, origin)), [studyValues, origin]);
   const drawnStudy = study !== null && study.values.values[study.geometry] !== undefined ? study : null;
   const studyLayer = useRef<THREE.Object3D | null>(null);
+  const studyGeometry = drawnStudy?.geometry;
+  const studyLayerOfDrawn = useEffectEvent(() => drawnStudy && studyCorners && studyValuesLayer(drawnStudy, studyCorners));
   useEffect(() => {
-    studyLayer.current = drawnStudy && studyCorners && studyValuesLayer(drawnStudy, studyCorners);
+    studyLayer.current = studyLayerOfDrawn();
     scene?.setLayer("study_values", studyLayer.current);
-  }, [scene, studyCorners, drawnStudy?.geometry]);
-  useEffect(() => {
+  }, [scene, studyCorners, studyGeometry]);
+  const { change: studyChange, colourBy: studyColourBy, range: [studyLow, studyHigh] = [], palette: studyPalette } = drawnStudy ?? {};
+  const recolourStudy = useEffectEvent(() => {
     if (drawnStudy === null || studyLayer.current === null) return;
     studyLayer.current.userData.recolour(drawnStudy);
     scene?.redraw();
-  }, [drawnStudy?.change, drawnStudy?.colourBy, drawnStudy?.range[0], drawnStudy?.range[1], drawnStudy?.palette]);
+  });
+  useEffect(() => recolourStudy(), [studyChange, studyColourBy, studyLow, studyHigh, studyPalette]);
   const studyDimmed = drawnStudy?.dimmed ?? false;
   useEffect(() => scene?.setLayerDimmed("study_values", studyDimmed), [scene, studyDimmed]);
 
@@ -343,20 +350,21 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
     });
   }, [scene, inspecting]);
   const inspectFrame = inspect?.frame ?? null;
-  useEffect(() => {
+  const inspectFrameRequest = inspectFrame?.request;
+  const frameInspected = useEffectEvent(() => {
     if (inspectFrame) scene?.frameBox(inspectFrame.min, inspectFrame.max);
-  }, [scene, inspectFrame?.request]);
+  });
+  useEffect(() => frameInspected(), [scene, inspectFrameRequest]);
 
   // Simulate's sun tool: its layer is made again when the day, the time or the hemisphere changes (a few hundred line points).
   const sunChart = sunStudy?.chart ?? null;
-  const sunVector = sunStudy?.sun ?? null;
-  const sunKey = sunVector?.join(",") ?? "";
+  const sunVector = useKeyedValue(sunStudy?.sun ?? null, sunStudy?.sun?.join(",") ?? "");
   useEffect(() => {
     scene?.setLayer("sun_study", sunChart && hemisphere && sunStudyLayer(sunStudyObjects(sunChart, sunVector, hemisphere), hemisphere));
-  }, [scene, sunChart, hemisphere, sunKey]);
+  }, [scene, sunChart, hemisphere, sunVector]);
   const sunShadows = sunStudy?.shadows ?? false;
   const shade = sunStudy?.shade ?? null;
-  useEffect(() => scene?.setSunStudy(sunVector, sunShadows, shade), [scene, sunKey, sunShadows, shade]);
+  useEffect(() => scene?.setSunStudy(sunVector, sunShadows, shade), [scene, sunVector, sunShadows, shade]);
 
   const present: LayerName[] = [];
   if (maxVolume) present.push("max_volume");
@@ -372,18 +380,19 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   if (massing) present.push("building_massing");
   if (drawnStudy) present.push("study_values");
   if (inspectFiles) present.push("inspect_surfaces");
+  // The layers are shown and hidden again when which are visible changes, not each time *present* is listed anew.
   const visibilityKey = present.map((name) => `${name}:${isVisible(name)}`).join(",");
-  const dimmedKey = dimmedLayers.join(",");
-
-  useEffect(() => {
+  const showVisibleLayers = useEffectEvent(() => {
     for (const name of present) scene?.setLayerVisible(name, isVisible(name));
     if (inspecting) scene?.setLayerVisible("test_surfaces", false);
-  }, [scene, visibilityKey, inspecting]);
+  });
+  useEffect(() => showVisibleLayers(), [scene, visibilityKey, inspecting]);
 
   // A slot keeps its dimmed state when its layer is replaced, so new data of a layer still out of date stays dimmed.
+  const dimmed = useKeyedValue(dimmedLayers, dimmedLayers.join(","));
   useEffect(() => {
-    for (const name of RESULT_LAYERS) scene?.setLayerDimmed(name, dimmedLayers.includes(name));
-  }, [scene, dimmedKey]);
+    for (const name of RESULT_LAYERS) scene?.setLayerDimmed(name, dimmed.includes(name));
+  }, [scene, dimmed]);
 
   useEffect(() => {
     if (framingRequest > 0) scene?.frameAll();

@@ -12,7 +12,7 @@
 // shown as Manual, at the carve amount it stands for.
 // When the analysis is out of date the histogram of the last carving is shown dimmed, its controls disabled, with a
 // line that says so (Run analysis is in the bar pinned under the Criteria step).
-import { useEffect, useId, useMemo, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useEffectEvent, useId, useMemo, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type PointerEvent } from "react";
 import type { RunSummary } from "../api_client/client";
 import { messages } from "../messages";
 import { shownValue, type FormState } from "../settings_form/form_state";
@@ -207,12 +207,17 @@ function ThresholdControl({ view, form, storedNumber: stored, highestScore, auto
   const [heldNumber, setHeldNumber] = useState<number | null>(null);
   // The number last handed on to run, or the stored number once the form holds a number, however it got there.
   const lastNumberHandedOn = useRef(stored);
-  useEffect(() => {
+  const [storedSeen, setStoredSeen] = useState(stored);
+  if (!Object.is(storedSeen, stored)) {
+    setStoredSeen(stored);
     if (heldNumber === stored) setHeldNumber(null);
+  }
+  useEffect(() => {
     lastNumberHandedOn.current = stored;
   }, [stored]);
-  useEffect(() => onHeldNumberChange?.(heldNumber), [heldNumber]);
-  useEffect(() => () => onHeldNumberChange?.(null), []);
+  const tellHeldNumber = useEffectEvent((number: number | null) => onHeldNumberChange?.(number));
+  useEffect(() => tellHeldNumber(heldNumber), [heldNumber]);
+  useEffect(() => () => tellHeldNumber(null), []);
   // A number refused in the field (above 100 % for Carve amount, below 0) is said under it and never handed on.
   const [refusedInput, setRefusedInput] = useState<string | null>(null);
   const error = refusedInput ?? fieldErrorOf(form, view);
@@ -332,11 +337,15 @@ export function CarvingStep(props: CarvingStepProps) {
   const [heldControlNumber, setHeldControlNumber] = useState<number | null>(null);
   const [released, setReleased] = useState<ReleasedCutoff | null>(null);
   const [switchedFromAutomatic, setSwitchedFromAutomatic] = useState(false);
-  useEffect(() => setReleased(null), [summary]);
+  const [summaryOfReleased, setSummaryOfReleased] = useState(summary);
+  if (summaryOfReleased !== summary) {
+    setSummaryOfReleased(summary);
+    setReleased(null);
+  }
   const comparedScores = scorePoints?.comparedScores ?? null;
   const kept = scorePoints?.kept ?? null;
   const ranked = useMemo(() => (scorePoints !== null && comparedScores !== null ? rankScorePoints(comparedScores, scorePoints.scores) : null),
-                         [scorePoints]);
+                         [scorePoints, comparedScores]);
   const scoreUnit = scorePoints?.header.score_unit ?? "";
   // The end of the Shadow tolerated slider: the highest score the cutoff is compared with, above which a cutoff carves nothing more;
   // the highest raw score until a carving has run on this analysis.

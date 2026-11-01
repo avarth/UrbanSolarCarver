@@ -21,6 +21,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - **The model of the simulated weights in the docs**: the Simulated Weights page now gives the 5R1C equations, the
   archetype rules, the attribution, the weights file's format and how benefit mode uses it, which were in a design
   note of the repository; the note is no longer published.
+- **ESLint for the app**, run by `npm test`: typescript-eslint and the React hooks rules (effect dependencies, refs and
+  state during render). The 153 findings were cleared without changing what the app does; one line sets a rule aside,
+  with its reason.
 
 ### Changed
 

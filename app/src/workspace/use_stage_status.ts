@@ -2,7 +2,7 @@
 // for each criterion, asked again after a save, a change of the input files, a run, or when the app's window comes back to the front
 // (a file may have been replaced in the project folder meanwhile); the input files changed in the folder or missing from it; and the
 // stages as the steps show them.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { dismissInputChanges, getStageStatus, type CriterionEntry, type InputFileChange, type ProjectDetail } from "../api_client/client";
 import { activeCriteria, stagesByCriterionOf, type StagesByCriterion } from "../criteria/criteria_state";
 import { analysisDiffersFromStored, type FormState } from "../settings_form/form_state";
@@ -48,7 +48,9 @@ export function useStageStatus({ token, project, criteria, form, runs, onInputFi
   // The stored analysis settings (FormState.storedAnalysisRevision) the last stage status used was asked for after.
   const [revisionOfStageStatus, setRevisionOfStageStatus] = useState(0);
   const storedAnalysisRevision = useRef(form.storedAnalysisRevision);
-  storedAnalysisRevision.current = form.storedAnalysisRevision;
+  useLayoutEffect(() => {
+    storedAnalysisRevision.current = form.storedAnalysisRevision;
+  });
   const [inputChanges, setInputChanges] = useState<InputFileChange[]>(project.stage_status.input_changes ?? []);
   // The changes the app has asked for the files of again: a reply that lists one again (not dismissed yet) asks for nothing.
   const changesSeen = useRef(new Set((project.stage_status.input_changes ?? []).filter((change) => change.state === "changed").map(changeKey)));
@@ -63,16 +65,8 @@ export function useStageStatus({ token, project, criteria, form, runs, onInputFi
   };
 
   // A stage status read across a run of this project says "missing" for results still on screen: such a reply is not used
-  // (RunLoop.replyStillHolds), and the run's end asks again. *completedStages*: the stages a run just completed are current at
-  // once, so their layers are not dimmed until the reply.
-  const refreshStageStatus = (completedStages: readonly string[] = []) => {
-    if (completedStages.length > 0) {
-      const completed = Object.fromEntries(completedStages.map((stage) => [stage, "current"]));
-      setStages((current) => ({ ...current, ...completed }));
-      const completedOfCriteria = Object.fromEntries(completedStages.filter((stage) => stage === "preprocessing" || stage === "thresholding")
-        .map((stage) => [stage, "current"]));
-      setCriterionStages((current) => Object.fromEntries(Object.entries(current).map(([id, ofCriterion]) => [id, { ...ofCriterion, ...completedOfCriteria }])));
-    }
+  // (RunLoop.replyStillHolds), and the run's end asks again.
+  const askForStageStatus = () => {
     const replyStillHolds = runs.replyStillHolds(project.name);
     const revisionAsked = storedAnalysisRevision.current;
     getStageStatus(token, project.name).then((reply) => {
@@ -83,16 +77,26 @@ export function useStageStatus({ token, project, criteria, form, runs, onInputFi
       takeInputChanges(reply.input_changes ?? []);
     }).catch(onServiceProblem);
   };
+  // *completedStages*: the stages a run just completed are current at once, so their layers are not dimmed until the reply.
+  const refreshStageStatus = (completedStages: readonly string[] = []) => {
+    if (completedStages.length > 0) {
+      const completed = Object.fromEntries(completedStages.map((stage) => [stage, "current"]));
+      setStages((current) => ({ ...current, ...completed }));
+      const completedOfCriteria = Object.fromEntries(completedStages.filter((stage) => stage === "preprocessing" || stage === "thresholding")
+        .map((stage) => [stage, "current"]));
+      setCriterionStages((current) => Object.fromEntries(Object.entries(current).map(([id, ofCriterion]) => [id, { ...ofCriterion, ...completedOfCriteria }])));
+    }
+    askForStageStatus();
+  };
   const dismissChanges = () => {
     for (const change of inputChanges) if (change.state === "changed") changesDismissed.current.add(changeKey(change));
     setInputChanges((changes) => changes.filter((change) => change.state !== "changed"));
     dismissInputChanges(token, project.name).catch(onServiceProblem);
   };
   // Back from the file manager: a file replaced in the project folder shows at once. The listener calls the latest refresh.
-  const refreshOnFocus = useRef(refreshStageStatus);
-  refreshOnFocus.current = refreshStageStatus;
+  const refreshOnFocus = useEffectEvent(() => askForStageStatus());
   useEffect(() => {
-    const refresh = () => refreshOnFocus.current();
+    const refresh = () => refreshOnFocus();
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
   }, []);
@@ -112,8 +116,11 @@ export function useStageStatus({ token, project, criteria, form, runs, onInputFi
     && activeCriteria(criteria).every((criterion) => criterionStages[criterion.id]?.thresholding === "current");
 
   // A save changes what the stages were run with; its reply is in once no save waits.
+  const refreshAfterSave = useEffectEvent(() => {
+    if (form.changeCount > 0) askForStageStatus();
+  });
   useEffect(() => {
-    if (form.changeCount > 0 && !form.pendingSave) refreshStageStatus();
+    if (!form.pendingSave) refreshAfterSave();
   }, [form.pendingSave]);
 
   return { stages, criterionStages, refreshStageStatus, shownAs, shownStages, everyCriterionCarved, inputChanges, dismissChanges };

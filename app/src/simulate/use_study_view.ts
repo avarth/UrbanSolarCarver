@@ -8,7 +8,7 @@
 // saved with the study, by default 0 and the highest value of the geometry shown. By share they are percentages of the no-build
 // value, 0 and 100 by default, kept for each study while the app is open. The palettes are pinned (user, 2026-10-28): magma by
 // value, viridis by share (and for Change).
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ApiError, getStudySkyPatches, getStudyValues, serviceProblemOf, type SkyDome, type StudyChange } from "../api_client/client";
 import { messages } from "../messages";
 import type { RunLoop } from "../common/run_state";
@@ -114,15 +114,20 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
 
   const selected = studies.studies.find((study) => study.entry.id === studies.selectedId) ?? null;
   const selectedId = selected?.entry.id ?? null;
+  // Made before the memos that read the study: the React Compiler takes a call given part of the study as one that may change it.
+  const skyDomeTitle = messages.studySkyDomeLegend(selected?.entry.metric);
   const hasResult = selected !== null && (selected.state === "current" || selected.state === "out_of_date");
   const running = runs.activeRun !== null;
+  const reportValuesProblem = useEffectEvent((error: unknown) => {
+    if (!(error instanceof ApiError && error.status === NOT_FOUND) && serviceProblemOf(error) !== "other") onServiceProblem(error);
+  });
   // Read when a study with a result is selected, and again when a run ends (a simulation writes new values); not during a run. They
   // are let go when Simulate closes (tens of megabytes on a district) and read again when it opens.
+  if (!active && (loaded !== null || loadedSky !== null)) {
+    setLoaded(null);
+    setLoadedSky(null);
+  }
   useEffect(() => {
-    if (!active) {
-      setLoaded(null);
-      setLoadedSky(null);
-    }
     if (!active || !hasResult || running || selectedId === null) return;
     let wanted = true;
     getStudyValues(token, project, selectedId).then((buffer) => {
@@ -130,7 +135,7 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
     }).catch((error: unknown) => {
       if (!wanted) return;
       setLoaded(null);
-      if (!(error instanceof ApiError && error.status === NOT_FOUND) && serviceProblemOf(error) !== "other") onServiceProblem(error);
+      reportValuesProblem(error);
     });
     // The sky dome is read beside the values; none is not a problem (a sun hours study, or a result from before it was kept).
     getStudySkyPatches(token, project, selectedId).then((dome) => {
@@ -139,7 +144,7 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
       if (wanted) setLoadedSky({ id: selectedId, dome: null });
     });
     return () => { wanted = false; };
-  }, [active, selectedId, hasResult, running]);
+  }, [active, token, project, selectedId, hasResult, running]);
 
   const available: StudyGeometry[] = ["max_volume", ...(envelopeBuilt ? ["envelope" as const] : []), ...(massingBuilt ? ["massing" as const] : [])];
   const outOfDateInDesign: StudyGeometry[] = [...(envelopeStage === "out_of_date" ? ["envelope" as const] : []),
@@ -194,7 +199,9 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
   // A saved end shows at once; it is saved once a gesture ends: TARGET_SAVE_DELAY_MILLISECONDS after the last change (a drag gives
   // one change, at its release; held or repeated keys many). The saves go one after another, so the service applies them in order.
   const latestStudies = useRef(studies);
-  latestStudies.current = studies;
+  useLayoutEffect(() => {
+    latestStudies.current = studies;
+  });
   const pendingSave = useRef<{ id: string; change: StudyChange; timer: ReturnType<typeof setTimeout> } | null>(null);
   const saves = useRef<Promise<unknown>>(Promise.resolve());
   const save = (id: string, sent: StudyChange) => {
@@ -211,7 +218,8 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
     pendingSave.current = null;
     save(pending.id, pending.change);
   };
-  useEffect(() => flushSave, []);         // an end still waiting is saved when the workspace closes
+  const flushOnClose = useEffectEvent(() => flushSave());
+  useEffect(() => () => flushOnClose(), []);         // an end still waiting is saved when the workspace closes
   const saveEnd = (key: "target" | "target_max", next: number | null) => {
     if (selectedId === null) return;
     if (pendingSave.current !== null && pendingSave.current.id !== selectedId) flushSave();
@@ -239,7 +247,7 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
     studyOutOfDate: active && shownOnView && selected?.state === "out_of_date",       // a hidden study shows no stamp
     skyDome: drawn && loadedSky?.id === selectedId ? loadedSky.dome : null,
     skyDomeMissing: drawn && loadedSky?.id === selectedId && loadedSky.dome === null && selected?.entry.metric !== "sun_hours",
-    skyDomeTitle: messages.studySkyDomeLegend(selected?.entry.metric),
+    skyDomeTitle,
     view: drawn ? { values, geometry, change, colourBy, range: [low, high], palette, unit, dimmed: selected.state === "out_of_date" } : null,
     legend: drawn ? {
       label, unit, mode: change ? "change" : colourBy, scale, low, high, palette, hasLoss: changeScale?.hasLoss ?? false,

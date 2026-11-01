@@ -8,7 +8,7 @@
 // The library's changes (Save to library, Save as new, rename, delete) go in the same line, and the library and the building are
 // read again after each: the building's library name and "changed" follow them. While Calculate waits, the share done is asked every
 // half second (PROGRESS_MILLISECONDS).
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   addTypicalBuildingLibraryEntry, ApiError, calculateTypicalBuilding, deleteTypicalBuildingLibraryEntry, failureTextOf, getTypicalBuilding,
   getTypicalBuildingLibrary, getTypicalBuildingProgress, getTypicalBuildingWeights, putTypicalBuilding, serviceProblemOf, updateTypicalBuildingLibraryEntry,
@@ -109,29 +109,42 @@ export function useTypicalBuilding({ token, project, active, runActive, weatherR
     setStored(reply);
     if (savesWaiting.current === 0) setShown(reply.values);
   };
+  const askForBuilding = () => getTypicalBuilding(token, project).then((reply) => take(reply), (error: unknown) => setReadProblem(failed(error)));
   const read = () => {
     setReadProblem(null);
-    getTypicalBuilding(token, project).then((reply) => take(reply), (error: unknown) => setReadProblem(failed(error)));
+    void askForBuilding();
   };
   const readLibrary = () => getTypicalBuildingLibrary(token).then(setLibrary, (error: unknown) => setReadProblem(failed(error)));
 
-  useEffect(() => {
-    if (!active || stored !== null) return;
-    read();
+  // Shown with nothing read: the problem of a read before is not said while the building is read again.
+  const [activeSeen, setActiveSeen] = useState(false);
+  if (activeSeen !== active) {
+    setActiveSeen(active);
+    if (active && stored === null) setReadProblem(null);
+  }
+  const readFirst = useEffectEvent(() => {
+    if (stored !== null) return;
+    void askForBuilding();
     if (library === null) void readLibrary();
+  });
+  useEffect(() => {
+    if (active) readFirst();
   }, [active]);
   // A run may have calculated the weights; a new weather file makes them out of date.
+  const readAgain = useEffectEvent(() => {
+    if (stored !== null) read();
+  });
   const runWasActive = useRef(runActive);
   useEffect(() => {
     const ended = runWasActive.current && !runActive;
     runWasActive.current = runActive;
-    if (ended && stored !== null) read();
+    if (ended) readAgain();
   }, [runActive]);
   const weatherRevisionSeen = useRef(weatherRevision);
   useEffect(() => {
     if (weatherRevisionSeen.current === weatherRevision) return;
     weatherRevisionSeen.current = weatherRevision;
-    if (stored !== null) read();
+    readAgain();
   }, [weatherRevision]);
 
   /** Saves *values*, from the entry *libraryId* when given. */
@@ -192,6 +205,7 @@ export function useTypicalBuilding({ token, project, active, runActive, weatherR
 
   const calculate = () => {
     setCalculating(true);
+    setCalculationShare(0);
     setProblem(null);
     saves.current = saves.current.then(async () => {
       try {
@@ -207,11 +221,7 @@ export function useTypicalBuilding({ token, project, active, runActive, weatherR
   // The share done, asked at once and then every PROGRESS_MILLISECONDS while Calculate waits; it only rises. A failed question is
   // left: the next one may answer, and Calculate's own reply ends the wait.
   useEffect(() => {
-    if (!calculating) {
-      setCalculationShare(null);
-      return;
-    }
-    setCalculationShare(0);
+    if (!calculating) return;
     let waiting = true;
     const ask = () => {
       getTypicalBuildingProgress(token, project).then((reply) => {
@@ -225,7 +235,7 @@ export function useTypicalBuilding({ token, project, active, runActive, weatherR
       waiting = false;
       clearInterval(timer);
     };
-  }, [calculating]);
+  }, [calculating, token, project]);
 
   const readWeights = () => {
     if (weightsAsked.current) return;
@@ -237,7 +247,7 @@ export function useTypicalBuilding({ token, project, active, runActive, weatherR
   };
 
   return {
-    stored, values: shown, library, readProblem, fieldErrors, problem, calculating, calculationShare, weights,
+    stored, values: shown, library, readProblem, fieldErrors, problem, calculating, calculationShare: calculating ? calculationShare : null, weights,
     change: (values) => save(values), choose: (entry) => save(structuredClone(entry.values), entry.id), saveToLibrary, saveAsNew, renameEntry,
     deleteEntry, calculate, readWeights,
   };

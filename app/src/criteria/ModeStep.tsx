@@ -46,8 +46,10 @@ export function tileAfterArrowKey(index: number, key: string, tileCount: number)
   return next >= 0 && next < tileCount ? next : null;                                          // stay in the column
 }
 
+const chosenIndexOf = (mode: string) => Math.max(0, MODE_TILES.findIndex((tile) => tile.engine_name === mode));
+
 export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone, valuesReset = null, showsDisabledReason = true }: ModeStepProps) {
-  const chosenIndex = Math.max(0, MODE_TILES.findIndex((tile) => tile.engine_name === mode));
+  const chosenIndex = chosenIndexOf(mode);
   const [focusIndex, setFocusIndex] = useState(chosenIndex);    // the tile in the tab order
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
@@ -64,8 +66,12 @@ export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone, valu
   const openIndex = pinnedIndex ?? (dismissed ? null : hoveredIndex ?? focusedIndex);
   const disabled = disabledReason !== null;
 
-  useEffect(() => setFocusIndex(chosenIndex), [chosenIndex]);
-  useEffect(() => setPinnedIndex(null), [mode]);      // another mode was chosen: a pinned tooltip goes
+  const [modeSeen, setModeSeen] = useState(mode);
+  if (modeSeen !== mode) {
+    setModeSeen(mode);
+    if (chosenIndexOf(modeSeen) !== chosenIndex) setFocusIndex(chosenIndex);
+    setPinnedIndex(null);                                   // another mode was chosen: a pinned tooltip goes
+  }
 
   useEffect(() => {
     const pressStarts = () => { pointerPressing.current = true; };
@@ -102,8 +108,12 @@ export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone, valu
     };
   }, [openIndex]);
 
-  useLayoutEffect(() => {
+  const [placedIndex, setPlacedIndex] = useState(openIndex);
+  if (placedIndex !== openIndex) {
+    setPlacedIndex(openIndex);
     setPlacement(null);
+  }
+  useLayoutEffect(() => {
     if (openIndex === null) return;
     const place = () => {
       const tile = tiles.current[openIndex];

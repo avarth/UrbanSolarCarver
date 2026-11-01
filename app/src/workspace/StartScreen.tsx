@@ -2,7 +2,7 @@
 // projects there are, newest first, each with its menu, with the projects folder and its Change folder at the foot, and the
 // bundled examples), and a footer with the version and the device. The top bar shows the device's state, so the footer only
 // names the GPU, or says why the CPU is used. Choosing a project opens it at its Inputs step.
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type Ref } from "react";
+import { useEffect, useEffectEvent, useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode, type Ref } from "react";
 import type { ExampleInfo, HealthReply, ProjectsFolderReply, ProjectSummary } from "../api_client/client";
 import { dateAndTime, messages } from "../messages";
 import { MessageParts } from "../settings_form/SettingTooltip";
@@ -237,11 +237,14 @@ export function StartScreen({ health, projects, examples, projectsFolder, active
   const projectsCard = useRef<HTMLElement>(null);
   const projectsHeading = useRef<HTMLHeadingElement>(null);
   const shownProjects = useRef(projects);
-  shownProjects.current = projects;
+  useLayoutEffect(() => {
+    shownProjects.current = projects;
+  });
 
-  useEffect(() => {
+  const focusHeadingIfAsked = useEffectEvent(() => {
     if (headingTakesFocus) pageHeading.current?.focus();
-  }, []);
+  });
+  useEffect(() => focusHeadingIfAsked(), []);
 
   // The renamed row is a new row, and a deleted one is gone: the focus moves on once the list read again shows it. A list read
   // again that does not show it ends the wait, so a later list does not take the focus from where the user has gone since.

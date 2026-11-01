@@ -4,7 +4,7 @@
 // the 3D view draws of the results (dimmed while out of date or replaced, listed as missing after a run that stopped before their
 // stage). ProjectWorkspace gives them the project's form, stage status and run loop; the results are fetched here and again as
 // each stage of a run is done.
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { downloadWithToken, failureTextOf, serviceProblemOf, type RunSummary } from "../api_client/client";
 import { messages } from "../messages";
 import { analysisDiffersFromStored, shownValue, type FormState, type SaveOutcome } from "../settings_form/form_state";
@@ -26,7 +26,7 @@ import {
 } from "../common/run_state";
 import { useResultsFollowingRun, useRunResults, type RunResults } from "../steps/run_results";
 import type { PipelineStage, StageState, StepName } from "../stages";
-import { createThresholdUpdateQueue } from "./threshold_queue";
+import { createThresholdUpdateQueue, type ThresholdUpdateQueue } from "./threshold_queue";
 
 export const ANALYSIS_STAGES: PipelineStage[] = ["thresholding"];     // Run analysis: preprocessing is added when it is out of date
 export const CARVING_STAGES: PipelineStage[] = ["thresholding"];
@@ -220,22 +220,25 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
 
   // A criterion whose thresholding the run has done shows its numbers once a run summary fetched since is in: until then its card
   // goes on saying Running (the summary held before has its numbers from before the run).
-  const summaryWhenCarved = useRef<{ serial: number | null; byCriterion: Map<string, RunSummary | null> }>({ serial: null, byCriterion: new Map() });
-  if (record !== null && summaryWhenCarved.current.serial !== record.serial) summaryWhenCarved.current = { serial: record.serial, byCriterion: new Map() };
+  const [summaryWhenCarved, setSummaryWhenCarved] = useState<{ serial: number | null; byCriterion: ReadonlyMap<string, RunSummary | null> }>(
+    { serial: null, byCriterion: new Map() });
   if (record !== null) {
-    for (const [id, progress] of Object.entries(criterionProgressOf(record.state))) {
-      if (progress.thresholding === "done" && !summaryWhenCarved.current.byCriterion.has(id)) summaryWhenCarved.current.byCriterion.set(id, results.summary);
+    const newRun = summaryWhenCarved.serial !== record.serial;
+    const carvedNow = Object.entries(criterionProgressOf(record.state))
+      .filter(([id, progress]) => progress.thresholding === "done" && (newRun || !summaryWhenCarved.byCriterion.has(id)))
+      .map(([id]): [string, RunSummary | null] => [id, results.summary]);
+    if (newRun || carvedNow.length > 0) {
+      setSummaryWhenCarved({ serial: record.serial, byCriterion: new Map([...(newRun ? [] : summaryWhenCarved.byCriterion), ...carvedNow]) });
     }
   }
-  const criteriaAwaitingNumbers = new Set([...summaryWhenCarved.current.byCriterion].filter(([, summary]) => summary === results.summary).map(([id]) => id));
+  const criteriaAwaitingNumbers = new Set([...summaryWhenCarved.byCriterion].filter(([, summary]) => summary === results.summary).map(([id]) => id));
 
   // The results the service holds, fetched again with the stage status, when the page may show older ones. After the last
   // threshold value ended without a run (its save was not stored, its run did not start, or the service had nothing to run),
   // the run before it is no longer superseded, but its results were not fetched; and "up to date" may come to a page that did
   // not follow the run that made the results. The stages stay dimmed until those fetches have ended, so results from before
   // are never shown as current.
-  const showResultsTheServiceHolds = useRef((_stagesToFetch: readonly PipelineStage[]) => {});
-  showResultsTheServiceHolds.current = (stagesToFetch) => {
+  const showResultsTheServiceHolds = (stagesToFetch: readonly PipelineStage[]) => {
     const countFetches = (change: number) => setFetchesUnderWay((current) => ({
       ...current, ...Object.fromEntries(stagesToFetch.map((stage) => [stage, (current[stage] ?? 0) + change])),
     }));
@@ -248,7 +251,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   // On "up to date" the steps would otherwise go on saying, from an old stage status, that a stage has not run.
   const startRun = async (produce: string[], origin: RunOrigin): Promise<RunOutcome> => {
     const outcome = await runs.start(project, produce, origin, { chainOrder: context.chainOrder });
-    if (outcome === "up_to_date") showResultsTheServiceHolds.current(stagesToFetchWhenUpToDate(produce, stages));
+    if (outcome === "up_to_date") showResultsTheServiceHolds(stagesToFetchWhenUpToDate(produce, stages));
     return outcome;
   };
   const startAfterSaving = (produce: string[], origin: RunOrigin) => runAnalysisAfterSaving(flushSave, () => void startRun(produce, origin));
@@ -260,11 +263,12 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const ownStages: Record<PipelineStage, StageState> = context.criterionStages === undefined ? stages : { ...stages, ...context.criterionStages };
   const analysisOutOfDate = ownStages.preprocessing !== "current";
   const chainAnalysisOutOfDate = stages.preprocessing !== "current";
-  const buildsLocked = useRef(chainAnalysisOutOfDate);
-  buildsLocked.current = chainAnalysisOutOfDate;
-  // What the threshold queue, made once, reads when a value's turn comes: this render's context and locks.
-  const latest = useRef({ context, analysisOutOfDate });
-  latest.current = { context, analysisOutOfDate };
+  // What the threshold queue, made once, reads when a value's turn comes, and a format change once its save ends: the context and
+  // locks of the latest render.
+  const latest = useRef({ context, analysisOutOfDate, chainAnalysisOutOfDate, showResultsTheServiceHolds });
+  useLayoutEffect(() => {
+    latest.current = { context, analysisOutOfDate, chainAnalysisOutOfDate, showResultsTheServiceHolds };
+  });
   /** Every criterion that is on has a current analysis (the selected one's, and the others' by analysisWaitsFor). */
   const carvingRunsNow = () => !latest.current.analysisOutOfDate && (latest.current.context.analysisWaitsFor ?? null) === null;
   /** Whether the save just stored changed what the analysis reads, or the form still shows other analysis settings. */
@@ -285,7 +289,9 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   // carving stays dimmed until the next value's run, or, when none follows, until the results the service holds have been fetched.
   // Each value is saved to the criterion it was given for, with the mode it was given in: through the form while that criterion is
   // shown, else straight to it (saveToCriterion); a value of a mode the criterion no longer has, or of a criterion gone, is dropped.
-  const thresholdQueue = useMemo(() => createThresholdUpdateQueue<ThresholdValue>(async ({ values, mode }, isSuperseded, criterionId) => {
+  // Made at the first threshold change, not during a render, as its runs read the latest render's context (*latest*).
+  const thresholdQueue = useRef<ThresholdUpdateQueue<ThresholdValue> | null>(null);
+  const newThresholdQueue = () => createThresholdUpdateQueue<ThresholdValue>(async ({ values, mode }, isSuperseded, criterionId) => {
     const now = latest.current.context;
     if (thresholdControlOf(mode) === null) return false;
     if (criterionId === (now.criterionId ?? "")) {
@@ -300,10 +306,13 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     }
     if (!carvingRunsNow()) return false;
     // The service thresholds again from the first criterion whose carving is not current, this one, and the criteria after it.
-    const runOutcome = await now.runs.start(project, CARVING_STAGES, "carving_update", { isSuperseded, chainOrder: latest.current.context.chainOrder });
+    const runOutcome = await now.runs.start(now.project, CARVING_STAGES, "carving_update", { isSuperseded, chainOrder: latest.current.context.chainOrder });
     return runOutcome !== "up_to_date" && runOutcome !== "not_started";
-  }, () => showResultsTheServiceHolds.current(CARVING_STAGES)), []);
-  const submitThreshold = (values: Record<string, unknown>) => thresholdQueue.submit({ values, mode: form.mode }, context.criterionId ?? "");
+  }, () => latest.current.showResultsTheServiceHolds(CARVING_STAGES));
+  const submitThreshold = (values: Record<string, unknown>) => {
+    thresholdQueue.current ??= newThresholdQueue();
+    thresholdQueue.current.submit({ values, mode: form.mode }, context.criterionId ?? "");
+  };
 
   const feedback = (origin: RunOrigin, foldWarnings = false) => (
     <RunProgress runs={runs} project={project} origin={origin} mode={form.mode} onGoToSetting={context.goToSetting} criterionNames={context.criterionNames}
@@ -343,7 +352,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const changeMeshFormat = async (format: string) => {
     const outcome = await changeAndSave({ final_mesh_format: format });
     const partsBuilt = BUILD_STAGES.filter((stage) => stages[stage] !== "missing");
-    if ((outcome === "saved" || outcome === "none") && partsBuilt.length > 0 && !buildsLocked.current) void startRun(partsBuilt, "export_format");
+    if ((outcome === "saved" || outcome === "none") && partsBuilt.length > 0 && !latest.current.chainAnalysisOutOfDate) void startRun(partsBuilt, "export_format");
   };
 
   // A part's results show once its stage is recorded, or done in the run under way (as isStageDimmed counts it): a run that wrote

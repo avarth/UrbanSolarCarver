@@ -2,7 +2,7 @@
 // the first of them is selected (unless one of them is selected already) and its editor is shown, and its panel asks for test
 // surfaces until its files change or another run is asked for. The Criteria bar's Run analysis and carving update say the refusal under their button, so
 // the panel asks only for a refusal of a button elsewhere (Site and grid), and never says it twice.
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
 import type { RunOrigin, RunRecord } from "../common/run_state";
@@ -31,13 +31,20 @@ interface RefusalSelectionSource {
 export function useRefusalSelection({ record, criteria, selectedId, shownCriterion, showCriterion }: RefusalSelectionSource): string | null {
   const askedFor = record?.missingInputs?.filter((role) => role.startsWith(TEST_SURFACES_ROLE_PREFIX))
     .map((role) => role.slice(TEST_SURFACES_ROLE_PREFIX.length)) ?? [];
-  const filesWhenRefused = useMemo(() => Object.fromEntries(askedFor.map((id) => [id, testSurfaceFilesKey(criteria, id)])), [record?.serial]);
-  const refusalSeen = useRef(record?.serial ?? null);
-  useEffect(() => {
-    if (record === null || record.serial === refusalSeen.current) return;
-    refusalSeen.current = record.serial;
+  const serial = record?.serial ?? null;
+  const filesOfAskedFor = () => Object.fromEntries(askedFor.map((id) => [id, testSurfaceFilesKey(criteria, id)]));
+  const [refusal, setRefusal] = useState(() => ({ serial, filesWhenRefused: filesOfAskedFor() }));
+  if (refusal.serial !== serial) setRefusal({ serial, filesWhenRefused: filesOfAskedFor() });
+  const { filesWhenRefused } = refusal;
+  const showFirstAskedFor = useEffectEvent(() => {
     if (askedFor.length > 0) showCriterion(askedFor.includes(selectedId) ? selectedId : askedFor[0]);
-  }, [record?.serial]);
+  });
+  const refusalSeen = useRef(serial);
+  useEffect(() => {
+    if (serial === null || serial === refusalSeen.current) return;
+    refusalSeen.current = serial;
+    showFirstAskedFor();
+  }, [serial]);
   const asksHere = shownCriterion !== null && record !== null && !ORIGINS_IN_CRITERIA_BAR.includes(record.origin) && askedFor.includes(shownCriterion.id)
     && filesWhenRefused[shownCriterion.id] === testSurfaceFilesKey(criteria, shownCriterion.id);
   return asksHere ? messages.addTestSurfacesTo(shownCriterion.name) : null;

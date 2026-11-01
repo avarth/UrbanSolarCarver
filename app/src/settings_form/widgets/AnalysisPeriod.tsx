@@ -175,7 +175,6 @@ function ColdPeriodPreset({ coldPeriod, pressed, disabled, onUse }: ColdPeriodPr
   }, [open]);
 
   useLayoutEffect(() => {
-    setPlacement(null);
     if (!open) return;
     const place = () => {
       if (button.current && tooltip.current) setPlacement(placementUnder(button.current, tooltip.current));
@@ -186,6 +185,7 @@ function ColdPeriodPreset({ coldPeriod, pressed, disabled, onUse }: ColdPeriodPr
     return () => {
       window.removeEventListener("scroll", place, true);
       window.removeEventListener("resize", place);
+      setPlacement(null);
     };
   }, [open]);
 

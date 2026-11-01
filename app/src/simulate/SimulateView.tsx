@@ -3,7 +3,7 @@
 // the bottom right corner (use_study_view.ts; the view draws its values, ProjectWorkspace gives them to ViewerPane). The studies are read when Simulate opens and again whenever a run ends while it is open: a simulation's results, or a run of
 // Design that changed what the studies trace. The simulation is a run of the app's run loop (origin "simulate"), one job at a time
 // with the runs of Design: Run waits while one of those goes on, and the studies cannot be changed while a run of the project does.
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useId, useRef, useState, type ReactNode } from "react";
 import { failureTextOf, serviceProblemOf, type CriterionEntry, type InputFileInfo, type StudySource } from "../api_client/client";
 import { messages } from "../messages";
 import type { ViewportTheme } from "../viewer/colour_scales";
@@ -52,9 +52,10 @@ export function SimulateView({ project, studies, criteria, storedTestSurfaces, h
   const popoverId = useId();
   const runEnded = runs.activeRun === null;
   const opened = useRef(false);
-  useEffect(() => void studies.refresh(), []);
+  const refreshStudies = useEffectEvent(() => void studies.refresh());
+  useEffect(() => refreshStudies(), []);
   useEffect(() => {
-    if (opened.current && runEnded) void studies.refresh();
+    if (opened.current && runEnded) refreshStudies();
     opened.current = true;
   }, [runEnded]);
 

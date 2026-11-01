@@ -3,7 +3,7 @@
 // joined into one geometry in local coordinates, fetched again when the files, their contents or the local origin change.
 // A file the service accepted (the engine reads it) that the view cannot parse is left out of the drawing and named in its
 // input box (UX 11); the role's other files are still drawn.
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { inputFileUrl, type InputFileInfo } from "../api_client/client";
@@ -55,12 +55,11 @@ const NOTHING_LOADED: InputGeometry = { geometry: null, byFile: {}, drawingProbl
 export function useInputGeometry(token: string, project: string, role: MeshRole, files: InputFileInfo[], origin: Point3, revision: number,
                                  onLoaded: () => void, onServiceProblem: (error: unknown) => void): InputGeometry {
   const [loaded, setLoaded] = useState<InputGeometry>(NOTHING_LOADED);
+  if (files.length === 0 && loaded !== NOTHING_LOADED) setLoaded(NOTHING_LOADED);
+  // The files and the origin are read as they are when the key says to load again.
   const reloadKey = JSON.stringify([files.map((file) => file.name), origin, revision]);
-  useEffect(() => {
-    if (files.length === 0) {
-      setLoaded(NOTHING_LOADED);
-      return;
-    }
+  const load = useEffectEvent(() => {
+    if (files.length === 0) return;
     let stale = false;
     Promise.allSettled(files.map((file) => loadMesh(inputFileUrl(project, role, file.name), token, extensionOf(file.name), origin)))
       .then((outcomes) => {
@@ -82,6 +81,7 @@ export function useInputGeometry(token: string, project: string, role: MeshRole,
     return () => {
       stale = true;
     };
-  }, [reloadKey]);
+  });
+  useEffect(() => load(), [reloadKey, project, role]);
   return loaded;
 }

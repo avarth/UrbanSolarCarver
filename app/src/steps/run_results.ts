@@ -3,7 +3,7 @@
 // results arrive stage by stage), and the result of the last request wins. A result a stage has not written (yet) is null. The
 // score points and the sky dome are those of the selected criterion: another criterion selected fetches them again, and so does
 // the selected one gaining results in its stage status (turned back on after a bypass).
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import type * as THREE from "three";
 import {
   ApiError, getCarvedByCriterion, getRunFileJson, getRunSummary, getScorePoints, getSkyPatches, runFileUrl, serviceProblemOf, type RunSummary, type SkyDome,
@@ -90,10 +90,12 @@ export function useRunResults({ token, project, origin, stagesWithResults, crite
   const latestRequest = useRef<Partial<Record<ResultName, number>>>({});
   const carvedByKey = carvedByCriterionIds === null ? null : carvedByCriterionIds.join(",");
   const source = useRef({ token, origin, criterionId, carvedByKey, onServiceProblem });
-  source.current = { token, origin, criterionId, carvedByKey, onServiceProblem };
+  useLayoutEffect(() => {
+    source.current = { token, origin, criterionId, carvedByKey, onServiceProblem };
+  });
 
   /** *summary*: the run summary of this round of fetches, asked for once however many results read it. */
-  const fetchResult = (name: ResultName, summary: () => Promise<RunSummary>): Promise<RunResults[ResultName]> => {
+  const fetchResult = useCallback((name: ResultName, summary: () => Promise<RunSummary>): Promise<RunResults[ResultName]> => {
     const { token: currentToken, origin: currentOrigin, criterionId: currentCriterion } = source.current;
     switch (name) {
       case "summary":
@@ -116,7 +118,7 @@ export function useRunResults({ token, project, origin, stagesWithResults, crite
         // Not asked for while the criteria that are on are fewer than two or one of them has not run: the service would answer 404.
         return source.current.carvedByKey === null ? Promise.resolve(null) : getCarvedByCriterion(currentToken, project).then(decodeCarvedByCriterion);
     }
-  };
+  }, [project]);
 
   // The score points and sky dome asked for since the criterion shown was selected (or the project opened).
   const askedOfCriterion = useRef(new Set<ResultName>());
@@ -140,15 +142,16 @@ export function useRunResults({ token, project, origin, stagesWithResults, crite
       });
     });
     return Promise.all(fetches).then(() => undefined);     // each fetch handles its own failure, so none rejects
-  }, [project]);
+  }, [project, fetchResult]);
 
   // The thresholding of the criteria also writes what the by-criterion layer shows.
   const reload = useCallback((stages: readonly string[]) => fetchResults([...resultsOfStages(stages), ...(stages.includes("thresholding") ? ["carvedByCriterion" as const] : [])]),
                              [fetchResults]);
 
-  useEffect(() => {
+  const fetchAtOpen = useEffectEvent(() => {
     fetchResults(resultsAtOpen(stagesWithResults, criterionStagesWithResults));
-  }, []);
+  });
+  useEffect(() => fetchAtOpen(), []);
 
   // The criteria that are on changed (or, at open, are there): the new layer is asked for when every criterion has run, and replaces the
   // one shown when it arrives (the old one stays meanwhile, so the layer does not flash to missing after a reorder). When the layer
@@ -156,16 +159,20 @@ export function useRunResults({ token, project, origin, stagesWithResults, crite
   useEffect(() => {
     if (carvedByKey === null) {
       latestRequest.current.carvedByCriterion = (latestRequest.current.carvedByCriterion ?? 0) + 1;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- with the count above in one step: no reply lands between
       setResults((current) => (current.carvedByCriterion === null ? current : { ...current, carvedByCriterion: null }));
     } else {
       fetchResults(["carvedByCriterion"]);
     }
-  }, [carvedByKey]);
+  }, [carvedByKey, fetchResults]);
 
   // Another criterion selected: its score points and sky dome replace the last one's, which are not shown meanwhile.
   const writtenOfCriterion = criterionStagesWithResults === undefined ? CRITERION_RESULTS
     : resultsOfStages(criterionStagesWithResults).filter((name) => CRITERION_RESULTS.includes(name));
   const firstCriterion = useRef(criterionId);
+  const fetchWrittenOfCriterion = useEffectEvent(() => {
+    fetchResults(writtenOfCriterion);
+  });
   useEffect(() => {
     if (criterionId === firstCriterion.current) return;
     firstCriterion.current = criterionId;
@@ -173,27 +180,33 @@ export function useRunResults({ token, project, origin, stagesWithResults, crite
     // A request still out for the criterion before is not kept.
     for (const name of CRITERION_RESULTS) latestRequest.current[name] = (latestRequest.current[name] ?? 0) + 1;
     askedOfCriterion.current = new Set();
-    fetchResults(writtenOfCriterion);
+    fetchWrittenOfCriterion();
   }, [criterionId]);
 
   // The criterion shown gains results it had not (it is turned back on after a bypass, and its stage status lists its stages
   // again): they are fetched, unless already asked for (a run that wrote them fetched them as it ended).
   const writtenKey = writtenOfCriterion.join(",");
   const lastWrittenKey = useRef(writtenKey);
+  const fetchWrittenNotAskedFor = useEffectEvent(() => {
+    const notAskedFor = writtenOfCriterion.filter((name) => !askedOfCriterion.current.has(name));
+    if (criterionId === firstCriterion.current && notAskedFor.length > 0) fetchResults(notAskedFor);
+  });
   useEffect(() => {
     if (writtenKey === lastWrittenKey.current) return;          // unchanged, or at open, where resultsAtOpen decides
     lastWrittenKey.current = writtenKey;
-    const notAskedFor = writtenOfCriterion.filter((name) => !askedOfCriterion.current.has(name));
-    if (criterionId === firstCriterion.current && notAskedFor.length > 0) fetchResults(notAskedFor);
+    fetchWrittenNotAskedFor();
   }, [writtenKey]);
 
   // The meshes are drawn in the local origin of the inputs; new inputs can move it.
   const originKey = origin.join(",");
   const firstOrigin = useRef(originKey);
+  const reloadMeshesShown = useEffectEvent(() => {
+    fetchResults(MESH_RESULTS.filter((name) => results[name] !== null));
+  });
   useEffect(() => {
     if (originKey === firstOrigin.current) return;
     firstOrigin.current = originKey;
-    fetchResults(MESH_RESULTS.filter((name) => results[name] !== null));
+    reloadMeshesShown();
   }, [originKey]);
 
   const reloadSummary = useCallback(() => fetchResults(["summary"]), [fetchResults]);
@@ -222,7 +235,8 @@ export function useResultsFollowingRun(record: RunRecord | null, reload: (stages
   const doneStages = record === null ? [] : stagesDone(record.state);
   const doneKeys = record === null ? [] : record.state.order.filter((key) => record.state.stages[key].state === "done");
   const progressKey = record === null ? "" : `${record.serial}:${doneKeys.join(",")}:${record.state.final}`;
-  useEffect(() => {
+  // Runs once for each progress the key tells apart, with the record and callbacks as they are then.
+  const followProgress = useEffectEvent(() => {
     if (record === null || record.refusal !== null) return;
     if (followed.current.serial !== record.serial) followed.current = { serial: record.serial, reloadedStages: new Set(), carvedCriteria: new Set(), ended: false };
     const run = followed.current;
@@ -243,5 +257,6 @@ export function useResultsFollowingRun(record: RunRecord | null, reload: (stages
       run.ended = true;
       onRunEnded(record);
     }
-  }, [progressKey]);
+  });
+  useEffect(() => followProgress(), [progressKey]);
 }

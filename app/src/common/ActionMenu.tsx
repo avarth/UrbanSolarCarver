@@ -4,7 +4,7 @@
 // below is too short), so a scrolling list never clips it, and it closes when the page scrolls or the window is resized. An item
 // with a reason waits: it is marked, the reason is written under the items, and choosing it does nothing. The placement and the
 // keyboard are menu_popup.ts's, shared with the menu of the modes under Add criterion (ModeMenu).
-import { useId, useRef, type KeyboardEvent, type ReactNode, type Ref } from "react";
+import { useId, useImperativeHandle, useRef, type KeyboardEvent, type ReactNode, type Ref } from "react";
 import { useMenuPopup, type MenuAlign } from "./menu_popup";
 import "../theme/panels.css";
 
@@ -41,11 +41,7 @@ export function ActionMenu({ label, symbol, items, onChoose, align = "end", clas
   const reasons = [...new Set(items.flatMap((item) => (item.disabledReason ? [item.disabledReason] : [])))];
   const reasonIdOf = (reason: string) => `${reasonIdPrefix}-${reasons.indexOf(reason)}`;
 
-  const setButton = (element: HTMLButtonElement | null) => {
-    button.current = element;
-    if (typeof buttonRef === "function") buttonRef(element);
-    else if (buttonRef) buttonRef.current = element;
-  };
+  useImperativeHandle(buttonRef, () => button.current!, []);
 
   const openOnArrowDown = (event: KeyboardEvent) => {
     if (event.key !== "ArrowDown" || open) return;
@@ -61,7 +57,7 @@ export function ActionMenu({ label, symbol, items, onChoose, align = "end", clas
 
   return (
     <div className={`action-menu ${className}`.trim()}>
-      <button ref={setButton} type="button" className={`action-menu-button ${buttonClassName}`.trim()} aria-label={label} aria-haspopup="menu"
+      <button ref={button} type="button" className={`action-menu-button ${buttonClassName}`.trim()} aria-label={label} aria-haspopup="menu"
               aria-expanded={open} aria-controls={open ? menuId : undefined} disabled={waitReasonId !== null} aria-describedby={waitReasonId ?? undefined}
               onClick={() => (open ? hide(false) : show())} onKeyDown={openOnArrowDown}>
         {symbol}

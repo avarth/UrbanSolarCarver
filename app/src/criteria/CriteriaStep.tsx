@@ -63,7 +63,11 @@ export function CriteriaStep({ panel, list, shows, onShowsChange, load = { state
       name.focus();
     }
   }, [focusRequest, shows, list.selectedId]);
-  useEffect(() => { setHeaderProblem(null); }, [list.selectedId, shows]);
+  const [headerProblemFor, setHeaderProblemFor] = useState({ selectedId: list.selectedId, shows });
+  if (headerProblemFor.selectedId !== list.selectedId || headerProblemFor.shows !== shows) {
+    setHeaderProblemFor({ selectedId: list.selectedId, shows });
+    setHeaderProblem(null);
+  }
 
   const shownList: CriterionListProps = {
     ...list,

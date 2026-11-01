@@ -2,7 +2,7 @@
 // it when the room below is too short), so a scrolling list never clips it; an open menu puts the focus on its first item, closes when
 // the page scrolls or the window is resized or a press lands elsewhere, and the keyboard moves through its items (arrows, Home, End),
 // closes it with Escape (the focus goes back to the anchor) or with Tab (the focus goes on to the next control).
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from "react";
 
 const GAP_UNDER_ANCHOR_PIXELS = 4;
 
@@ -42,16 +42,17 @@ export function useMenuPopup(anchor: RefObject<HTMLElement | null>, align: MenuA
     const roomBelow = window.innerHeight - box.bottom - GAP_UNDER_ANCHOR_PIXELS;
     const roomAbove = box.top - GAP_UNDER_ANCHOR_PIXELS;
     if (menuHeight > roomBelow && roomAbove > roomBelow) setPlace((current) => ({ ...current, top: box.top - GAP_UNDER_ANCHOR_PIXELS - menuHeight }));
-  }, [open]);
+  }, [open, anchor]);
 
+  const hideByItself = useEffectEvent(() => hide(false));
   useEffect(() => {
     if (!open) return;
     popup.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true });
     const hideOnPressElsewhere = (event: Event) => {
       const target = event.target instanceof Node ? event.target : null;
-      if (!(popup.current?.contains(target) || anchor.current?.contains(target))) hide(false);
+      if (!(popup.current?.contains(target) || anchor.current?.contains(target))) hideByItself();
     };
-    const hideOnMove = () => hide(false);
+    const hideOnMove = () => hideByItself();
     document.addEventListener("pointerdown", hideOnPressElsewhere);
     window.addEventListener("scroll", hideOnMove, true);       // capture: a scrolling list moves the anchor too
     window.addEventListener("resize", hideOnMove);
@@ -60,7 +61,7 @@ export function useMenuPopup(anchor: RefObject<HTMLElement | null>, align: MenuA
       window.removeEventListener("scroll", hideOnMove, true);
       window.removeEventListener("resize", hideOnMove);
     };
-  }, [open]);
+  }, [open, anchor]);
 
   const onMenuKeyDown = (event: KeyboardEvent) => {
     if (event.key === "Escape") {

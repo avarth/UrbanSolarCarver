@@ -3,12 +3,13 @@
 // over a period (days and hours, as the analysis period gives them), the times read in the clock chosen. The Sun panel sets them and
 // the 3D view draws them; a collapsed panel draws nothing. It reads GET sun-chart and sun-positions while Simulate and the panel are
 // open and the project has a weather file.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useState } from "react";
 import { ApiError, getSunChart, getSunPositions, serviceProblemOf, type SunChart, type SunPosition, type SunPositions } from "../api_client/client";
 import { dayAndMonth, messages } from "../messages";
 import type { AnalysisPeriodField } from "../settings_form/analysis_period";
 import type { Point3 } from "../viewer/local_origin";
 import { sunAt, type ShadeHours, type ShadePalette, type SunStudyView } from "../viewer/sun_study";
+import { useKeyedValue } from "../viewer_overlays/use_keyed_value";
 
 const NOT_FOUND = 404;
 // The sun of the day is read every 5 minutes; the time strip moves in the same steps.
@@ -101,9 +102,9 @@ export function useSunStudy({ token, project, active, hasWeatherFile, onServiceP
   const [shadePositions, setShadePositions] = useState<{ key: string; positions: SunPositions } | null>(null);
   const reads = active && hasWeatherFile && settings.open;
   const { timeBasis, view, period } = settings;
-  const report = (error: unknown) => {
+  const report = useEffectEvent((error: unknown) => {
     if (!(error instanceof ApiError && error.status === NOT_FOUND) && serviceProblemOf(error) !== "other") onServiceProblem(error);
-  };
+  });
 
   // The sun path's day: the moment's, or the first day of the period while the hours in shade are shown.
   const date = monthDayText(view === "shade" ? { month: period.start_month, day: period.start_day } : settings.date);
@@ -111,9 +112,9 @@ export function useSunStudy({ token, project, active, hasWeatherFile, onServiceP
   useEffect(() => {
     if (!reads) return;
     let wanted = true;
-    getSunChart(token, project, date, timeBasis).then((reply) => { if (wanted) setChart({ key: chartKey, chart: reply }); }).catch(report);
+    getSunChart(token, project, date, timeBasis).then((reply) => { if (wanted) setChart({ key: chartKey, chart: reply }); }).catch((error) => report(error));
     return () => { wanted = false; };
-  }, [reads, chartKey]);
+  }, [reads, token, project, date, timeBasis, chartKey]);
 
   const momentDate = monthDayText(settings.date);
   const dayKey = `${momentDate} ${timeBasis}`;
@@ -121,40 +122,43 @@ export function useSunStudy({ token, project, active, hasWeatherFile, onServiceP
     if (!reads) return;
     let wanted = true;
     getSunPositions(token, project, { from: momentDate, to: momentDate, start: 0, end: MINUTES_PER_DAY, step: TIME_STEP_MINUTES, time_basis: timeBasis })
-      .then((reply) => { if (wanted) setDay({ key: dayKey, positions: reply.positions }); }).catch(report);
+      .then((reply) => { if (wanted) setDay({ key: dayKey, positions: reply.positions }); }).catch((error) => report(error));
     return () => { wanted = false; };
-  }, [reads, dayKey]);
+  }, [reads, token, project, momentDate, timeBasis, dayKey]);
 
   const shade = shadeRequest(period, timeBasis);
   const shadeKey = JSON.stringify(shade.range);
+  // The same range object while its times are, so a period set again to the same times reads nothing.
+  const shadeRange = useKeyedValue(shade.range, shadeKey);
   const shadeWanted = reads && view === "shade";
   useEffect(() => {
     if (!shadeWanted) return;
     let wanted = true;
-    getSunPositions(token, project, shade.range).then((reply) => { if (wanted) setShadePositions({ key: shadeKey, positions: reply }); }).catch(report);
+    getSunPositions(token, project, shadeRange).then((reply) => { if (wanted) setShadePositions({ key: shadeKey, positions: reply }); })
+      .catch((error) => report(error));
     return () => { wanted = false; };
-  }, [shadeWanted, shadeKey]);
+  }, [shadeWanted, token, project, shadeRange, shadeKey]);
 
   const sunNow = reads && day?.key === dayKey ? sunAt(day.positions, settings.minute, TIME_STEP_MINUTES / 2) : null;
   const shownShade = shadeWanted && shadePositions?.key === shadeKey ? shadePositions.positions : null;
   // The count once per set of positions; another palette only recolours it (the view does not count again).
   const counted = useMemo(() => {
     if (shownShade === null) return null;
-    const { from, to } = shade.range;
+    const { from, to } = shadeRange;
     const days = from === to ? dayAndMonth(from) : messages.sunToolDays(dayAndMonth(from), dayAndMonth(to), shownShade.day_step);
     const end = clockText(((period.end_hour + 1) % 24) * 60);
     return { ...shadeHoursOf(shownShade, shade.hours, INITIAL_SUN_STUDY.palette),
              title: messages.shadeHoursLegend(clockText(period.start_hour * 60), end, days) };
-  }, [shownShade]);
+  }, [shownShade, shadeRange, shade.hours, period.start_hour, period.end_hour]);
   const shadeView = useMemo(() => (counted === null ? null : { ...counted, palette: settings.palette }), [counted, settings.palette]);
+  // The same array while the same position of the day is shown: the positions are kept as read.
   const sunVector = view === "shade" || sunNow === null ? null : (sunNow.vector as Point3);
-  const sunKey = sunVector?.join(",") ?? "";
   const shownView = useMemo<SunStudyView>(() => ({
     chart: reads && chart?.key === chartKey ? chart.chart : null,
     sun: reads ? sunVector : null,
     shadows: reads && view === "shadows",
     shade: reads && view === "shade" ? shadeView : null,
-  }), [reads, view, chart, chartKey, sunKey, shadeView]);
+  }), [reads, view, chart, chartKey, sunVector, shadeView]);
 
   return { settings, change, available: hasWeatherFile, sunNow, view: shownView };
 }

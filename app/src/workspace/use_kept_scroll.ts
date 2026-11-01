@@ -11,7 +11,7 @@ export function useKeptScroll(panel: RefObject<HTMLElement | null>, shown: boole
       if (panel.current?.contains(element)) element.scrollTop = top;
     }
     noted.current.clear();
-  }, [shown]);
+  }, [panel, shown]);
   return (event) => {
     if (!shown) return;       // the reset a browser reports when the panel goes away is not the position to keep
     const element = event.target as HTMLElement;

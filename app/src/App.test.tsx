@@ -23,7 +23,7 @@ const workspaceSteps = vi.hoisted(() => ({
   startedWith: [] as (WorkspaceSteps | undefined)[], report: null as ((steps: WorkspaceSteps) => void) | null, runs: null as RunLoop | null,
 }));
 vi.mock("./workspace/ProjectWorkspace", async () => {
-  const { useEffect } = await import("react");
+  const { useEffect, useEffectEvent } = await import("react");
   const { createConfigSaver } = await import("./settings_form/form_state");
   const { putSharedSettings } = await import("./api_client/client");
   return {
@@ -33,7 +33,8 @@ vi.mock("./workspace/ProjectWorkspace", async () => {
     }) => {
       workspaceSteps.runs = runs;
       workspaceSteps.report = onStepsChange ?? null;
-      useEffect(() => {
+      // Made once, with the props of the first render, as the workspace makes its settings saver.
+      const open = useEffectEvent(() => {
         workspaceSteps.startedWith.push(startSteps);
         workspaceMounts.push(project.name);
         const saver = createConfigSaver((values) => putSharedSettings(token, project.name, values), () => {}, workspaceSettings.delay);
@@ -43,7 +44,8 @@ vi.mock("./workspace/ProjectWorkspace", async () => {
           onSettingsSaverReady?.(null);
           void saver.flush();
         };
-      }, []);
+      });
+      useEffect(() => open(), []);
       return <div className="fake-workspace" data-run-refusal={runs.current?.refusal ?? ""} data-criterion-keys={[...criterionKeys].join(",")} data-mode={mode}>{project.modified}</div>;
     },
   };

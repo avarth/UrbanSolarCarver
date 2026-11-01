@@ -2,7 +2,7 @@
 // and the voxel grid it planned. The service stores only the settings that were given (the engine warns about a setting the
 // mode does not read), so the form sends the mode and the values the user set, never every field; the mode's starting values
 // and the schema defaults fill the rest, on the service as in the form.
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useReducer, useRef } from "react";
 import { ApiError, type ConfigErrorReply, type GridPlanReply, type ModeInfo } from "../api_client/client";
 import { gridIsOverBudget } from "./grid_budget";
 import { errorOfHiddenSetting, shownConfigErrorOf } from "./engine_errors";
@@ -370,7 +370,9 @@ export function useSettingsForm(token: string, project: string, start: FormStart
   const formProject = useRef(project);
   // The send of the latest render, used by the next save sent.
   const currentSend = useRef(send);
-  currentSend.current = send;
+  useLayoutEffect(() => {
+    currentSend.current = send;
+  });
 
   const dispatch = useCallback((action: FormAction) => {
     latestForm.current = formReducer(latestForm.current, action);
@@ -382,11 +384,11 @@ export function useSettingsForm(token: string, project: string, start: FormStart
   }, [token]);
 
   /** A saver whose replies reach the form only while it is the form's saver. */
-  const newSaver = (projectName: string): ConfigSaver => {
+  const newSaver = useCallback((projectName: string): ConfigSaver => {
     const projectSaver: ConfigSaver = createConfigSaver((values) => currentSend.current(currentToken.current, projectName, values),
       (action) => { if (saver.current === projectSaver) dispatch(action); });
     return projectSaver;
-  };
+  }, [dispatch]);
 
   useEffect(() => {
     const projectSaver = newSaver(project);
@@ -396,20 +398,22 @@ export function useSettingsForm(token: string, project: string, start: FormStart
       saver.current = null;
       void current?.flush();
     };
-  }, [project]);
+  }, [project, newSaver]);
 
-  useEffect(() => {
+  const openProject = useEffectEvent(() => {
     if (formProject.current === project) return;
     formProject.current = project;
     changeSavedAtOnce.current = 0;
     dispatch({ type: "project_opened", start });     // the start given with the new project
-  }, [project]);
+  });
+  useEffect(() => openProject(), [project]);
 
   // Only a change starts a save: a reply changes the form too, but not its change count, and opening a project sets it to 0.
   // A change changeAndSave has sent already is not scheduled again.
-  useEffect(() => {
+  const scheduleSave = useEffectEvent(() => {
     if (form.changeCount > changeSavedAtOnce.current) saver.current?.schedule(valuesToSend(form));
-  }, [form.changeCount]);
+  });
+  useEffect(() => scheduleSave(), [form.changeCount]);
 
   const flushSave = useCallback((): Promise<SaveOutcome> => saver.current?.flush() ?? Promise.resolve("none"), []);
   // The form after every action so far, for code that reads it after awaiting a save, before the render that shows it.
@@ -420,7 +424,7 @@ export function useSettingsForm(token: string, project: string, start: FormStart
     changeSavedAtOnce.current = latestForm.current.changeCount;
     saver.current.schedule(valuesToSend(latestForm.current));
     return saver.current.flush();
-  }, []);
+  }, [dispatch]);
   // Drops a waiting or failed save, so the flush when the project closes sends nothing: for a project renamed, reset or deleted.
   const cancelSave = useCallback(() => saver.current?.cancel(), []);
   // Starts the form again from *nextStart* in the same project (another criterion's settings). A change still waiting is sent at
@@ -431,7 +435,7 @@ export function useSettingsForm(token: string, project: string, start: FormStart
     void previous?.flush();
     changeSavedAtOnce.current = 0;
     dispatch({ type: "form_restarted", start: nextStart });
-  }, []);
+  }, [dispatch, newSaver]);
   return { form, dispatch, flushSave, cancelSave, changeAndSave, currentForm, restart, pendingSave: form.pendingSave };
 }
 

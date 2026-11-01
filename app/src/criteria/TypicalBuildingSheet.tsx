@@ -10,7 +10,7 @@
 // refused value shows its error at its field, and its group opens. While the building or the weather file differs from the one
 // calculated, the chart is dimmed and Calculate reads Calculate again. The window opens with the focus on its title; Escape, × and Done end it,
 // and the focus goes back to Edit building.
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useEffectEvent, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import type { TypicalBuildingLibraryEntry, TypicalBuildingReply, TypicalBuildingWeightsReply } from "../api_client/client";
 import { dayAndMonth, messages } from "../messages";
@@ -393,7 +393,7 @@ export function EffectChart({ weights, countsHarm }: { weights: TypicalBuildingW
       }
     }
     context.putImageData(image, 0, 0);
-  }, [weights, countsHarm, theme]);
+  }, [weights, countsHarm, theme, colours.sunDown]);
   const ramp = countsHarm ? [...colours.cooling.slice(1).reverse(), ...colours.heating] : colours.heating;
   const legend = messages.effectLegend;
   return (
@@ -520,19 +520,26 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
     if (window !== undefined && window !== null && !window.contains(document.activeElement)) window.querySelector<HTMLElement>("h2")?.focus();
   }, [shape]);
   // Without a building the library opens, to choose one from.
-  useLayoutEffect(() => {
+  const [notChosenSeen, setNotChosenSeen] = useState(false);
+  if (notChosenSeen !== notChosen) {
+    setNotChosenSeen(notChosen);
     if (notChosen) setOpenGroups((open) => new Set([...open, "library"]));
-  }, [notChosen]);
+  }
   // A group with a field the last save refused opens, before the page is drawn, and Advanced with it when it is one of its groups.
   const groupsWithErrors = BUILDING_GROUPS.filter((group) => Object.keys(fieldErrors).some((field) => groupOfField(field) === group));
-  useLayoutEffect(() => {
+  const groupsWithErrorsKey = groupsWithErrors.join(" ");
+  const [groupsWithErrorsSeen, setGroupsWithErrorsSeen] = useState("");
+  if (groupsWithErrorsSeen !== groupsWithErrorsKey) {
+    setGroupsWithErrorsSeen(groupsWithErrorsKey);
     if (groupsWithErrors.some((group) => !openGroups.has(group))) setOpenGroups((open) => new Set([...open, ...groupsWithErrors]));
     if (groupsWithErrors.some((group) => ADVANCED_GROUPS.includes(group))) setAdvancedOpen(true);
-  }, [groupsWithErrors.join(" ")]);
+  }
   // The weights of the last calculation, read while the sheet is open.
+  const storedState = stored?.state;
+  const readWeights = useEffectEvent(() => building.readWeights());
   useEffect(() => {
-    if (stored !== null && stored.state !== "missing" && stored.state !== "not_chosen" && weights === null) building.readWeights();
-  }, [stored?.state, weights]);
+    if (storedState !== undefined && storedState !== "missing" && storedState !== "not_chosen" && weights === null) readWeights();
+  }, [storedState, weights]);
 
   const toggleGroup = (group: BuildingGroupId | "library") => setOpenGroups((open) => {
     const next = new Set(open);

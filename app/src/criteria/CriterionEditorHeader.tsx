@@ -6,7 +6,7 @@
 // under them, across the header, its name (whole on up to two lines, the whole name its title; the step gives it the focus when a
 // card, Add or Duplicate opens the editor). Row 3: its result or status line, cut with an ellipsis when it is long; the whole line is
 // its title. The step (CriteriaStep) does the requests.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
 import { ActionMenu } from "../common/ActionMenu";
@@ -57,11 +57,12 @@ export function CriterionEditorHeader(props: CriterionEditorHeaderProps) {
   // What the live region says: the criterion previous or next opened, once it is shown (empty until then).
   const moved = useRef(false);
   const [said, setSaid] = useState("");
-  useEffect(() => {
+  const sayShown = useEffectEvent(() => {
     if (!moved.current) return;
     moved.current = false;
     setSaid(messages.criterionShownAt(entry.name, messages.criterionPosition(position, count)));
-  }, [entry.id]);
+  });
+  useEffect(() => sayShown(), [entry.id]);
   const isFirst = position <= 1, isLast = position >= count;
   const move = (waits: boolean, open: () => void) => {
     if (waits) return;

@@ -2,7 +2,7 @@
 // and owns the grid plan, the criterion's saves with PATCH criteria/{id} and holds the mode. Settings are split between them by
 // the service's criterion keys (GET criterion-keys). Until the steps show the two apart, they see them as one form: each value
 // read from the form that owns it, each change sent to it.
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 import { ApiError, type ConfigErrorReply, type CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
 import { errorOfHiddenSetting, shownConfigErrorOf } from "./engine_errors";
@@ -165,10 +165,13 @@ export function useBothForms(shared: SettingsForm, criterion: SettingsForm, crit
   // A stored save is the only action that gives the criterion's form new stored settings.
   const criterionStored = criterion.form.stored;
   const criterionStoredBefore = useRef(criterionStored);
+  const saveHeldBackSharedChange = useEffectEvent(() => {
+    if (sharedChangeHeldBack(shared.currentForm())) shared.dispatch({ type: "values_changed", values: {} });
+  });
   useEffect(() => {
     if (criterionStoredBefore.current === criterionStored) return;
     criterionStoredBefore.current = criterionStored;
-    if (sharedChangeHeldBack(shared.currentForm())) shared.dispatch({ type: "values_changed", values: {} });
+    saveHeldBackSharedChange();
   }, [criterionStored]);
   return bothForms(shared, criterion, criterionKeys);
 }

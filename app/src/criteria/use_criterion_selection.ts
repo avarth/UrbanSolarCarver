@@ -5,7 +5,7 @@
 // A run refused for a criterion selects it the same way (showCriterion) and marks its fields once its settings are shown; the
 // workspace shows that criterion's editor then (onShowCriterion).
 // Each change of the criteria dates thresholding (order, bypass) or adds stages, so the stage status is asked for again.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { failureTextOf, getCriterionSettings, serviceProblemOf } from "../api_client/client";
 import type { FormStart, SettingsForm } from "../settings_form/form_state";
 import type { CriterionListProps } from "./CriterionList";
@@ -55,6 +55,12 @@ export function useCriterionSelection(source: CriterionSelectionSource): Criteri
   const selectionRequest = useRef(0);
   const whenShown = useRef<{ id: string; then: () => void } | null>(null);
   const wanted = criteria.selectedId;
+  // A refusal of an earlier request is not said while the request for the newly selected criterion is out.
+  const [wantedSeen, setWantedSeen] = useState(wanted);
+  if (wantedSeen !== wanted) {
+    setWantedSeen(wanted);
+    if (wanted !== "" && wanted !== shownCriterionId) setFailure(null);
+  }
   const load: SelectionLoad = failure !== null && failure.id === wanted ? { state: "failed", problem: failure.problem }
     : wanted !== "" && wanted !== shownCriterionId ? { state: "loading" } : { state: "ready" };
 
@@ -62,12 +68,11 @@ export function useCriterionSelection(source: CriterionSelectionSource): Criteri
   // (the form reads its send, which names the shown criterion, when the save goes out).
   const saveTheShownCriterion = () => void criterionForm.flushSave();
 
-  useEffect(() => {
+  const askForSettingsOf = useEffectEvent((wanted: string) => {
     const request = ++selectionRequest.current;       // a reply for a card selected before is not used
     if (whenShown.current !== null && whenShown.current.id !== wanted) whenShown.current = null;
     if (wanted === "" || wanted === shownCriterionId) return;
     saveTheShownCriterion();
-    setFailure(null);                                 // a refusal of an earlier request is not said while this one is out
     followed(getCriterionSettings(token, project, wanted)).then((reply) => {
       if (request !== selectionRequest.current) return;
       // The restart sends a change still waiting with the send of the render before, the shown criterion's.
@@ -80,7 +85,8 @@ export function useCriterionSelection(source: CriterionSelectionSource): Criteri
       if (serviceProblemOf(error) !== "other") onServiceProblem(error);
       setFailure({ id: wanted, problem: failureTextOf(error) });
     });
-  }, [wanted, attempt]);
+  });
+  useEffect(() => askForSettingsOf(wanted), [wanted, attempt]);
 
   useEffect(() => {
     const waiting = whenShown.current;

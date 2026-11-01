@@ -131,6 +131,23 @@ test("the answer says which weather file it is of; while the replaced file is as
   expect(state).toEqual({ kind: "none", baseTemperature: 13 });
 });
 
+test("a failure is not shown again when the form leaves the mode and comes back to the same base; it is asked again", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (address: string) => {
+    requests.push(address);
+    return requests.length === 1 ? new Response("{}", { status: 500 })
+      : new Response(JSON.stringify(FOUND), { status: 200, headers: { "content-type": "application/json" } });
+  }));
+  rendered = renderForTest(<ColdPeriodOf form={formOf({})} />);
+  await waitForTheRequest();
+  expect(state?.kind).toBe("failed");
+  rendered.rerender(<ColdPeriodOf form={formOf({ mode: "irradiance" })} />);
+  rendered.rerender(<ColdPeriodOf form={formOf({})} />);
+  expect(state).toEqual({ kind: "finding" });
+  await waitForTheRequest();
+  expect(requests).toHaveLength(2);
+  expect(state?.kind).toBe("found");
+});
+
 test("a mode without a balance temperature has no cold period", async () => {
   rendered = renderForTest(<ColdPeriodOf form={formOf({ mode: "irradiance" })} />);
   await waitForTheRequest();

@@ -10,7 +10,7 @@
 // view, which draws the orientation of the test surfaces (use_inspection.ts); turns not saved are reported to the app, which asks
 // before Inspect is left. The project's typical building (use_typical_building.ts) is read once the shown criterion counts its hours
 // by it (Energy-weighted, in Solar usefulness).
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   failureTextOf, putSharedSettings, serviceProblemOf, updateCriterion, type HealthReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
@@ -154,14 +154,14 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const criterionId = criterion?.id ?? FIRST_CRITERION_ID;
   const resultsCriterionId = criteria.criteria.length > 0 ? formCriterionId : undefined;
   // The project's settings are the shared ones with the first criterion's: each form starts from its own. The shared form takes
-  // the criterion's mode, which decides the settings it shows, but does not save it.
-  const formStarts = useMemo((): { shared: FormStart; criterion: FormStart } => {
+  // the criterion's mode, which decides the settings it shows, but does not save it. The forms read their start once, when made.
+  const [formStarts] = useState((): { shared: FormStart; criterion: FormStart } => {
     const { shared, criterion } = splitSettings(project.settings, criterionKeys);
     return {
       shared: { schema: props.schema, modes, settings: { ...shared, mode: criterion.mode }, gridPlan: project.grid_plan, savesMode: false },
       criterion: { schema: props.schema, modes, settings: criterion, gridPlan: null },
     };
-  }, []);
+  });
   // A criterion's save replaces its settings; a new mode may rename it, so its entry is kept. The save goes to the criterion whose
   // settings the form holds (the form reads this send when a save goes out).
   const saveCriterionSettings: SettingsSend = async (formToken, projectName, values) => {
@@ -197,11 +197,13 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const { files, origin, weather, meshes, addFiles, removeFile, storeTestSurfaceFiles, reloadRoles, followedInputChange, waitForInputChanges } = useInputFiles({
     token, project, modes, currentForm, sharedForm, refreshStageStatus, onInputsLoaded: frameAllInputs, onServiceProblem,
   });
-  reloadInputRoles.current = reloadRoles;
   const inputChangesNotice = <InputChangesNotice changes={inputChanges} onDismiss={dismissChanges} />;
+  const tellSettingsSaver = useEffectEvent((open: boolean) => {
+    props.onSettingsSaverReady?.(open ? { flush: flushSave, cancel: cancelSave, waitForInputChanges } : null);
+  });
   useEffect(() => {
-    props.onSettingsSaverReady?.({ flush: flushSave, cancel: cancelSave, waitForInputChanges });
-    return () => props.onSettingsSaverReady?.(null);
+    tellSettingsSaver(true);
+    return () => tellSettingsSaver(false);
   }, []);
   const [openStep, setOpenStep] = useState<StepName | null>(props.startSteps?.open ?? "inputs");
   const [viewStep, setViewStep] = useState<StepName>(props.startSteps?.view ?? "inputs");
@@ -210,7 +212,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   // stays open (also in the steps reported for a renamed project), whatever opens the step. The criterion reported is the selected one,
   // also while its settings are on their way, so the workspace made again after a rename opens on it.
   const [criteriaShows, setCriteriaShows] = useState<CriteriaShows | null>(props.startSteps?.criteria?.shows ?? null);
-  useEffect(() => props.onStepsChange?.({
+  const reportSteps = useEffectEvent((steps: WorkspaceSteps) => props.onStepsChange?.(steps));
+  useEffect(() => reportSteps({
     open: openStep, view: viewStep, ...(criteriaShows === null ? {} : { criteria: { shows: criteriaShows, criterionId: criteria.selectedId } }),
   }), [openStep, viewStep, criteriaShows, criteria.selectedId]);
   const panel = useRef<HTMLElement>(null);
@@ -242,23 +245,29 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     }
     return next;
   });
-  const criterionIdsKey = criteria.criteria.map((entry) => entry.id).join("\n");
-  useEffect(() => setHiddenTestSurfaceCriteria((hidden) => {
-    const kept = new Set([...hidden].filter((id) => criteria.criteria.some((entry) => entry.id === id)));
-    return kept.size === hidden.size ? hidden : kept;
-  }), [criterionIdsKey]);
+  // A criterion gone takes its toggle with it.
+  const hiddenOfListedCriteria = new Set([...hiddenTestSurfaceCriteria].filter((id) => criteria.criteria.some((entry) => entry.id === id)));
+  if (hiddenOfListedCriteria.size !== hiddenTestSurfaceCriteria.size) setHiddenTestSurfaceCriteria(hiddenOfListedCriteria);
   // What the groups hold, not which criterion is selected: a selection that moves no file to another criterion draws nothing again.
   const testSurfaceDrawingKey = JSON.stringify([criteria.criteria.map((entry) => [entry.id, entry.name, entry.colour, entry.bypassed]),
                                                 [...testSurfaceOwners(criteria.criteria, criterion?.id ?? null, hiddenTestSurfaceCriteria)].sort(),
                                                 [...hiddenTestSurfaceCriteria].sort()]);
-  const testSurfaceGroups = useMemo(
-    () => testSurfaceGroupsOf(criteria.criteria, criterion?.id ?? null, hiddenTestSurfaceCriteria, testSurfacesMesh.byFile, testSurfaces),
-    [testSurfaces, testSurfacesMesh.byFile, testSurfaceDrawingKey]);
+  // The groups are kept until the key or the meshes change; a useMemo would make them again for each new list of the criteria.
+  const newTestSurfaceDrawing = () => ({
+    key: testSurfaceDrawingKey, byFile: testSurfacesMesh.byFile, allFiles: testSurfaces,
+    groups: testSurfaceGroupsOf(criteria.criteria, criterion?.id ?? null, hiddenTestSurfaceCriteria, testSurfacesMesh.byFile, testSurfaces),
+  });
+  const [testSurfaceDrawing, setTestSurfaceDrawing] = useState(newTestSurfaceDrawing);
+  if (testSurfaceDrawing.key !== testSurfaceDrawingKey || testSurfaceDrawing.byFile !== testSurfacesMesh.byFile || testSurfaceDrawing.allFiles !== testSurfaces) {
+    setTestSurfaceDrawing(newTestSurfaceDrawing());
+  }
+  const testSurfaceGroups = testSurfaceDrawing.groups;
   const sceneSphere = useMemo(() => (inputsBounds === null ? null : sceneHemisphere(inputsBounds)), [inputsBounds]);
   const northDegrees = Number(shownValue(form, "north_deg") ?? 0);
 
+  const reportServiceProblem = useEffectEvent((error: unknown) => onServiceProblem(error));
   useEffect(() => {
-    if (form.saveFailure !== null && serviceProblemOf(form.saveFailure) !== "other") onServiceProblem(form.saveFailure);
+    if (form.saveFailure !== null && serviceProblemOf(form.saveFailure) !== "other") reportServiceProblem(form.saveFailure);
   }, [form.saveFailure]);
 
   // The sun path of the stored period (UX 8.2), as soon as the weather file and the period are there, before any run.
@@ -272,9 +281,10 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   });
   // Once the period is not the one the new file came with, the notice has nothing more to say about it, even if the period comes back.
   const weatherChangeOutlived = weather.fileChange !== null && periodChangedSince(weather.fileChange, periodShown);
+  const setWeatherFileChange = weather.setFileChange;
   useEffect(() => {
-    if (weatherChangeOutlived) weather.setFileChange(null);
-  }, [weatherChangeOutlived]);
+    if (weatherChangeOutlived) setWeatherFileChange(null);
+  }, [weatherChangeOutlived, setWeatherFileChange]);
 
   const inputsDisabledReason = runActive ? messages.runInProgress : null;
   const inputRolesWithFiles = (Object.keys(files) as InputRole[]).filter((role) => files[role].length > 0);
@@ -297,20 +307,26 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   });
   const inspectView = useInspectView(inspection, origin, inspecting);
   const latestInspection = useRef(inspection);
-  latestInspection.current = inspection;
-  reloadInspection.current = inspection.reload;
+  // Set once the render is committed: the hooks above call reloadInputRoles and reloadInspection with a reply, the app the turns' calls.
+  useLayoutEffect(() => {
+    latestInspection.current = inspection;
+    reloadInspection.current = inspection.reload;
+    reloadInputRoles.current = reloadRoles;
+  });
   // Leaving Inspect asks while turns are not saved and while a save or restore is under way (its refusal is then shown, not lost).
   const inspectUnsavedOrUnderWay = inspection.unsaved || inspection.busy;
-  useEffect(() => props.onInspectUnsavedChange?.(inspectUnsavedOrUnderWay), [inspectUnsavedOrUnderWay]);
+  const tellInspectUnsaved = useEffectEvent((unsaved: boolean) => props.onInspectUnsavedChange?.(unsaved));
+  useEffect(() => tellInspectUnsaved(inspectUnsavedOrUnderWay), [inspectUnsavedOrUnderWay]);
+  const tellInspectTurns = useEffectEvent((turns: InspectTurns | null) => props.onInspectTurnsReady?.(turns));
   useEffect(() => {
-    props.onInspectTurnsReady?.({
+    tellInspectTurns({
       saveAll: () => latestInspection.current.saveAll(), discardAll: () => latestInspection.current.discardAll(),
       waitForUnderWay: () => latestInspection.current.waitForUnderWay(), underWay: () => latestInspection.current.underWayNow(),
       unsaved: () => latestInspection.current.unsavedNow(),
     });
     return () => {
-      props.onInspectTurnsReady?.(null);
-      props.onInspectUnsavedChange?.(false);
+      tellInspectTurns(null);
+      tellInspectUnsaved(false);
     };
   }, []);
 
@@ -353,14 +369,15 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   });
   // The first time the Criteria step opens, before the first paint of it.
   const criteriaCount = criteria.criteria.length;
-  useLayoutEffect(() => {
-    if (openStep === "criteria" && criteriaShows === null) setCriteriaShows(firstCriteriaShows(criteriaCount));
-  }, [openStep, criteriaShows]);
-  // A new weather file's notice belongs to the criterion whose form it is shown in: while it waits, the Criteria step opens on that editor.
-  const weatherNoticeWaits = weatherChangeSuggestionNow !== null;
-  useLayoutEffect(() => {
-    if (openStep === "criteria" && weatherNoticeWaits) setCriteriaShows("editor");
-  }, [openStep, weatherNoticeWaits]);
+  if (openStep === "criteria" && criteriaShows === null) setCriteriaShows(firstCriteriaShows(criteriaCount));
+  // A new weather file's notice belongs to the criterion whose form it is shown in: while it waits, the Criteria step opens on that
+  // editor. It does so as the step opens or the notice comes; the list can be chosen after.
+  const editorForWeatherNotice = openStep === "criteria" && weatherChangeSuggestionNow !== null;
+  const [editorWasForWeatherNotice, setEditorWasForWeatherNotice] = useState(false);
+  if (editorForWeatherNotice !== editorWasForWeatherNotice) {
+    setEditorWasForWeatherNotice(editorForWeatherNotice);
+    if (editorForWeatherNotice) setCriteriaShows("editor");
+  }
   const { selection, active, ownStages } = workspaceCriteria;
   const resultSteps = useResultSteps({
     ...workspaceCriteria.ofResults,

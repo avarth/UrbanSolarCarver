@@ -20,11 +20,13 @@ Times are wall times on an 8-core / 16-thread AMD Zen 2 with an RTX 3060, measur
 | 2 | Before each commit | `python -m pytest -m "not sweep" -n 8` | about 65 s |
 | 3 | Before merging | `python -m pytest -n 8` | about 100 s |
 
-When `app/` changed, also run the front-end checks of the same tier (see below): `npm test` takes about 15 s,
+When `app/` changed, also run the front-end checks of the same tier (see below): `npm test` takes about 30 s (12 s of it ESLint),
 `npm run typecheck` 5 s and `npm run build` 7 s.
 
 Every tier also checks the import rules of the [Project Map](project-map.md): `tests/test_architecture.py` for the
-Python package (with `npm test`'s `deps` script for the app).
+Python package (with `npm test`'s `deps` script for the app). `npm test` also runs ESLint (`npm run lint`,
+`app/eslint.config.js`): the React hooks rules check effect dependencies and what components do during render, and a
+line that sets a rule aside says why.
 
 ### Tier 0: the files you are editing
 

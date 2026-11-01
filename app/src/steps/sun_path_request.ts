@@ -1,6 +1,6 @@
 // The sun path of the stored analysis period (UX 8.2), asked for as soon as the mode reads one, the weather file is there and
 // every part of the period is set, before any run; of the selected criterion, asked for again when another is selected.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { getSunPath, serviceProblemOf } from "../api_client/client";
 import { shownValue, storedValue, type FormState } from "../settings_form/form_state";
 import { ANALYSIS_PERIOD_FIELDS } from "../settings_form/presentation";
@@ -46,12 +46,8 @@ export function useSunPathOfStoredPeriod({ token, project, form, hasWeatherFile,
   const sunPathKey = JSON.stringify([form.mode, ANALYSIS_PERIOD_FIELDS.map((name) => shownValue(form, name)), northDegrees, hasWeatherFile, criterionId]);
   const sunPathWanted = form.mode === MODE_WITH_SUN_PATH && hasWeatherFile && analysisPeriodOf(form, true) !== null;
   const sunPathRequestKey = useRef<string | null>(null);      // the period last asked for; only its reply is kept
-  useEffect(() => {
-    if (!sunPathWanted) {
-      sunPathRequestKey.current = null;
-      setSunPath(null);
-      return;
-    }
+  if (!sunPathWanted && sunPath !== null) setSunPath(null);
+  const askForSunPath = useEffectEvent(() => {
     // The service reads the stored settings: wait for the save, and keep the last path while the form holds a refused change.
     if (form.pendingSave || settingsToFixCount(form) > 0 || sunPathRequestKey.current === sunPathKey) return;
     const requestKey = sunPathKey;
@@ -62,6 +58,10 @@ export function useSunPathOfStoredPeriod({ token, project, form, hasWeatherFile,
     }).catch((error) => {
       if (serviceProblemOf(error) !== "other") onServiceProblem(error);
     });
+  });
+  useEffect(() => {
+    if (sunPathWanted) askForSunPath();
+    else sunPathRequestKey.current = null;
   }, [sunPathKey, sunPathWanted, form.pendingSave]);
   return sunPath;
 }

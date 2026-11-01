@@ -2,7 +2,7 @@
 // it, not while its request is out), the Cancel and confirm buttons, the request that keeps the dialog open with the
 // service's words when it is refused, and the line that says them. The project menu's dialogs (workspace/ProjectDialogs.tsx),
 // the criterion dialogs and the typical building's window (a wide frame with a × and the title in focus) are built on it.
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { messages } from "../messages";
 import "../theme/panels.css";
 
@@ -40,7 +40,8 @@ export function DialogFrame({ title, busy, onClose, describedBy, wide = false, c
   const heading = useRef<HTMLHeadingElement>(null);
   const titleId = useId();
 
-  useEffect(() => {
+  // The focus moves in once, when the dialog opens.
+  const takeFocus = useEffectEvent(() => {
     if (titleTakesFocus) {
       heading.current?.focus();
       return;
@@ -48,7 +49,8 @@ export function DialogFrame({ title, busy, onClose, describedBy, wide = false, c
     const first = dialog.current!.querySelector<HTMLElement>("[data-autofocus]") ?? focusableControls(dialog.current!)[0];
     first?.focus();
     if (first instanceof HTMLInputElement) first.select();
-  }, []);
+  });
+  useEffect(() => takeFocus(), []);
 
   const keepFocusInside = (event: KeyboardEvent) => {
     if (event.key === "Escape") {

@@ -13,7 +13,7 @@
 // app's own carries the turns staged while it ran to the version it wrote, when that has the same triangles and surfaces.
 // useInspectView gives the view what it draws, kept the same between renders that change none of it (the view draws the layer again
 // whenever its files change).
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   failureTextOf, getInspection, getInspectionGeometry, isStoredFileChanged, restoreOriginal, serviceProblemOf, turnSurfaces, type InspectedFile,
   type InspectReply,
@@ -22,6 +22,7 @@ import { messages } from "../messages";
 import type { InspectLayerFile } from "../viewer/layers";
 import { toLocal, type Point3 } from "../viewer/local_origin";
 import type { InspectView } from "../viewer_overlays/ViewerPane";
+import { useKeyedValue } from "../viewer_overlays/use_keyed_value";
 import { decodeInspectGeometry, localCorners, localSurfaces, type InspectGeometry } from "./inspect_geometry_decoder";
 
 export const TEST_SURFACES_ROLE = "test_surfaces";
@@ -148,7 +149,9 @@ export function useInspection({ token, project, active, onSaved, onServiceProble
   // The save or restore under way of each file, which a later save of the file waits for.
   const underWay = useRef(new Map<string, Promise<string | null>>());
   const shown = useRef(active);
-  shown.current = active;
+  useLayoutEffect(() => {
+    shown.current = active;
+  });
 
   const fileOf = (key: FileKey | null) => latest.current.reply?.files.find((file) => isKeyOf(key, file)) ?? null;
   const testSurfaceFile = (fileName: string) => fileOf({ role: TEST_SURFACES_ROLE, fileName });
@@ -187,10 +190,11 @@ export function useInspection({ token, project, active, onSaved, onServiceProble
     }
   };
 
-  useEffect(() => {
-    if (active) void refresh();
+  const followShown = useEffectEvent((shownNow: boolean) => {
+    if (shownNow) void refresh();
     else if (latest.current.flipMode) commit({ flipMode: false });
-  }, [active]);
+  });
+  useEffect(() => followShown(active), [active]);
 
   /** The staged turns of the file become *surfaces*; the file's version is noted with its first turn and forgotten with its last. */
   const stagedTurns = (fileName: string, surfaces: ReadonlySet<number>): Partial<InspectionState> => {
@@ -341,20 +345,20 @@ export function useInspection({ token, project, active, onSaved, onServiceProble
  * others faint (none faint while no file is selected), and the selected file's bounds to frame. The files are the same array while
  * the geometries, the origin, the turns and the selection are, so the view does not draw the layer again for another change.
  */
-export function useInspectView(inspection: InspectionHook, origin: Point3, active: boolean): InspectView | null {
-  const originKey = origin.join(",");
+export function useInspectView(inspection: InspectionHook, givenOrigin: Point3, active: boolean): InspectView | null {
+  const origin = useKeyedValue(givenOrigin, givenOrigin.join(","));
   const local = useMemo(() => [...inspection.geometries].map(([fileName, geometry]) => ({
     fileName, corners: localCorners(geometry, origin), surfaceOfTriangle: geometry.surfaceOfTriangle, surfaces: localSurfaces(geometry, origin),
-  })), [inspection.geometries, originKey]);
+  })), [inspection.geometries, origin]);
   const { selected } = inspection;
   const selectedName = selected === null ? null : selected.role === TEST_SURFACES_ROLE ? selected.file_name : "";
   const files = useMemo((): InspectLayerFile[] => local.map((file) => ({
     ...file, turned: inspection.drawnTurned.get(file.fileName) ?? new Set<number>(), selected: selectedName === null || file.fileName === selectedName,
   })), [local, inspection.drawnTurned, selectedName]);
   const bounds = selected?.bounds;
-  // Made anew for each request only: a file selected by a click on the view (no request) leaves the camera where it is.
+  // The view frames the box only for a new request: a file selected by a click on the view (no request) leaves the camera where it is.
   const frame = useMemo(() => (bounds === undefined ? null
-    : { min: toLocal(bounds[0], origin), max: toLocal(bounds[1], origin), request: inspection.frameRequest }), [inspection.frameRequest, originKey]);
+    : { min: toLocal(bounds[0], origin), max: toLocal(bounds[1], origin), request: inspection.frameRequest }), [inspection.frameRequest, bounds, origin]);
   if (!active) return null;
   return { files, arrows: inspection.arrows, onSurfaceClick: inspection.clickSurface, frame };
 }

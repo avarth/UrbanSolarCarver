@@ -8,7 +8,7 @@
 // is under the Settings header, open or closed. In Solar usefulness, Settings starts with Which hours count: Cold hours (the balance
 // temperature rule) or Energy-weighted, which hides the balance temperature and shows the typical building's box, whose Edit
 // building opens its window (TypicalBuildingSheet).
-import { useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffectEvent, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { InputFileInfo } from "../api_client/client";
 import { messages } from "../messages";
 import type { ColdPeriodState, Hemisphere } from "../settings_form/analysis_period";
@@ -139,11 +139,13 @@ export function CriterionPanel(props: CriterionPanelProps) {
   // A section opens when something it shows appears, before the page is drawn; the user may close it again.
   const calling = PANEL_SECTIONS.filter((id) => problems[id] || (id === "mode" && valuesReset));
   const calledBefore = useRef<ReadonlySet<PanelSectionId>>(new Set());
-  useLayoutEffect(() => {
+  const openAppeared = useEffectEvent(() => {
     const appeared = calling.filter((id) => !calledBefore.current.has(id));
     calledBefore.current = new Set(calling);
     if (appeared.length > 0) onOpenSections(appeared);
-  }, [calling.join(" ")]);
+  });
+  const callingKey = calling.join(" ");
+  useLayoutEffect(() => openAppeared(), [callingKey]);
 
   const summaries: Record<PanelSectionId, string> = {
     test_surfaces: testSurfacesSummary(props.testSurfaces.map((file) => file.name)),

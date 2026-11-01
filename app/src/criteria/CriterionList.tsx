@@ -83,11 +83,14 @@ function AddCriterion({ onAdd, disabledReason }: AddCriterionProps) {
     if (link.current?.disabled) block.current?.closest(".criteria-list-block")?.querySelector<HTMLElement>('.criterion-card[aria-current="true"] .criterion-card-select')?.focus();
     else link.current?.focus();
   };
-  useEffect(() => {
-    if (problem === null) return;
-    setChoosing(false);
-    if (block.current?.contains(document.activeElement)) focusLinkOrSelectedCard();
-  }, [problem]);
+  const add = async (mode: string) => {
+    const reason = await onAdd(mode);
+    if (reason !== null) {
+      setChoosing(false);
+      if (block.current?.contains(document.activeElement)) focusLinkOrSelectedCard();
+    }
+    return reason;
+  };
   return (
     <div ref={block} className="add-criterion">
       <button ref={link} type="button" className="link-button" disabled={disabledReason !== null} aria-haspopup="menu" aria-expanded={choosing}
@@ -97,7 +100,7 @@ function AddCriterion({ onAdd, disabledReason }: AddCriterionProps) {
       </button>
       {problem !== null && <p className="setting-error" role="alert">{problem}</p>}
       {choosing && (
-        <ModeMenu id={menuId} anchor={link} onChoose={(mode) => void send(() => onAdd(mode))} onClose={(focusedAnchor) => { setChoosing(false); if (focusedAnchor && link.current?.disabled) focusLinkOrSelectedCard(); }}
+        <ModeMenu id={menuId} anchor={link} onChoose={(mode) => void send(() => add(mode))} onClose={(focusedAnchor) => { setChoosing(false); if (focusedAnchor && link.current?.disabled) focusLinkOrSelectedCard(); }}
                   disabledReason={busy ? messages.addingCriterion : disabledReason} />
       )}
     </div>
@@ -112,17 +115,19 @@ export function CriterionList(props: CriterionListProps) {
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   // The card moved with the keyboard and the order asked for: its handle takes the focus back once the cards are in that order
   // (moving the card in the page loses the focus).
-  const [keyboardMove, setKeyboardMove] = useState<{ id: string; order: string } | null>(null);
+  const keyboardMove = useRef<{ id: string; order: string } | null>(null);
   const list = useRef<HTMLOListElement>(null);
   const ids = criteria.map((criterion) => criterion.id);
+  const order = ids.join(",");
   const cardElement = (id: string | undefined) =>
     [...(list.current?.querySelectorAll<HTMLElement>(".criterion-card") ?? [])].find((card) => card.dataset.criterionId === id);
 
   useEffect(() => {
-    if (keyboardMove === null || keyboardMove.order !== ids.join(",")) return;
-    cardElement(keyboardMove.id)?.querySelector<HTMLElement>(".criterion-card-handle")?.focus();
-    setKeyboardMove(null);
-  }, [ids.join(",")]);
+    const move = keyboardMove.current;
+    if (move === null || move.order !== order) return;
+    cardElement(move.id)?.querySelector<HTMLElement>(".criterion-card-handle")?.focus();
+    keyboardMove.current = null;
+  }, [order]);
 
   /** Sends a change; resolves with whether it was done, the refusal said under the cards. */
   const request = async (change: Promise<string | null>): Promise<boolean> => {
@@ -135,8 +140,8 @@ export function CriterionList(props: CriterionListProps) {
   const moveWithKeys = (id: string, step: -1 | 1) => {
     const order = orderAfterMoving(ids, id, step);
     if (order === null) return;
-    setKeyboardMove({ id, order: order.join(",") });
-    void reorder(order).then((done) => { if (!done) setKeyboardMove(null); });
+    keyboardMove.current = { id, order: order.join(",") };
+    void reorder(order).then((done) => { if (!done) keyboardMove.current = null; });
   };
   const choose = (criterion: CriterionEntry, item: CriterionMenuItem) => {
     if (item === "duplicate") void request(props.onDuplicate(criterion.id));

@@ -1,6 +1,6 @@
 // The run report (run_report.md) in a panel over the 3D view (UX 5.6), as preformatted text in milestone 1; a report that cannot
 // be read says so. It closes with its Close button or Escape, and gives the focus back to what opened it.
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent } from "react";
 import { getRunFileText, serviceProblemOf } from "../api_client/client";
 import { messages } from "../messages";
 import { WarningIcon } from "../settings_form/SettingField";
@@ -23,17 +23,22 @@ export function RunReportPanel({ token, project, onClose, onServiceProblem }: Ru
 
   useEffect(() => {
     closeButton.current?.focus();
+    const giveFocusBackTo = openedFrom.current as HTMLElement | null;
+    return () => giveFocusBackTo?.focus?.();
+  }, []);
+
+  const reportProblem = useEffectEvent((error: unknown) => onServiceProblem(error));
+  useEffect(() => {
     let stale = false;
     getRunFileText(token, project, RUN_REPORT_PATH).then((text) => { if (!stale) setReport(text); }).catch((error) => {
       if (stale) return;
-      if (serviceProblemOf(error) !== "other") onServiceProblem(error);
+      if (serviceProblemOf(error) !== "other") reportProblem(error);
       setUnreadable(true);
     });
     return () => {
       stale = true;
-      (openedFrom.current as HTMLElement | null)?.focus?.();
     };
-  }, []);
+  }, [token, project]);
 
   const closeOnEscape = (event: KeyboardEvent) => {
     if (event.key === "Escape") onClose();

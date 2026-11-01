@@ -8,7 +8,7 @@
 // reset opens it afresh. The product name at the left of the top bar returns to the start screen; leaving Inspect with turned
 // surfaces not saved, by it or by the switch, asks first (UnsavedTurnsDialog). The theme button at the right of the top bar
 // switches the whole app, the 3D view with it, between light and dark (theme/app_theme.tsx).
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   chooseProjectsFolder, createProject, createProjectFromExample, deleteProject, failureTextOf, getExamples, getHealth, getModes, getProject, getProjectsFolder,
   getCriterionKeys, getSchema, listProjects, openProjectFolder, readTokenFromLaunchUrl, renameProject, resetProjectToExample, serviceProblemOf,
@@ -157,15 +157,9 @@ export function App() {
   const [focusStartScreenHeading, setFocusStartScreenHeading] = useState(false);
   const openProjectSettings = useRef<OpenProjectSettingsSaver | null>(null);
   const engineCheck = useRef<(() => void) | null>(null);
-  const runs = useRunLoop(accessToken, (error) => handleServiceProblem(error));
-  const [lastRunSeconds, setLastRunSeconds] = useState<ReadonlyMap<string, number>>(new Map());
-  useEffect(() => setLastRunSeconds((times) => lastRunSecondsWith(times, runs.current)), [runs.current]);
-  // Save in the dialog waits, as Save in the Files panel does, while a run of the open project goes on.
-  const openProjectRunActive = openProject !== null && runs.activeRun !== null && sameProjectName(runs.activeRun.project, openProject.name);
-  const leavingInspect = useLeavingInspect(workspaceMode, openProjectRunActive ? messages.runInProgress : null);
 
   /** A failed request: a lost token is said at once; a missing engine only once GET health finds none either. */
-  const handleServiceProblem = (error: unknown) => {
+  const handleServiceProblem = useCallback((error: unknown) => {
     const kind = serviceProblemOf(error);
     if (kind === "access_lost") setProblem(kind);
     if (kind !== "engine_stopped" || engineCheck.current !== null) return;
@@ -178,7 +172,20 @@ export function App() {
       onProblem: setProblem,
       askAgainAfter: () => false,
     });
-  };
+  }, []);
+
+  const runs = useRunLoop(accessToken, handleServiceProblem);
+  const [lastRunSeconds, setLastRunSeconds] = useState<ReadonlyMap<string, number>>(new Map());
+  // A finished run's time is noted once, when the run loop shows its record.
+  const [timedRun, setTimedRun] = useState<RunRecord | null>(null);
+  if (runs.current !== timedRun) {
+    const record = runs.current;
+    setTimedRun(record);
+    setLastRunSeconds((times) => lastRunSecondsWith(times, record));
+  }
+  // Save in the dialog waits, as Save in the Files panel does, while a run of the open project goes on.
+  const openProjectRunActive = openProject !== null && runs.activeRun !== null && sameProjectName(runs.activeRun.project, openProject.name);
+  const leavingInspect = useLeavingInspect(workspaceMode, openProjectRunActive ? messages.runInProgress : null);
 
   // Before the page is painted, so a dark theme never shows light first.
   useLayoutEffect(() => showTheme(theme), [theme]);
@@ -193,31 +200,37 @@ export function App() {
       stopPolling();
       engineCheck.current?.();
     };
-  }, []);
+  }, [handleServiceProblem]);
 
   /**
    * The projects and the examples, whose project (the one made from each) changes with every project made, renamed or deleted:
    * the examples the start screen shows wait for their answer.
    */
-  const readStartScreenLists = () => {
-    setExamplesCurrent(false);
+  const askForStartScreenLists = useCallback(() => {
     listProjects(accessToken).then(setProjects).catch(handleServiceProblem);
     getExamples(accessToken).then((read) => {
       setExamples(read);
       setExamplesCurrent(true);
     }).catch(handleServiceProblem);
+  }, [handleServiceProblem]);
+  const readStartScreenLists = () => {
+    setExamplesCurrent(false);
+    askForStartScreenLists();
   };
-  const readProjectsFolder = () => getProjectsFolder(accessToken).then(setProjectsFolder).catch(handleServiceProblem);
+  const readProjectsFolder = useCallback(() => getProjectsFolder(accessToken).then(setProjectsFolder).catch(handleServiceProblem), [handleServiceProblem]);
 
+  // While a project is open the examples are not current, so the start screen that shows next waits for them.
+  const startScreenShown = openProject === null;
+  if (!startScreenShown && examplesCurrent) setExamplesCurrent(false);
   useEffect(() => {
-    if (openProject === null) readStartScreenLists();
-    else setExamplesCurrent(false);
-  }, [openProject === null]);
+    if (startScreenShown) askForStartScreenLists();
+  }, [startScreenShown, askForStartScreenLists]);
 
   // Whether the folder may change depends on a run being active, so it is asked again when a run starts or ends.
+  const anyRunActive = runs.activeRun !== null;
   useEffect(() => {
-    if (openProject === null) void readProjectsFolder();
-  }, [openProject === null, runs.activeRun === null]);
+    if (startScreenShown) void readProjectsFolder();
+  }, [startScreenShown, anyRunActive, readProjectsFolder]);
 
   /** A failed request in words (failureTextOf), once the app has looked at it for a lost token or a stopped engine. */
   const failureText = (error: unknown): string => {

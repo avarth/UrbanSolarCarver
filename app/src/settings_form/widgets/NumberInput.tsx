@@ -5,7 +5,7 @@
 // that says what to use; it gets null again once a number is taken, the field is emptied, or the value changes from elsewhere.
 // A refusal gives the setting back the value it had when the editing began, so the part typed in range before the refused
 // keystroke ("36" on the way to "360") is never kept.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { messages } from "../../messages";
 
 /** What SettingField gives every control: the ids that tie it to its label and error message, and whether it may be used. */
@@ -68,9 +68,10 @@ export function NumberInput({ value, onValue, mayBeEmpty, id, ariaLabel, ariaLab
     onRefused?.(refusal);
   };
   // A value set from elsewhere while the field is not being edited (a mode change, another control) ends a refusal's message.
-  useEffect(() => {
+  const endRefusal = useEffectEvent(() => {
     if (typedText === null && refusing.current) report(null);
-  }, [value]);
+  });
+  useEffect(() => endRefusal(), [value]);
   // The browser's own limits for the spinner: an exclusive bound is the nearest the spinner may go, and is refused there.
   const lowest = minimum ?? exclusiveMinimum, highest = maximum ?? exclusiveMaximum;
   return (
