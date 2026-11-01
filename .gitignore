@@ -90,9 +90,10 @@ src.zip
 # Private files
 fullText.pdf
 
-# Front-end (app/): installed packages and the intermediate OpenAPI file; the build goes to src/urbansolarcarver/ui_static/ and is committed
+# Front-end (app/): installed packages, the intermediate OpenAPI file and the TypeScript build cache; the build goes to src/urbansolarcarver/ui_static/ and is committed
 app/node_modules/
 app/openapi.json
+app/*.tsbuildinfo
 
 # Project instructions for Claude Code: kept locally, not in the repository
 CLAUDE.md
