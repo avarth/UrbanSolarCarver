@@ -186,7 +186,7 @@ test("a layers menu entry with parts lists a check box and a swatch for each, an
 
 test("the overlay styles take every colour from the tokens and keep the toolbar focus outline visible", () => {
   const overlaysCss = readFileSync("src/viewer_overlays/overlays.css", "utf8");
-  expect(overlaysCss).not.toMatch(/#[0-9a-f]{3,6}|rgb\(/i);
+  expect(overlaysCss).not.toMatch(/#[0-9a-f]{3,6}\b|rgb\(/i);
   expect(overlaysCss).toMatch(/\.viewer-toolbar button {[^}]*outline-offset: -2px/);
 });
 

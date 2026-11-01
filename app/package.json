@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit -p .",
     "build": "npm run typecheck && vite build --outDir ../src/urbansolarcarver/ui_static --emptyOutDir && node scripts/write_build_info.mjs",
     "test": "vitest run && npm run deps",
-    "deps": "depcruise src --config .dependency-cruiser.cjs"
+    "deps": "depcruise src --config .dependency-cruiser.cjs",
+    "lint": "eslint ."
   },
   "dependencies": {
     "react": "^19.3.1",
@@ -17,6 +18,7 @@
     "three": "^0.186.1"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@fontsource/atkinson-hyperlegible-next": "^5.3.0",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
@@ -24,9 +26,13 @@
     "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "^6.1.2",
     "dependency-cruiser": "^18.7.0",
+    "eslint": "^10.14.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
     "jsdom": "^29.1.1",
     "openapi-typescript": "^7.13.0",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.1",
     "vite": "^8.3.4",
     "vitest": "^5.0.5"
   }
