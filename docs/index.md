@@ -42,7 +42,7 @@ Each stage reads the previous stage's manifest, so you can re-run thresholding w
 - **[Simulate](simulate.md)**: the browser workspace that checks how much sun, solar energy or sky reaches test points on the maximum volume, the envelope and the massing
 - **[Inspect](inspect.md)**: the browser workspace that shows which way the test surfaces face, flips the ones that face the wrong way, and summarises each input mesh file
 - **[Grasshopper Plugin](grasshopper.md)**: Rhino 3D integration, component list, daemon setup
-- **[Project Map](project-map.md)**: every file and directory in the repository
+- **[Project Map](project-map.md)**: how the code is layered, the rules that keep it so, and how to draw its maps
 - **[API Reference](api/index.md)**: function signatures, parameters, and return types (generated from docstrings)
 - **[Changelog](https://github.com/avarth/UrbanSolarCarver/blob/main/CHANGELOG.md)**
 

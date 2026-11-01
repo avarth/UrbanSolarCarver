@@ -14,6 +14,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - **Progress of Calculate** in the typical building window: a bar under the button fills as the weights are calculated
   (`GET /projects/{name}/typical-building/progress`; `generate_simulated_weights` takes a `progress` callback). A run
   that calculates the weights first reports the same progress, in percent.
+- **Import rules and drawn maps** for developers: the Python package's seven layers are written in
+  `pyproject.toml` and checked by import-linter in the tests, the app's rules by dependency-cruiser in `npm test`,
+  and `python tools/draw_maps.py` draws both as SVG. The Project Map page explains them in place of its file list;
+  each file's description is its own docstring or header comment.
 
 ### Changed
 

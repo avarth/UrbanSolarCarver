@@ -20,8 +20,11 @@ Times are wall times on an 8-core / 16-thread AMD Zen 2 with an RTX 3060, measur
 | 2 | Before each commit | `python -m pytest -m "not sweep" -n 8` | about 65 s |
 | 3 | Before merging | `python -m pytest -n 8` | about 100 s |
 
-When `app/` changed, also run the front-end checks of the same tier (see below): `npm test` takes about 12 s,
+When `app/` changed, also run the front-end checks of the same tier (see below): `npm test` takes about 15 s,
 `npm run typecheck` 5 s and `npm run build` 7 s.
+
+Every tier also checks the import rules of the [Project Map](project-map.md): `tests/test_architecture.py` for the
+Python package (with `npm test`'s `deps` script for the app).
 
 ### Tier 0: the files you are editing
 

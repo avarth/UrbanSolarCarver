@@ -1,3 +1,10 @@
+"""Preprocessing stage: score every voxel of the maximum volume by what it blocks.
+
+Voxelizes the maximum volume, samples the test surfaces into points with outward normals, traces rays from them
+(toward the sky patches, the sun positions or the tilted planes, depending on the mode) through the voxel grid, and
+writes each voxel's score to ``scores.npy`` with the grid, the footprint, the sample points, the manifest and the
+diagnostics. Thresholding reads these files.
+"""
 from __future__ import annotations
 import json, logging, time
 from dataclasses import dataclass

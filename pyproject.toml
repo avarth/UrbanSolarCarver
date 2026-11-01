@@ -49,7 +49,7 @@ Repository = "https://github.com/avarth/UrbanSolarCarver"
 Issues = "https://github.com/avarth/UrbanSolarCarver/issues"
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "pytest-xdist>=3.5", "mapbox-earcut", "httpx>=0.27"]
+dev = ["pytest>=7.0", "pytest-xdist>=3.5", "mapbox-earcut", "httpx>=0.27", "import-linter>=2.1", "pydeps>=3.0"]
 # Local browser UI (usc ui)
 ui = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9", "websockets>=12", "send2trash>=1.8"]
 # Rebuild the Grasshopper .ghuser files (grasshopper/build_ghuser.py)
@@ -83,3 +83,42 @@ markers = [
   "sweep: exhaustive parameter sweeps and Monte Carlo seeds, also marked slow, run before merging; skip with -m 'not sweep'",
   "gpu: needs a CUDA GPU; skipped automatically when torch sees none (see tests/conftest.py)",
 ]
+
+# Import rules (import-linter): how the package is layered, checked by tests/test_architecture.py and by `lint-imports`.
+# docs/project-map.md explains the layers. A new module must be placed in a layer (exhaustive).
+[tool.importlinter]
+root_package = "urbansolarcarver"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Layers: front ends, service, requests, API, stages, engine, settings"
+type = "layers"
+containers = ["urbansolarcarver"]
+exhaustive = true
+layers = [
+  "carver_cli | daemon",
+  "local_web_service",
+  "engine_requests",
+  "api",
+  "api_core | solar_check | access_evaluation",
+  "carving : scoring : context_geometry : voxelization : floor_plates : meshing : surface_sampling : sun : sky_patches : simulated_weights : ray_tracing : warp_kernels : io : column_postprocessing : cold_period : session : check_files",
+  "chain_config : load_config : check_settings : stage_settings : pydantic_schemas : mode_registry : run_context : errors : compute_device : weather_file : archetype_defaults : grid_planning : daemon_client",
+]
+# Known exception, to remove: run_chain returns api.PipelineResult, imported inside the function because api imports
+# api_core.chain. Moving PipelineResult into api_core would end the cycle.
+ignore_imports = ["urbansolarcarver.api_core.chain -> urbansolarcarver.api"]
+
+[[tool.importlinter.contracts]]
+name = "Settings modules load without torch, Warp or the web server"
+type = "forbidden"
+source_modules = [
+  "urbansolarcarver.chain_config",
+  "urbansolarcarver.load_config",
+  "urbansolarcarver.check_settings",
+  "urbansolarcarver.stage_settings",
+  "urbansolarcarver.pydantic_schemas",
+  "urbansolarcarver.mode_registry",
+  "urbansolarcarver.run_context",
+  "urbansolarcarver.errors",
+]
+forbidden_modules = ["torch", "warp", "fastapi", "uvicorn"]

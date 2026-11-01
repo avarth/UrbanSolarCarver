@@ -1,3 +1,10 @@
+"""Thresholding stage: decide which voxels to carve from their scores.
+
+Reads the preprocessing scores, optionally smooths them, applies the threshold (``carve_fraction``, ``headtail`` or a
+number) together with ``carve_above`` and the slope limit, and writes the kept voxels to ``mask.npy``. With ``after``
+(the previous criterion's result) it decides only among the voxels that criterion kept. It can be re-run with other
+threshold settings without tracing the rays again.
+"""
 from __future__ import annotations
 import time
 from dataclasses import dataclass

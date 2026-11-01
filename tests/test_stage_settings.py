@@ -1,3 +1,4 @@
+"""The per-stage settings models: every config field in exactly one, and stages_to_rerun."""
 import pytest
 
 from _stage_scene import daylight_cube_config
