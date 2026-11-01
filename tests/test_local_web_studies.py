@@ -159,6 +159,26 @@ def test_a_study_is_changed_by_its_target_and_its_settings(project_with_inputs):
     assert (both.target, both.target_max) == (100.0, 900.0)
     assert store.update_study(name, study.id, target=150.0).target_max == 900.0     # not sent: stays
     assert store.update_study(name, study.id, target_max=None).target_max is None
+
+
+def test_new_settings_or_a_new_metric_clear_the_colour_range_so_the_next_run_shows_its_own(project_with_inputs):
+    """The ends are in the study's unit: a range set on a year's result would not fit a day's (user, 2026-11-01)."""
+    store, name = _with_weather(project_with_inputs)
+    study = store.add_study(name, metric="solar_energy")
+    store.update_study(name, study.id, target=100.0, target_max=900.0)
+    kept = store.update_study(name, study.id, name="Renamed", values=dict(store.studies(name)[0].settings))   # same settings
+    assert (kept.target, kept.target_max) == (100.0, 900.0)
+    cleared = store.update_study(name, study.id, values={"end_month": 6, "end_day": 21, "start_month": 6, "start_day": 21})
+    assert (cleared.target, cleared.target_max) == (None, None)
+    store.update_study(name, study.id, target=1.0, target_max=5.0)
+    assert (store.update_study(name, study.id, metric="sun_hours").target, store.studies(name)[0].target_max) == (None, None)
+    sent = store.update_study(name, study.id, values={"start_month": 1}, target=2.0)        # an end sent with the change stays
+    assert (sent.target, sent.target_max) == (2.0, None)
+
+
+def test_a_study_refuses_bad_settings_names_and_metrics(project_with_inputs):
+    store, name = _with_weather(project_with_inputs)
+    study = store.add_study(name, metric="useful_solar_energy")
     for bad in ({"threshold": 1}, {"dew_point_celsius": 10}, {"start_month": 13}, {"balance_offset": -1}):
         before = store.studies(name)
         with pytest.raises(ProjectError) as refused:

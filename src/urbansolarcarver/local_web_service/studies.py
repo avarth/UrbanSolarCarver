@@ -166,7 +166,8 @@ def change_study(entry: StudyEntry, *, name: str | None = None, metric: str | No
     samples, except a time basis the new metric does not take (only sun hours reads another clock than standard time), which
     becomes the default. *values* then change
     those keys. The settings are checked after a metric change or with *values*, so no study is stored with settings its metric
-    refuses. A study the user did not name is named again by its metric and period.
+    refuses. A study the user did not name is named again by its metric and period. New settings or a new metric clear target and
+    target_max (the colour range of the last result), unless they are given here.
     """
     new_name = None if name is None else checked_study_name(name)
     new_metric = entry.metric if metric is None else checked_metric(metric)
@@ -179,6 +180,10 @@ def change_study(entry: StudyEntry, *, name: str | None = None, metric: str | No
             settings["time_basis"] = defaults["time_basis"]
     if new_metric != entry.metric or values is not None:
         settings = checked_study_settings(new_metric, {**settings, **(values or {})})
+    # The ends of the colour range are in the study's unit and fit its last result: new settings or a new metric clear them, so
+    # the next run shows its own range (user, 2026-11-01). An end sent with the change is set below.
+    if new_metric != entry.metric or settings != entry.settings:
+        entry.target = entry.target_max = None
     entry.metric, entry.settings = new_metric, settings
     if new_name is not None:
         entry.name, entry.named_by_user = new_name, True

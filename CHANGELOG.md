@@ -59,6 +59,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - **The legend's two ends can no longer meet.** Dragging the high end onto the low end saved both at one value: the high mark hid
   under the low one and the palette spanned one unit (0 to 1 kWh/m², with nearly everything in the top colour). An end now stays
   1 % of the bar short of the other, and a saved high end at or below the target counts as none.
+- **New study settings clear the colour range.** Changing a study's settings (its period, for example) or its metric clears
+  the two ends of its colour range, which are in the study's unit and fitted the last result; the next run shows its own range
+  (a range set on a year's result no longer applies to a day's).
 
 ## [0.10.0] - 2026-10-30
 
