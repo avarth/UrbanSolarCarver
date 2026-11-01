@@ -468,10 +468,14 @@ def sample_planar_surface(
     #     axis_v so cross(axis_u, axis_v) stays equal to the normal; the
     #     quads built below then wind counter-clockwise around it, which
     #     viewers such as Plotly and Rhino use for front-face lighting.
+    #     The v coordinates flip with it, so the quads stay centred on the
+    #     points lifted above (without, each quad was mirrored through the
+    #     centroid onto another point's place).
     face_normal = (mesh.face_normals * mesh.area_faces[:, None]).sum(axis=0)
     if np.dot(face_normal, plane_normal) < 0:
         plane_normal = -plane_normal
         axis_v = -axis_v  # flip one axis so cross(u,v) matches new normal
+        points_2d = points_2d * np.array([1.0, -1.0])
     point_normals = np.tile(plane_normal, (len(points_3d), 1))  # (M, 3)
 
     # 11) Build analysis-mesh quad data.  Each sample point becomes a

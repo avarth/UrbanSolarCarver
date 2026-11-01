@@ -303,3 +303,25 @@ def test_zero_area_face_does_not_drop_panel_and_bent_panel_warns():
     with pytest.warns(UserWarning, match="1 non-planar"):
         pts, *_ = sample_surface(trimesh.util.concatenate([rect, bent]), _sampling_settings())
     assert len(pts) > 0 and pts[:, 0].max() <= 4.0  # the rectangle is sampled, the bent panel is not
+
+
+@pytest.mark.parametrize("corners", [
+    [[0, 0, 0], [0, 20, 0], [0, 20, 6], [0, 0, 6]],          # wall facing +x
+    [[0, 20, 0], [0, 0, 0], [0, 0, 6], [0, 20, 6]],          # wall facing -x
+    [[0, 0, 0], [20, 0, 0], [20, 0, 6], [0, 0, 6]],          # wall facing -y
+    [[20, 0, 0], [0, 0, 0], [0, 0, 6], [20, 0, 6]],          # wall facing +y
+    [[0, 0, 3], [20, 0, 3], [20, 6, 3], [0, 6, 3]],          # roof facing up
+    [[0, 0, 0], [20, 2, 0], [20, 2, 6], [0, 0, 6]],          # wall turned 6 deg
+])
+def test_each_patch_is_centred_on_its_point_and_faces_its_normal(corners):
+    """The patch drawn for a point lies on it, whichever way the panel faces (a mirrored patch showed another point's value)."""
+    import trimesh
+    from urbansolarcarver.surface_sampling import discretize_surface_with_normals
+    mesh = trimesh.Trimesh(np.array(corners, dtype=np.float64), [[0, 1, 2], [0, 2, 3]], process=False)
+    points, normals, analysis_mesh, _w, _s = discretize_surface_with_normals(mesh, sample_step=0.5)
+    quads = analysis_mesh.vertices[analysis_mesh.faces]
+    np.testing.assert_allclose(quads.mean(axis=1), points, atol=1e-5)
+    winding = np.cross(quads[:, 1] - quads[:, 0], quads[:, 2] - quads[:, 0])
+    winding /= np.linalg.norm(winding, axis=1, keepdims=True)
+    np.testing.assert_allclose(winding, normals, atol=1e-5)
+    np.testing.assert_allclose(normals[0], mesh.face_normals[0], atol=1e-6)
