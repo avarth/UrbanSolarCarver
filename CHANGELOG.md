@@ -18,6 +18,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
   `pyproject.toml` and checked by import-linter in the tests, the app's rules by dependency-cruiser in `npm test`,
   and `python tools/draw_maps.py` draws both as SVG. The Project Map page explains them in place of its file list;
   each file's description is its own docstring or header comment.
+- **The model of the simulated weights in the docs**: the Simulated Weights page now gives the 5R1C equations, the
+  archetype rules, the attribution, the weights file's format and how benefit mode uses it, which were in a design
+  note of the repository; the note is no longer published.
 
 ### Changed
 

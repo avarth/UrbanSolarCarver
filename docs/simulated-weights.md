@@ -50,7 +50,124 @@ It is **cross-validated against [RC_BuildingSimulator](https://github.com/archit
 
 Beyond the oracle comparison, the engine is checked for **steady-state energy-balance closure** against an independent hand-derived network reduction (constant outdoor temperature, no gains: demand converges to conductance × ΔT with the air node held at setpoint), and for the physical property that heavier mass classes flatten hour-to-hour mass-temperature variation.
 
-Full derivation notes and the coefficient provenance live in the repository at `design/simulated-weights.md`.
+The attribution is checked on the same scenarios: winter hours have a high benefit and no harm, summer afternoons a high harm and a benefit near 0, a winter noon keeps a high benefit (the lag credit), and a heavier mass class gives flatter weights over the day. The hook into benefit mode is checked in `tests/test_modes.py` and `tests/test_pipeline.py`: a schedule of all ones gives the plain irradiance weights, a schedule of the balance-point rule's ones and zeros gives the simple weights exactly, and `include_harm` gives clip(benefit − harm, 0). The script that captured the oracle data is `tests/data/capture_oracle_5r1c.py` (its paths to the oracle are machine-specific).
+
+On the demo site (a CUDA workstation, RTX 3060), the simulated weights move about 9 % of the sky's weight relative to the simple rule: less to the east-morning sky, more to the south-west afternoon, the sign of thermal lag. With `include_harm` the shift reaches 20 to 30 % and gathers in the low southern sky. Tutorial 5 (`examples/5_benefit_5r1c.ipynb`) reproduces the comparison.
+
+## The model in detail
+
+### Conductances (W/K)
+
+| Conductance | Value | Joins |
+|-------------|-------|-------|
+| `H_ve`, ventilation | `1200 · b_ek · V · ACH_tot / 3600`, with `b_ek = 1 − (ACH_vent / ACH_tot) · η_hr` (heat recovery, ISO 13790 Annex E) | supply air (= outdoor air, no preheating) and indoor air |
+| `H_tr,is` | `h_is · A_tot`, `h_is = 3.45 W/m²K`, `A_tot = Λ_at · A_f`, `Λ_at = 4.5` | indoor air and surface |
+| `H_tr,w` | `Σ U_w · A_w` (glazing, no mass) | outdoor air and surface |
+| `H_tr,ms` | `h_ms · A_m`, `h_ms = 9.1 W/m²K` | surface and mass |
+| `H_tr,em` | `1 / (1/H_tr,op − 1/H_tr,ms)` (the opaque envelope less its surface part, §12.2.2) | outdoor air and mass |
+
+`A_f` is the floor area and `V` the volume. RC_BuildingSimulator takes `H_tr,em = U_op · A_op` directly; the validation feeds both engines the same values, so the recurrence is compared, not this convention.
+
+The mass classes of ISO 13790 Table 12, per m² of floor:
+
+| Class | A_m | C_m (J/K) |
+|-------|-----|-----------|
+| very light | 2.5 · A_f | 80,000 · A_f |
+| light | 2.5 · A_f | 110,000 · A_f |
+| medium | 2.5 · A_f | 165,000 · A_f |
+| heavy | 3.0 · A_f | 260,000 · A_f |
+| very heavy | 3.5 · A_f | 370,000 · A_f |
+
+With `mass_capacity_kj_m2k` instead of a class, `C_m = capacity · 1000 · A_f`, and `A_m` is that of the class nearest in capacity (the lighter one on a tie).
+
+### Gains and the hourly step
+
+The internal gains `Φ_int` and the transmitted solar gains `Φ_sol` are split between the nodes (C.1 to C.3):
+
+```
+Φ_ia = 0.5 · Φ_int                                          to the air
+Φ_m  = (A_m / A_tot) · (0.5 · Φ_int + Φ_sol)                to the mass
+Φ_st = (1 − A_m / A_tot − H_tr,w / (9.1 · A_tot))
+       · (0.5 · Φ_int + Φ_sol)                              to the surface
+```
+
+The heating or cooling power `Φ_HC` enters the air node. With the auxiliary conductances (C.6 to C.8)
+
+```
+H_tr,1 = 1 / (1/H_ve + 1/H_tr,is)
+H_tr,2 = H_tr,1 + H_tr,w
+H_tr,3 = 1 / (1/H_tr,2 + 1/H_tr,ms)
+```
+
+the mass node steps by Crank-Nicolson over one hour (C.4, C.5):
+
+```
+Φ_m,tot = Φ_m + H_tr,em · θ_e
+        + H_tr,3 · (Φ_st + H_tr,w · θ_e + H_tr,1 · ((Φ_ia + Φ_HC) / H_ve + θ_sup)) / H_tr,2
+
+θ_m,t = [θ_m,t−1 · (C_m/3600 − 0.5 · (H_tr,3 + H_tr,em)) + Φ_m,tot]
+      / [C_m/3600 + 0.5 · (H_tr,3 + H_tr,em)]
+```
+
+The hour's mass temperature is the mean `θ_m = (θ_m,t + θ_m,t−1) / 2` (C.9), and the surface and air follow (C.10, C.11):
+
+```
+θ_s   = [H_tr,ms · θ_m + Φ_st + H_tr,w · θ_e + H_tr,1 · (θ_sup + (Φ_ia + Φ_HC) / H_ve)]
+      / [H_tr,ms + H_tr,w + H_tr,1]
+θ_air = [H_tr,is · θ_s + H_ve · θ_sup + Φ_ia + Φ_HC] / [H_tr,is + H_ve]
+```
+
+A conditioned zone's demand in each hour takes three steps (C.4.2):
+
+1. The zone runs without heating or cooling (`Φ_HC = 0`). If the air stays between the set points, there is no demand.
+2. Otherwise a test load `Φ_HC,10 = 10 W/m² · A_f` is applied, and the demand is interpolated to the set point that was crossed: `Φ_HC,nd = Φ_HC,10 · (θ_set − θ_air,0) / (θ_air,10 − θ_air,0)`.
+3. The system's capacity is unlimited.
+
+The heating demand adds the positive `Φ_HC,nd` over the year, the cooling demand the negative ones.
+
+With an hourly `ach_vent`, `H_ve` changes each hour, and the time loop takes each hour's `H_ve` with the constants that depend on it. Heat recovery applies to that hour's ventilation, and infiltration stays one value. 8,760 equal values give the result of one value exactly.
+
+### Archetype details
+
+In the shoebox form, `expand_shoebox()` derives the floor area, the volume, the window area per facade and the opaque area: the walls less their windows, plus the roof and floor when exposed. A part that is not exposed is adiabatic. With `u_wall`, `u_roof` and `u_floor`, `H_tr,op = u_wall · opaque walls + u_roof · roof + u_floor · floor`, each U needed only when its part is exposed. Giving both `u_opaque` and `u_wall` is an error, and so is giving both `mass_class` and `mass_capacity_kj_m2k`.
+
+The shading factors multiply each window's `Φ_sol`. `shading_hot` applies during `hot_months` or during `shading_hot_period: [first_day, last_day]` (days 1 to 365, both included, wrapping the new year when the first is later), one or the other. The attribution is scaled by each hour's effective transmission, `f_eff(t) = Φ_sol,shaded / Φ_sol,unshaded`, so the weights stay a share of a watt-hour of *exterior* sun. The transmitted solar comes from the weather file through Ladybug's directional irradiance on each window, `Φ_sol(t) = Σ A_w · g · I(t)`; only the hourly weights leave the generator, and USC's sky patches never see these areas.
+
+### Attribution
+
+All 1 + 2 × 8,760 = 17,521 runs (the base year and a +ε and a −ε run for each hour) march together as one NumPy batch. Each run carries one state, its mass temperature, and the heating and cooling branches are masks. The values are marginal, at the archetype's operating point. Near a switch between heating, free floating and cooling the derivative is a one-sided one, which the central differences smooth. The series are clipped to [0, 1], with a warning when a value lies more than 0.02 outside.
+
+### The weights file
+
+`usc simulate-weights` (`generate_simulated_weights`) writes `simulated_weights.json`, with a `.png` beside it that shows benefit and harm as day × hour charts:
+
+```json
+{
+  "schema_version": 2,
+  "meta": {
+    "method": "iso13790-5r1c-perturbation",
+    "operation": "conditioned",
+    "epw": "<the weather file as given>",
+    "archetype": { "...the archetype, expanded..." },
+    "eps_w": 1.0,
+    "heating_kwh_m2": 0.0,
+    "cooling_kwh_m2": 0.0,
+    "sun_up": [8760 values, 0 or 1],
+    "generated": "<ISO timestamp>",
+    "generator": "usc simulate-weights (iso13790-5r1c)"
+  },
+  "hourly": {
+    "benefit": [8760 values in [0, 1]],
+    "harm":    [8760 values in [0, 1]]
+  }
+}
+```
+
+The 8,760 values are the hours of a non-leap year, index = hour of the year. A free-running zone has `method` `iso13790-5r1c-free-running-perturbation`, `eps_w` 10, and in place of the two demands `underheating_kh`, `overheating_kh`, `hours_below`, `hours_above`, `comfort_band_c` and `loss_coefficient_w_k`. `sun_up` marks the hours with the sun above the horizon at the weather file's site, at the middle of each hour (`sun_up_hours()`), so a reader can tell a night hour from a day hour whose weight is 0. Files of schema version 1, and version 2 files that still hold the rooms per facade direction of 30 October 2026, are read for their `hourly.benefit` and `harm`.
+
+### How benefit mode uses it
+
+With `simulated_weights_path` set, each hour's direct and diffuse radiation in the weather data is scaled by `benefit[t]` before the cumulative sky matrix is built. The sky integration then spreads each hour's weight over the patches that hour's sun and sky occupied; the cold-hours rule is the special case of weights 0 and 1. `include_harm: true` subtracts the matrix scaled by `harm[t]`, clipped at 0. `balance_temperature` and `balance_offset` are not used, with a warning if they were changed. The file is read again on every preprocessing run, and its `meta` goes into the preprocessing diagnostics. With `diagnostic_plots: true`, the diagnostics also hold the comparison dome: the difference between these weights and the simple rule's for the same config (`sky_patch_comparison_image`, with the shift in `diagnostic.json`).
 
 ## What you supply: the archetype
 
@@ -69,7 +186,7 @@ The archetype describes a *typical* building in about ten numbers. Two equivalen
 
 **Both forms** additionally take: `u_opaque`, `u_window` (W/m²K), `ach_vent`, `ach_infiltration` (1/h), `heat_recovery` (0-1), `mass_class` (`very_light` … `very_heavy`, ISO 13790 Table 12), `t_set_heating`, `t_set_cooling` (°C), and internal gains as either a flat `internal_gains_w_m2` (W/m², default 5) or a 24-value daily profile `internal_gains_profile_w_m2`.
 
-The shoebox form may instead give `u_wall` with `u_roof` and `u_floor` (W/m²K) and the switches `roof_exposed` (default true) and `floor_exposed` (default false): the walls, and the roof and floor when exposed, each at its own U; `u_opaque` keeps its meaning (walls and roof at one U). The thermal mass may be `mass_capacity_kj_m2k` (kJ/m²K of floor) instead of `mass_class`; `internal_gains_w_m2` and `ach_vent` also take 8,760 hourly values (a schedule), and the summer shading may run over `shading_hot_period: [first_day, last_day]` (days of the year, wrapping the new year when the first is later) instead of `hot_months`. The repository's `design/simulated-weights.md` §3 gives the details.
+The shoebox form may instead give `u_wall` with `u_roof` and `u_floor` (W/m²K) and the switches `roof_exposed` (default true) and `floor_exposed` (default false): the walls, and the roof and floor when exposed, each at its own U; `u_opaque` keeps its meaning (walls and roof at one U). The thermal mass may be `mass_capacity_kj_m2k` (kJ/m²K of floor) instead of `mass_class`; `internal_gains_w_m2` and `ach_vent` also take 8,760 hourly values (a schedule), and the summer shading may run over `shading_hot_period: [first_day, last_day]` (days of the year, wrapping the new year when the first is later) instead of `hot_months`. [Archetype details](#archetype-details) gives the rules.
 
 **How the zone runs** (optional): `operation` is `conditioned` (the default: ideal heating and cooling to the set points) or `free_running` ([Free running](#free-running): the set points are the comfort band), and a free-running zone takes `vent_above` (°C, default 25) and `vent_ach` (1/h, default 4) for its windows. These two keys belong to a free-running zone only; with a conditioned one they are refused.
 

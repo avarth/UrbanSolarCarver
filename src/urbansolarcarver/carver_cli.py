@@ -620,7 +620,7 @@ def simulate_weights(
 
     The file is read through benefit mode's ``simulated_weights_path`` config
     key, where it replaces the balance-point on/off hour filter with these
-    hourly weights. See design/simulated-weights.md.
+    hourly weights. See docs/simulated-weights.md.
     """
     import yaml
     from urbansolarcarver.simulated_weights import generate_simulated_weights
@@ -648,7 +648,7 @@ _ARCHETYPE_TEMPLATE = """\
 # Shoebox form: floor area, volume, facade and window areas are derived.
 # The default values are neutral examples: take real ones from TABULA (EU),
 # DOE prototypes (US), or your national code tables.
-# See design/simulated-weights.md.
+# See docs/simulated-weights.md.
 
 # --- Geometry ---
 width: {width}              # m, east-west dimension

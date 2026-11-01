@@ -24,9 +24,9 @@ in directly, so the comparison tests the hourly recurrence: annual heating
 and cooling demands agree within 1 Wh (or a relative 1e-6), and hourly air
 and mass temperatures and demands agree at sampled hours.
 Reference data: ``tests/data/oracle_5r1c_reference.json``;
-regression: ``tests/test_simulated_weights.py``. Design, coefficient provenance,
-and declared limitations: ``design/simulated-weights.md``; user-level
-documentation: ``docs/simulated-weights.md``.
+regression: ``tests/test_simulated_weights.py``. The equations, the artifact,
+the coefficient provenance and the declared limitations:
+``docs/simulated-weights.md``.
 
 This module is deliberately NumPy-only at import time (no torch, no
 ladybug) so it stays usable as a standalone generator; the EPW-facing
@@ -785,7 +785,7 @@ def _rounded(series) -> list:
 def write_simulated_weights(path, benefit, harm, meta: dict) -> Path:
     """Write the simulated_weights.json artifact and return its path.
 
-    The schema is described in ``design/simulated-weights.md``.  Values are
+    The schema is described in ``docs/simulated-weights.md``.  Values are
     rounded to 6 decimals.  Raises ValueError if a series is not 8760
     finite values in [0, 1].
     """
