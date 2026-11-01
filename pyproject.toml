@@ -104,9 +104,6 @@ layers = [
   "carving : scoring : context_geometry : voxelization : floor_plates : meshing : surface_sampling : sun : sky_patches : simulated_weights : ray_tracing : warp_kernels : io : column_postprocessing : cold_period : session : check_files",
   "chain_config : load_config : check_settings : stage_settings : pydantic_schemas : mode_registry : run_context : errors : compute_device : weather_file : archetype_defaults : grid_planning : daemon_client",
 ]
-# Known exception, to remove: run_chain returns api.PipelineResult, imported inside the function because api imports
-# api_core.chain. Moving PipelineResult into api_core would end the cycle.
-ignore_imports = ["urbansolarcarver.api_core.chain -> urbansolarcarver.api"]
 
 [[tool.importlinter.contracts]]
 name = "Settings modules load without torch, Warp or the web server"

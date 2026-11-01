@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Collection, Iterable, Optional, Union
+from typing import Collection, Iterable, Optional, Union
 
 from ..chain_config import ChainConfig, load_chain
 from ..run_context import Issue, RunContext, report_progress, run_context, stage_context
@@ -12,11 +12,9 @@ from ..stage_settings import PIPELINE_STAGES, stage_folder, stages_needed_for
 from ._stage_io import load_upstream
 from .exporting import ExportingResult, exporting
 from .massing import MassingResult, massing
+from .pipeline_result import PipelineResult
 from .preprocessing import preprocessing
 from .thresholding import thresholding
-
-if TYPE_CHECKING:  # api.py imports this module, so PipelineResult is imported where it is used
-    from ..api import PipelineResult
 
 # The stages that run once per criterion, and the folder under the run folder that holds each criterion's folders.
 _CRITERION_STAGES = ("preprocessing", "thresholding")
@@ -33,7 +31,7 @@ class ChainResult:
     issues reported while that criterion ran. ``exporting`` and ``massing`` are built from the last criterion and are
     None when they were not produced. ``issues`` are all the issues of the call, in the order they were noticed.
     """
-    criteria: tuple["PipelineResult", ...]
+    criteria: tuple[PipelineResult, ...]
     exporting: Optional[ExportingResult]
     massing: Optional[MassingResult]
     issues: tuple[Issue, ...]
@@ -116,8 +114,6 @@ def run_chain(
     RunCancelled
         If the context is cancelled; stages that finished keep their output.
     """
-    from ..api import PipelineResult  # here, not at the top: api.py imports this module
-
     wanted = [produce] if isinstance(produce, str) else list(produce)
     if not wanted or not set(wanted) <= set(PIPELINE_STAGES):
         raise ValueError(

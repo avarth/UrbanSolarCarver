@@ -40,7 +40,11 @@ The `PipelineResult` has one attribute per stage (`preprocessing`, `thresholding
 
 ::: urbansolarcarver.api
     options:
-      members: [run_pipeline, PipelineResult]
+      members: [run_pipeline]
+
+::: urbansolarcarver.api_core.pipeline_result
+    options:
+      members: [PipelineResult]
 
 ## run_chain
 

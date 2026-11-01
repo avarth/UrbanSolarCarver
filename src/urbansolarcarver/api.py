@@ -4,7 +4,6 @@ Importing this module imports torch, and Warp if it is installed, through
 ``api_core``.
 """
 from __future__ import annotations
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional, Union
 
@@ -15,7 +14,8 @@ from .api_core import (
     PreprocessingResult, ThresholdingResult, ExportingResult, MassingResult,
 )
 from .api_core.chain import ChainResult, run_chain
-from .run_context import Issue, RunContext, report_progress, run_context, stage_context
+from .api_core.pipeline_result import PipelineResult
+from .run_context import RunContext, report_progress, run_context, stage_context
 from .stage_settings import PIPELINE_STAGES, stage_folder, stages_needed_for, stages_to_rerun
 
 # The stage whose output each stage reads.
@@ -24,21 +24,6 @@ _UPSTREAM_STAGE = {
     "exporting": "thresholding",
     "massing": "thresholding",
 }
-
-
-@dataclass(frozen=True)
-class PipelineResult:
-    """What one :func:`run_pipeline` call produced.
-
-    Each stage attribute holds the Result of a stage that ran in this call and
-    is None for a stage that did not.  ``issues`` are the conditions reported
-    during the call, from all stages, in the order they were noticed.
-    """
-    preprocessing: Optional[PreprocessingResult]
-    thresholding: Optional[ThresholdingResult]
-    exporting: Optional[ExportingResult]
-    massing: Optional[MassingResult]
-    issues: tuple[Issue, ...]
 
 
 def run_pipeline(

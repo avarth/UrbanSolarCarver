@@ -48,8 +48,8 @@ keeps the settings modules free of torch, Warp and the web server, so the CLI an
 starting the GPU stack.
 
 `tests/test_architecture.py` runs these rules with every test run (`lint-imports` from the repository gives the same
-report). A new module must be added to a layer, or the test fails. Known exceptions are listed with
-`ignore_imports` and a comment saying why; there is one today, `api_core.chain` importing `api`.
+report). A new module must be added to a layer, or the test fails. An exception would be listed with
+`ignore_imports` and a comment saying why; there is none today.
 
 ## The app
 

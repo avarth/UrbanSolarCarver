@@ -24,6 +24,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **`PipelineResult` is defined in `urbansolarcarver.api_core.pipeline_result`**, below `api`, since `run_chain` builds
+  it too. `from urbansolarcarver import PipelineResult` and `from urbansolarcarver.api import PipelineResult` work as
+  before.
 - **The typical building runs free**: the energy-weighted Solar usefulness weights now measure passive performance.
   The room has no heating or cooling; its two set points are the limits of a **comfort band**, its windows open for
   natural ventilation (above **Open the windows above**, 25 °C in the examples, when outdoors is cooler, up to **Open
