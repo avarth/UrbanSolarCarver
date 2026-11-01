@@ -17,7 +17,7 @@ import { dayAndMonth, messages } from "../messages";
 import { WarningIcon } from "../settings_form/SettingField";
 import { SettingTooltip } from "../settings_form/SettingTooltip";
 import { formatNumber, formattedNumber, groupedDigits } from "../steps/format_numbers";
-import { DialogFrame } from "../steps/ProjectDialogs";
+import { DialogFrame } from "../common/dialogs";
 import { useAppTheme, type AppTheme } from "../theme/app_theme";
 import { PanelSection } from "./PanelSection";
 import { DeleteLibraryEntryDialog, LibraryNameDialog } from "./TypicalBuildingDialogs";

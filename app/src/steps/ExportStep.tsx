@@ -11,7 +11,7 @@ import { messages } from "../messages";
 import type { FormState } from "../settings_form/form_state";
 import { settingView } from "../settings_form/presentation";
 import { SettingField, WarningIcon } from "../settings_form/SettingField";
-import type { StageState } from "./step_summaries";
+import type { StageState } from "../stages";
 import "./steps.css";
 
 export interface ExportDownload {

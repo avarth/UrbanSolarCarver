@@ -8,7 +8,7 @@ import { ApiError, getSunChart, getSunPositions, serviceProblemOf, type SunChart
 import { dayAndMonth, messages } from "../messages";
 import type { AnalysisPeriodField } from "../settings_form/analysis_period";
 import type { Point3 } from "../viewer/local_origin";
-import { sunAt, type ShadeHours, type ShadePalette } from "../viewer/sun_study";
+import { sunAt, type ShadeHours, type ShadePalette, type SunStudyView } from "../viewer/sun_study";
 
 const NOT_FOUND = 404;
 // The sun of the day is read every 5 minutes; the time strip moves in the same steps.
@@ -44,14 +44,6 @@ export interface SunStudySettings {
   /** The period of the hours in shade: its days, and its hours with the end hour counted (8 to 15 h is 08:00 to 16:00). */
   period: ShadePeriod;
   palette: ShadePalette;
-}
-
-/** What the 3D view draws of the sun tool. */
-export interface SunStudyView {
-  chart: SunChart | null;
-  sun: Point3 | null;
-  shadows: boolean;
-  shade: (ShadeHours & { title: string }) | null;
 }
 
 export interface SunStudyHook {

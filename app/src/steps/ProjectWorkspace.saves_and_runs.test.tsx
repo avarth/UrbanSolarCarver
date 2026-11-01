@@ -7,7 +7,7 @@ import { FakeViewerScene } from "../viewer/fake_scene_for_test";
 import { addStyleSheetForTest } from "../viewer_overlays/render_for_test";
 import type { ModeInfo, ProjectDetail } from "../api_client/client";
 import { LAYERS_SHOWN_IN_STEP, type OpenProjectSettingsSaver } from "./ProjectWorkspace";
-import type { PipelineStage, StageState } from "./step_summaries";
+import type { PipelineStage, StageState } from "../stages";
 import {
   CURRENT, FACADES, OUT_OF_DATE, ROOFS, WINDOWS, card, cardLine, carvingSummaryOf, openChain, panel, panelFrame, select, selectedCardName,
   service as chainService,

@@ -3,14 +3,13 @@
 // cannot start in Criteria and in Site and grid, what the results need to know about the criteria (useResultSteps), and the cards'
 // lines and the chain line, which read the results (cardsOf).
 import { useRef } from "react";
-import { serviceProblemOf, updateCriterion, type CriterionEntry, type HealthReply, type ModeInfo } from "../api_client/client";
+import { serviceProblemOf, updateCriterion, type CriterionEntry, type HealthReply, type ModeInfo, type RunSummary } from "../api_client/client";
 import { messages } from "../messages";
 import type { FormStart, FormState, SettingsForm } from "../settings_form/form_state";
 import { splitSettings, type StepFormAction } from "../settings_form/two_forms";
-import type { ResultSteps, ResultStepsContext } from "../steps/result_steps";
 import { criterionProgressOf, pipelineRecordOf, runningCriterion, type RunFailure, type RunLoop } from "../steps/run_state";
 import { runAnalysisBlocker, stepOfSetting } from "../steps/SettingsStep";
-import type { StageState, StepName } from "../steps/step_summaries";
+import type { StageState, StepName } from "../stages";
 import {
   activeCriteria, cardLineOf, chainSummaryLine, criteriaProtectingNothing, criterionStatus, stagesDuringRun, type StagesByCriterion,
 } from "./criteria_state";
@@ -73,10 +72,49 @@ export interface WorkspaceCriteriaSource {
   onServiceProblem: (error: unknown) => void;
 }
 
-/** The criteria's parts of the result steps' context (useResultSteps). */
-export type CriteriaOfResults = Pick<ResultStepsContext,
-  "criterionStagesWithResults" | "carvedByCriterionIds" | "carvedByCriterionWanted" | "carvedByCriterionOutOfDate" | "criterionStages" | "chainOrder"
-  | "analysisWaitsFor" | "buildWaitReason" | "showRefusalOfCriterion" | "saveToCriterion" | "criterionBypassed" | "criterionNames">;
+/** The criteria's parts of the result steps' context (useResultSteps, which extends it). */
+export interface CriteriaOfResults {
+  /** The selected criterion's stages with output (run_results.ts asks for its score points and sky dome only then). */
+  criterionStagesWithResults?: readonly string[];
+  /** The criteria that are on, in chain order, when there are two or more and every one has run: the by-criterion layer is asked for then. */
+  carvedByCriterionIds?: readonly string[] | null;
+  /** Two or more criteria are on: the by-criterion layer belongs to the view, and is listed as missing while it has no data. */
+  carvedByCriterionWanted?: boolean;
+  /** The thresholding of some criterion that is on is not current (as shown): the by-criterion layer is dimmed. */
+  carvedByCriterionOutOfDate?: boolean;
+  /**
+   * The selected criterion's own analysis and carving stages, as shown (out of date while the form differs from the stored
+   * settings): its carving rule locks while its own analysis is out of date. Absent: the project's stages.
+   */
+  criterionStages?: Record<"preprocessing" | "thresholding", StageState>;
+  /** The ids of the criteria in chain order: the order of their stages in a run's progress. */
+  chainOrder?: readonly string[];
+  /** The criteria's names by id, which label their stages in a run's progress; absent with one criterion. */
+  criterionNames?: Readonly<Record<string, string>>;
+  /**
+   * Another criterion that is on and whose analysis is not current (and whether it protects nothing): a carving change of the
+   * selected one is then saved but runs nothing, since the run would trace that criterion first, which only Run analysis starts
+   * (M10). Absent or null: none.
+   */
+  analysisWaitsFor?: { name: string; protectsNothing: boolean } | null;
+  /**
+   * Why the builds wait while the analysis of the chain is not current, naming the criterion (with several criteria): "Run the
+   * analysis for {name} first", "Add test surfaces to {name} first". Absent or null: the settings changed since the analysis.
+   */
+  buildWaitReason?: string | null;
+  /** The selected criterion is off: its panel says so in place of a carving rule. */
+  criterionBypassed?: boolean;
+  /**
+   * Saves threshold values to a criterion that is not the one shown (a value of the threshold queue whose turn came after another
+   * card was selected): its settings with the values, if it still has *mode*. Resolves with whether they were stored.
+   */
+  saveToCriterion?: (criterionId: string, mode: string, values: Record<string, unknown>) => Promise<boolean>;
+  /**
+   * Shows a run refused for another criterion's settings: selects that criterion and marks the fields once its settings are
+   * shown. Absent: the fields are marked in the forms shown.
+   */
+  showRefusalOfCriterion?: (criterionId: string, fieldErrors: RunFailure["field_errors"]) => void;
+}
 
 export interface WorkspaceCriteria {
   selection: CriterionSelection;
@@ -93,7 +131,8 @@ export interface WorkspaceCriteria {
   /** What the shown criterion's panel says over its settings about a refused start; null when nothing. */
   panelProblem: string | null;
   /** The cards and the chain line, from the results. */
-  cardsOf: (resultSteps: Pick<ResultSteps, "results" | "criteriaAwaitingNumbers">, disabledReason: string | null) => {
+  cardsOf: (resultSteps: { results: { summary: RunSummary | null }; criteriaAwaitingNumbers: ReadonlySet<string> },
+            disabledReason: string | null) => {
     list: CriterionListProps; chainLine: string | null;
   };
 }

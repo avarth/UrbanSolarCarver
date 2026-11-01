@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { ProjectDetail } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
-import type { PipelineStage, StageState } from "./step_summaries";
+import type { PipelineStage, StageState } from "../stages";
 import { FACADES, ROOFS, WINDOWS, deleteCriterion, openChain, select, service as chainService } from "./chain_service_for_test";
 import {
   CARVED, CARVING, ENVELOPE, FakeService, MASSING, NOTHING_RUN, TRIANGLE_OBJ, buttonIn, container, criterionEntry, endWorkspaceTest, openStep,

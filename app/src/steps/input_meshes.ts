@@ -10,7 +10,7 @@ import { inputFileUrl, type InputFileInfo } from "../api_client/client";
 import { messages } from "../messages";
 import { loadMesh, MeshNotReadableError } from "../viewer/loaders";
 import type { Bounds3, Point3 } from "../viewer/local_origin";
-import type { InputRole } from "./InputsStep";
+import type { InputRole } from "../common/InputBox";
 
 export type MeshRole = Exclude<InputRole, "weather">;
 

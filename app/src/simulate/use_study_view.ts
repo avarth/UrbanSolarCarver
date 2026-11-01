@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, getStudySkyPatches, getStudyValues, serviceProblemOf, type SkyDome, type StudyChange } from "../api_client/client";
 import { messages } from "../messages";
 import type { RunLoop } from "../steps/run_state";
-import type { StageState } from "../steps/step_summaries";
+import type { StageState } from "../stages";
 import type { StudyPalette } from "../viewer/study_palettes";
 import { changeOf, changeTolerance, distributionOf, highestOf, keptShareOf, OPEN_COLUMN, shareAtOrAbove, type ColourBy, type StudyGeometry,
   type StudyStatistics, type StudyView } from "./study_values";

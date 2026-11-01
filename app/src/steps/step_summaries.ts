@@ -1,33 +1,8 @@
 // The one-line summary and the state mark of each step row (UX 4.1), from what the app knows of the open project.
 import { messages } from "../messages";
 import { formatNumber, formatPercent, formattedNumber, withUnit } from "./format_numbers";
-import modeTiles from "./mode_tiles.json";
-
-/** The steps (spec 7.1): the site's inputs, the shared settings, the criteria, then the envelope and massing and the downloads. */
-export type StepName = "inputs" | "site_and_grid" | "criteria" | "envelope_and_massing" | "export";
-export type PipelineStage = "preprocessing" | "thresholding" | "exporting" | "massing";
-export type StageState = "current" | "out_of_date" | "missing";
-export type StepMark = "done" | "error" | "none";
-
-/** The steps in the order of the accordion. */
-export const STEP_NAMES: readonly StepName[] = ["inputs", "site_and_grid", "criteria", "envelope_and_massing", "export"];
-
-export interface ModeTile {
-  engine_name: string;
-  plain_name: string;
-  one_line: string;
-  tooltip: string;
-  needs: string;
-  /** What a criterion of the mode may protect, under the drop box of its test surfaces while it has none (7.2: hints only). */
-  protects_hint: string;
-  symbol: string;
-}
-
-export const MODE_TILES: readonly ModeTile[] = modeTiles;
-
-export function plainModeName(engineName: string): string {
-  return MODE_TILES.find((tile) => tile.engine_name === engineName)?.plain_name ?? engineName;
-}
+import { plainModeName } from "../modes";
+import type { PipelineStage, StageState, StepMark, StepName } from "../stages";
 
 export interface ProjectViewState {
   maxVolumeFiles: number;

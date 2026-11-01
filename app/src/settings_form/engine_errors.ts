@@ -3,7 +3,7 @@
 // "Value error, " in front. Here such an error goes under every setting it names, so their fields are outlined and their
 // folds open; the known ones are said in the interface's own sentences, and any other has the labels in place of the names.
 import { messages } from "../messages";
-import { plainModeName } from "../steps/step_summaries";
+import { plainModeName } from "../modes";
 import { ANALYSIS_PERIOD_FIELDS, presentedSettingOf, SETTING_PRESENTATIONS, settingView } from "./presentation";
 
 /** An engine error as the form shows it: under each of *settings*, or for the step when it names none. */

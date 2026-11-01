@@ -12,7 +12,7 @@ import { listedWithAnd, messages } from "../messages";
 import { settingView } from "../settings_form/presentation";
 import { MessageParts, placedTooltipStyle, placementUnder, type TooltipPlacement } from "../settings_form/SettingTooltip";
 import { ModeTileSymbol } from "./ModeTileSymbols";
-import { MODE_TILES, plainModeName } from "./step_summaries";
+import { MODE_TILES, plainModeName } from "../modes";
 import "./steps.css";
 
 const TILES_PER_ROW = 3;

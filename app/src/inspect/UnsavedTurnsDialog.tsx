@@ -7,7 +7,7 @@
 // that of the save under way included, keeps the dialog open with its reason, so no failed save goes unseen in another workspace.
 import { useRef, useState, type ReactNode } from "react";
 import { messages } from "../messages";
-import { DialogFrame, ProblemLine } from "../steps/ProjectDialogs";
+import { DialogFrame, ProblemLine } from "../common/dialogs";
 import type { WorkspaceMode } from "../steps/WorkspaceModeSwitch";
 
 /** What the open workspace gives the app for its turns not saved and its saves under way. */

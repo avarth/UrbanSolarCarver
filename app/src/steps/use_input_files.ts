@@ -10,7 +10,7 @@ import { hemisphereOfLatitude, seasonsOfLatitude, type Hemisphere } from "../set
 import type { FormState, SettingsForm } from "../settings_form/form_state";
 import { localOrigin, type Bounds3, type Point3 } from "../viewer/local_origin";
 import { useInputGeometry, type InputGeometry, type MeshRole } from "./input_meshes";
-import { inputProblemText, type AddInputFiles, type InputRole, type RemoveInputFile } from "./InputsStep";
+import { inputProblemText, type AddInputFiles, type InputRole, type RemoveInputFile } from "../common/InputBox";
 import { analysisPeriodOf } from "./sun_path_request";
 import type { WeatherFileChange } from "./weather_change_notice";
 

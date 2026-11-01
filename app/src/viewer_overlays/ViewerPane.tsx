@@ -29,7 +29,7 @@ import { voxelCentres, type ScorePoints } from "../viewer/score_points_decoder";
 import type { Hemisphere } from "../viewer/sky_dome";
 import { sunPathLegend, sunPathObjects, type SunPathWithNorth } from "../viewer/sun_path";
 import { sunStudyObjects } from "../viewer/sun_study";
-import type { SunStudyView } from "../simulate/use_sun_study";
+import type { SunStudyView } from "../viewer/sun_study";
 import { useAppTheme } from "../theme/app_theme";
 import { AxisGizmo } from "./AxisGizmo";
 import { Compass } from "./Compass";

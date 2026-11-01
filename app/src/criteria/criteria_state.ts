@@ -4,7 +4,7 @@ import type { ChainSummary, CriterionCarvingSummary, CriterionEntry } from "../a
 import { messages } from "../messages";
 import { formatPercent } from "../steps/format_numbers";
 import type { StageRunState } from "../steps/run_state";
-import type { StageState } from "../steps/step_summaries";
+import type { StageState } from "../stages";
 
 export type CardStatus =
   | { kind: "current" | "out_of_date" | "running" | "bypassed" | "no_test_surfaces" | "not_run" }

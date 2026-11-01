@@ -2,7 +2,7 @@
 // lists file names only, so after an upload or a removal the stored files are asked for again (with their triangle counts, for the
 // box and the 3D view); the stage status follows every change, as after a change of the site's inputs.
 import { getInputFiles, serviceProblemOf, type InputFileInfo } from "../api_client/client";
-import { inputProblemText } from "../steps/InputsStep";
+import { inputProblemText } from "../common/InputBox";
 import type { CriteriaHook } from "./use_criteria";
 
 export interface TestSurfaceContext {

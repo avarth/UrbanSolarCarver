@@ -7,7 +7,7 @@ import { useId, type RefObject } from "react";
 import { messages } from "../messages";
 import { useMenuPopup } from "../steps/menu_popup";
 import { ModeTileSymbol } from "../steps/ModeTileSymbols";
-import { MODE_TILES } from "../steps/step_summaries";
+import { MODE_TILES } from "../modes";
 
 interface ModeMenuProps {
   /** The menu's id, which the anchor names (aria-controls) while the menu is open. */

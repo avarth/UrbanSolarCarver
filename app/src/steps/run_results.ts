@@ -15,7 +15,7 @@ import { decodeScorePoints, type ScorePoints } from "../viewer/score_points_deco
 import type { PlatesFile } from "./EnvelopeAndMassingStep";
 import { exportedMeshPath, MASSING_JSON_PATH, MASSING_OBJ_PATH, meshFormatOf } from "./ExportStep";
 import { criterionOfKey, runStages, stageOfKey, stagesDone, type RunRecord } from "./run_state";
-import type { PipelineStage } from "./step_summaries";
+import type { PipelineStage } from "../stages";
 
 export interface RunResults {
   summary: RunSummary | null;

@@ -5,9 +5,9 @@
 // (Simulate) draws the box too: its files, to add to, and the project's stored files to use.
 import type { InputFileInfo } from "../api_client/client";
 import { messages } from "../messages";
-import { InputBox } from "../steps/InputsStep";
-import { useDialogRequest } from "../steps/ProjectDialogs";
-import { MODE_TILES } from "../steps/step_summaries";
+import { InputBox } from "../common/InputBox";
+import { useDialogRequest } from "../common/dialogs";
+import { MODE_TILES } from "../modes";
 
 interface ProtectsBoxProps {
   /** The criterion's test surface files, with their triangle counts. */

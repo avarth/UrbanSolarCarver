@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { CriterionCarvingSummary, CriterionEntry } from "../api_client/client";
-import type { StageState } from "../steps/step_summaries";
+import type { StageState } from "../stages";
 import {
   activeCriteria, cardLineOf, cardResultLine, cardStatusText, chainSummaryLine, criterionStatus, filesOfOtherCriteria, orderAfterDropping, orderAfterMoving,
   selectionAfterRemoving, criteriaProtectingNothing, stagesByCriterionOf, stagesDuringRun,

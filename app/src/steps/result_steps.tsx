@@ -14,17 +14,18 @@ import type { LayerName } from "../viewer/scene";
 import type { ViewerPaneProps } from "../viewer_overlays/ViewerPane";
 import { CarvingStep, thresholdControlOf, useAutoUpdate } from "./CarvingStep";
 import { CriteriaRunBar } from "./CriteriaRunBar";
+import type { CriteriaOfResults } from "../criteria/use_workspace_criteria";
 import { EnvelopeAndMassingStep } from "./EnvelopeAndMassingStep";
 import { exportDownloads, ExportStep, type ExportDownload } from "./ExportStep";
 import { RunProgress, type GoToSetting } from "./RunProgress";
 import { RunReportPanel } from "./RunReportPanel";
 import { runAnalysisAfterSaving, RunAnalysisButton, SettingsToFix } from "./SettingsStep";
 import {
-  activeRunReason, criterionProgressOf, pipelineRecordOf, runProgressShare, runStages, stageRunState, type RunFailure, type RunLoop, type RunOrigin, type RunOutcome,
+  activeRunReason, criterionProgressOf, pipelineRecordOf, runProgressShare, runStages, stageRunState, type RunLoop, type RunOrigin, type RunOutcome,
   type RunRecord,
 } from "./run_state";
 import { useResultsFollowingRun, useRunResults, type RunResults } from "./run_results";
-import type { PipelineStage, StageState, StepName } from "./step_summaries";
+import type { PipelineStage, StageState, StepName } from "../stages";
 import { createThresholdUpdateQueue } from "./threshold_queue";
 
 export const ANALYSIS_STAGES: PipelineStage[] = ["thresholding"];     // Run analysis: preprocessing is added when it is out of date
@@ -131,53 +132,13 @@ export function carvingOfCriterion(summary: RunSummary | null, criterionId?: str
   return entries.find((entry) => entry.id === criterionId)?.carving ?? null;
 }
 
-export interface ResultStepsContext {
+export interface ResultStepsContext extends CriteriaOfResults {
   token: string;
   project: string;
   /** The selected criterion, whose carving, score points and sky dome are shown; absent: the service's default. */
   criterionId?: string;
-  /** The selected criterion's stages with output (run_results.ts asks for its score points and sky dome only then). */
-  criterionStagesWithResults?: readonly string[];
-  /** The criteria that are on, in chain order, when there are two or more and every one has run: the by-criterion layer is asked for then. */
-  carvedByCriterionIds?: readonly string[] | null;
-  /** Two or more criteria are on: the by-criterion layer belongs to the view, and is listed as missing while it has no data. */
-  carvedByCriterionWanted?: boolean;
-  /** The thresholding of some criterion that is on is not current (as shown): the by-criterion layer is dimmed. */
-  carvedByCriterionOutOfDate?: boolean;
-  /**
-   * The selected criterion's own analysis and carving stages, as shown (out of date while the form differs from the stored
-   * settings): its carving rule locks while its own analysis is out of date. Absent: the project's stages.
-   */
-  criterionStages?: Record<"preprocessing" | "thresholding", StageState>;
-  /** The ids of the criteria in chain order: the order of their stages in a run's progress. */
-  chainOrder?: readonly string[];
-  /** The criteria's names by id, which label their stages in a run's progress; absent with one criterion. */
-  criterionNames?: Readonly<Record<string, string>>;
   /** The settings that belong to a criterion (GET criterion-keys): a run failing on another, a shared one, names no criterion. */
   criterionKeys?: ReadonlySet<string>;
-  /**
-   * Another criterion that is on and whose analysis is not current (and whether it protects nothing): a carving change of the
-   * selected one is then saved but runs nothing, since the run would trace that criterion first, which only Run analysis starts
-   * (M10). Absent or null: none.
-   */
-  analysisWaitsFor?: { name: string; protectsNothing: boolean } | null;
-  /**
-   * Why the builds wait while the analysis of the chain is not current, naming the criterion (with several criteria): "Run the
-   * analysis for {name} first", "Add test surfaces to {name} first". Absent or null: the settings changed since the analysis.
-   */
-  buildWaitReason?: string | null;
-  /** The selected criterion is off: its panel says so in place of a carving rule. */
-  criterionBypassed?: boolean;
-  /**
-   * Saves threshold values to a criterion that is not the one shown (a value of the threshold queue whose turn came after another
-   * card was selected): its settings with the values, if it still has *mode*. Resolves with whether they were stored.
-   */
-  saveToCriterion?: (criterionId: string, mode: string, values: Record<string, unknown>) => Promise<boolean>;
-  /**
-   * Shows a run refused for another criterion's settings: selects that criterion and marks the fields once its settings are
-   * shown. Absent: the fields are marked in the forms shown.
-   */
-  showRefusalOfCriterion?: (criterionId: string, fieldErrors: RunFailure["field_errors"]) => void;
   form: FormState;
   /** The form after every action so far, read after a save is awaited. */
   currentForm: () => FormState;

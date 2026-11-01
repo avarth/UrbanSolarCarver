@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
-import { STEP_NAMES, stepMark, stepNotUsableYet, stepSummary, type PipelineStage, type ProjectViewState, type StageState, type StepName } from "./step_summaries";
+import { stepMark, stepNotUsableYet, stepSummary, type ProjectViewState } from "./step_summaries";
+import { STEP_NAMES, type PipelineStage, type StageState, type StepName } from "../stages";
 
 const THIN = "\u202f";
 const NBSP = "\u00a0";

@@ -2,9 +2,11 @@
 // stages, criteria and run summary.
 import type { CriterionEntry, InputFileInfo, RunSummary } from "../api_client/client";
 import { shownValue, type FormState } from "../settings_form/form_state";
-import type { InputRole } from "./InputsStep";
+import type { InputRole } from "../common/InputBox";
 import { settingsToFixByStep } from "./SettingsStep";
-import { plainModeName, type PipelineStage, type ProjectViewState, type StageState } from "./step_summaries";
+import { type ProjectViewState } from "./step_summaries";
+import { plainModeName } from "../modes";
+import { type PipelineStage, type StageState } from "../stages";
 
 export interface ProjectViewInputs {
   files: Record<InputRole, InputFileInfo[]>;

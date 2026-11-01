@@ -15,7 +15,7 @@ import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf, SETTING_PRESENTATIONS, settings
 import { fieldErrorOf, gridLineOf, SettingField, WarningIcon, type SettingFieldExtras } from "../settings_form/SettingField";
 import { SettingGroup } from "../settings_form/SettingGroup";
 import { gridIsOverBudget, smallestVoxelSizeWithinBudget } from "./grid_budget";
-import type { StepName } from "./step_summaries";
+import type { StepName } from "../stages";
 import type { WeatherChangeSuggestion } from "./weather_change_notice";
 import "./steps.css";
 

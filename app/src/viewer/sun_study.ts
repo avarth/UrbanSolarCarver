@@ -74,3 +74,11 @@ export function sunAt<Position extends { minute: number; vector: number[] }>(pos
   }
   return nearest;
 }
+
+/** What the 3D view draws of the sun tool. */
+export interface SunStudyView {
+  chart: SunChart | null;
+  sun: Point3 | null;
+  shadows: boolean;
+  shade: (ShadeHours & { title: string }) | null;
+}

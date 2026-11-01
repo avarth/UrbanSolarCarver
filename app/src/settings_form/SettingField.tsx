@@ -3,7 +3,7 @@
 import { useId, useState, type ReactNode } from "react";
 import { messages } from "../messages";
 import { formattedNumber, withUnit } from "../steps/format_numbers";
-import { plainModeName } from "../steps/step_summaries";
+import { plainModeName } from "../modes";
 import type { ColdPeriodState, Hemisphere } from "./analysis_period";
 import { defaultValue, shownValue, type FormState, type SchemaProperty } from "./form_state";
 import {

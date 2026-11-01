@@ -10,7 +10,7 @@ import type { FormState } from "../settings_form/form_state";
 import { settingsForStep } from "../settings_form/presentation";
 import { SettingGroup } from "../settings_form/SettingGroup";
 import { storeyColour } from "../viewer/colour_scales";
-import { NumberTile } from "./CarvingStep";
+import { NumberTile } from "../common/NumberTile";
 import { formatNumber } from "./format_numbers";
 import "./steps.css";
 

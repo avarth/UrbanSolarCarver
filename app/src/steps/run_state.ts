@@ -17,7 +17,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, cancelRun, failureTextOf, serviceProblemOf, startRun, startSimulation as postSimulation } from "../api_client/client";
 import { subscribeToRunEvents, type RunEvent } from "../api_client/events";
 import { messages } from "../messages";
-import type { PipelineStage } from "./step_summaries";
+import type { PipelineStage } from "../stages";
 
 export type StageRunState = "waiting" | "running" | "done";
 export type RunEnding = "finished" | "failed" | "cancelled" | "connection_lost";

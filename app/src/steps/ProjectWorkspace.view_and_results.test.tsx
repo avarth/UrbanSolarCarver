@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { ProjectDetail } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
-import type { PipelineStage, StageState } from "./step_summaries";
+import type { PipelineStage, StageState } from "../stages";
 import {
   CARVED, CARVING, ENVELOPE, FakeService, MASSING, NOTHING_RUN, buildPart, buttonIn, container, endWorkspaceTest, openStep,
   openWorkspace, project, reasonOf, settle, startWorkspaceTest, type, waitForTheSave,

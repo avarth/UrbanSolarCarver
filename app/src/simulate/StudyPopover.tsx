@@ -12,7 +12,7 @@ import { messages } from "../messages";
 import { ANALYSIS_PERIOD_FIELDS, BALANCE_TEMPERATURE_FIELDS, SETTING_PRESENTATIONS } from "../settings_form/presentation";
 import { AnalysisPeriod, type AnalysisPeriodField } from "../settings_form/widgets/AnalysisPeriod";
 import { BalanceTemperatureSlider } from "../settings_form/widgets/BalanceTemperatureSlider";
-import { useDialogRequest } from "../steps/ProjectDialogs";
+import { useDialogRequest } from "../common/dialogs";
 
 interface StudyPopoverProps {
   id: string;

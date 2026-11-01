@@ -16,7 +16,7 @@ import { shownValue, type FormState } from "../settings_form/form_state";
 import { BALANCE_TEMPERATURE_FIELDS } from "../settings_form/presentation";
 import { SettingTooltip } from "../settings_form/SettingTooltip";
 import { ModeStep } from "../steps/ModeStep";
-import { useDialogRequest } from "../steps/ProjectDialogs";
+import { useDialogRequest } from "../common/dialogs";
 import { SettingsStep, WeatherChangeRegion, type WeatherChangeNoticeContent } from "../steps/SettingsStep";
 import { PanelSection, type PanelSections } from "./PanelSection";
 import { ProtectsBox } from "./ProtectsBox";

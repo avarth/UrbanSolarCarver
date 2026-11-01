@@ -12,7 +12,7 @@ import { FakeViewerScene, pretendTheBrowserHasWebGl } from "../viewer/fake_scene
 import { renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { ProjectWorkspace } from "./ProjectWorkspace";
 import { useRunLoop } from "./run_state";
-import type { PipelineStage, StageState } from "./step_summaries";
+import type { PipelineStage, StageState } from "../stages";
 import type { WorkspaceMode } from "./WorkspaceModeSwitch";
 
 export const SCHEMA = {

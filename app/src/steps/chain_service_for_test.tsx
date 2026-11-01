@@ -4,7 +4,8 @@
 import { act } from "react";
 import { expect } from "vitest";
 import type { ChainSummary, CriterionCarvingSummary, CriterionEntry, ProjectDetail } from "../api_client/client";
-import { plainModeName, type PipelineStage, type StageState } from "./step_summaries";
+import { plainModeName } from "../modes";
+import { type PipelineStage, type StageState } from "../stages";
 import {
   CARVED, CARVING, CRITERION_KEYS, FakeService, buttonIn, container, json, openPanelSection, openStep, openWorkspace, project, settle, showCriterionCards, showCriterionEditor, stepRow,
 } from "./project_workspace_for_test";

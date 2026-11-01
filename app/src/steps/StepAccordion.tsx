@@ -2,7 +2,7 @@
 // closed, its one-line summary. Steps never lock: a step that cannot be used yet says why when opened. The summary of a step
 // with a setting to fix stays visible while it is open. The open step's run button is pinned under the list.
 import { useId, type ReactNode } from "react";
-import type { StepMark, StepName } from "./step_summaries";
+import type { StepMark, StepName } from "../stages";
 import "./steps.css";
 
 export interface AccordionStep {

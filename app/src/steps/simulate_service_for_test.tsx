@@ -5,7 +5,7 @@ import { act } from "react";
 import type { CriterionEntry, InputFileInfo, MetricInfo, SkyDome, StudyEntry, StudyWithState } from "../api_client/client";
 import { ChainService, CURRENT, FACADES, OUT_OF_DATE, openChainWith, type CriterionStages } from "./chain_service_for_test";
 import { buttonIn, container, json, settle, switchMode } from "./project_workspace_for_test";
-import type { PipelineStage, StageState } from "./step_summaries";
+import type { PipelineStage, StageState } from "../stages";
 
 const PERIOD = { start_month: 12, start_day: 21, start_hour: 10, end_month: 12, end_day: 21, end_hour: 14, time_basis: "standard" };
 

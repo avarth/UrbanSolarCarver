@@ -8,7 +8,7 @@ import type { ThresholdSpec } from "../settings_form/widgets/ThresholdRule";
 import { carvingRuleOf, manualCarveAmountOf, thresholdControlOf } from "../steps/CarvingStep";
 import { formattedNumber, withUnit } from "../steps/format_numbers";
 import { fieldsWithErrors } from "../steps/SettingsStep";
-import { plainModeName } from "../steps/step_summaries";
+import { plainModeName } from "../modes";
 
 export type PanelSectionId = "test_surfaces" | "mode" | "settings" | "carving";
 

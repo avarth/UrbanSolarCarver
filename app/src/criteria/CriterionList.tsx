@@ -5,7 +5,7 @@
 import { useEffect, useId, useRef, useState, type DragEvent, type ReactNode } from "react";
 import type { CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
-import { useDialogRequest } from "../steps/ProjectDialogs";
+import { useDialogRequest } from "../common/dialogs";
 import { CriterionCard, type CriterionMenuItem } from "./CriterionCard";
 import { DeleteCriterionDialog, RenameCriterionDialog } from "./CriterionDialogs";
 import { orderAfterDropping, orderAfterMoving } from "./criteria_state";

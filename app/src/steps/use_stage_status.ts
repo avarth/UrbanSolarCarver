@@ -7,7 +7,7 @@ import { dismissInputChanges, getStageStatus, type CriterionEntry, type InputFil
 import { activeCriteria, stagesByCriterionOf, type StagesByCriterion } from "../criteria/criteria_state";
 import { analysisDiffersFromStored, type FormState } from "../settings_form/form_state";
 import type { RunLoop } from "./run_state";
-import type { PipelineStage, StageState } from "./step_summaries";
+import type { PipelineStage, StageState } from "../stages";
 
 export interface StageStatusContext {
   token: string;

@@ -8,7 +8,7 @@ import type { ScorePoints } from "../viewer/score_points_decoder";
 import { dimmedLayersOf, isStageDimmed, missingLayersOf, useResultSteps, type ResultSteps } from "./result_steps";
 import { resultsAtOpen, resultsOfStages, useResultsFollowingRun, type RunResults } from "./run_results";
 import { initialRunState, runReducer, useRunLoop, type RunRecord, type RunState } from "./run_state";
-import type { PipelineStage, StageState } from "./step_summaries";
+import type { PipelineStage, StageState } from "../stages";
 
 const ALL_CURRENT: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" };
 const NO_RESULTS: RunResults = { summary: null, scorePoints: null, skyDome: null, envelope: null, massing: null, platesFile: null, carvedByCriterion: null };

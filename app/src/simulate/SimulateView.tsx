@@ -8,7 +8,7 @@ import { failureTextOf, serviceProblemOf, type CriterionEntry, type InputFileInf
 import { messages } from "../messages";
 import type { ViewportTheme } from "../viewer/colour_scales";
 import type { RunLoop } from "../steps/run_state";
-import { inputProblemText } from "../steps/InputsStep";
+import { inputProblemText } from "../common/InputBox";
 import { RunProgress } from "../steps/RunProgress";
 import { TargetLegend } from "../viewer_overlays/TargetLegend";
 import { GeometrySwitch } from "./GeometrySwitch";

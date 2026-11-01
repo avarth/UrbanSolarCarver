@@ -3,7 +3,7 @@
 // Escape or Cancel closes them, and a refusal of the service is shown in its words with the dialog left open.
 import { useId, useState, type FormEvent } from "react";
 import { messages } from "../messages";
-import { DialogButtons, DialogFrame, ProblemLine, useDialogRequest } from "../steps/ProjectDialogs";
+import { DialogButtons, DialogFrame, ProblemLine, useDialogRequest } from "../common/dialogs";
 
 interface RenameCriterionDialogProps {
   name: string;

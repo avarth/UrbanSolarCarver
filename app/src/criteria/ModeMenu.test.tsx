@@ -2,7 +2,7 @@
 // choice it reports and the keyboard. The tooltip text stays on the tiles of the panel's Mode section.
 import { act, useRef, useState } from "react";
 import { afterEach, expect, test, vi } from "vitest";
-import { MODE_TILES } from "../steps/step_summaries";
+import { MODE_TILES } from "../modes";
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { ModeMenu } from "./ModeMenu";
 

@@ -1,7 +1,8 @@
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
-import { carvedByNote, InputBox, InputsStep, inputsSizeText, type AddInputFiles } from "./InputsStep";
+import { carvedByNote, InputsStep, inputsSizeText } from "./InputsStep";
+import { InputBox, type AddInputFiles } from "../common/InputBox";
 
 let rendered: RenderedOverlay | null = null;
 

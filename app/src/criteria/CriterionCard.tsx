@@ -9,7 +9,7 @@ import type { CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
 import { ActionMenu } from "../steps/ActionMenu";
 import { ModeTileSymbol } from "../steps/ModeTileSymbols";
-import { MODE_TILES } from "../steps/step_summaries";
+import { MODE_TILES } from "../modes";
 import "../steps/steps.css";
 
 export type CriterionMenuItem = "rename" | "duplicate" | "delete";
