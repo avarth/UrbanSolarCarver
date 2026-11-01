@@ -1,8 +1,44 @@
 // Import rules of the app (dependency-cruiser), checked by `npm test` (the `deps` script) and drawn by
 // `python tools/draw_maps.py`. docs/project-map.md explains them.
+
+// The folders of src/ in layers, top first. A file may import from its own folder and from the layers below, not from a
+// layer above and not from another folder of its own layer. Above them all are App.tsx and main.tsx; below them all the
+// other top-level files (messages.ts, format_numbers.ts, modes.ts, stages.ts), which import no folder. Tests may import
+// anything.
+const LAYERS = [
+  ["workspace"],
+  ["steps", "criteria", "simulate", "inspect"],
+  ["common"],
+  ["settings_form"],
+  ["viewer_overlays"],
+  ["theme"],
+  ["viewer"],
+  ["api_client"],
+];
+const TESTS = ["[.]test[.]tsx?$", "_for_test[.]tsx?$"];
+
+const layerRules = LAYERS.flatMap((layer, index) => layer.map((folder) => {
+  const notAllowed = [...LAYERS.slice(0, index).flat(), ...layer.filter((other) => other !== folder)];
+  return {
+    name: `layer-${folder}`,
+    severity: "error",
+    comment: `${folder}/ imports only from its own folder and the layers below it (${notAllowed.join(", ") || "none"} are not).`,
+    from: { path: `^src/${folder}/`, pathNot: TESTS },
+    to: { path: `^src/(${notAllowed.join("|")})/` },
+  };
+})).filter((rule) => !rule.to.path.includes("()"));
+
 /** @type {import('dependency-cruiser').IConfiguration} */
 module.exports = {
   forbidden: [
+    ...layerRules,
+    {
+      name: "top-level-files-below-the-folders",
+      severity: "error",
+      comment: "The top-level files other than App.tsx and main.tsx (the texts, numbers, modes, stages) import no folder.",
+      from: { path: "^src/[^/]+$", pathNot: ["^src/(App|main)[.]tsx$", ...TESTS] },
+      to: { path: "^src/[^/]+/" },
+    },
     {
       name: "no-circular",
       severity: "error",

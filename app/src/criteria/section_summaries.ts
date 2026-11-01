@@ -5,9 +5,9 @@ import { periodFromSettings, periodInWords, type AnalysisPeriodField } from "../
 import { defaultValue, shownValue, type FormState } from "../settings_form/form_state";
 import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf, presentedSettingOf, SETTING_PRESENTATIONS, settingIsShownIn, unitBesideValue } from "../settings_form/presentation";
 import type { ThresholdSpec } from "../settings_form/widgets/ThresholdRule";
-import { carvingRuleOf, manualCarveAmountOf, thresholdControlOf } from "../steps/CarvingStep";
-import { formattedNumber, withUnit } from "../steps/format_numbers";
-import { fieldsWithErrors } from "../steps/SettingsStep";
+import { carvingRuleOf, manualCarveAmountOf, thresholdControlOf } from "./CarvingStep";
+import { formattedNumber, withUnit } from "../format_numbers";
+import { fieldsWithErrors } from "../settings_form/SettingsStep";
 import { plainModeName } from "../modes";
 
 export type PanelSectionId = "test_surfaces" | "mode" | "settings" | "carving";

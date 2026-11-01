@@ -43,7 +43,7 @@ CRITERIA_FOLDER = "criteria"
 # The settings an energy-weighted criterion leaves out of config.yaml: its weights replace the balance temperature, and the engine
 # warns when both are given.
 BALANCE_POINT_KEYS = ("balance_temperature", "balance_offset")
-# The names the app shows for the modes (app/src/steps/mode_tiles.json, which a test compares with this table): a criterion that
+# The names the app shows for the modes (app/src/mode_tiles.json, which a test compares with this table): a criterion that
 # the user did not name is named after them.
 MODE_LABELS = {
     "tilted_plane": "Angle rule",

@@ -5,8 +5,8 @@ import {
 } from "./api_client/client";
 import { App, DeviceStatus, freeProjectName, LastRunTime, lastRunSecondsWith, pollHealth } from "./App";
 import { FakeWebSocket } from "./api_client/fake_websocket_for_test";
-import type { WorkspaceSteps } from "./steps/ProjectWorkspace";
-import { initialRunState, runReducer, type RunLoop, type RunOrigin, type RunRecord } from "./steps/run_state";
+import type { WorkspaceSteps } from "./workspace/ProjectWorkspace";
+import { initialRunState, runReducer, type RunLoop, type RunOrigin, type RunRecord } from "./common/run_state";
 import { click, renderForTest, type RenderedOverlay } from "./viewer_overlays/render_for_test";
 
 // The open project stands in for the workspace here: the page's own part is which project it opens, when it opens it afresh,
@@ -22,7 +22,7 @@ const workspaceSettings = vi.hoisted(() => ({
 const workspaceSteps = vi.hoisted(() => ({
   startedWith: [] as (WorkspaceSteps | undefined)[], report: null as ((steps: WorkspaceSteps) => void) | null, runs: null as RunLoop | null,
 }));
-vi.mock("./steps/ProjectWorkspace", async () => {
+vi.mock("./workspace/ProjectWorkspace", async () => {
   const { useEffect } = await import("react");
   const { createConfigSaver } = await import("./settings_form/form_state");
   const { putSharedSettings } = await import("./api_client/client");

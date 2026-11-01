@@ -36,7 +36,7 @@ export function click(element: Element): void {
 }
 
 /**
- * Adds a style sheet of the app (a path from app/, such as "src/steps/steps.css") to the jsdom document, so getComputedStyle
+ * Adds a style sheet of the app (a path from app/, such as "src/theme/panels.css") to the jsdom document, so getComputedStyle
  * reports what its rules declare (jsdom applies the cascade but resolves no var() and computes no layout); returns its removal.
  */
 export function addStyleSheetForTest(path: string): () => void {

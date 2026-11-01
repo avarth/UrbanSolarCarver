@@ -1,7 +1,7 @@
 // The interface texts of UX spec sections 4, 5, 6.1, 7, 8 and 11, in one place. A text that takes values is a function.
 // Texts that the engine writes (a file that cannot be read, why Warp cannot run, the message of a failed run) are shown as the
 // engine gives them and have no entry here. A unit follows its number after a no-break space (\u00a0), as in format_numbers.ts.
-import { formattedNumber, groupedDigits, withUnit } from "./steps/format_numbers";
+import { formattedNumber, groupedDigits, withUnit } from "./format_numbers";
 
 // The words for an input role inside a sentence.
 const INPUT_ROLE_WORDS: Record<string, string> = {
@@ -326,7 +326,7 @@ export const messages = {
   meshCannotBeDrawn: "The 3D view cannot read this file, so it is not drawn. Runs still use it.",
   meshTypeCannotBeShown: (extension: string) => `Meshes of type '${extension}' cannot be shown.`,
   // A criterion's test surfaces (7.2): the add button of its drop box, titled testSurfacesTitle; its hint for the mode is in
-  // steps/mode_tiles.json (protects_hint).
+  // mode_tiles.json (protects_hint).
   addTestSurfaces: "Add test surfaces",
   // Under the box with several criteria: the stored files the other criteria use, each with a button that adds it to this one.
   useFileOfOtherCriterion: "Use a file from another criterion",
@@ -335,7 +335,7 @@ export const messages = {
   inputsSizeTitle: "Size of all inputs together",
   inputsSize: (sideX: string, sideY: string, sideZ: string) => `${sideX} × ${sideY} × ${sideZ}\u00a0m`,
 
-  // Mode (5.3). The names, lines and tooltips of the six modes are in steps/mode_tiles.json.
+  // Mode (5.3). The names, lines and tooltips of the six modes are in mode_tiles.json.
   modeGroupLabel: "Mode",
   modeFillsStartingValues: "Choosing a mode fills its starting values in the settings below.",
   // After a mode change that set values the user had set back to the new mode's own (the new mode refuses them).
@@ -606,7 +606,7 @@ export const messages = {
   periodPresetNames: { winter_solstice: "21 December", summer_solstice: "21 June", heating_season: "Heating season, October to April", whole_year: "Whole year" },
   // The heating season preset where the weather file is in the southern hemisphere.
   southernHeatingSeasonPresetName: "Heating season, April to October",
-  // The notice of a weather file added or replaced in this session (steps/weather_change_notice.ts), over the criterion's settings in Criteria.
+  // The notice of a weather file added or replaced in this session (settings_form/weather_change_notice.ts), over the criterion's settings in Criteria.
   periodDates: (startMonth: number, startDay: number, endMonth: number, endDay: number) => periodDatesInWords(startMonth, startDay, endMonth, endDay),
   weatherChangeColdPeriod: (location: string | null, coldPeriodDatesText: string, periodDatesText: string) =>
     `The new weather file${location === null ? "" : ` (${location})`} has its cold period from ${coldPeriodDatesText}; ` +

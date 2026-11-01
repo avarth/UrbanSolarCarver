@@ -9,7 +9,7 @@ import { useId, useState, type ReactNode } from "react";
 import type { InspectedFile } from "../api_client/client";
 import { messages } from "../messages";
 import { SettingTooltip } from "../settings_form/SettingTooltip";
-import { formattedNumber } from "../steps/format_numbers";
+import { formattedNumber } from "../format_numbers";
 import type { Point3 } from "../viewer/local_origin";
 import { TEST_SURFACES_ROLE, type InspectionHook } from "./use_inspection";
 import "./inspect.css";

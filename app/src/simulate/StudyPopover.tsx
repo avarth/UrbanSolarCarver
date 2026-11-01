@@ -7,7 +7,7 @@
 // around it stays usable; Escape and Close end it, and the focus goes back to the study's settings button.
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import type { InputFileInfo, MetricInfo, StudyChange, StudyWithState } from "../api_client/client";
-import { ProtectsBox } from "../criteria/ProtectsBox";
+import { ProtectsBox } from "../common/ProtectsBox";
 import { messages } from "../messages";
 import { ANALYSIS_PERIOD_FIELDS, BALANCE_TEMPERATURE_FIELDS, SETTING_PRESENTATIONS } from "../settings_form/presentation";
 import { AnalysisPeriod, type AnalysisPeriodField } from "../settings_form/widgets/AnalysisPeriod";

@@ -49,7 +49,7 @@ test("the dark theme is set on the body and gives dark values to the interface's
 });
 
 test("shadows mix the shadow colour, which stays dark in the dark theme, not the ink, which turns light", () => {
-  const cssFiles = ["src/App.css", "src/steps/steps.css", "src/simulate/simulate.css", "src/inspect/inspect.css",
+  const cssFiles = ["src/App.css", "src/theme/panels.css", "src/simulate/simulate.css", "src/inspect/inspect.css",
                     "src/settings_form/settings_form.css", "src/viewer_overlays/overlays.css"];
   for (const file of cssFiles) expect(readFileSync(file, "utf8")).not.toMatch(/box-shadow:[^;]*var\(--colour-ink\) (1[268]|35|60)%/);
 });

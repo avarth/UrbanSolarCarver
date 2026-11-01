@@ -84,7 +84,7 @@ export type PeriodPreset = (typeof PERIOD_PRESETS)[number];
 /** The dates of a period, without its hours: what a preset sets. */
 export type PeriodDates = Pick<Period, "startMonth" | "startDay" | "endMonth" | "endDay">;
 
-/** Where the cold period of the weather file stands (steps/cold_period_request.ts), for its preset and the line under the presets. */
+/** Where the cold period of the weather file stands (settings_form/cold_period_request.ts), for its preset and the line under the presets. */
 export type ColdPeriodState =
   | { kind: "needs_weather_file" }
   | { kind: "finding" }

@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { GeometrySwitch } from "./GeometrySwitch";
-import type { StudyGeometry } from "./study_values";
+import type { StudyGeometry } from "../viewer/study_values";
 
 let rendered: RenderedOverlay | null = null;
 

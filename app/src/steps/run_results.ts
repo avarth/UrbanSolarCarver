@@ -14,7 +14,7 @@ import { decodeCarvedByCriterion, type CarvedByCriterion } from "../viewer/carve
 import { decodeScorePoints, type ScorePoints } from "../viewer/score_points_decoder";
 import type { PlatesFile } from "./EnvelopeAndMassingStep";
 import { exportedMeshPath, MASSING_JSON_PATH, MASSING_OBJ_PATH, meshFormatOf } from "./ExportStep";
-import { criterionOfKey, runStages, stageOfKey, stagesDone, type RunRecord } from "./run_state";
+import { criterionOfKey, runStages, stageOfKey, stagesDone, type RunRecord } from "../common/run_state";
 import type { PipelineStage } from "../stages";
 
 export interface RunResults {

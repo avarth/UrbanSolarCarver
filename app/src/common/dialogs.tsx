@@ -4,7 +4,7 @@
 // the criterion dialogs and the typical building's window (a wide frame with a × and the title in focus) are built on it.
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { messages } from "../messages";
-import "../steps/steps.css";
+import "../theme/panels.css";
 
 /**
  * The controls of a dialog that take the focus, in the order of the page. Every element is walked: jsdom returns the matches

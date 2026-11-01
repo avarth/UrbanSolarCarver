@@ -10,7 +10,7 @@ import { CriterionCard, type CriterionMenuItem } from "./CriterionCard";
 import { DeleteCriterionDialog, RenameCriterionDialog } from "./CriterionDialogs";
 import { orderAfterDropping, orderAfterMoving } from "./criteria_state";
 import { ModeMenu } from "./ModeMenu";
-import "../steps/steps.css";
+import "../theme/panels.css";
 
 /** The requests of the list; each resolves with the reason it was refused, or null once done. */
 export interface CriterionListProps {

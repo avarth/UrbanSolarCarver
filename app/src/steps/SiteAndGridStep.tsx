@@ -2,7 +2,7 @@
 // criterion-keys): north, the surroundings switch, the voxel size with the grid budget line under it, and the detail settings.
 // Run analysis is pinned under the steps while it is open (ProjectWorkspace).
 import type { FormState } from "../settings_form/form_state";
-import { SettingsStep } from "./SettingsStep";
+import { SettingsStep } from "../settings_form/SettingsStep";
 
 interface SiteAndGridStepProps {
   form: FormState;

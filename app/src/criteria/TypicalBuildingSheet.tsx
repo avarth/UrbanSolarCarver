@@ -16,13 +16,13 @@ import type { TypicalBuildingLibraryEntry, TypicalBuildingReply, TypicalBuilding
 import { dayAndMonth, messages } from "../messages";
 import { WarningIcon } from "../settings_form/SettingField";
 import { SettingTooltip } from "../settings_form/SettingTooltip";
-import { formatNumber, formattedNumber, groupedDigits } from "../steps/format_numbers";
+import { formatNumber, formattedNumber, groupedDigits } from "../format_numbers";
 import { DialogFrame } from "../common/dialogs";
 import { useAppTheme, type AppTheme } from "../theme/app_theme";
 import { PanelSection } from "./PanelSection";
 import { DeleteLibraryEntryDialog, LibraryNameDialog } from "./TypicalBuildingDialogs";
 import type { TypicalBuildingHook, TypicalBuildingValues } from "./use_typical_building";
-import "../steps/steps.css";
+import "../theme/panels.css";
 
 export type BuildingGroupId = "use" | "fabric" | "shading" | "room" | "roof_and_floor" | "air";
 

@@ -6,8 +6,8 @@ import {
   keptColumnTops, pointSizeForVoxel, splitScorePoints, type InspectLayerFile,
   storeyOfPart, studyValuesLayer, sunStudyLayer, testSurfacesLayer, volumeOutline,
 } from "./layers";
-import { decodeStudyValues, patchCorners } from "../simulate/study_values_decoder";
-import { studyValuesOf } from "../simulate/study_values_for_test";
+import { decodeStudyValues, patchCorners } from "./study_values_decoder";
+import { studyValuesOf } from "./study_values_for_test";
 import { changeRamp, colourToken } from "./colour_scales";
 import { studyPaletteColour, type StudyPalette } from "./study_palettes";
 import type { Point3 } from "./local_origin";

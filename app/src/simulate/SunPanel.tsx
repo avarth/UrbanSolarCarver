@@ -8,7 +8,7 @@
 // file the panel says one is needed. The 3D view draws what it sets (use_sun_study, the sun_study layer, sun_shading).
 import { useId, useRef, useState } from "react";
 import { messages } from "../messages";
-import { formattedNumber } from "../steps/format_numbers";
+import { formattedNumber } from "../format_numbers";
 import { dateHandleValueAfterKey, dayOfYear, dayOfYearAt, DAYS_IN_YEAR, daysInMonth, monthDayOf, type AnalysisPeriodField } from "../settings_form/analysis_period";
 import { AnalysisPeriod } from "../settings_form/widgets/AnalysisPeriod";
 import { ScaleStrip, type ScaleStripCell } from "../settings_form/widgets/ScaleStrip";

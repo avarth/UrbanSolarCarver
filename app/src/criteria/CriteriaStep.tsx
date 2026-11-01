@@ -11,7 +11,7 @@ import { messages } from "../messages";
 import { CriterionEditorHeader } from "./CriterionEditorHeader";
 import { CriterionList, useCriterionDialogs, type CriterionListProps } from "./CriterionList";
 import type { SelectionLoad } from "./use_criterion_selection";
-import "../steps/steps.css";
+import "../theme/panels.css";
 
 /** What the step shows: the cards of all the criteria, or the editor of the selected one. */
 export type CriteriaShows = "list" | "editor";

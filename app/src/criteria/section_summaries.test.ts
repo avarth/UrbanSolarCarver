@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { initialFormState, type FormState } from "../settings_form/form_state";
-import { CRITERION_KEYS, MODES, SCHEMA } from "../steps/project_workspace_for_test";
-import { settingsToFixByStep } from "../steps/SettingsStep";
+import { CRITERION_KEYS, MODES, SCHEMA } from "../workspace/project_workspace_for_test";
+import { settingsToFixByStep } from "../settings_form/SettingsStep";
 import {
   carvingRuleSummary, criterionSettingsSummary, DEFAULT_OPEN_SECTIONS, modeSummary, sectionOfSetting, settingsToFixBySection, testSurfacesSummary,
 } from "./section_summaries";

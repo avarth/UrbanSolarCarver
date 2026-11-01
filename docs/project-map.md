@@ -53,12 +53,24 @@ report). A new module must be added to a layer, or the test fails. An exception 
 
 ## The app
 
-The app (`app/src/`) is organised in folders by screen and concern: `steps/` (the five steps and the workspace),
-`criteria/`, `simulate/`, `inspect/`, `settings_form/`, `viewer/` (the three.js scene), `viewer_overlays/` (what sits
-over the 3D view), `api_client/` (the typed client of the service) and `theme/`, with `App.tsx`, `main.tsx` and
-`messages.ts` (every text of the interface) at the top.
+The app (`app/src/`) is organised in folders, in layers like the Python package. A file may import from its own folder
+and from the layers below, not from a layer above and not from another folder of its own layer. Top first:
 
-`app/.dependency-cruiser.cjs` holds its rules, checked by `npm test` (the `deps` script):
+| Layer | Folders | What they hold |
+|---|---|---|
+| 1. Page | `App.tsx`, `main.tsx` | the top bar with the device status, then the start screen or the open project |
+| 2. Workspace | `workspace/` | the start screen, the open project with its top bar and step list, the project dialogs, the result steps that put the screens together |
+| 3. Screens | `steps/`, `criteria/`, `simulate/`, `inspect/` | the Design steps other than Criteria; the Criteria step (list, panel, mode, settings, carving rule, typical building); Simulate; Inspect |
+| 4. Shared parts | `common/` | what several screens use: the dialog frame, menus, the input box, the run's state and progress, the test-surfaces box |
+| 5. Settings | `settings_form/` | the settings fields and their state, the analysis settings (SettingsStep), the cold period |
+| 6. Over the 3D view | `viewer_overlays/` | the view pane, legends, compass, layers menu |
+| 7. Theme | `theme/` | colours and sizes (`tokens.css`), the panels' stylesheet (`panels.css`), light and dark |
+| 8. 3D scene | `viewer/` | the three.js scene, its loaders and decoders |
+| 9. Service client | `api_client/` | the typed client of the service |
+| 10. Basics | `messages.ts`, `format_numbers.ts`, `modes.ts`, `stages.ts` | every text of the interface, numbers as it writes them, the modes' names, the steps' and stages' names |
+
+`app/.dependency-cruiser.cjs` holds these layers (`LAYERS`) and the other rules, checked by `npm test` (the `deps`
+script):
 
 - no import cycles between files;
 - no source file that nothing imports (helpers named `*_for_test` are for tests);
@@ -66,7 +78,7 @@ over the 3D view), `api_client/` (the typed client of the service) and `theme/`,
 - `api_client/` imports only itself and `messages.ts`;
 - `viewer/` imports no React component.
 
-The folders themselves still import each other both ways in several places (red in the folder map below).
+Tests may import across the layers. A new folder must be added to `LAYERS`, or nothing checks it.
 
 ## Drawing the maps
 
@@ -77,7 +89,8 @@ python tools/draw_maps.py
 writes into `build/maps/` (not kept in git):
 
 - `python_layers.svg`: the seven layers with their modules and the number of imports between them;
-- `app_folders.svg`: the app's folders with the number of imports between them, pairs that import each other in red.
+- `app_folders.svg`: the app's folders with the number of imports between them; two folders that import each other
+  would be joined in red.
 
 `--modules` also draws every Python module (`python_modules.svg`, pydeps). It needs Graphviz
 (`winget install Graphviz.Graphviz`), the dev extra and `npm install` in `app/`.

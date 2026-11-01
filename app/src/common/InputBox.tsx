@@ -7,7 +7,7 @@ import { ApiError, failureTextOf, type InputFileInfo } from "../api_client/clien
 import { messages } from "../messages";
 import { WarningIcon } from "../settings_form/SettingField";
 import { Subheading } from "../settings_form/Subheading";
-import "../steps/steps.css";
+import "../theme/panels.css";
 
 export type InputRole = "max_volume" | "test_surfaces" | "context" | "terrain" | "weather";
 /** The mesh roles a run can do without: no "Required" beside their titles. */

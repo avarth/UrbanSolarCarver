@@ -1,6 +1,6 @@
 // A key number on chrome (UX 5.6), as the carving rule and the Envelope and massing step show them.
 import { SettingTooltip } from "../settings_form/SettingTooltip";
-import "../steps/steps.css";
+import "../theme/panels.css";
 
 /**
  * A key number on chrome (UX 5.6): its label, with an "i" that says what it counts when *help* is given, then the value; the

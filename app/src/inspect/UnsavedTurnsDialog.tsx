@@ -8,7 +8,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { messages } from "../messages";
 import { DialogFrame, ProblemLine } from "../common/dialogs";
-import type { WorkspaceMode } from "../steps/WorkspaceModeSwitch";
+import type { WorkspaceMode } from "../common/WorkspaceModeSwitch";
 
 /** What the open workspace gives the app for its turns not saved and its saves under way. */
 export interface InspectTurns {

@@ -15,7 +15,7 @@ from urbansolarcarver.mode_registry import MODES
 
 COMMENT_LINE = "# Written by the UrbanSolarCarver app from project.json; change settings in the app."
 # The names of the modes as the app shows them (step_summaries.ts reads them for the Mode step and the step summaries).
-APP_MODE_TILES_PATH = Path(__file__).resolve().parent.parent / "app" / "src" / "steps" / "mode_tiles.json"
+APP_MODE_TILES_PATH = Path(__file__).resolve().parent.parent / "app" / "src" / "mode_tiles.json"
 
 
 def _config_path(store, name):

@@ -9,11 +9,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
-import { ActionMenu } from "../steps/ActionMenu";
-import { ModeTileSymbol } from "../steps/ModeTileSymbols";
+import { ActionMenu } from "../common/ActionMenu";
+import { ModeTileSymbol } from "./ModeTileSymbols";
 import { MODE_TILES } from "../modes";
 import type { CriterionMenuItem } from "./CriterionCard";
-import "../steps/steps.css";
+import "../theme/panels.css";
 
 export interface CriterionEditorHeaderProps {
   /** The criterion the editor shows: its colour, name, mode, and whether the chain uses it. */

@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "vitest";
 import { initialFormState } from "../settings_form/form_state";
 import { renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
-import { CRITERION_KEYS, MODES, SCHEMA } from "./project_workspace_for_test";
+import { CRITERION_KEYS, MODES, SCHEMA } from "../workspace/project_workspace_for_test";
 import { SiteAndGridStep } from "./SiteAndGridStep";
 
 let rendered: RenderedOverlay | null = null;

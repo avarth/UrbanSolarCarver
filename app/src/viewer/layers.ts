@@ -7,7 +7,7 @@ import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
 import type { SkyDome } from "../api_client/client";
 import { messages } from "../messages";
-import { changeOf, changeTolerance, highestOf, OPEN_COLUMN, shareOfOpen, type StudyView } from "../simulate/study_values";
+import { changeOf, changeTolerance, highestOf, OPEN_COLUMN, shareOfOpen, type StudyView } from "./study_values";
 import { changeRamp, changeRampStops, cividis, colourToken, storeyColour, sunRamp, type ViewportTheme } from "./colour_scales";
 import { studyPaletteColour, type StudyPalette } from "./study_palettes";
 import type { CarvedVoxels } from "./carved_by_criterion_decoder";

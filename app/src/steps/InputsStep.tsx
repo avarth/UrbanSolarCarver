@@ -9,9 +9,9 @@ import { messages } from "../messages";
 import { WarningIcon } from "../settings_form/SettingField";
 import type { Bounds3 } from "../viewer/local_origin";
 import { sizeWarning } from "../viewer/size_check";
-import { formatNumber, formattedNumber } from "./format_numbers";
+import { formatNumber, formattedNumber } from "../format_numbers";
 import { plainModeName } from "../modes";
-import "./steps.css";
+import "../theme/panels.css";
 
 /** The roles of the Inputs step: the site's (the test surfaces are each criterion's). */
 export const INPUT_ROLES: readonly InputRole[] = ["max_volume", "context", "terrain", "weather"];

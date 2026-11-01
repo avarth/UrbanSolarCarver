@@ -1,0 +1,1164 @@
+/* The start screen, the steps of the left panel and the parts they share: dialogs, menus, input boxes, number tiles (UX 4.1,
+   5.1 to 5.4, 10, 11). Every colour, size and radius comes from tokens.css. */
+
+/* Start screen ---------------------------------------------------------------------------------------------------------- */
+
+.start-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 5);
+  overflow-y: auto;
+  padding: calc(var(--space-unit) * 10) max(16px, calc((100% - 1120px) / 2)) calc(var(--space-unit) * 4);
+}
+
+.start-heading { margin: 0; font-size: var(--text-key-number); font-weight: 700; }
+
+/* The warm-up notice: one line with its spinner. */
+.start-device-card {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-unit) * 3);
+  padding: calc(var(--space-unit) * 2) calc(var(--space-unit) * 4);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  background: var(--colour-accent-soft);
+}
+
+.start-device-card p { margin: 0; }
+.start-device-status { font-weight: 600; }
+
+.start-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1.25fr);
+  gap: calc(var(--space-unit) * 5);
+  align-items: stretch;
+}
+
+@media (max-width: 899px) {
+  .start-cards { grid-template-columns: minmax(0, 1fr); }
+}
+
+.start-card {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 4);
+  padding: calc(var(--space-unit) * 5);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  background: var(--colour-panel);
+}
+
+.start-card-heading { display: flex; align-items: flex-start; gap: calc(var(--space-unit) * 3); }
+.start-card-heading h2 { margin: 0; font-size: var(--text-step-title); font-weight: 600; }
+.start-card-heading .start-hint { margin-top: 2px; }
+
+.start-card-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-large);
+  background: var(--colour-accent-soft);
+  color: var(--colour-accent);
+}
+
+.start-new-project {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--space-unit) * 2);
+}
+
+.start-new-project .primary-button { margin-top: var(--space-unit); }
+.start-name-field.setting-number { width: 100%; box-sizing: border-box; }
+.start-hint { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
+
+.start-choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-unit);
+  max-height: 360px;
+  margin: 0 calc(var(--space-unit) * -2);
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.start-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: calc(var(--space-unit) * 2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--colour-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.start-choice:hover { border-color: var(--colour-line); background: var(--colour-chrome); }
+.start-choice:disabled { cursor: default; }
+.start-choice-name { font-weight: 600; }
+.start-choice-detail { color: var(--colour-muted); font-size: var(--text-secondary); }
+.start-choice-row { display: flex; align-items: flex-start; gap: var(--space-unit); }
+.start-choice-row .start-choice { flex: 1; min-width: 0; }
+
+/* The foot of a card (the projects folder of Open a project), below a line. */
+.start-card-foot {
+  margin-top: auto;
+  padding-top: calc(var(--space-unit) * 3);
+  border-top: 1px solid var(--colour-line);
+}
+
+.start-projects-folder {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-unit);
+  min-width: 0;
+}
+
+.start-projects-folder p { margin: 0; }
+.start-projects-folder code { font-family: var(--font-family-code); }
+
+/* The folder's path on one line, cut at the end; the whole path shows on hover. */
+.start-projects-folder-line {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The version and the device, small and muted at the foot of the page. */
+.start-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--space-unit) * 2) calc(var(--space-unit) * 4);
+  margin-top: auto;
+  padding-top: calc(var(--space-unit) * 3);
+  border-top: 1px solid var(--colour-line);
+  color: var(--colour-muted);
+  font-size: var(--text-secondary);
+}
+
+/* The menu of actions of a project or a criterion card (ActionMenu), and the project's dialogs (R2 7.2) ---------------- */
+
+.project-menu { flex: none; }
+
+.action-menu-button {
+  border: 1px solid transparent;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--colour-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.action-menu-button:hover,
+.action-menu-button[aria-expanded="true"] { border-color: var(--colour-line); background: var(--colour-chrome); }
+.project-menu-button-row { padding: calc(var(--space-unit) * 2); font-size: var(--text-step-title); line-height: 1; }
+
+.project-menu-button-top-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--space-unit) * 1.5);
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  font-weight: 600;
+}
+
+.project-menu-caret { color: var(--colour-muted); }
+
+.action-menu-popup {
+  position: fixed;
+  z-index: 30;
+  min-width: 200px;
+  max-width: 320px;
+  padding: var(--space-unit);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  background: var(--colour-panel);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-shadow) 18%, transparent);
+}
+
+.action-menu-popup ul { margin: 0; padding: 0; list-style: none; }
+
+.action-menu-popup [role="menuitem"] {
+  display: block;
+  width: 100%;
+  padding: calc(var(--space-unit) * 2) calc(var(--space-unit) * 3);
+  border: 0;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--colour-ink);
+  font: inherit;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+}
+
+.action-menu-popup [role="menuitem"]:hover,
+.action-menu-popup [role="menuitem"]:focus { background: var(--colour-accent-soft); }
+.action-menu-popup [role="menuitem"][aria-disabled="true"] { color: var(--colour-muted); cursor: default; }
+
+.action-menu-reason {
+  margin: var(--space-unit) calc(var(--space-unit) * 3) calc(var(--space-unit) * 2);
+  color: var(--colour-muted);
+  font-size: var(--text-secondary);
+}
+
+.project-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--space-unit) * 4);
+  background: color-mix(in srgb, var(--colour-shadow) 35%, transparent);
+}
+
+.project-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 3);
+  box-sizing: border-box;
+  width: min(440px, 100%);
+  max-height: 100%;       /* a window shorter than the dialog (browser zoom) scrolls it */
+  overflow-y: auto;
+  padding: calc(var(--space-unit) * 5);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  background: var(--colour-panel);
+  color: var(--colour-ink);
+  font-weight: 400;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-shadow) 18%, transparent);
+}
+
+.project-dialog h2 { margin: 0; font-size: var(--text-step-title); font-weight: 600; overflow-wrap: anywhere; }
+.project-dialog p { margin: 0; }
+.project-dialog-form { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
+.project-dialog-field.setting-number { box-sizing: border-box; width: 100%; }
+.project-dialog-path { font-family: var(--font-family-code); overflow-wrap: anywhere; }
+
+.project-dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: calc(var(--space-unit) * 2);
+  margin-top: calc(var(--space-unit) * 2);
+}
+
+.project-dialog-buttons .secondary-button { align-self: auto; }
+
+/* The step list ---------------------------------------------------------------------------------------------------------- */
+
+.step-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.step-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 2);
+  margin: 0;
+  padding: calc(var(--space-unit) * 3);
+  overflow-y: auto;
+  list-style: none;
+}
+
+.step {
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  background: var(--colour-panel);
+}
+
+.step-heading { margin: 0; font: inherit; }
+
+.step-header {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--space-unit) * 3);
+  width: 100%;
+  padding: calc(var(--space-unit) * 3);
+  border: 0;
+  border-radius: var(--radius-large);
+  background: transparent;
+  color: var(--colour-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.step-mark {
+  flex: none;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border: 2px solid var(--colour-line);
+  border-radius: 50%;
+  font-size: var(--text-secondary);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.step-mark-open { border-color: var(--colour-accent); }
+.step-mark-done { border-color: var(--colour-ready); background: var(--colour-ready); color: var(--colour-panel); }
+.step-mark-error { border-color: var(--colour-error); background: var(--colour-error); color: var(--colour-panel); }
+
+.step-header-text { display: flex; flex-direction: column; min-width: 0; }
+.step-title { font-size: var(--text-step-title); font-weight: 600; }
+.step-summary { color: var(--colour-muted); font-size: var(--text-secondary); }
+.step-summary-error { color: var(--colour-error); font-weight: 600; }
+
+.step-content { padding: 0 calc(var(--space-unit) * 3) calc(var(--space-unit) * 3); }
+.step-not-usable { margin: 0; color: var(--colour-muted); }
+.step-reason { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
+.step-error { margin-bottom: calc(var(--space-unit) * 3); }
+/* The notice of a new weather file above the settings groups, in a live region kept on the page (empty, it takes no space): what the
+   file means for the analysis period, with its two buttons. */
+.weather-change-notice {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 2);
+  margin-bottom: calc(var(--space-unit) * 3);
+  padding: calc(var(--space-unit) * 3);
+  border: 1px solid var(--colour-accent);
+  border-radius: var(--radius-large);
+  background: var(--colour-accent-soft);
+}
+.weather-change-notice p { margin: 0; }
+/* Input files changed in the project folder or missing from it: over Design's steps, and at the top of Simulate's studies panel. */
+.input-changes-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--space-unit) * 2);
+  padding: calc(var(--space-unit) * 3);
+  border: 1px solid var(--colour-out-of-date);
+  border-radius: var(--radius-large);
+  background: var(--colour-panel);
+  overflow-wrap: anywhere;
+}
+.input-changes-notice p { margin: 0; }
+.workspace-panel > .input-changes-notice { flex: none; margin: calc(var(--space-unit) * 3) calc(var(--space-unit) * 3) 0; }
+.weather-change-notice-buttons { display: flex; flex-wrap: wrap; gap: calc(var(--space-unit) * 2); }
+/* The fields with an error of a step that cannot be used yet, under the reason. */
+.settings-to-fix { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); margin-top: calc(var(--space-unit) * 3); }
+
+/* The open step's run button with its progress, failure details and warnings: at most half the panel, scrolling beyond that,
+   so a long list at 200 % zoom (UX 12) never pushes the step list out of the panel. */
+.step-pinned-action {
+  flex: none;
+  box-sizing: border-box;     /* the half includes the padding and the border */
+  max-height: 50%;
+  overflow-y: auto;
+  padding: calc(var(--space-unit) * 3);
+  border-top: 1px solid var(--colour-line);
+  background: var(--colour-panel);
+}
+
+.save-failure { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-unit); }
+.save-failure:not(:last-child) { margin-bottom: calc(var(--space-unit) * 3); }   /* above the open step's run button */
+
+.run-button-area .primary-button, .run-button-area .secondary-button { width: 100%; }
+/* Criteria: Run analysis and the build side by side, each button over its own reason, the progress under both. */
+.criteria-run-buttons { display: flex; flex-wrap: wrap; align-items: flex-start; gap: calc(var(--space-unit) * 2); }
+.criteria-run-buttons .run-button-area { flex: 1 1 10rem; min-width: 0; }     /* two rows when the bar is too narrow for 2 x 10rem */
+.run-button-reason { margin: var(--space-unit) 0 0; color: var(--colour-muted); font-size: var(--text-secondary); }
+
+/* Inputs ---------------------------------------------------------------------------------------------------------------- */
+
+.inputs-step { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); }
+
+.input-box {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 2);
+  padding: calc(var(--space-unit) * 3);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+}
+
+.input-box-empty { border-style: dashed; }
+.input-box-drop-target { border-color: var(--colour-accent); background: var(--colour-accent-soft); }
+
+.input-box-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--space-unit) * 2);
+}
+
+.input-box-title { margin: 0; font-size: var(--text-body); font-weight: 600; }
+.input-box-required { color: var(--colour-muted); font-size: var(--text-secondary); }
+.input-box-hint { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
+
+/* Room for a "Draw" button beside "Add files" in milestone 2 (UX 5.2). */
+.input-box-actions { display: flex; align-items: center; gap: calc(var(--space-unit) * 2); }
+.input-box-drop-hint { color: var(--colour-muted); font-size: var(--text-secondary); }
+
+.input-add {
+  padding: var(--space-unit) calc(var(--space-unit) * 3);
+  border: 1px solid var(--colour-accent);
+  border-radius: var(--radius-small);
+  background: var(--colour-panel);
+  color: var(--colour-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.input-add:disabled { border-color: var(--colour-line); color: var(--colour-muted); cursor: default; }
+
+.input-file-list { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); margin: 0; padding: 0; list-style: none; }
+
+.input-file-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--space-unit) * 2);
+}
+
+.input-file-name { overflow-wrap: anywhere; }
+.input-file-detail { color: var(--colour-muted); font-size: var(--text-secondary); }
+
+.input-remove {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--colour-muted);
+  cursor: pointer;
+}
+
+.input-remove:hover:not(:disabled) { background: var(--colour-chrome); color: var(--colour-ink); }
+.input-remove:disabled { cursor: default; opacity: 0.5; }
+
+.input-box-reason { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
+
+.input-box-problem,
+.inputs-size-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-unit);
+  margin: 0;
+  font-size: var(--text-secondary);
+}
+
+.input-box-problem { color: var(--colour-error); }
+.inputs-size-warning { color: var(--colour-muted); }
+.inputs-size-title { color: var(--colour-muted); font-size: var(--text-secondary); }
+
+/* Mode ------------------------------------------------------------------------------------------------------------------ */
+
+.mode-step { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
+
+.mode-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: calc(var(--space-unit) * 2);
+}
+
+.mode-tile-cell { position: relative; }
+
+.mode-tile {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  height: 100%;
+  padding: calc(var(--space-unit) * 2);       /* the "i" sits on the symbol's row, right of it */
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  background: var(--colour-panel);
+  cursor: pointer;
+}
+
+.mode-tile:hover { border-color: var(--colour-muted); }
+
+/* The chosen tile: a 2 px accent edge on accent soft; the padding loses the extra pixel so the content does not move. */
+.mode-tile[aria-checked="true"] {
+  padding: calc(var(--space-unit) * 2 - 1px);
+  border: 2px solid var(--colour-accent);
+  background: var(--colour-accent-soft);
+}
+
+.mode-tile[aria-disabled="true"] { cursor: default; opacity: 0.6; }
+.mode-tile-symbol { margin-bottom: var(--space-unit); color: var(--colour-ink); }
+.mode-tile-name { font-size: var(--text-body); font-weight: 600; line-height: 1.25; }
+
+.mode-tile-info { position: absolute; top: 6px; right: 6px; }
+/* The "i" whose tooltip is open, drawn as .setting-info[aria-expanded="true"] (this one carries no ARIA state: it is hidden). */
+.mode-tile-info[data-open="true"] {
+  background: var(--colour-accent-soft);
+  border-color: var(--colour-accent);
+  color: var(--colour-accent);
+}
+/* The mode tooltip is read only, and lies over the tiles below its own: the pointer goes through it, to the tile under it. */
+.mode-tooltip { pointer-events: none; }
+.mode-tooltip-name { font-weight: 600; }
+.mode-tooltip-line { color: var(--colour-muted); }
+.mode-step-note { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
+
+/* Runs: the progress and outcome under the button that started one (UX 6.3, 11) ------------------------------------------ */
+
+.secondary-button {
+  align-self: flex-start;
+  padding: var(--space-unit) calc(var(--space-unit) * 3);
+  border: 1px solid var(--colour-accent);
+  border-radius: var(--radius-small);
+  background: var(--colour-panel);
+  color: var(--colour-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.secondary-button:disabled { border-color: var(--colour-line); color: var(--colour-muted); cursor: default; }
+
+.run-progress {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 2);
+  margin-top: calc(var(--space-unit) * 2);
+  font-size: var(--text-secondary);
+}
+
+.run-progress-stages ol { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.run-stage { display: flex; justify-content: space-between; gap: calc(var(--space-unit) * 2); }
+.run-stage-state { color: var(--colour-muted); font-variant-numeric: tabular-nums; }
+.run-stage-running .run-stage-name { font-weight: 600; }
+.run-stage-done .run-stage-state { color: var(--colour-ready); }
+
+.run-progress-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--space-unit) * 2);
+  margin-top: calc(var(--space-unit) * 2);
+}
+
+.run-progress-elapsed { color: var(--colour-muted); font-variant-numeric: tabular-nums; }
+.run-outcome { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-unit); margin: 0; }
+.run-outcome p { margin: 0; }
+.run-outcome-error > p:first-child,
+p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
+.run-failure-details summary { color: var(--colour-accent); cursor: pointer; }
+.run-failure-details p { margin: var(--space-unit) 0 0; }
+.run-failure-message { overflow-wrap: anywhere; white-space: pre-wrap; }
+.run-issues ul { margin: var(--space-unit) 0 0; padding-left: calc(var(--space-unit) * 4); }
+.run-issues-title { margin: 0; font-weight: 600; }
+
+/* Criteria (spec 7.1, 7.2): the cards, or the editor of one criterion, its header over its panel in folded sections, each set off
+   by a line. -------------------------------------------------------------------------------------------------------------------- */
+
+.criteria-step { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 4); }
+.criterion-panel { display: flex; flex-direction: column; }
+.criterion-carving { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 4); }
+
+/* A section of the panel: its header a full-width button with a caret, the title and, while closed, what the section holds on the
+   same line, cut short when it is too long; in the error colour when the section has something to fix, as a step's summary. */
+.panel-section + .panel-section { border-top: 1px solid var(--colour-line); }
+.panel-section-heading { margin: 0; font: inherit; }
+.panel-section-header {
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--space-unit) * 2);
+  width: 100%;
+  padding: calc(var(--space-unit) * 3) 0;
+  border: 0;
+  background: transparent;
+  color: var(--colour-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.panel-section-header::before {
+  content: "";
+  flex: none;
+  align-self: center;
+  width: 6px;
+  height: 6px;
+  margin: 0 2px;
+  border-right: 2px solid var(--colour-muted);
+  border-bottom: 2px solid var(--colour-muted);
+  transform: rotate(-45deg);
+}
+.panel-section-header[aria-expanded="true"]::before { transform: rotate(45deg); }
+.panel-section-header:focus { outline: none; }
+.panel-section-header:focus-visible { outline: 2px solid var(--colour-accent); outline-offset: 2px; }
+.panel-section-title { flex: none; font-weight: 600; }
+.panel-section-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--colour-muted);
+  font-size: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.panel-section-summary-problem { color: var(--colour-error); font-weight: 600; }
+.panel-section-summary-problem .setting-error-icon { margin: 0 var(--space-unit) 0 0; vertical-align: -2px; }
+.panel-section-content { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 4); padding-bottom: calc(var(--space-unit) * 4); }
+/* The notice of a new weather file, under the Settings header open or closed. */
+.panel-section > .weather-change-region:not(:empty) { padding-bottom: calc(var(--space-unit) * 3); }
+
+/* Which hours count, at the top of a Solar usefulness criterion's Settings, and under it, energy-weighted, the typical building's
+   box: its type, the state of its weights and Edit building. */
+.hours-counted .segmented-switch { align-self: flex-start; }
+.typical-building-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-unit);
+  margin-top: calc(var(--space-unit) * 2);
+  padding: calc(var(--space-unit) * 2) calc(var(--space-unit) * 3);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-small);
+}
+.typical-building-box p { margin: 0; }
+.typical-building-box-title { font-weight: 600; }
+.typical-building-box-state { color: var(--colour-muted); font-size: var(--text-secondary); }
+.typical-building-box .secondary-button { margin-top: var(--space-unit); }
+
+/* The typical building's window: the project dialogs' modal frame (DialogFrame), wide, as tall as the browser window lets it be.
+   From 900 px the values are a column on the left that scrolls, and Calculate, the chart and the numbers a column on the right that
+   stays where it is (each scrolls when it does not fit; so do the windows of one column); under 900 px the columns are one under the
+   other and the window scrolls. */
+.project-dialog-wide { width: min(880px, 100%); max-height: calc(100vh - 64px); }
+.project-dialog-title-row { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--space-unit) * 2); }
+.project-dialog h2:focus { outline: none; }      /* the title takes the focus on opening, which is not a control to point at */
+.project-dialog-close {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--colour-ink);
+  cursor: pointer;
+}
+.project-dialog-close:hover { background: var(--colour-accent-soft); }
+.typical-building-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 3);
+}
+.typical-building-window-columns { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); }
+.typical-building-window-values, .typical-building-window-results { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); min-width: 0; }
+.typical-building-window-results .weights-chart-canvas { height: 140px; }
+@media (min-width: 900px) {
+  .project-dialog-wide { overflow-y: hidden; }
+  .project-dialog-wide > .typical-building-sheet { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .typical-building-window-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 440px) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    flex: 1 1 auto;
+    min-height: 0;
+    gap: calc(var(--space-unit) * 5);
+  }
+  .typical-building-window-values { min-height: 0; overflow-y: auto; padding-right: var(--space-unit); }
+  .typical-building-window-results { min-height: 0; overflow-y: auto; }
+}
+.typical-building-sheet p { margin: 0; }
+.typical-building-sheet .segmented-switch { align-self: flex-start; }
+.typical-building-groups { border-top: 1px solid var(--colour-line); border-bottom: 1px solid var(--colour-line); }
+/* The library: the entries of each group one a row, the user's own with Rename and Delete beside them; the source of the example in
+   use in small print under the section's header. */
+.typical-building-source { padding-bottom: calc(var(--space-unit) * 2); color: var(--colour-muted); font-size: 11px; }
+.typical-building-library-group { display: flex; flex-direction: column; gap: var(--space-unit); }
+.typical-building-library-group-name { color: var(--colour-muted); font-size: var(--text-secondary); font-weight: 600; }
+.typical-building-library-list { display: flex; flex-direction: column; gap: var(--space-unit); margin: 0; padding: 0; list-style: none; }
+.typical-building-library-list li { display: flex; align-items: center; gap: calc(var(--space-unit) * 2); }
+.typical-building-library-list .link-button { font-size: var(--text-secondary); }
+.typical-building-library-entry { flex: 1; min-width: 0; text-align: left; }
+.typical-building-library-actions { display: flex; flex-direction: column; gap: var(--space-unit); }
+.typical-building-library-buttons { display: flex; flex-wrap: wrap; gap: calc(var(--space-unit) * 2); }
+/* Advanced: a header as the groups' own, the three groups under it set in from the left. */
+.typical-building-advanced-toggle { font-weight: 600; }
+.typical-building-advanced > .typical-building-groups { margin-left: calc(var(--space-unit) * 3); border-bottom: 0; }
+.typical-building-calculate { display: flex; flex-direction: column; gap: var(--space-unit); }
+.typical-building-calculate .primary-button { display: inline-flex; align-items: center; justify-content: center; gap: calc(var(--space-unit) * 2); }
+/* How far Calculate has come, under the button: as the run's bar over the 3D view, a thin accent bar on a tint of the accent. */
+.typical-building-progress { height: 4px; border-radius: 2px; overflow: hidden; background: color-mix(in srgb, var(--colour-accent) 20%, transparent); }
+.typical-building-progress-bar { height: 100%; background: var(--colour-accent); transition: width 450ms linear; }
+@media (prefers-reduced-motion: reduce) {
+  .typical-building-progress-bar { transition: none; }
+}
+.typical-building-results-area { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
+.typical-building-out-of-date { color: var(--colour-out-of-date); font-size: var(--text-secondary); font-weight: 600; }
+.typical-building-results { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); }
+/* Weights of a building that has changed since: dimmed, as the 3D view dims results that are out of date. */
+.typical-building-results-out-of-date { opacity: 0.45; }
+/* The three numbers, one a row: the name on the left, the value on the right. */
+.typical-building-numbers { display: flex; flex-direction: column; gap: var(--space-unit); margin: 0; }
+.typical-building-numbers > div { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--space-unit) * 2); }
+.typical-building-numbers dt { display: flex; align-items: center; gap: var(--space-unit); color: var(--colour-muted); }
+.typical-building-numbers dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* The weight of each hour of the year: the days across, the hours down, each hour one cell of the canvas, drawn without smoothing. */
+.weights-chart { display: flex; flex-direction: column; gap: var(--space-unit); margin: 0; }
+.weights-chart-title { font-size: var(--text-secondary); font-weight: 600; }
+.weights-chart-plot { display: flex; gap: var(--space-unit); }
+.weights-chart-hours {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 16px;
+  color: var(--colour-muted);
+  font-size: 10px;
+  line-height: 1;
+  text-align: right;
+}
+.weights-chart-canvas {
+  flex: 1;
+  box-sizing: border-box;
+  min-width: 0;
+  height: 96px;
+  border: 1px solid var(--colour-line);     /* the hours of no effect are white, as the panel */
+  border-radius: 2px;
+  image-rendering: pixelated;
+}
+.weights-chart-months, .weights-chart-legend { display: flex; margin-left: calc(16px + var(--space-unit)); color: var(--colour-muted); font-size: 10px; }
+.weights-chart-months span { flex-basis: 0; text-align: center; }
+.weights-chart-legend { flex-wrap: wrap; align-items: center; gap: var(--space-unit); }
+.weights-chart-ramp { flex: 0 0 100px; box-sizing: border-box; height: 8px; border: 1px solid var(--colour-line); border-radius: 2px; }
+.weights-chart-sun-down { display: inline-flex; align-items: center; gap: var(--space-unit); margin-left: calc(var(--space-unit) * 2); }
+.weights-chart-swatch { width: 8px; height: 8px; border-radius: 2px; }
+
+/* The cards in carving order, Add criterion under them, then what the chain kept. */
+.criteria-list-block { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
+/* What the chain kept, under the cards. */
+.chain-summary { margin: 0; font-size: var(--text-body); font-weight: 600; }
+/* The panel takes the focus after a change of the cards; a ring only when the keyboard put it there. */
+.criterion-panel-frame:focus { outline: none; }
+.criterion-panel-frame:focus-visible { outline: 2px solid var(--colour-accent); outline-offset: 2px; }
+.criterion-panel-waits { margin: 0; }
+.criterion-panel-problem { margin: 0 0 calc(var(--space-unit) * 3); }
+.criterion-list { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); margin: 0; padding: 0; list-style: none; }
+
+/* A grid in three rows. Row 1: the drag handle when the list has several cards, the swatch, the mode symbol, then the switch, the menu
+   and the chevron at the right end. Row 2: the name across the card. Row 3: the card's line across the card. The select button
+   covers rows 1 and 2 from the swatch to the chevron and lays its swatch, symbol, name and chevron on the card's own columns and
+   rows (subgrid); the switch and the menu sit over it in row 1, so a press on them is theirs. */
+.criterion-card {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: var(--space-unit) calc(var(--space-unit) * 2);
+  padding: calc(var(--space-unit) * 2);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  background: var(--colour-panel);
+}
+
+.criterion-card-reorderable { grid-template-columns: auto auto auto minmax(0, 1fr) auto auto auto; }
+.criterion-card-selected { border-color: var(--colour-accent); background: var(--colour-accent-soft); box-shadow: inset 3px 0 0 var(--colour-accent); }
+.criterion-card-drop-target { border-style: dashed; border-color: var(--colour-accent); }
+/* A bypassed card: muted text (AA on white, UX 12), its swatch and symbol faded. */
+.criterion-card-bypassed { color: var(--colour-muted); }
+.criterion-card-bypassed .criterion-card-swatch,
+.criterion-card-bypassed .mode-tile-symbol { opacity: 0.45; }
+
+.criterion-card-handle {
+  grid-column: 1;
+  grid-row: 1;
+  display: inline-flex;
+  flex: none;
+  padding: var(--space-unit) 2px;
+  border-radius: var(--radius-small);
+  color: var(--colour-muted);
+  cursor: grab;
+}
+
+.criterion-card-handle:active { cursor: grabbing; }
+.criterion-card-handle[aria-disabled="true"] { cursor: default; opacity: 0.5; }
+
+.criterion-card-select {
+  grid-column: 1 / -1;
+  grid-row: 1 / 3;
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-template-rows: subgrid;
+  align-items: center;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.criterion-card-reorderable .criterion-card-select { grid-column: 2 / -1; }
+.criterion-card-swatch { flex: none; width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--colour-ink) 25%, transparent); }
+.criterion-card-select > .criterion-card-swatch { grid-column: 1; grid-row: 1; }
+.criterion-card-select > .mode-tile-symbol { grid-column: 2; grid-row: 1; }
+/* The whole name, up to two lines across the card (the same clamp and wrapping as the editor's header); a longer one is cut with an
+   ellipsis, and a long word without spaces breaks where it must. */
+.criterion-card-name {
+  grid-column: 1 / -1; grid-row: 2;
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.criterion-card-chevron {
+  grid-column: -2 / -1; grid-row: 1;
+  color: var(--colour-muted);
+  font-size: var(--text-step-title);
+  line-height: 1;
+}
+.criterion-card-line { grid-column: 1 / -1; grid-row: 3; color: var(--colour-muted); font-size: var(--text-secondary); cursor: pointer; }
+/* The criterion a run works on: its line in the accent colour. */
+.criterion-card-running .criterion-card-line { color: var(--colour-accent); font-weight: 600; }
+.criterion-card .mode-tile-symbol { flex: none; width: 22px; height: 22px; margin: 0; }
+.criterion-card-switch { flex: none; }
+.criterion-card > .criterion-card-switch { grid-column: -4 / -3; grid-row: 1; }
+.criterion-card > .action-menu { grid-column: -3 / -2; grid-row: 1; display: flex; }
+.criterion-card-menu-button { padding: var(--space-unit) calc(var(--space-unit) * 1.5); font-size: var(--text-step-title); line-height: 1; }
+.criterion-list-problem { margin: 0; }
+
+/* The header of the editor of one criterion: three rows that stay at the top while the sections scroll under them. It sticks at the
+   very top of the step list, above the list's own padding (a negative top), and takes that padding inside it so no strip of the
+   sections shows above it; a negative margin keeps it where it was. Kept short so the carving rule starts near the top: 95 px under
+   that padding with a name on one line, 115 px with two (rows of 22 px, 22 + 2 + the name's 20 or 39 px and 17 px, 4 px between
+   them, 4 px under them, a 1 px line). */
+.criterion-editor-header {
+  position: sticky;
+  top: calc(var(--space-unit) * -3);
+  z-index: 3;     /* over the period control's bubbles (2) that scroll under it */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-unit);
+  margin-top: calc(var(--space-unit) * -3);
+  padding-top: calc(var(--space-unit) * 3);
+  padding-bottom: var(--space-unit);
+  border-bottom: 1px solid var(--colour-line);
+  background: var(--colour-panel);
+}
+.criterion-editor-row { display: flex; align-items: center; gap: calc(var(--space-unit) * 2); }
+.criterion-editor-back { display: inline-flex; align-items: center; gap: var(--space-unit); }
+.criterion-editor-neighbours { display: inline-flex; align-items: center; gap: var(--space-unit); margin-left: auto; }
+.criterion-editor-position { color: var(--colour-muted); font-size: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.criterion-editor-step {
+  display: inline-flex;
+  padding: calc(var(--space-unit) / 2);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+/* At the first or the last criterion: waits, and keeps the focus (aria-disabled, not disabled). */
+.criterion-editor-step[aria-disabled="true"] { opacity: 0.4; cursor: default; }
+/* Row 2: the colour, the mode symbol, then the switch and the menu at the right end; the name under them across the header. */
+.criterion-editor-identity {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: calc(var(--space-unit) / 2) calc(var(--space-unit) * 2);
+}
+.criterion-editor-identity > .criterion-card-swatch { grid-column: 1; grid-row: 1; }
+.criterion-editor-identity > .mode-tile-symbol { grid-column: 2; grid-row: 1; }
+.criterion-editor-identity > .criterion-card-switch { grid-column: 4; grid-row: 1; }
+.criterion-editor-identity > .action-menu { grid-column: 5; grid-row: 1; display: flex; }
+.criterion-editor-header .criterion-card-menu-button { padding-block: calc(var(--space-unit) / 2); }
+/* The name, whole on up to two lines across the header (the same clamp and wrapping as a card's); a long word without spaces breaks
+   where it must. It takes the focus when a card, Add or Duplicate opens the editor; a ring only when the keyboard put it there. */
+.criterion-editor-name {
+  grid-column: 1 / -1; grid-row: 2;
+  display: -webkit-box;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--text-body);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.criterion-editor-name:focus { outline: none; }
+.criterion-editor-name:focus-visible { outline: 2px solid var(--colour-accent); outline-offset: 2px; }
+.criterion-editor-line { margin: 0; overflow: hidden; color: var(--colour-muted); font-size: var(--text-secondary); text-overflow: ellipsis; white-space: nowrap; }
+.criterion-editor-problem { margin: var(--space-unit) 0 0; }
+.criterion-editor-header .mode-tile-symbol { flex: none; width: 22px; height: 22px; margin: 0; }
+.criterion-editor-header-bypassed .criterion-card-swatch,
+.criterion-editor-header-bypassed .mode-tile-symbol { opacity: 0.45; }
+/* The editor: its sections start 4 px under the header, and their headers are 32 px (19.6 px of text and 6 px above and below), so
+   three closed sections put the carving rule about 97 px under the header. */
+.criteria-step-editor { gap: 0; }
+.criteria-step-editor .criterion-panel-frame { padding-top: var(--space-unit); }
+.criteria-step-editor .criterion-panel > .panel-section > .panel-section-heading > .panel-section-header { padding-block: calc(var(--space-unit) * 1.5); }
+
+/* Add criterion: a link, and under it the short menu of the modes (ModeMenu, in the popup of ActionMenu): symbol, name, one line. */
+.add-criterion { display: flex; flex-direction: column; align-items: flex-start; gap: calc(var(--space-unit) * 2); }
+.mode-menu { max-width: 360px; }
+.action-menu-popup.mode-menu [role="menuitem"] { display: flex; align-items: center; gap: calc(var(--space-unit) * 3); }
+.mode-menu .mode-tile-symbol { flex: none; width: 24px; height: 24px; margin: 0; }
+.mode-menu-text { display: flex; flex-direction: column; min-width: 0; }
+.mode-menu-name { font-weight: 600; line-height: 1.25; }
+.mode-menu-line { color: var(--colour-muted); font-size: var(--text-secondary); line-height: 1.25; }
+.mode-menu [role="menuitem"][aria-disabled="true"] .mode-tile-symbol { opacity: 0.45; }
+
+/* Use a file from another criterion, under the test surfaces box. */
+.protects { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
+.protects-reuse { display: flex; flex-direction: column; gap: var(--space-unit); }
+.protects-reuse-title { margin: 0; font-size: var(--text-secondary); font-weight: 600; }
+.protects-reuse-files { display: flex; flex-direction: column; gap: var(--space-unit); margin: 0; padding: 0; list-style: none; }
+.protects-reuse-files li { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--space-unit) * 2); }
+.protects-reuse-name { overflow-wrap: anywhere; }
+
+/* Carving (UX 5.5) -------------------------------------------------------------------------------------------------------- */
+
+.carving-step,
+.carving-content,
+.envelope-step,
+.export-step { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); }
+
+/* Dimmed results (UX 5.5, 6.3): the text turns muted, which keeps AA contrast on white and on chrome (UX 12); only the graphics
+   without text fade. Opacity on text would bring muted text to about 2.3:1. */
+.carving-content-dimmed { color: var(--colour-muted); }
+.carving-content-dimmed .histogram-bar,
+.carving-content-dimmed .histogram-swatch,
+.carving-content-dimmed .histogram-cutoff { opacity: 0.55; }
+.carving-content-dimmed .histogram-cutoff-label rect { fill: var(--colour-muted); }
+
+.carving-locked {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--space-unit) * 2);
+  padding: calc(var(--space-unit) * 3);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  background: var(--colour-chrome);
+}
+
+.threshold-number { display: inline-flex; }
+
+.threshold-slider-ends {
+  display: flex;
+  justify-content: space-between;
+  color: var(--colour-muted);
+  font-size: var(--text-secondary);
+}
+
+.switch-row { display: flex; align-items: center; gap: calc(var(--space-unit) * 2); }
+
+/* Number tiles on chrome: the label 12 px muted, the value 20 px bold (UX 5.6, screens). */
+.number-tiles { display: grid; gap: calc(var(--space-unit) * 2); }
+.number-tiles-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.number-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: calc(var(--space-unit) * 2) calc(var(--space-unit) * 3);
+  border-radius: var(--radius-large);
+  background: var(--colour-chrome);
+}
+
+.number-tile-label { color: var(--colour-muted); font-size: var(--text-secondary); }
+.number-tile-value { font-size: var(--text-key-number); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.number-tile-unit { white-space: nowrap; }
+
+/* The histogram (UX 5.5, screens): kept bars in accent, carved bars in the carved colour, the cutoff a dashed ink line. */
+.score-histogram { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); margin: 0; }
+.score-histogram-title-row { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--space-unit) * 2); }
+.score-histogram-title { margin: 0; font-size: var(--text-body); font-weight: 600; }
+
+.segmented-switch { display: inline-flex; border: 1px solid var(--colour-line); border-radius: var(--radius-small); overflow: hidden; }
+
+.segmented-switch button {
+  padding: 2px calc(var(--space-unit) * 2);
+  border: 0;
+  background: var(--colour-panel);
+  color: var(--colour-ink);
+  font: inherit;
+  font-size: var(--text-secondary);
+  cursor: pointer;
+  outline-offset: -2px;
+}
+
+.segmented-switch button + button { border-left: 1px solid var(--colour-line); }
+.segmented-switch button[aria-pressed="true"] { background: var(--colour-accent-soft); color: var(--colour-accent); font-weight: 600; }
+
+.score-histogram-chart { position: relative; }
+.score-histogram-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.histogram-kept { fill: var(--colour-accent); }
+.histogram-carved { fill: var(--colour-carved); }
+.histogram-bar-active rect { stroke: var(--colour-ink); stroke-width: 0.75; }
+.histogram-axis { stroke: var(--colour-ink); stroke-width: 1; }
+.histogram-grid-line { stroke: var(--colour-line); stroke-width: 0.5; }
+.histogram-tick { fill: var(--colour-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.histogram-cutoff { stroke: var(--colour-ink); stroke-width: 1.25; stroke-dasharray: 4 3; }
+.histogram-cutoff-label rect { fill: var(--colour-ink); }
+.histogram-cutoff-label text { fill: var(--colour-panel); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* A cutoff not run yet: the line and its label in accent, so it reads apart from the carving the tiles describe. */
+.score-histogram-preview .histogram-cutoff { stroke: var(--colour-accent); }
+.score-histogram-preview .histogram-cutoff-label rect { fill: var(--colour-accent); }
+
+/* The cutoff line's handle: a strip over the line, the full height of the chart, dragged sideways or moved with its keys. */
+.histogram-cutoff-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 20px;
+  transform: translateX(-50%);
+  border-radius: var(--radius-small);
+  cursor: ew-resize;
+  touch-action: none;
+}
+.histogram-cutoff-handle:focus-visible { outline: 2px solid var(--colour-accent); outline-offset: 0; }
+.histogram-cutoff-handle[aria-disabled="true"] { cursor: default; }
+
+.score-histogram-readout {
+  position: absolute;
+  top: 22px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  padding: 2px calc(var(--space-unit) * 2);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-small);
+  background: var(--colour-panel);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--colour-shadow) 16%, transparent);
+  font-size: var(--text-secondary);
+  white-space: nowrap;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.score-histogram-caption { display: flex; flex-direction: column; gap: var(--space-unit); font-size: var(--text-secondary); }
+.score-histogram-axis-title { color: var(--colour-muted); text-align: center; }
+.score-histogram-key { display: flex; gap: calc(var(--space-unit) * 4); }
+.score-histogram-key > span { display: inline-flex; align-items: center; gap: var(--space-unit); }
+.histogram-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.histogram-swatch-kept { background: var(--colour-accent); }
+.histogram-swatch-carved { background: var(--colour-carved); }
+.score-histogram-note { color: var(--colour-muted); }
+.score-histogram-preview-note { color: var(--colour-accent); }
+
+/* The carving rule of the weighted modes, at the top of the step: three choices side by side. */
+/* Manual | Automatic with its "i" beside it on one row: the panel's section is titled Carving rule already. */
+.setting-field.carving-rule-choice { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: calc(var(--space-unit) * 2); }
+.carving-rule-options { display: flex; flex-wrap: wrap; border: 1px solid var(--colour-line); border-radius: var(--radius-small); overflow: hidden; width: fit-content; }
+.carving-rule-options label {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px calc(var(--space-unit) * 3);
+  background: var(--colour-panel);
+  color: var(--colour-ink);
+  cursor: pointer;
+}
+.carving-rule-options label + label { border-left: 1px solid var(--colour-line); }
+.carving-rule-options input { position: absolute; opacity: 0; pointer-events: none; }
+.carving-rule-options label:has(input:checked) { background: var(--colour-accent-soft); color: var(--colour-accent); font-weight: 600; }
+.carving-rule-options label:has(input:focus-visible) { outline: 2px solid var(--colour-accent); outline-offset: -2px; }
+.carving-rule-options label:has(input:disabled) { color: var(--colour-muted); cursor: default; }
+
+/* Envelope and massing (UX 5.6) -------------------------------------------------------------------------------------------- */
+
+/* Two parts (R2 5), each with its settings, its build button and its results, a line between them. */
+.build-part { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); }
+.build-part + .build-part { padding-top: calc(var(--space-unit) * 3); border-top: 1px solid var(--colour-line); }
+
+.envelope-results { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); }
+/* Greyed when out of date (UX 5.6), as the dimmed carving: muted text, faded swatches. */
+.envelope-results-out-of-date .number-tiles,
+.envelope-results-out-of-date .storey-table { color: var(--colour-muted); }
+.envelope-results-out-of-date .storey-swatch { opacity: 0.55; }
+.out-of-date-label { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); font-weight: 600; }
+
+.storey-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.storey-table caption { margin-bottom: var(--space-unit); font-weight: 600; text-align: left; }
+.storey-table th,
+.storey-table td { padding: var(--space-unit) calc(var(--space-unit) * 1.5); border-bottom: 1px solid var(--colour-line); text-align: right; font-weight: 400; }
+.storey-table th:first-child { text-align: left; }
+.storey-table thead th { color: var(--colour-muted); font-size: var(--text-secondary); }
+.storey-table tfoot th,
+.storey-table tfoot td { border-bottom: 0; font-weight: 700; }
+
+.storey-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: calc(var(--space-unit) * 1.5);
+  border: 1px solid var(--colour-line);
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+/* The run report over the 3D view. */
+.run-report-panel {
+  position: absolute;
+  inset: 12px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  background: var(--colour-panel);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-shadow) 18%, transparent);
+}
+
+.run-report-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(var(--space-unit) * 3);
+  border-bottom: 1px solid var(--colour-line);
+}
+
+.run-report-header h2 { margin: 0; font-size: var(--text-step-title); font-weight: 600; }
+.run-report-problem { padding: calc(var(--space-unit) * 3); font-size: var(--text-body); }
+
+.run-report-text {
+  flex: 1;
+  margin: 0;
+  padding: calc(var(--space-unit) * 3);
+  overflow: auto;
+  font-family: var(--font-family-code);
+  font-size: var(--text-secondary);
+  white-space: pre-wrap;
+}
+
+/* Export (UX 5.7) ---------------------------------------------------------------------------------------------------------- */
+
+.download-list { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); margin: 0; padding: 0; list-style: none; }
+.download-list li { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--space-unit) * 2); }
+.download-note { color: var(--colour-muted); font-size: var(--text-secondary); }
+
+.out-of-date-tag {
+  padding: 0 var(--space-unit);
+  border: 1px solid var(--colour-muted);
+  border-radius: var(--radius-small);
+  color: var(--colour-muted);
+  font-size: var(--text-secondary);
+}

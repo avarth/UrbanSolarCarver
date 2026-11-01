@@ -5,8 +5,8 @@
 // one does nothing.
 import { useId, type RefObject } from "react";
 import { messages } from "../messages";
-import { useMenuPopup } from "../steps/menu_popup";
-import { ModeTileSymbol } from "../steps/ModeTileSymbols";
+import { useMenuPopup } from "../common/menu_popup";
+import { ModeTileSymbol } from "./ModeTileSymbols";
 import { MODE_TILES } from "../modes";
 
 interface ModeMenuProps {

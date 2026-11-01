@@ -13,7 +13,7 @@
 // drag that crosses the end hour and comes back) never moves the end date. The form saves once the changes stop.
 //
 // In Solar usefulness a fifth preset, "Cold period from the weather file", sets the dates of the weather file's cold period
-// (steps/cold_period_request.ts). What it found, or why it cannot be used yet, is the preset's tooltip (on hover and keyboard focus,
+// (settings_form/cold_period_request.ts). What it found, or why it cannot be used yet, is the preset's tooltip (on hover and keyboard focus,
 // as the mode tiles show theirs) and its description for a screen reader; in an energy-weighted criterion it adds that the cold
 // period follows the cold hours rule, not the typical building. The heating season preset follows the hemisphere of the
 // weather file: October to April in the north, April to October in the south.

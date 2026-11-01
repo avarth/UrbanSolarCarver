@@ -11,8 +11,8 @@ import { settingsForStep } from "../settings_form/presentation";
 import { SettingGroup } from "../settings_form/SettingGroup";
 import { storeyColour } from "../viewer/colour_scales";
 import { NumberTile } from "../common/NumberTile";
-import { formatNumber } from "./format_numbers";
-import "./steps.css";
+import { formatNumber } from "../format_numbers";
+import "../theme/panels.css";
 
 type EnvelopeSummary = NonNullable<RunSummary["envelope"]>;
 type MassingSummary = NonNullable<RunSummary["massing"]>;

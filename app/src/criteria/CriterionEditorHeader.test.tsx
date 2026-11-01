@@ -76,7 +76,7 @@ test("the name is whole, on a row of its own under the colour, symbol, switch an
   expect(nameElement.getAttribute("title")).toBe(name);
   const identity = header().querySelector(".criterion-editor-identity")!;
   expect([...identity.children].map((child) => child.classList[0])).toEqual(["criterion-card-swatch", "mode-tile-symbol", "setting-switch", "action-menu", "criterion-editor-name"]);
-  const css = readFileSync("src/steps/steps.css", "utf8");
+  const css = readFileSync("src/theme/panels.css", "utf8");
   const nameRule = css.match(/\n\.criterion-editor-name\s*{([^}]*)}/)![1];
   expect(nameRule).toMatch(/-webkit-line-clamp:\s*2/);
   expect(nameRule).toMatch(/overflow-wrap:\s*anywhere/);
@@ -138,7 +138,7 @@ test("the sticky header stays over the controls that scroll under it, the period
     const start = css.indexOf(`${selector} {`);
     return Number(/z-index:\s*(\d+)/.exec(css.slice(start, css.indexOf("}", start)))![1]);
   };
-  const header = zIndexOf(readFileSync("src/steps/steps.css", "utf8"), ".criterion-editor-header");
+  const header = zIndexOf(readFileSync("src/theme/panels.css", "utf8"), ".criterion-editor-header");
   const bubble = zIndexOf(readFileSync("src/settings_form/settings_form.css", "utf8"), ".scale-strip-bubble");
   expect(header).toBeGreaterThan(bubble);
 });

@@ -66,7 +66,7 @@ test("a card shows its whole name on up to two lines in a row of its own, its li
     rendered!.unmount();
     rendered = null;
   }
-  const css = readFileSync("src/steps/steps.css", "utf8");
+  const css = readFileSync("src/theme/panels.css", "utf8");
   const rule = (selector: string) => css.match(new RegExp(`\\n${selector.replace(/[.>]/g, "\\$&")}\\s*{([^}]*)}`))![1];
   expect(rule(".criterion-card-name")).toMatch(/-webkit-line-clamp:\s*2/);
   expect(rule(".criterion-card-name")).toMatch(/overflow-wrap:\s*anywhere/);

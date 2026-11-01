@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { getRunFileText, serviceProblemOf } from "../api_client/client";
 import { messages } from "../messages";
 import { WarningIcon } from "../settings_form/SettingField";
-import "./steps.css";
+import "../theme/panels.css";
 
 export const RUN_REPORT_PATH = "run_report.md";
 

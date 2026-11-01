@@ -4,7 +4,7 @@
 // and the schema defaults fill the rest, on the service as in the form.
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { ApiError, type ConfigErrorReply, type GridPlanReply, type ModeInfo } from "../api_client/client";
-import { gridIsOverBudget } from "../steps/grid_budget";
+import { gridIsOverBudget } from "./grid_budget";
 import { errorOfHiddenSetting, shownConfigErrorOf } from "./engine_errors";
 import { engineIgnoresIn } from "./engine_modes";
 import { SETTING_PRESENTATIONS, settingIsShownIn } from "./presentation";

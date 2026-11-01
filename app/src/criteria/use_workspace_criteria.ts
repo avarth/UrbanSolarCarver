@@ -7,8 +7,8 @@ import { serviceProblemOf, updateCriterion, type CriterionEntry, type HealthRepl
 import { messages } from "../messages";
 import type { FormStart, FormState, SettingsForm } from "../settings_form/form_state";
 import { splitSettings, type StepFormAction } from "../settings_form/two_forms";
-import { criterionProgressOf, pipelineRecordOf, runningCriterion, type RunFailure, type RunLoop } from "../steps/run_state";
-import { runAnalysisBlocker, stepOfSetting } from "../steps/SettingsStep";
+import { criterionProgressOf, pipelineRecordOf, runningCriterion, type RunFailure, type RunLoop } from "../common/run_state";
+import { runAnalysisBlocker, stepOfSetting } from "../settings_form/SettingsStep";
 import type { StageState, StepName } from "../stages";
 import {
   activeCriteria, cardLineOf, chainSummaryLine, criteriaProtectingNothing, criterionStatus, stagesDuringRun, type StagesByCriterion,

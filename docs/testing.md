@@ -38,7 +38,7 @@ python -m pytest tests/test_floor_plates.py -k end_wings
 `--lf` runs only the tests that failed last time, which is quick after a fix. In `app/`:
 
 ```bash
-npx vitest run src/steps/ModeStep.test.tsx
+npx vitest run src/criteria/ModeStep.test.tsx
 ```
 
 ### Tier 1: after every change

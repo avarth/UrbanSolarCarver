@@ -3,8 +3,8 @@
 // (10th percentile) and, with a target, the share of points at or above it; each with the maximum volume's value in brackets, which
 // the heading names: "mean 3.6 h (4.1)". A result without test points shows no card.
 import { messages } from "../messages";
-import { formatPercent, formattedNumber, withUnit } from "../steps/format_numbers";
-import type { StudyGeometry, StudyStatistics } from "./study_values";
+import { formatPercent, formattedNumber, withUnit } from "../format_numbers";
+import type { StudyGeometry, StudyStatistics } from "../viewer/study_values";
 
 export interface ResultCardProps {
   geometry: StudyGeometry;

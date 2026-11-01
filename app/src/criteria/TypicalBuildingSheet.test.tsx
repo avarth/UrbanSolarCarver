@@ -646,7 +646,7 @@ test("choosing the first building changes the window's shape without losing the 
 });
 
 test("the window is a modal frame in two columns from 900 px: no fixed sheet beside the panel, no stamp moved aside for it", () => {
-  const css = readFileSync("src/steps/steps.css", "utf8").replace(/\r\n/g, "\n");
+  const css = readFileSync("src/theme/panels.css", "utf8").replace(/\r\n/g, "\n");
   const wide = css.match(/@media \(min-width: 900px\) \{[\s\S]*?\n\}/)![0];
   // At every width the window is as wide as 880 px allows; under 900 px it is one column, not a narrow dialog.
   expect(css.replace(wide, "")).toMatch(/\.project-dialog-wide \{[^}]*width: min\(880px, 100%\)/);

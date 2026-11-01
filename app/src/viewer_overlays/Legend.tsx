@@ -1,6 +1,6 @@
 // The legend of UX 8.1 and 8.2, bottom right of the 3D view: the colourings on screen and their units.
 import { messages } from "../messages";
-import { formattedNumber, withUnit } from "../steps/format_numbers";
+import { formattedNumber, withUnit } from "../format_numbers";
 import { cividis, colourToken, keptScoreRange, storeyColour, sunRamp } from "../viewer/colour_scales";
 import { shadeColour, type ShadePalette } from "../viewer/sun_study";
 import type { ViewportTheme } from "../viewer/scene";

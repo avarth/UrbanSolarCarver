@@ -6,7 +6,7 @@
 // that waits stays focusable (aria-disabled), so its tooltip and reason can be reached.
 import { useId } from "react";
 import { messages } from "../messages";
-import { STUDY_GEOMETRIES, type StudyGeometry } from "./study_values";
+import { STUDY_GEOMETRIES, type StudyGeometry } from "../viewer/study_values";
 
 export interface GeometrySwitchProps {
   /** The geometries that can be shown: the maximum volume, and the envelope and the massing once built. */

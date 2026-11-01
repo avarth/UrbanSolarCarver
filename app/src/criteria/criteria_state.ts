@@ -2,8 +2,8 @@
 // line, where the selection goes when a card is removed, the order after a card is moved, and the files of the other criteria.
 import type { ChainSummary, CriterionCarvingSummary, CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
-import { formatPercent } from "../steps/format_numbers";
-import type { StageRunState } from "../steps/run_state";
+import { formatPercent } from "../format_numbers";
+import type { StageRunState } from "../common/run_state";
 import type { StageState } from "../stages";
 
 export type CardStatus =

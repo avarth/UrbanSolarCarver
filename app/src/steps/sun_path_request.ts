@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { getSunPath, serviceProblemOf } from "../api_client/client";
 import { shownValue, storedValue, type FormState } from "../settings_form/form_state";
 import { ANALYSIS_PERIOD_FIELDS } from "../settings_form/presentation";
-import { settingsToFixCount } from "./SettingsStep";
+import { settingsToFixCount } from "../settings_form/SettingsStep";
 import type { SunPathWithNorth } from "../viewer/sun_path";
 
 const MODE_WITH_SUN_PATH = "time-based";

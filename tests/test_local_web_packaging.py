@@ -185,7 +185,7 @@ def test_each_slider_lies_within_the_engine_limits():
 
 # ---- The Mode step: mode_tiles.json against the engine's modes (UX 5.3) ----
 
-MODE_TILES_PATH = APP_FOLDER / "src" / "steps" / "mode_tiles.json"
+MODE_TILES_PATH = APP_FOLDER / "src" / "mode_tiles.json"
 
 
 def test_mode_tiles_name_every_engine_mode_once():

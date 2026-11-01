@@ -2,7 +2,7 @@
 // 50 m for a model under 30 m), distance labels on the 100 m lines, reaching 1 km from the model centre and fading with distance.
 import * as THREE from "three";
 import { messages } from "../messages";
-import { formattedNumber } from "../steps/format_numbers";
+import { formattedNumber } from "../format_numbers";
 import { colourToken, type ViewportTheme } from "./colour_scales";
 import { recolourTextSprite, textSprite, type TextSprite } from "./text_sprite";
 

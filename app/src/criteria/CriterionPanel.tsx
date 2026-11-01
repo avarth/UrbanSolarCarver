@@ -15,17 +15,17 @@ import type { ColdPeriodState, Hemisphere } from "../settings_form/analysis_peri
 import { shownValue, type FormState } from "../settings_form/form_state";
 import { BALANCE_TEMPERATURE_FIELDS } from "../settings_form/presentation";
 import { SettingTooltip } from "../settings_form/SettingTooltip";
-import { ModeStep } from "../steps/ModeStep";
+import { ModeStep } from "./ModeStep";
 import { useDialogRequest } from "../common/dialogs";
-import { SettingsStep, WeatherChangeRegion, type WeatherChangeNoticeContent } from "../steps/SettingsStep";
+import { SettingsStep, WeatherChangeRegion, type WeatherChangeNoticeContent } from "../settings_form/SettingsStep";
 import { PanelSection, type PanelSections } from "./PanelSection";
-import { ProtectsBox } from "./ProtectsBox";
+import { ProtectsBox } from "../common/ProtectsBox";
 import { TypicalBuildingBox, TypicalBuildingSheet } from "./TypicalBuildingSheet";
 import type { TypicalBuildingHook } from "./use_typical_building";
 import {
   carvingRuleSummary, criterionSettingsSummary, modeSummary, PANEL_SECTIONS, settingsToFixBySection, testSurfacesSummary, type PanelSectionId,
 } from "./section_summaries";
-import "../steps/steps.css";
+import "../theme/panels.css";
 
 export interface CriterionPanelProps extends PanelSections {
   /** The criterion's test surface files, with their triangle counts. */

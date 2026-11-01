@@ -8,7 +8,7 @@
 import { useId, useRef, useState, type ReactNode } from "react";
 import type { CriterionEntry, MetricInfo, StudySource, StudyWithState } from "../api_client/client";
 import { messages } from "../messages";
-import { RunAnalysisButton } from "../steps/SettingsStep";
+import { RunAnalysisButton } from "../settings_form/SettingsStep";
 import { AddStudyMenu } from "./AddStudyMenu";
 import { surfacesFromOf } from "./StudyPopover";
 import "./simulate.css";

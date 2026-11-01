@@ -1,7 +1,7 @@
 // A stand-in for ViewerScene in tests. jsdom has no WebGL, so a test that renders ViewerPane (or the workspace around it)
 // swaps the scene for this one with vi.mock and reads what the pane asked the scene to draw:
-//   vi.mock("../viewer/scene", async (importOriginal) => ({
-//     ...(await importOriginal<typeof import("../viewer/scene")>()), ViewerScene: (await import("../viewer/fake_scene_for_test")).FakeViewerScene }));
+//   vi.mock("./scene", async (importOriginal) => ({
+//     ...(await importOriginal<typeof import("./scene")>()), ViewerScene: (await import("./fake_scene_for_test")).FakeViewerScene }));
 import type * as THREE from "three";
 import { vi } from "vitest";
 import type { Point3 } from "./local_origin";

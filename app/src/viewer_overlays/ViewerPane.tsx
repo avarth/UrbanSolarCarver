@@ -16,8 +16,8 @@ import type { RunSummary, SkyDome } from "../api_client/client";
 import { messages } from "../messages";
 import { carvedVoxelsByCriterion, type CarvedByCriterion } from "../viewer/carved_by_criterion_decoder";
 import { colourToken, keptScoreRange } from "../viewer/colour_scales";
-import type { StudyView } from "../simulate/study_values";
-import { patchCorners } from "../simulate/study_values_decoder";
+import type { StudyView } from "../viewer/study_values";
+import { patchCorners } from "../viewer/study_values_decoder";
 import {
   buildingMassingLayer, carvedByCriterionLayer, carvedVoxelsLayer, contextLayer, envelopeLayer, inspectSurfacesLayer, keptColumnTops, keptVoxelsLayer, maxVolumeLayer,
   skyDomeLayer, splitScorePoints, storeyOfPart, studyValuesLayer, sunPathLayer, sunStudyLayer, terrainLayer, testSurfacesLayer, volumeOutline, type InspectLayerFile, type MaxVolumeAppearance,

@@ -2,7 +2,7 @@
 // and, after a rejected save, the message under it with a warning icon and the field outlined in the error colour.
 import { useId, useState, type ReactNode } from "react";
 import { messages } from "../messages";
-import { formattedNumber, withUnit } from "../steps/format_numbers";
+import { formattedNumber, withUnit } from "../format_numbers";
 import { plainModeName } from "../modes";
 import type { ColdPeriodState, Hemisphere } from "./analysis_period";
 import { defaultValue, shownValue, type FormState, type SchemaProperty } from "./form_state";

@@ -8,8 +8,8 @@
 // without ends, with the loss colour when some point lost.
 import { useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import { messages } from "../messages";
-import type { ColourBy } from "../simulate/study_values";
-import { formattedNumber, withUnit } from "../steps/format_numbers";
+import type { ColourBy } from "../viewer/study_values";
+import { formattedNumber, withUnit } from "../format_numbers";
 import { changeRamp } from "../viewer/colour_scales";
 import { studyPaletteColour, type StudyPalette } from "../viewer/study_palettes";
 import "./overlays.css";

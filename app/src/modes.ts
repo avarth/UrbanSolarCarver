@@ -1,6 +1,6 @@
 // The six modes as the interface names them (mode_tiles.json: the plain name, the line and tooltip of the tile, what the
 // mode needs and what it may protect), and the plain name of an engine mode.
-import modeTiles from "./steps/mode_tiles.json";
+import modeTiles from "./mode_tiles.json";
 
 export interface ModeTile {
   engine_name: string;

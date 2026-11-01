@@ -4,7 +4,7 @@
 // known, else in the middle of the track; the value stays empty until the slider is moved. Every move is passed on; the form saves
 // once the moves stop (SAVE_DELAY_MILLISECONDS), so a drag is one save.
 import { messages } from "../../messages";
-import { formattedNumber, withUnit } from "../../steps/format_numbers";
+import { formattedNumber, withUnit } from "../../format_numbers";
 import type { SliderRange } from "../presentation";
 import { NumberInput, type ControlProps, type NumberRange } from "./NumberInput";
 

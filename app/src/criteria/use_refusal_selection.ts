@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
-import type { RunOrigin, RunRecord } from "../steps/run_state";
+import type { RunOrigin, RunRecord } from "../common/run_state";
 
 const TEST_SURFACES_ROLE_PREFIX = "test_surfaces:";
 /** The runs whose progress and outcome are shown in the bar pinned under the Criteria step. */

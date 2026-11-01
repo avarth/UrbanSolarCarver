@@ -1,7 +1,7 @@
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { initialFormState, type FormState } from "../settings_form/form_state";
-import { CRITERION_KEYS, MODES, SCHEMA } from "../steps/project_workspace_for_test";
+import { CRITERION_KEYS, MODES, SCHEMA } from "../workspace/project_workspace_for_test";
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { CriterionPanel, type CriterionPanelProps, type HoursCountedProps } from "./CriterionPanel";
 import { usePanelSections } from "./PanelSection";

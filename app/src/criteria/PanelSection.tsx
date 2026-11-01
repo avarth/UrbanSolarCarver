@@ -7,7 +7,7 @@ import { messages } from "../messages";
 import { WarningIcon } from "../settings_form/SettingField";
 import { SubheadingLevel } from "../settings_form/Subheading";
 import { DEFAULT_OPEN_SECTIONS, type PanelSectionId } from "./section_summaries";
-import "../steps/steps.css";
+import "../theme/panels.css";
 
 interface PanelSectionProps {
   /** A section of the panel (PanelSectionId), or a group of the typical building's window (TypicalBuildingSheet). */

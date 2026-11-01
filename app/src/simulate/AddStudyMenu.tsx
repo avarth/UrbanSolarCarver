@@ -5,7 +5,7 @@
 import { useId, type RefObject } from "react";
 import type { CriterionEntry, MetricInfo, StudySource } from "../api_client/client";
 import { messages } from "../messages";
-import { useMenuPopup } from "../steps/menu_popup";
+import { useMenuPopup } from "../common/menu_popup";
 
 interface AddStudyMenuProps {
   /** The menu's id, which the anchor names (aria-controls) while the menu is open. */

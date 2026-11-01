@@ -7,10 +7,10 @@
 import { useId, type DragEvent, type KeyboardEvent } from "react";
 import type { CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
-import { ActionMenu } from "../steps/ActionMenu";
-import { ModeTileSymbol } from "../steps/ModeTileSymbols";
+import { ActionMenu } from "../common/ActionMenu";
+import { ModeTileSymbol } from "./ModeTileSymbols";
 import { MODE_TILES } from "../modes";
-import "../steps/steps.css";
+import "../theme/panels.css";
 
 export type CriterionMenuItem = "rename" | "duplicate" | "delete";
 
