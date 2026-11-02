@@ -40,7 +40,7 @@ log = logging.getLogger(__name__)
 from urbansolarcarver.engine_requests import answer_engine_message, error_reply_for
 from urbansolarcarver.compute_device import resolve_compute_device
 from urbansolarcarver.daemon_client import (
-    DAEMON_AUTHKEY_PATH, DEFAULT_DAEMON_PORT, resolve_daemon_authkey,
+    DEFAULT_DAEMON_PORT, daemon_authkey_path, resolve_daemon_authkey,
 )
 from urbansolarcarver.session import CarverSession
 
@@ -140,7 +140,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="[daemon] %(levelname)s %(name)s: %(message)s")
     key = resolve_daemon_authkey()
     _validate_localhost(args.host)
-    print(f"[daemon] authkey file: {DAEMON_AUTHKEY_PATH}", flush=True)
+    print(f"[daemon] authkey file: {daemon_authkey_path()}", flush=True)
     print(f"[daemon] starting on {args.host}:{args.port} (device={args.device}) ...", flush=True)
     try:
         serve((args.host, args.port), authkey=key, device_arg=args.device)

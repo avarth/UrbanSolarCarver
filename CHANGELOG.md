@@ -36,6 +36,13 @@ versioning follows [Semantic Versioning](https://semver.org/).
   `reportServiceProblem` replaces 24 copies of the same check, `configErrorOf` four readers of a refused save's field
   errors. Three small hooks in a new `hooks/` folder (`useChangedDuringRender`, `useLatest`, `useKeyedValue`) replace
   about 20 hand-written copies. Nothing the app does changes.
+- **The daemon's key file is found when it is asked for**: `daemon_client.daemon_authkey_path()` replaces the constant
+  `DAEMON_AUTHKEY_PATH`, which was fixed when the module was imported and so ignored a home folder set later.
+- **Tests keep out of the user's folders on their own**: every test gets a home folder of its own, and Warp's kernel cache
+  stays in its usual folder (no more `NVIDIA` folder in the checkout after a test run). The smallest shared test scene
+  has its test surface under the cube, as described, not inside it; its end-to-end tests now check that part of the cube
+  is carved. `pytest` collects from `tests/` only. The app's fake service checks its main replies against the service's
+  types, and the fake 3D scene against the real one's methods. `docs/testing.md` lists the shared scenes and fakes.
 - **`PipelineResult` is defined in `urbansolarcarver.api_core.pipeline_result`**, below `api`, since `run_chain` builds
   it too. `from urbansolarcarver import PipelineResult` and `from urbansolarcarver.api import PipelineResult` work as
   before.

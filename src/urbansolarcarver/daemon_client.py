@@ -18,12 +18,15 @@ log = logging.getLogger(__name__)
 
 DEFAULT_DAEMON_HOST = "localhost"
 DEFAULT_DAEMON_PORT = 6000
-# Per-user key file shared by the daemon and its clients.
-DAEMON_AUTHKEY_PATH = Path.home() / ".urbansolarcarver" / ".daemon_authkey"
 
 
-def resolve_daemon_authkey(keyfile: Path = DAEMON_AUTHKEY_PATH) -> bytes:
-    """Read the authkey from *keyfile*, creating it if it does not exist.
+def daemon_authkey_path() -> Path:
+    """The per-user key file shared by the daemon and its clients, under the home folder as it is when asked."""
+    return Path.home() / ".urbansolarcarver" / ".daemon_authkey"
+
+
+def resolve_daemon_authkey(keyfile: Path | None = None) -> bytes:
+    """Read the authkey from *keyfile* (default: daemon_authkey_path()), creating it if it does not exist.
 
     Whichever process calls this first (the daemon or a client) generates
     the key: 32 bytes from ``secrets``, hex-encoded to 64 ASCII bytes.  All
@@ -32,6 +35,7 @@ def resolve_daemon_authkey(keyfile: Path = DAEMON_AUTHKEY_PATH) -> bytes:
     with mode 0o600; on Windows ``icacls`` is run afterwards, and if that
     fails a warning is logged and the key is still used.
     """
+    keyfile = daemon_authkey_path() if keyfile is None else keyfile
     if keyfile.is_file():
         return keyfile.read_bytes().strip()
     key = secrets.token_hex(32).encode()

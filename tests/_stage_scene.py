@@ -1,5 +1,6 @@
-"""A 10 m cube with a small horizontal test surface under it, in daylight
-mode on the CPU (no EPW needed): the smallest scene that runs every stage."""
+"""A 10 m cube (z -5 to 5) with a small horizontal test surface 1 m under it,
+facing up into it, in daylight mode on the CPU (no EPW needed): the smallest
+scene that runs every stage and carves the columns above the surface."""
 import numpy as np
 import trimesh
 
@@ -11,7 +12,7 @@ def daylight_cube_config(tmp_path, **overrides):
     from urbansolarcarver.load_config import user_config
     volume = trimesh.creation.box(extents=(10.0, 10.0, 10.0))
     surface = trimesh.Trimesh(
-        vertices=np.array([[-3, -3, 0], [3, -3, 0], [3, 3, 0], [-3, 3, 0]], dtype=float),
+        vertices=np.array([[-3, -3, -6], [3, -3, -6], [3, 3, -6], [-3, 3, -6]], dtype=float),
         faces=[[0, 1, 2], [0, 2, 3]],
     )
     volume_path, surface_path = tmp_path / "vol.ply", tmp_path / "srf.ply"

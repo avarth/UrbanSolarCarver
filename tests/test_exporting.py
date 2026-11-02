@@ -18,7 +18,7 @@ def _run_to_thresholding(tmp_path, offset, grid_step=1.0):
     volume = trimesh.creation.box(extents=(10.0, 10.0, 10.0))
     volume.apply_translation(offset)
     surface = trimesh.Trimesh(
-        vertices=np.array([[-3, -3, 0], [3, -3, 0], [3, 3, 0], [-3, 3, 0]], dtype=float) + offset,
+        vertices=np.array([[-3, -3, -6], [3, -3, -6], [3, 3, -6], [-3, 3, -6]], dtype=float) + offset,       # 1 m under the cube
         faces=[[0, 1, 2], [0, 2, 3]],
     )
     vol_path, srf_path = tmp_path / "vol.ply", tmp_path / "srf.ply"

@@ -5,7 +5,7 @@
 import type * as THREE from "three";
 import { vi } from "vitest";
 import type { Point3 } from "./local_origin";
-import type { CameraState, GroundAid, LayerName, ViewportTheme } from "./scene";
+import type { CameraState, GroundAid, LayerName, ViewerScene, ViewportTheme } from "./scene";
 import type { Hemisphere } from "./sky_dome";
 import type { ShadeHours } from "./sun_study";
 
@@ -22,8 +22,9 @@ export function pretendTheBrowserHasNoWebGl(): void {
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => null);
 }
 
-export class FakeViewerScene {
-  /** The scene the last ViewerPane made. */
+/** Every public method of ViewerScene, with its signature: a method the scene gains or changes must be faked too. */
+export class FakeViewerScene implements Pick<ViewerScene, keyof ViewerScene> {
+  /** The scene of the ViewerPane on screen; null once it is disposed (the pane unmounted), so a later test cannot read it. */
   static latest: FakeViewerScene | null = null;
   /** When set, the next scene throws it from its constructor (a fault of the scene, not a missing WebGL). */
   static constructorError: Error | null = null;
@@ -62,7 +63,12 @@ export class FakeViewerScene {
     return [...this.layers].filter(([, object]) => object !== null).map(([name]) => name);
   }
 
-  setNorth(_northDegrees: number): void {}
+  /** The North the pane gave last, in degrees; undefined until it gives one. */
+  northDegrees: number | undefined = undefined;
+  setNorth(northDegrees: number): void {
+    this.northDegrees = northDegrees;
+  }
+
   setSceneHemisphere(hemisphere: Hemisphere | null): void {
     this.sceneHemisphere = hemisphere;
   }
@@ -71,7 +77,11 @@ export class FakeViewerScene {
     this.groundAid = aid;
   }
 
-  setSkyDomeOpacity(_opacity: number): void {}
+  /** The sky dome's opacity the pane gave last; undefined until it gives one. */
+  skyDomeOpacity: number | undefined = undefined;
+  setSkyDomeOpacity(opacity: number): void {
+    this.skyDomeOpacity = opacity;
+  }
 
   /** The last call of setSunStudy: the sun, whether it casts shadows, the hours in shade. */
   sunStudy: { sun: Point3 | null; shadows: boolean; shade: ShadeHours | null } = { sun: null, shadows: false, shade: null };
@@ -91,12 +101,22 @@ export class FakeViewerScene {
   setEnvelopeSeeThrough(seeThrough: boolean): void {
     this.envelopeSeeThrough = seeThrough;
   }
-  setViewportTheme(_theme: ViewportTheme): void {}
+  /** The viewport theme the pane gave last; undefined until it gives one. */
+  theme: ViewportTheme | undefined = undefined;
+  setViewportTheme(theme: ViewportTheme): void {
+    this.theme = theme;
+  }
+
   leftInsetSource: (() => number) | null = null;
   setLeftInsetSource(source: () => number): void {
     this.leftInsetSource = source;
   }
-  frameAll(): void {}
+  /** How many times the pane asked to frame everything, and to look from the top. */
+  framedAll = 0;
+  viewsFromTheTop = 0;
+  frameAll(): void {
+    this.framedAll += 1;
+  }
 
   /** The boxes the pane asked the camera to frame, in order. */
   framedBoxes: { min: Point3; max: Point3 }[] = [];
@@ -121,7 +141,14 @@ export class FakeViewerScene {
   clickListenerCount(name: LayerName): number {
     return this.clickListeners.get(name)?.size ?? 0;
   }
-  viewTop(): void {}
+  viewTop(): void {
+    this.viewsFromTheTop += 1;
+  }
+
+  /** The layers with an object, as the scene's accessible name would list them. */
+  describe(): string {
+    return this.layersWithObjects().join(", ");
+  }
 
   onCameraChange(_listener: (camera: CameraState) => void): () => void {
     return () => {};
@@ -129,5 +156,6 @@ export class FakeViewerScene {
 
   dispose(): void {
     this.disposed = true;
+    if (FakeViewerScene.latest === this) FakeViewerScene.latest = null;
   }
 }

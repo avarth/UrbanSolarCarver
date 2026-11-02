@@ -8,20 +8,20 @@ from pathlib import Path
 
 @pytest.fixture
 def tiny_cube_mesh():
-    """A minimal watertight cube mesh (8 vertices, 12 faces) for smoke tests."""
+    """A minimal watertight cube mesh (8 vertices, 12 faces), z -5 to 5, for smoke tests."""
     import trimesh
     return trimesh.creation.box(extents=(10.0, 10.0, 10.0))
 
 
 @pytest.fixture
 def tiny_surface_mesh():
-    """A small horizontal quad as a test surface (facing +Z)."""
+    """A small horizontal quad as a test surface, 1 m under tiny_cube_mesh and facing up into it."""
     import trimesh
     verts = np.array([
-        [-3.0, -3.0, 0.0],
-        [ 3.0, -3.0, 0.0],
-        [ 3.0,  3.0, 0.0],
-        [-3.0,  3.0, 0.0],
+        [-3.0, -3.0, -6.0],
+        [ 3.0, -3.0, -6.0],
+        [ 3.0,  3.0, -6.0],
+        [-3.0,  3.0, -6.0],
     ], dtype=np.float32)
     faces = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.int32)
     return trimesh.Trimesh(vertices=verts, faces=faces)
@@ -75,6 +75,30 @@ def no_real_recycle_bin(monkeypatch):
             os.remove(path)
 
     monkeypatch.setattr(send2trash, "send2trash", remove)
+
+
+@pytest.fixture(autouse=True)
+def no_real_home_folder(tmp_path_factory, monkeypatch):
+    """Every test has a home folder of its own, so none reads or writes the user's ~/.urbansolarcarver (the typical building
+    library, the preferences, the daemon key) or ~/UrbanSolarCarver/projects. A test that looks into the home folder asks
+    for it by its own fixture (home_folder)."""
+    home = tmp_path_factory.mktemp("home")
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setenv("HOME", str(home))
+
+
+def pytest_configure(config):
+    """Warp finds its kernel cache from the user's folders: with the home folder moved (no_real_home_folder) it would make a
+    new cache in the working folder (an NVIDIA folder in the checkout) and compile every kernel again. Each test process
+    pins it to the usual cache first."""
+    if "WARP_CACHE_PATH" in os.environ:
+        return
+    try:
+        import warp.config
+        from warp.thirdparty import appdirs
+    except ImportError:
+        return
+    os.environ["WARP_CACHE_PATH"] = appdirs.user_cache_dir(appname="warp", appauthor="NVIDIA", version=warp.config.version)
 
 
 @pytest.fixture

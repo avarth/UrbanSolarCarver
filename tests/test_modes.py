@@ -1,5 +1,7 @@
 """Smoke tests that the tilted_plane, time-based, irradiance, benefit and daylight
 modes run end to end on a tiny mesh, plus checks of the benefit-mode weight formula."""
+import json
+
 import numpy as np
 import pytest
 import yaml
@@ -34,6 +36,12 @@ def _write_config(tmp_path, vol_path, srf_path, epw_path, mode, **extra):
     return load_config(str(cfg_path))
 
 
+def _assert_carves_part_of_the_cube(result):
+    """The test surface under the cube looks up through it: some voxels go, not all."""
+    diagnostic = json.loads((result.exporting.out_dir / "diagnostics" / "diagnostic.json").read_text(encoding="utf-8"))
+    assert 0 < diagnostic["voxels_removed"] < diagnostic["voxels_original"]
+
+
 def _run_mode(tmp_path, vol_path, srf_path, epw_path, mode, **extra):
     """Run full pipeline for a mode and return the PipelineResult."""
     from urbansolarcarver import run_pipeline
@@ -54,6 +62,7 @@ def test_smoke_tilted_plane(tmp_path, tmp_mesh_files):
     import trimesh
     mesh = trimesh.load(str(result.exporting.export_path))
     assert len(mesh.vertices) > 0
+    _assert_carves_part_of_the_cube(result)
 
 
 # --- EPW-dependent modes ---
@@ -77,6 +86,7 @@ def test_smoke_epw_modes(tmp_path, tmp_mesh_files, example_epw_path, mode, extra
     import trimesh
     mesh = trimesh.load(str(result.exporting.export_path))
     assert len(mesh.vertices) > 0
+    _assert_carves_part_of_the_cube(result)
 
 
 # --- Benefit weight semantics (documented Heaviside formula) ---

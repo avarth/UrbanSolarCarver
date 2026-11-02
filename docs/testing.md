@@ -1,6 +1,6 @@
 # Running the tests
 
-The Python suite (about 1330 tests in `tests/`) and the front-end suite (about 480 vitest tests in `app/`) run locally:
+The Python suite (about 2,080 tests in `tests/`) and the front-end suite (about 1,010 vitest tests in `app/`) run locally:
 there is no CI, because the engine runs on the GPU and hosted runners have none. Tests marked `gpu` are skipped
 automatically without CUDA.
 
@@ -11,16 +11,16 @@ git worktree that has no environment of its own, put the worktree's sources firs
 
 ## Four tiers
 
-Times are wall times on an 8-core / 16-thread AMD Zen 2 with an RTX 3060, measured 2026-10-19.
+Times are wall times on an 8-core / 16-thread AMD Zen 2 with an RTX 3060, measured 2026-11-02.
 
 | Tier | When | Command | Time |
 |---|---|---|---|
 | 0 | While editing | `python -m pytest tests/test_floor_plates.py -m "not slow"` | seconds |
-| 1 | After every change | `python -m pytest -m "not slow" -n 8` | about 45 s |
-| 2 | Before each commit | `python -m pytest -m "not sweep" -n 8` | about 65 s |
-| 3 | Before merging | `python -m pytest -n 8` | about 100 s |
+| 1 | After every change | `python -m pytest -m "not slow" -n 8` | about 70 s |
+| 2 | Before each commit | `python -m pytest -m "not sweep" -n 8` | about 3 min |
+| 3 | Before merging | `python -m pytest -n 8` | about 4 min |
 
-When `app/` changed, also run the front-end checks of the same tier (see below): `npm test` takes about 30 s (12 s of it ESLint),
+When `app/` changed, also run the front-end checks of the same tier (see below): `npm test` takes about 32 s (12 s of it ESLint),
 `npm run typecheck` 5 s and `npm run build` 7 s.
 
 Every tier also checks the import rules of the [Project Map](project-map.md): `tests/test_architecture.py` for the
@@ -105,6 +105,38 @@ faster. Times grow by about half under `-n 8`, so a test listed only in a parall
 
 An exact count in a test (panels, sample points, kept voxels of a packaged example) carries a comment on how to take
 the new value after a deliberate change of the example files or of the code that produces it.
+
+## Keeping out of the user's folders
+
+`tests/conftest.py` does this for every test, without a fixture to ask for:
+
+- `no_real_home_folder` gives each test a home folder of its own (`HOME` and `USERPROFILE`), so no test reads or writes
+  the user's `~/.urbansolarcarver` (the typical building library, the preferences, the daemon key) or
+  `~/UrbanSolarCarver/projects`. A test that looks into the home folder asks for it by a `home_folder` fixture.
+- `pytest_configure` pins Warp's kernel cache (`WARP_CACHE_PATH`) to its usual folder first: with the home folder
+  moved, Warp would otherwise make a new cache in the working folder (an `NVIDIA` folder in the checkout) and compile
+  every kernel again. A daemon started by a test gets the same environment (`tests/_daemon_home.py`).
+- `no_real_recycle_bin` removes what the local web service would send to the recycle bin.
+
+`tests/test_isolation.py` checks the first two.
+
+## Shared scenes and fakes
+
+Before writing a scene or a fake of your own, use these.
+
+| Where | What |
+|---|---|
+| `tests/conftest.py` | `tiny_cube_mesh` (a 10 m cube, z -5 to 5), `tiny_surface_mesh` (a 6 m quad 1 m under it, facing up), `tmp_mesh_files`, `example_epw_path`, `project_with_inputs`, `example_project_templates` |
+| `tests/_stage_scene.py` | `daylight_cube_config`: the same cube and surface as a validated daylight config on the CPU, the smallest scene that runs every stage |
+| `tests/_chain_scene.py` | a box with two facades, on which two chained criteria decide about different voxels |
+| `tests/cases.py`, `tests/oracle.py`, `tests/montecarlo.py` | the typology scenes run end to end, an independent reference implementation, and the randomised sweep |
+| `tests/local_web_test_support.py` | projects for the local web service (`add_project_with_inputs`, `box_bytes`), `FakeEngine` (writes run_chain's folders without computing), `FakeRecycleBin` |
+| `tests/_epw.py`, `tests/_daemon_home.py` | the weather file to use or skip on; the environment of a daemon subprocess |
+| `app/src/workspace/project_workspace_for_test.tsx` | `FakeService`, the service an open project talks to; `json<Reply>(body)` checks a reply against the service's type when given it |
+| `app/src/workspace/chain_service_for_test.tsx`, `simulate_service_for_test.tsx` | the same for several criteria, and for Simulate |
+| `app/src/viewer/fake_scene_for_test.ts` | `FakeViewerScene`, typed against `ViewerScene`'s public methods; it records what the pane asked it to draw |
+| `app/src/api_client/project_session_for_test.tsx` | `inProjectSession(element)`: a hook or panel of an open project rendered without the workspace |
+| `app/src/api_client/fake_websocket_for_test.ts`, `app/src/viewer_overlays/render_for_test.tsx` | a run's events; rendering with React's `act` |
 
 ## Running in parallel
 

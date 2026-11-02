@@ -114,5 +114,4 @@ class TestSaveHistogram:
         """All-identical scores should not crash."""
         scores = np.full(50, 3.14)
         path = save_histogram(scores, tmp_path, "const.png")
-        # The function may return a path or None here; the test only checks
-        # that it does not raise.
+        assert path is not None and path.is_file()       # one bar at the constant value

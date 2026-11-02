@@ -92,6 +92,8 @@ def test_full_pipeline_benefit(tmp_path, tiny_cube_mesh, tiny_surface_mesh):
     assert "voxels_kept" in thr_summary
     assert "retention_pct" in thr_summary
     assert "timings" in thr_summary
+    # The surface under the cube sees the low January sun through it: half the score carved keeps part of the cube.
+    assert 0 < thr_summary["retention_pct"] < 100
 
 
 @_SKIP_EPW
@@ -130,6 +132,8 @@ def test_run_pipeline_convenience(tmp_path, tiny_cube_mesh, tiny_surface_mesh):
     cfg = load_config(str(cfg_path))
     result = run_pipeline(cfg, tmp_path / "pipeline_out")
     assert result.exporting.export_path.exists()
+    diagnostic = json.loads((result.exporting.out_dir / "diagnostics" / "diagnostic.json").read_text(encoding="utf-8"))
+    assert 0 < diagnostic["voxels_removed"] < diagnostic["voxels_original"]
 
 
 # ---------------------------------------------------------------------------

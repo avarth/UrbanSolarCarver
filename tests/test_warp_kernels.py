@@ -12,8 +12,9 @@ class TestWarmupKernels:
         assert warmup_kernels("cpu") == expected
 
     def test_warmup_auto_device(self):
-        from urbansolarcarver.warp_kernels import warmup_kernels
-        assert isinstance(warmup_kernels(), bool)  # must not raise
+        from urbansolarcarver.compute_device import resolve_compute_device
+        from urbansolarcarver.warp_kernels import warmup_kernels, dda_backend_available
+        assert warmup_kernels() == dda_backend_available(resolve_compute_device("auto"))
 
 
 def test_requiring_the_dda_backend_names_why_warp_cannot_run(monkeypatch):

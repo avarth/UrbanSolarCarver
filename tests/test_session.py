@@ -40,12 +40,12 @@ class TestCarverSessionLifecycle:
 
     def test_auto_device_resolves(self):
         sess = CarverSession(device="auto")
-        assert sess.device.type in ("cpu", "cuda")
+        assert sess.device.type == ("cuda" if torch.cuda.is_available() else "cpu")
         sess.close()
 
     def test_none_device_resolves(self):
         sess = CarverSession(device=None)
-        assert sess.device.type in ("cpu", "cuda")
+        assert sess.device.type == ("cuda" if torch.cuda.is_available() else "cpu")
         sess.close()
 
     def test_invalid_device_raises(self):

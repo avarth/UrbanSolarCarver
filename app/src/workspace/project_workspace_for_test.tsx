@@ -4,7 +4,10 @@
 import { act, useState, type ComponentProps } from "react";
 import { flushSync } from "react-dom";
 import { vi } from "vitest";
-import type { CriterionEntry, InputFileChange, InputFileInfo, InspectedFile, ModeInfo, ProjectDetail, SunChart, SunPath } from "../api_client/client";
+import type {
+  ColdPeriodReply, ConfigErrorReply, ConfigReply, CriterionEntry, InputFileChange, InputFileInfo, InputFilesReply, InspectedFile, InspectReply, ModeInfo,
+  ProjectDetail, RunSummary, StageStatusReply, StartRunReply, SunChart, SunPath, SunPositions,
+} from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { useLeavingInspect } from "../inspect/UnsavedTurnsDialog";
 import { SAVE_DELAY_MILLISECONDS } from "../settings_form/form_state";
@@ -55,7 +58,8 @@ export const MASSING = { export_mesh_file: "plates.ply", floor_area_m2_per_store
 export const NOTHING_RUN: Record<PipelineStage, StageState> = { preprocessing: "missing", thresholding: "missing", exporting: "missing", massing: "missing" };
 export const CARVED: Record<PipelineStage, StageState> = { ...NOTHING_RUN, preprocessing: "current", thresholding: "current" };
 
-export function json(body: unknown, status = 200): Response {
+/** A reply of the fake service. Given the service's type of the reply (json<RunSummary>(...)), the body is checked against it. */
+export function json<Reply = unknown>(body: NoInfer<Reply>, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
@@ -95,7 +99,7 @@ export class FakeService {
   /** The location and latitude the reply to a weather file upload gives. */
   uploadedWeather = { location: "Golden, CO, USA", latitude: 39.74 };
   /** The reply of GET cold-period. */
-  coldPeriodReply: unknown = { status: "none", period: null };
+  coldPeriodReply: ColdPeriodReply = { status: "none", period: null };
   /** The modes whose starting values a criterion's settings are stored on top of (openWorkspace gives the workspace's). */
   modes: ModeInfo[] = MODES;
   /** The shared settings stored by the saves of this test, which a shared settings save is merged into. */
@@ -139,40 +143,40 @@ export class FakeService {
       const criterionSettings = Object.keys(values).filter((name) => CRITERION_KEYS.has(name));
       const fieldErrors = criterionSettings.length > 0
         ? criterionSettings.map((field) => ({ field, message: "A setting of one criterion, not shared by the criteria." })) : this.configErrorsOf(values);
-      if (fieldErrors !== null) return json({ field_errors: fieldErrors, grid_plan: null, criterion: this.sharedRefusalCriterion }, 422);
+      if (fieldErrors !== null) return json<ConfigErrorReply>({ field_errors: fieldErrors, grid_plan: null, criterion: this.sharedRefusalCriterion }, 422);
       this.savedValues.push(values);
       this.sharedSettings = { ...this.sharedSettings, ...values };       // merged into the stored shared settings
-      return json({ settings: this.sharedSettings, grid_plan: null });
+      return json<ConfigReply>({ settings: this.sharedSettings, grid_plan: null });
     }
     if (method === "PATCH" && path === "/criteria/1") {
       if (this.refuseSavesWith !== null) return json({ detail: "A run of this project is in progress." }, this.refuseSavesWith);
       const { values } = JSON.parse(String(init!.body)) as { values: Record<string, unknown> };
       const fieldErrors = this.configErrorsOf(values);
-      if (fieldErrors !== null) return json({ field_errors: fieldErrors, grid_plan: null, criterion: "1" }, 422);
+      if (fieldErrors !== null) return json<ConfigErrorReply>({ field_errors: fieldErrors, grid_plan: null, criterion: "1" }, 422);
       this.savedValues.push(values);
       // The criterion's settings are replaced, on top of the starting values of their mode (shared settings in the values are
       // ignored), and it is named after a new mode.
       const mode = String(values.mode);
       const startingValues = this.modes.find((candidate) => candidate.name === mode)?.starting_values ?? {};
       this.criterionSettings = Object.fromEntries(Object.entries({ ...startingValues, ...values }).filter(([name]) => CRITERION_KEYS.has(name)));
-      return json(criterionEntry(this.criterionSettings, this.criterionTestSurfaceFiles));
+      return json<CriterionEntry>(criterionEntry(this.criterionSettings, this.criterionTestSurfaceFiles));
     }
     if (method === "POST" && path === "/criteria/1/test-surfaces") {
       if (this.refuseSavesWith !== null) return json({ detail: "A run of this project is in progress." }, this.refuseSavesWith);
       const fileName = ((init!.body as FormData).get("file") as File).name;
       if (!this.criterionTestSurfaceFiles.includes(fileName)) this.criterionTestSurfaceFiles = [...this.criterionTestSurfaceFiles, fileName];
       if (!this.storedTestSurfaces.some((file) => file.name === fileName)) this.storedTestSurfaces = [...this.storedTestSurfaces, { name: fileName, triangle_count: 1 }];
-      return json(criterionEntry(this.criterionSettings, this.criterionTestSurfaceFiles));
+      return json<CriterionEntry>(criterionEntry(this.criterionSettings, this.criterionTestSurfaceFiles));
     }
     if (method === "DELETE" && path.startsWith("/criteria/1/test-surfaces/")) {
       const fileName = decodeURIComponent(path.replace("/criteria/1/test-surfaces/", ""));
       this.criterionTestSurfaceFiles = this.criterionTestSurfaceFiles.filter((name) => name !== fileName);
       this.storedTestSurfaces = this.storedTestSurfaces.filter((file) => file.name !== fileName);       // no other criterion uses it
-      return json(criterionEntry(this.criterionSettings, this.criterionTestSurfaceFiles));
+      return json<CriterionEntry>(criterionEntry(this.criterionSettings, this.criterionTestSurfaceFiles));
     }
-    if (method === "GET" && path === "/inputs/test_surfaces") return json(this.storedTestSurfaces);
+    if (method === "GET" && path === "/inputs/test_surfaces") return json<InputFileInfo[]>(this.storedTestSurfaces);
     if (path === "/stage-status") {
-      return json({ stages: this.stages, criteria: { 1: { preprocessing: this.stages.preprocessing, thresholding: this.stages.thresholding } },
+      return json<StageStatusReply>({ stages: this.stages, criteria: { 1: { preprocessing: this.stages.preprocessing, thresholding: this.stages.thresholding } },
                     input_changes: this.inputChanges });
     }
     if (method === "DELETE" && path === "/input-changes") {
@@ -182,30 +186,30 @@ export class FakeService {
     if (method === "POST" && path === "/runs") {
       await this.runStartsWaitFor;
       const { produce } = JSON.parse(String(init!.body)) as { produce: string[] };
-      if (this.everythingUpToDate) return json({ status: "up_to_date", run_id: null, stages: [] });
+      if (this.everythingUpToDate) return json<StartRunReply>({ status: "up_to_date", run_id: null, stages: [] });
       this.runsStarted.push(produce);
       const stages = this.stages.preprocessing === "current" ? produce : ["preprocessing", ...produce];    // the analysis when it is out of date
-      return json({ status: "started", run_id: `r${this.runsStarted.length}`, stages });
+      return json<StartRunReply>({ status: "started", run_id: `r${this.runsStarted.length}`, stages });
     }
-    if (path === "/sun-path" && this.sunPath !== null) return json(this.sunPath);
-    if (path === "/sun-chart") return json(this.sunChart);
+    if (path === "/sun-path" && this.sunPath !== null) return json<SunPath>(this.sunPath);
+    if (path === "/sun-chart") return json<SunChart>(this.sunChart);
     if (path === "/sun-positions") {
       const query = new URLSearchParams(fullPath.split("?")[1]);
       const [start, end, step] = ["start", "end", "step"].map((key) => Number(query.get(key)));
       const minutes = Array.from({ length: Math.floor((end - start) / step) + 1 }, (_, index) => start + index * step).filter((minute) => minute >= 480 && minute <= 960);
-      return json({ positions: minutes.map((minute) => ({ date: query.get("from"), minute, vector: FakeService.SUN_UP, altitude: 53.1, azimuth: 180 })),
+      return json<SunPositions>({ positions: minutes.map((minute) => ({ date: query.get("from")!, minute, vector: FakeService.SUN_UP, altitude: 53.1, azimuth: 180 })),
                     days_sampled: 1, day_step: 1, step_minutes: step });
     }
-    if (path === "/run/summary") return json(this.summary);
+    if (path === "/run/summary") return json<RunSummary>(this.summary);
     if (method === "POST" && path.startsWith("/inputs/")) {
       await this.uploadsAnswerWhen;
       const role = path.replace("/inputs/", "");
       const files = role === "weather" ? [{ name: "weather.epw", triangle_count: 0 }] : [{ name: "more.obj", triangle_count: 1 }];
-      return json({ role, files, joined_bounds: [[0, 0, 0], [1, 1, 0]], weather_location: this.uploadedWeather.location,
+      return json<InputFilesReply>({ role, files, joined_bounds: [[0, 0, 0], [1, 1, 0]], weather_location: this.uploadedWeather.location,
                     weather_latitude: this.uploadedWeather.latitude });
     }
-    if (path.startsWith("/cold-period")) return json(this.coldPeriodReply);
-    if (method === "GET" && path === "/inspect") return json({ files: this.inspection });
+    if (path.startsWith("/cold-period")) return json<ColdPeriodReply>(this.coldPeriodReply);
+    if (method === "GET" && path === "/inspect") return json<InspectReply>({ files: this.inspection });
     const inspected = /^\/inspect\/test_surfaces\/([^/]+)\/(geometry|turn|restore)$/.exec(path);
     if (inspected !== null) return this.answerInspect(method, decodeURIComponent(inspected[1]), inspected[2], init);
     if (path.startsWith("/inputs/")) return new Response(this.inputFileContents[path] ?? TRIANGLE_OBJ);

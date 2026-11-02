@@ -1,6 +1,7 @@
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import * as THREE from "three";
+import type { RunSummary } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { initialFormState, type SaveOutcome } from "../settings_form/form_state";
 import { renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
@@ -148,7 +149,7 @@ test("threshold moves during a carving run: one more run with the last value, an
     const method = init?.method ?? "GET";
     requests.push(`${method} ${address}`);
     if (method === "POST" && address.endsWith("/runs")) return new Response(JSON.stringify(await startReplies.shift()));
-    if (address.endsWith("/run/summary")) return new Response(JSON.stringify({ carving: null, massing: null }));
+    if (address.endsWith("/run/summary")) return new Response(JSON.stringify({ carving: null, envelope: null, massing: null } satisfies RunSummary));
     return new Response(JSON.stringify({ detail: "none" }), { status: 404 });
   }));
   const resultFetches = () => requests.filter((request) => request.endsWith("/run/summary") || request.endsWith("/run/score-points")).length;
@@ -208,7 +209,7 @@ test("a threshold run whose follow-up brings no run (a failed save, results up t
     const method = init?.method ?? "GET";
     requests.push(`${method} ${address}`);
     if (method === "POST" && address.endsWith("/runs")) return new Response(JSON.stringify(startReplies.shift()));
-    if (address.endsWith("/run/summary")) return new Response(JSON.stringify({ carving: null, massing: null }));
+    if (address.endsWith("/run/summary")) return new Response(JSON.stringify({ carving: null, envelope: null, massing: null } satisfies RunSummary));
     return new Response(JSON.stringify({ detail: "none" }), { status: 404 });
   }));
   const resultFetches = () => requests.filter((request) => request.endsWith("/run/summary") || request.endsWith("/run/score-points")).length;
@@ -273,7 +274,7 @@ test("after a follow-up with nothing to run, the carving stays dimmed until the 
   vi.stubGlobal("fetch", vi.fn(async (address: string, init?: RequestInit) => {
     if ((init?.method ?? "GET") === "POST" && address.endsWith("/runs")) return new Response(JSON.stringify(startReplies.shift()));
     if (address.endsWith("/run/summary") || address.endsWith("/run/score-points")) await resultsHeld;
-    if (address.endsWith("/run/summary")) return new Response(JSON.stringify({ carving: CARVING_SUMMARY, massing: null }));
+    if (address.endsWith("/run/summary")) return new Response(JSON.stringify({ carving: CARVING_SUMMARY, envelope: null, massing: null } satisfies RunSummary));
     return new Response(JSON.stringify({ detail: "none" }), { status: 404 });
   }));
   const stages: Record<PipelineStage, StageState> = { ...ALL_CURRENT, exporting: "missing", massing: "missing" };
@@ -358,7 +359,7 @@ test("a threshold change whose save stores a mode or an analysis setting a refus
   vi.stubGlobal("fetch", vi.fn(async (address: string, init?: RequestInit) => {
     requests.push(`${init?.method ?? "GET"} ${address}`);
     if ((init?.method ?? "GET") === "POST" && address.endsWith("/runs")) return new Response(JSON.stringify(STARTED("r1")));
-    if (address.endsWith("/run/summary")) return new Response(JSON.stringify({ carving: null, massing: null }));
+    if (address.endsWith("/run/summary")) return new Response(JSON.stringify({ carving: null, envelope: null, massing: null } satisfies RunSummary));
     return new Response(JSON.stringify({ detail: "none" }), { status: 404 });
   }));
   const stages: Record<PipelineStage, StageState> = { ...ALL_CURRENT, exporting: "missing", massing: "missing" };
