@@ -540,8 +540,9 @@ export function studyValuesLayer(corners: Float32Array): THREE.Object3D {
   geometry.setIndex(new THREE.BufferAttribute(index, 1));
   // The sphere around the corners' box: one pass over the points where computeBoundingSphere takes two.
   geometry.boundingSphere = new THREE.Box3().setFromBufferAttribute(positions).getBoundingSphere(new THREE.Sphere());
+  // Pulled further forward than the test surfaces (-2, -8) the patches lie on: at the same offset the two take turns in stripes.
   const material = layerMaterial(new THREE.MeshBasicMaterial({
-    vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8,
+    vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -12,
   }));
   const patches = new THREE.Mesh(geometry, material);
   layerHooks(patches).recolour = (view: StudyView) => {

@@ -276,7 +276,10 @@ test("study values are drawn in front of the test surfaces they lie on, unlit, a
   const layer = paintedStudyLayer(view, corners) as THREE.Mesh;
   const material = layer.material as THREE.MeshBasicMaterial;
   expect(material).toBeInstanceOf(THREE.MeshBasicMaterial);
-  expect([material.polygonOffset, material.polygonOffsetFactor, material.polygonOffsetUnits]).toEqual([true, -2, -8]);
+  const surfaces = (testSurfacesLayer([{ name: "1", colour: null, geometry: new THREE.BoxGeometry(1, 1, 1) }]).children[0] as THREE.Mesh).material as THREE.Material;
+  expect(material.polygonOffset).toBe(true);
+  expect(material.polygonOffsetFactor).toBeLessThan(surfaces.polygonOffsetFactor);
+  expect(material.polygonOffsetUnits).toBeLessThan(surfaces.polygonOffsetUnits);
   expect(material.side).toBe(THREE.DoubleSide);
   expect(Array.from(corners)).toEqual(Array.from(before));
 });

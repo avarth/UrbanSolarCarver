@@ -87,6 +87,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Simulate's study values no longer break into stripes with the test surfaces shown.** The patches and the test
+  surfaces they lie on were pulled forward in depth by the same amount, so with the Test surfaces layer turned on the two
+  took turns pixel by pixel, more at grazing angles. The patches are now pulled further forward.
 - **A criterion turned back on shows its result again.** The run summary lists only the criteria that are on, and the app
   fetched it at open and after runs only: a criterion turned on after the summary was read had an empty card line, and
   the chain line kept the numbers without it, until the next run or a reload. The app now fetches the summary again
