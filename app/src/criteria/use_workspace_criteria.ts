@@ -2,11 +2,11 @@
 // (use_criterion_selection.ts), a run refused for a criterion shown on that criterion (use_refusal_selection.ts), why Run analysis
 // cannot start in Criteria and in Site and grid, what the results need to know about the criteria (useResultSteps), and the cards'
 // lines and the chain line, which read the results (cardsOf).
-import { useLayoutEffect, useRef } from "react";
 import {
   reportServiceProblem, updateCriterion, type CriterionEntry, type HealthReply, type ModeInfo, type RunSummary,
 } from "../api_client/client";
 import { useProjectSession } from "../api_client/project_session";
+import { useLatest } from "../hooks/use_latest";
 import { messages } from "../messages";
 import type { FormStart, FormState, SettingsForm } from "../settings_form/form_state";
 import { splitSettings, type StepFormAction } from "../settings_form/two_forms";
@@ -150,10 +150,7 @@ export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): Workspace
   });
 
   // A start refused for another criterion's settings marks them once that criterion's panel shows them, with the forms then.
-  const latestForms = useRef({ dispatch: source.dispatch, currentForm: source.currentForm });
-  useLayoutEffect(() => {
-    latestForms.current = { dispatch: source.dispatch, currentForm: source.currentForm };
-  });
+  const latestForms = useLatest({ dispatch: source.dispatch, currentForm: source.currentForm });
   const markRunErrors = (fieldErrors: RunFailure["field_errors"]) => {
     latestForms.current.dispatch({ type: "save_rejected", reply: { field_errors: fieldErrors, grid_plan: latestForms.current.currentForm().gridPlan } });
   };

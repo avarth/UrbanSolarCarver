@@ -25,6 +25,7 @@ import { useTestSurfaceCalls } from "../criteria/test_surface_calls";
 import { useCriteria } from "../criteria/use_criteria";
 import { useTypicalBuilding } from "../criteria/use_typical_building";
 import { useWorkspaceCriteria } from "../criteria/use_workspace_criteria";
+import { useChangedDuringRender } from "../hooks/use_changed_during_render";
 import { InspectView } from "../inspect/InspectView";
 import type { InspectTurns } from "../inspect/UnsavedTurnsDialog";
 import { useInspection, useInspectView } from "../inspect/use_inspection";
@@ -380,11 +381,9 @@ function OpenProject(props: ProjectWorkspaceProps) {
   // A new weather file's notice belongs to the criterion whose form it is shown in: while it waits, the Criteria step opens on that
   // editor. It does so as the step opens or the notice comes; the list can be chosen after.
   const editorForWeatherNotice = openStep === "criteria" && weatherChangeSuggestionNow !== null;
-  const [editorWasForWeatherNotice, setEditorWasForWeatherNotice] = useState(false);
-  if (editorForWeatherNotice !== editorWasForWeatherNotice) {
-    setEditorWasForWeatherNotice(editorForWeatherNotice);
+  useChangedDuringRender(editorForWeatherNotice, () => {
     if (editorForWeatherNotice) setCriteriaShows("editor");
-  }
+  }, { before: false });
   const { selection, active, ownStages } = workspaceCriteria;
   const resultSteps = useResultSteps({
     ...workspaceCriteria.ofResults,

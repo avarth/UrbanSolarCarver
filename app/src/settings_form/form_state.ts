@@ -2,12 +2,13 @@
 // and the voxel grid it planned. The service stores only the settings that were given (the engine warns about a setting the
 // mode does not read), so the form sends the mode and the values the user set, never every field; the mode's starting values
 // and the schema defaults fill the rest, on the service as in the form.
-import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useEffectEvent, useReducer, useRef } from "react";
 import { configErrorOf, type ConfigErrorReply, type GridPlanReply, type ModeInfo } from "../api_client/client";
 import { gridIsOverBudget } from "./grid_budget";
 import { errorOfHiddenSetting, shownConfigErrorOf } from "./engine_errors";
 import { engineIgnoresIn } from "./engine_modes";
 import { SETTING_PRESENTATIONS, settingIsShownIn } from "./presentation";
+import { useLatest } from "../hooks/use_latest";
 
 export const SAVE_DELAY_MILLISECONDS = 400;
 
@@ -365,10 +366,7 @@ export function useSettingsForm(token: string, project: string, start: FormStart
   const currentToken = useRef(token);
   const formProject = useRef(project);
   // The send of the latest render, used by the next save sent.
-  const currentSend = useRef(send);
-  useLayoutEffect(() => {
-    currentSend.current = send;
-  });
+  const currentSend = useLatest(send);
 
   const dispatch = useCallback((action: FormAction) => {
     latestForm.current = formReducer(latestForm.current, action);
@@ -384,7 +382,7 @@ export function useSettingsForm(token: string, project: string, start: FormStart
     const projectSaver: ConfigSaver = createConfigSaver((values) => currentSend.current(currentToken.current, projectName, values),
       (action) => { if (saver.current === projectSaver) dispatch(action); });
     return projectSaver;
-  }, [dispatch]);
+  }, [dispatch, currentSend]);
 
   useEffect(() => {
     const projectSaver = newSaver(project);

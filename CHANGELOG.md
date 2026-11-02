@@ -15,7 +15,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
   (`GET /projects/{name}/typical-building/progress`; `generate_simulated_weights` takes a `progress` callback). A run
   that calculates the weights first reports the same progress, in percent.
 - **Import rules and drawn maps** for developers: the Python package's seven layers are written in
-  `pyproject.toml` and checked by import-linter in the tests, the app's folders in ten layers and its other rules by
+  `pyproject.toml` and checked by import-linter in the tests, the app's folders in eleven layers and its other rules by
   dependency-cruiser in `npm test`, and `python tools/draw_maps.py` draws both as SVG. The Project Map page explains
   them in place of its file list; each file's description is its own docstring or header comment.
 - **The model of the simulated weights in the docs**: the Simulated Weights page now gives the 5R1C equations, the

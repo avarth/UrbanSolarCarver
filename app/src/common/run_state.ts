@@ -13,11 +13,12 @@
 // Before the engine, a run that analyses an energy-weighted criterion calculates the typical building's weights when they are
 // missing or out of date: progress of the stage "typical_building", of no criterion, which the run's reply does not list. Its
 // first event puts it at the front of the run's order; it is not a pipeline stage (runStages leaves it out).
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ApiError, cancelRun, configErrorOf, failureTextOf, reportServiceProblem, startRun, startSimulation as postSimulation, type FieldErrorReply,
 } from "../api_client/client";
 import { subscribeToRunEvents, type RunEvent } from "../api_client/events";
+import { useLatest } from "../hooks/use_latest";
 import { messages } from "../messages";
 import type { PipelineStage } from "../stages";
 
@@ -348,10 +349,7 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
   const runsAskedForByProject = useRef(new Map<string, number>());
   const stopEvents = useRef<(() => void) | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const reportProblem = useRef(onServiceProblem);
-  useLayoutEffect(() => {
-    reportProblem.current = onServiceProblem;
-  });
+  const reportProblem = useLatest(onServiceProblem);
 
   useEffect(() => () => {
     stopEvents.current?.();
@@ -387,7 +385,7 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
       if (event.type === "connection_lost") reportProblem.current(problemOfLostConnection(event.code));
       resolve(state.final);
     });
-  }), [token]);
+  }), [token, reportProblem]);
 
   const start = useCallback(async (project: string, produce: string[], origin: RunOrigin, options: RunStartOptions = {}): Promise<RunOutcome> => {
     const { isSuperseded } = options;
@@ -426,7 +424,7 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
     show({ serial, project, origin, runId: reply.run_id, state: initialRunState(runOrderOf(reply.stages, reply.criterion_stages, options.chainOrder)),
            refusal: null, isSuperseded });
     return followEvents(reply.run_id);
-  }, [token, followEvents]);
+  }, [token, followEvents, reportProblem]);
 
   // A simulation holds the engine as a run does, but is not a run of the project's stages: busyProject and the count of the
   // project's runs stay as they were, so a stage status read meanwhile still holds.
@@ -456,13 +454,13 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
     }
     show({ serial, project, origin, runId: reply.run_id, state: initialRunState(reply.stages), refusal: null });
     return followEvents(reply.run_id);
-  }, [token, followEvents]);
+  }, [token, followEvents, reportProblem]);
 
   const cancel = useCallback(() => {
     const record = latestRecord.current;
     if (record?.runId == null || record.state.final !== null) return;
     cancelRun(token, record.runId).catch((error) => { reportServiceProblem(error, reportProblem.current); });
-  }, [token]);
+  }, [token, reportProblem]);
 
   const replyStillHolds = useCallback((project: string) => {
     const runsBefore = runsAskedForByProject.current.get(project) ?? 0;

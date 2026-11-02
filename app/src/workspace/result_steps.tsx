@@ -4,9 +4,10 @@
 // the 3D view draws of the results (dimmed while out of date or replaced, listed as missing after a run that stopped before their
 // stage). ProjectWorkspace gives them the project's form, stage status and run loop; the results are fetched here and again as
 // each stage of a run is done.
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { downloadWithToken, failureTextOf, reportServiceProblem, type RunSummary } from "../api_client/client";
 import { useProjectSession } from "../api_client/project_session";
+import { useLatest } from "../hooks/use_latest";
 import { messages } from "../messages";
 import { analysisDiffersFromStored, shownValue, type FormState, type SaveOutcome } from "../settings_form/form_state";
 import type { StepFormAction } from "../settings_form/two_forms";
@@ -263,10 +264,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const chainAnalysisOutOfDate = stages.preprocessing !== "current";
   // What the threshold queue, made once, reads when a value's turn comes, and a format change once its save ends: the context and
   // locks of the latest render.
-  const latest = useRef({ context, analysisOutOfDate, chainAnalysisOutOfDate, showResultsTheServiceHolds });
-  useLayoutEffect(() => {
-    latest.current = { context, analysisOutOfDate, chainAnalysisOutOfDate, showResultsTheServiceHolds };
-  });
+  const latest = useLatest({ context, analysisOutOfDate, chainAnalysisOutOfDate, showResultsTheServiceHolds });
   /** Every criterion that is on has a current analysis (the selected one's, and the others' by analysisWaitsFor). */
   const carvingRunsNow = () => !latest.current.analysisOutOfDate && (latest.current.context.analysisWaitsFor ?? null) === null;
   /** Whether the save just stored changed what the analysis reads, or the form still shows other analysis settings. */

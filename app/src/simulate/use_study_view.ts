@@ -8,9 +8,10 @@
 // saved with the study, by default 0 and the highest value of the geometry shown. By share they are percentages of the no-build
 // value, 0 and 100 by default, kept for each study while the app is open. The palettes are pinned (user, 2026-10-28): magma by
 // value, viridis by share (and for Change).
-import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { ApiError, getStudySkyPatches, getStudyValues, reportServiceProblem, type SkyDome, type StudyChange } from "../api_client/client";
 import { useProjectSession } from "../api_client/project_session";
+import { useLatest } from "../hooks/use_latest";
 import { messages } from "../messages";
 import type { RunLoop } from "../common/run_state";
 import type { StageState } from "../stages";
@@ -196,10 +197,7 @@ export function useStudyView({ studies, active, runs, envelopeBuilt, massingBuil
   const drawn = shownOnView && values !== null && shown !== null && selected !== null;
   // A saved end shows at once; it is saved once a gesture ends: TARGET_SAVE_DELAY_MILLISECONDS after the last change (a drag gives
   // one change, at its release; held or repeated keys many). The saves go one after another, so the service applies them in order.
-  const latestStudies = useRef(studies);
-  useLayoutEffect(() => {
-    latestStudies.current = studies;
-  });
+  const latestStudies = useLatest(studies);
   const pendingSave = useRef<{ id: string; change: StudyChange; timer: ReturnType<typeof setTimeout> } | null>(null);
   const saves = useRef<Promise<unknown>>(Promise.resolve());
   const save = (id: string, sent: StudyChange) => {

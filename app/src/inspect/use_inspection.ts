@@ -13,17 +13,18 @@
 // app's own carries the turns staged while it ran to the version it wrote, when that has the same triangles and surfaces.
 // useInspectView gives the view what it draws, kept the same between renders that change none of it (the view draws the layer again
 // whenever its files change).
-import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import {
   failureTextOf, getInspection, getInspectionGeometry, isStoredFileChanged, reportServiceProblem, restoreOriginal, turnSurfaces,
   type InspectedFile, type InspectReply,
 } from "../api_client/client";
 import { useProjectSession } from "../api_client/project_session";
+import { useLatest } from "../hooks/use_latest";
 import { messages } from "../messages";
 import type { InspectLayerFile } from "../viewer/layers";
 import { toLocal, type Point3 } from "../viewer/local_origin";
 import type { InspectView } from "../viewer_overlays/ViewerPane";
-import { useKeyedValue } from "../viewer_overlays/use_keyed_value";
+import { useKeyedValue } from "../hooks/use_keyed_value";
 import { decodeInspectGeometry, localCorners, localSurfaces, type InspectGeometry } from "./inspect_geometry_decoder";
 
 export const TEST_SURFACES_ROLE = "test_surfaces";
@@ -146,10 +147,7 @@ export function useInspection({ active, onSaved }: InspectionOptions): Inspectio
   const readsAskedFor = useRef(0);
   // The save or restore under way of each file, which a later save of the file waits for.
   const underWay = useRef(new Map<string, Promise<string | null>>());
-  const shown = useRef(active);
-  useLayoutEffect(() => {
-    shown.current = active;
-  });
+  const shown = useLatest(active);
 
   const fileOf = (key: FileKey | null) => latest.current.reply?.files.find((file) => isKeyOf(key, file)) ?? null;
   const testSurfaceFile = (fileName: string) => fileOf({ role: TEST_SURFACES_ROLE, fileName });

@@ -66,8 +66,9 @@ and from the layers below, not from a layer above and not from another folder of
 | 6. Over the 3D view | `viewer_overlays/` | the view pane, legends, compass, layers menu |
 | 7. Theme | `theme/` | colours and sizes (`tokens.css`), the panels' stylesheet (`panels.css`), light and dark |
 | 8. 3D scene | `viewer/` | the three.js scene, its loaders and decoders |
-| 9. Service client | `api_client/` | the typed client of the service |
-| 10. Basics | `messages.ts`, `format_numbers.ts`, `modes.ts`, `stages.ts` | every text of the interface, numbers as it writes them, the modes' names, the steps' and stages' names |
+| 9. Service client | `api_client/` | the typed client of the service, and the open project's session (token, project, failure handler) |
+| 10. React helpers | `hooks/` | small hooks that import nothing of the app: a value kept while its key holds, the latest value for callbacks, state adjusted when a value changes |
+| 11. Basics | `messages.ts`, `format_numbers.ts`, `modes.ts`, `stages.ts` | every text of the interface, numbers as it writes them, the modes' names, the steps' and stages' names |
 
 `app/.dependency-cruiser.cjs` holds these layers (`LAYERS`) and the other rules, checked by `npm test` (the `deps`
 script):

@@ -13,6 +13,7 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from "react";
 import type * as THREE from "three";
 import type { RunSummary, SkyDome } from "../api_client/client";
+import { useChangedDuringRender } from "../hooks/use_changed_during_render";
 import { messages } from "../messages";
 import { carvedVoxelsByCriterion, type CarvedByCriterion } from "../viewer/carved_by_criterion_decoder";
 import { colourToken, keptScoreRange } from "../viewer/colour_scales";
@@ -37,7 +38,7 @@ import { Compass } from "./Compass";
 import { LayersMenu, type LayersMenuEntry } from "./LayersMenu";
 import { Legend, type LegendContent } from "./Legend";
 import { ScaleBar } from "./ScaleBar";
-import { useKeyedValue } from "./use_keyed_value";
+import { useKeyedValue } from "../hooks/use_keyed_value";
 import { useSceneLayers } from "./use_scene_layers";
 import { rememberedGroundAid, ViewToolbar } from "./ViewToolbar";
 import "./overlays.css";
@@ -226,12 +227,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   const [skyDomeHidden, setSkyDomeHidden] = useState(rememberedSkyDomeHidden);
   const [skyDomeOpacity, setSkyDomeOpacity] = useState(DEFAULT_SKY_DOME_OPACITY);
   // A change of step brings back its layers: the choices made in the menu are dropped.
-  const defaultsKey = shownByDefault.join(",");
-  const [choicesMadeFor, setChoicesMadeFor] = useState(defaultsKey);
-  if (choicesMadeFor !== defaultsKey) {
-    setChoicesMadeFor(defaultsKey);
-    setVisibleByChoice({});
-  }
+  useChangedDuringRender(shownByDefault.join(","), () => setVisibleByChoice({}));
   const { scorePoints, carving, skyDome, envelope, massing, carvedByCriterion } = results;
   const origin = useKeyedValue(localOrigin, localOrigin.join(","));
 

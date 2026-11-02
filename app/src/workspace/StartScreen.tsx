@@ -2,8 +2,9 @@
 // projects there are, newest first, each with its menu, with the projects folder and its Change folder at the foot, and the
 // bundled examples), and a footer with the version and the device. The top bar shows the device's state, so the footer only
 // names the GPU, or says why the CPU is used. Choosing a project opens it at its Inputs step.
-import { useEffect, useEffectEvent, useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode, type Ref } from "react";
+import { useEffect, useEffectEvent, useId, useRef, useState, type FormEvent, type ReactNode, type Ref } from "react";
 import type { ExampleInfo, HealthReply, ProjectsFolderReply, ProjectSummary } from "../api_client/client";
+import { useLatest } from "../hooks/use_latest";
 import { dateAndTime, messages } from "../messages";
 import { MessageParts } from "../settings_form/SettingTooltip";
 import { projectFolderPath, sameProjectName } from "./ProjectDialogs";
@@ -236,10 +237,7 @@ export function StartScreen({ health, projects, examples, projectsFolder, active
   const pageHeading = useRef<HTMLHeadingElement>(null);
   const projectsCard = useRef<HTMLElement>(null);
   const projectsHeading = useRef<HTMLHeadingElement>(null);
-  const shownProjects = useRef(projects);
-  useLayoutEffect(() => {
-    shownProjects.current = projects;
-  });
+  const shownProjects = useLatest(projects);
 
   const focusHeadingIfAsked = useEffectEvent(() => {
     if (headingTakesFocus) pageHeading.current?.focus();

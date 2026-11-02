@@ -3,13 +3,14 @@
 // results arrive stage by stage), and the result of the last request wins. A result a stage has not written (yet) is null. The
 // score points and the sky dome are those of the selected criterion: another criterion selected fetches them again, and so does
 // the selected one gaining results in its stage status (turned back on after a bypass).
-import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import type * as THREE from "three";
 import {
   ApiError, getCarvedByCriterion, getRunFileJson, getRunSummary, getScorePoints, getSkyPatches, reportServiceProblem, runFileUrl,
   type RunSummary, type SkyDome,
 } from "../api_client/client";
 import { useProjectSession } from "../api_client/project_session";
+import { useLatest } from "../hooks/use_latest";
 import { loadMesh } from "../viewer/loaders";
 import type { Point3 } from "../viewer/local_origin";
 import { decodeCarvedByCriterion, type CarvedByCriterion } from "../viewer/carved_by_criterion_decoder";
@@ -89,10 +90,7 @@ export function useRunResults({ origin, stagesWithResults, criterionId, criterio
   const [results, setResults] = useState<RunResults>(NO_RESULTS);
   const latestRequest = useRef<Partial<Record<ResultName, number>>>({});
   const carvedByKey = carvedByCriterionIds === null ? null : carvedByCriterionIds.join(",");
-  const source = useRef({ token, origin, criterionId, carvedByKey, onServiceProblem });
-  useLayoutEffect(() => {
-    source.current = { token, origin, criterionId, carvedByKey, onServiceProblem };
-  });
+  const source = useLatest({ token, origin, criterionId, carvedByKey, onServiceProblem });
 
   /** *summary*: the run summary of this round of fetches, asked for once however many results read it. */
   const fetchResult = useCallback((name: ResultName, summary: () => Promise<RunSummary>): Promise<RunResults[ResultName]> => {
@@ -118,7 +116,7 @@ export function useRunResults({ origin, stagesWithResults, criterionId, criterio
         // Not asked for while the criteria that are on are fewer than two or one of them has not run: the service would answer 404.
         return source.current.carvedByKey === null ? Promise.resolve(null) : getCarvedByCriterion(currentToken, project).then(decodeCarvedByCriterion);
     }
-  }, [project]);
+  }, [project, source]);
 
   // The score points and sky dome asked for since the criterion shown was selected (or the project opened).
   const askedOfCriterion = useRef(new Set<ResultName>());
@@ -142,7 +140,7 @@ export function useRunResults({ origin, stagesWithResults, criterionId, criterio
       });
     });
     return Promise.all(fetches).then(() => undefined);     // each fetch handles its own failure, so none rejects
-  }, [project, fetchResult]);
+  }, [project, fetchResult, source]);
 
   // The thresholding of the criteria also writes what the by-criterion layer shows.
   const reload = useCallback((stages: readonly string[]) => fetchResults([...resultsOfStages(stages), ...(stages.includes("thresholding") ? ["carvedByCriterion" as const] : [])]),

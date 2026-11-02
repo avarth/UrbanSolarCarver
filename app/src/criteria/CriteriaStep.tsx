@@ -7,6 +7,7 @@
 // on it, previous and next, a run or a link that opens it). All criteria and a Delete return to the list with the focus on the card
 // selected then.
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useChangedDuringRender } from "../hooks/use_changed_during_render";
 import { messages } from "../messages";
 import { CriterionEditorHeader } from "./CriterionEditorHeader";
 import { CriterionList, useCriterionDialogs, type CriterionListProps } from "./CriterionList";
@@ -63,11 +64,7 @@ export function CriteriaStep({ panel, list, shows, onShowsChange, load = { state
       name.focus();
     }
   }, [focusRequest, shows, list.selectedId]);
-  const [headerProblemFor, setHeaderProblemFor] = useState({ selectedId: list.selectedId, shows });
-  if (headerProblemFor.selectedId !== list.selectedId || headerProblemFor.shows !== shows) {
-    setHeaderProblemFor({ selectedId: list.selectedId, shows });
-    setHeaderProblem(null);
-  }
+  useChangedDuringRender(JSON.stringify([list.selectedId, shows]), () => setHeaderProblem(null));
 
   const shownList: CriterionListProps = {
     ...list,

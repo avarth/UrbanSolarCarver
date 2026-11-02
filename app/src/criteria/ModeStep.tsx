@@ -8,6 +8,7 @@
 // While Night cooling is chosen, a line under the tiles says that it is experimental.
 // A mode that needs a weather file the project lacks gets the weather drop zone under the tiles.
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useChangedDuringRender } from "../hooks/use_changed_during_render";
 import { listedWithAnd, messages } from "../messages";
 import { settingView } from "../settings_form/presentation";
 import { MessageParts, placedTooltipStyle, placementUnder, type TooltipPlacement } from "../settings_form/SettingTooltip";
@@ -66,12 +67,10 @@ export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone, valu
   const openIndex = pinnedIndex ?? (dismissed ? null : hoveredIndex ?? focusedIndex);
   const disabled = disabledReason !== null;
 
-  const [modeSeen, setModeSeen] = useState(mode);
-  if (modeSeen !== mode) {
-    setModeSeen(mode);
-    if (chosenIndexOf(modeSeen) !== chosenIndex) setFocusIndex(chosenIndex);
+  useChangedDuringRender(mode, (modeBefore) => {
+    if (chosenIndexOf(modeBefore) !== chosenIndex) setFocusIndex(chosenIndex);
     setPinnedIndex(null);                                   // another mode was chosen: a pinned tooltip goes
-  }
+  });
 
   useEffect(() => {
     const pressStarts = () => { pointerPressing.current = true; };

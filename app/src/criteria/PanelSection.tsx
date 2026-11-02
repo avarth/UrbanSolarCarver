@@ -3,6 +3,7 @@
 // section has something to fix; the content only while it is open, its headings one level under the section's. The open sections belong to the workspace (usePanelSections), not to one criterion: they stay as they
 // are when another criterion is selected, and when the Criteria step is closed and opened again.
 import { useId, useState, type ReactNode } from "react";
+import { useChangedDuringRender } from "../hooks/use_changed_during_render";
 import { messages } from "../messages";
 import { WarningIcon } from "../settings_form/SettingField";
 import { SubheadingLevel } from "../settings_form/Subheading";
@@ -66,11 +67,9 @@ const withSections = (open: ReadonlySet<PanelSectionId>, ids: readonly PanelSect
  */
 export function usePanelSections(request: OpenSectionRequest | null): PanelSections {
   const [openSections, setOpenSections] = useState<ReadonlySet<PanelSectionId>>(() => withSections(DEFAULT_OPEN_SECTIONS, request === null ? [] : [request.section]));
-  const [requestSeen, setRequestSeen] = useState(request);
-  if (request !== requestSeen) {
-    setRequestSeen(request);
+  useChangedDuringRender(request, () => {
     if (request !== null) setOpenSections((open) => withSections(open, [request.section]));
-  }
+  });
   return {
     openSections,
     onToggleSection: (id) => setOpenSections((open) => {

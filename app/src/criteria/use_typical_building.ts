@@ -15,6 +15,7 @@ import {
   updateTypicalBuildingLibraryEntry, type TypicalBuildingLibraryEntry, type TypicalBuildingReply, type TypicalBuildingWeightsReply,
 } from "../api_client/client";
 import { useProjectSession } from "../api_client/project_session";
+import { useChangedDuringRender } from "../hooks/use_changed_during_render";
 
 export type TypicalBuildingValues = Record<string, unknown>;
 
@@ -113,11 +114,9 @@ export function useTypicalBuilding({ active, runActive, weatherRevision }: Typic
   const readLibrary = () => getTypicalBuildingLibrary(token).then(setLibrary, (error: unknown) => setReadProblem(failed(error)));
 
   // Shown with nothing read: the problem of a read before is not said while the building is read again.
-  const [activeSeen, setActiveSeen] = useState(false);
-  if (activeSeen !== active) {
-    setActiveSeen(active);
+  useChangedDuringRender(active, () => {
     if (active && stored === null) setReadProblem(null);
-  }
+  }, { before: false });
   const readFirst = useEffectEvent(() => {
     if (stored !== null) return;
     void askForBuilding();

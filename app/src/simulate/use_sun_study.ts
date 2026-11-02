@@ -12,7 +12,7 @@ import { dayAndMonth, messages } from "../messages";
 import type { AnalysisPeriodField } from "../settings_form/analysis_period";
 import type { Point3 } from "../viewer/local_origin";
 import { sunAt, type ShadeHours, type ShadePalette, type SunStudyView } from "../viewer/sun_study";
-import { useKeyedValue } from "../viewer_overlays/use_keyed_value";
+import { useKeyedValue } from "../hooks/use_keyed_value";
 
 const NOT_FOUND = 404;
 // The sun of the day is read every 5 minutes; the time strip moves in the same steps.

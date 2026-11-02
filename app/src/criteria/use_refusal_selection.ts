@@ -2,8 +2,9 @@
 // the first of them is selected (unless one of them is selected already) and its editor is shown, and its panel asks for test
 // surfaces until its files change or another run is asked for. The Criteria bar's Run analysis and carving update say the refusal under their button, so
 // the panel asks only for a refusal of a button elsewhere (Site and grid), and never says it twice.
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 import type { CriterionEntry } from "../api_client/client";
+import { useKeyedValue } from "../hooks/use_keyed_value";
 import { messages } from "../messages";
 import type { RunOrigin, RunRecord } from "../common/run_state";
 
@@ -33,9 +34,7 @@ export function useRefusalSelection({ record, criteria, selectedId, shownCriteri
     .map((role) => role.slice(TEST_SURFACES_ROLE_PREFIX.length)) ?? [];
   const serial = record?.serial ?? null;
   const filesOfAskedFor = () => Object.fromEntries(askedFor.map((id) => [id, testSurfaceFilesKey(criteria, id)]));
-  const [refusal, setRefusal] = useState(() => ({ serial, filesWhenRefused: filesOfAskedFor() }));
-  if (refusal.serial !== serial) setRefusal({ serial, filesWhenRefused: filesOfAskedFor() });
-  const { filesWhenRefused } = refusal;
+  const filesWhenRefused = useKeyedValue(filesOfAskedFor(), String(serial));
   const showFirstAskedFor = useEffectEvent(() => {
     if (askedFor.length > 0) showCriterion(askedFor.includes(selectedId) ? selectedId : askedFor[0]);
   });

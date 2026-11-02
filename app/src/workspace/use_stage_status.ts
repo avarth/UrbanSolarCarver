@@ -2,10 +2,11 @@
 // for each criterion, asked again after a save, a change of the input files, a run, or when the app's window comes back to the front
 // (a file may have been replaced in the project folder meanwhile); the input files changed in the folder or missing from it; and the
 // stages as the steps show them.
-import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { dismissInputChanges, getStageStatus, type CriterionEntry, type InputFileChange, type ProjectDetail } from "../api_client/client";
 import { useProjectSession } from "../api_client/project_session";
 import { activeCriteria, stagesByCriterionOf, type StagesByCriterion } from "../criteria/criteria_state";
+import { useLatest } from "../hooks/use_latest";
 import { analysisDiffersFromStored, type FormState } from "../settings_form/form_state";
 import type { RunLoop } from "../common/run_state";
 import type { PipelineStage, StageState } from "../stages";
@@ -47,10 +48,7 @@ export function useStageStatus({ project, criteria, form, runs, onInputFilesChan
   const [criterionStages, setCriterionStages] = useState<StagesByCriterion>(() => stagesByCriterionOf(project.criterion_status));
   // The stored analysis settings (FormState.storedAnalysisRevision) the last stage status used was asked for after.
   const [revisionOfStageStatus, setRevisionOfStageStatus] = useState(0);
-  const storedAnalysisRevision = useRef(form.storedAnalysisRevision);
-  useLayoutEffect(() => {
-    storedAnalysisRevision.current = form.storedAnalysisRevision;
-  });
+  const storedAnalysisRevision = useLatest(form.storedAnalysisRevision);
   const [inputChanges, setInputChanges] = useState<InputFileChange[]>(project.stage_status.input_changes ?? []);
   // The changes the app has asked for the files of again: a reply that lists one again (not dismissed yet) asks for nothing.
   const changesSeen = useRef(new Set((project.stage_status.input_changes ?? []).filter((change) => change.state === "changed").map(changeKey)));

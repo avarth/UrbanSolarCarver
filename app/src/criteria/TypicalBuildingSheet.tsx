@@ -13,6 +13,7 @@
 import { useEffect, useEffectEvent, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import type { TypicalBuildingLibraryEntry, TypicalBuildingReply, TypicalBuildingWeightsReply } from "../api_client/client";
+import { useChangedDuringRender } from "../hooks/use_changed_during_render";
 import { dayAndMonth, messages } from "../messages";
 import { WarningIcon } from "../settings_form/SettingField";
 import { SettingTooltip } from "../settings_form/SettingTooltip";
@@ -520,20 +521,16 @@ export function TypicalBuildingSheet({ id, building, includesHarm, hasWeatherFil
     if (window !== undefined && window !== null && !window.contains(document.activeElement)) window.querySelector<HTMLElement>("h2")?.focus();
   }, [shape]);
   // Without a building the library opens, to choose one from.
-  const [notChosenSeen, setNotChosenSeen] = useState(false);
-  if (notChosenSeen !== notChosen) {
-    setNotChosenSeen(notChosen);
+  useChangedDuringRender(notChosen, () => {
     if (notChosen) setOpenGroups((open) => new Set([...open, "library"]));
-  }
+  }, { before: false });
   // A group with a field the last save refused opens, before the page is drawn, and Advanced with it when it is one of its groups.
   const groupsWithErrors = BUILDING_GROUPS.filter((group) => Object.keys(fieldErrors).some((field) => groupOfField(field) === group));
   const groupsWithErrorsKey = groupsWithErrors.join(" ");
-  const [groupsWithErrorsSeen, setGroupsWithErrorsSeen] = useState("");
-  if (groupsWithErrorsSeen !== groupsWithErrorsKey) {
-    setGroupsWithErrorsSeen(groupsWithErrorsKey);
+  useChangedDuringRender(groupsWithErrorsKey, () => {
     if (groupsWithErrors.some((group) => !openGroups.has(group))) setOpenGroups((open) => new Set([...open, ...groupsWithErrors]));
     if (groupsWithErrors.some((group) => ADVANCED_GROUPS.includes(group))) setAdvancedOpen(true);
-  }
+  }, { before: "" });
   // The weights of the last calculation, read while the sheet is open.
   const storedState = stored?.state;
   const readWeights = useEffectEvent(() => building.readWeights());

@@ -14,6 +14,7 @@
 // line that says so (Run analysis is in the bar pinned under the Criteria step).
 import { useEffect, useEffectEvent, useId, useMemo, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type PointerEvent } from "react";
 import type { RunSummary } from "../api_client/client";
+import { useChangedDuringRender } from "../hooks/use_changed_during_render";
 import { messages } from "../messages";
 import { shownValue, type FormState } from "../settings_form/form_state";
 import { fromDisplayValue, settingsForStep, settingView, thresholdIsShadowToleratedIn, toDisplayValue, type SettingView } from "../settings_form/presentation";
@@ -207,11 +208,9 @@ function ThresholdControl({ view, form, storedNumber: stored, highestScore, auto
   const [heldNumber, setHeldNumber] = useState<number | null>(null);
   // The number last handed on to run, or the stored number once the form holds a number, however it got there.
   const lastNumberHandedOn = useRef(stored);
-  const [storedSeen, setStoredSeen] = useState(stored);
-  if (!Object.is(storedSeen, stored)) {
-    setStoredSeen(stored);
+  useChangedDuringRender(stored, () => {
     if (heldNumber === stored) setHeldNumber(null);
-  }
+  });
   useEffect(() => {
     lastNumberHandedOn.current = stored;
   }, [stored]);
@@ -337,11 +336,7 @@ export function CarvingStep(props: CarvingStepProps) {
   const [heldControlNumber, setHeldControlNumber] = useState<number | null>(null);
   const [released, setReleased] = useState<ReleasedCutoff | null>(null);
   const [switchedFromAutomatic, setSwitchedFromAutomatic] = useState(false);
-  const [summaryOfReleased, setSummaryOfReleased] = useState(summary);
-  if (summaryOfReleased !== summary) {
-    setSummaryOfReleased(summary);
-    setReleased(null);
-  }
+  useChangedDuringRender(summary, () => setReleased(null));
   const comparedScores = scorePoints?.comparedScores ?? null;
   const kept = scorePoints?.kept ?? null;
   const ranked = useMemo(() => (scorePoints !== null && comparedScores !== null ? rankScorePoints(comparedScores, scorePoints.scores) : null),

@@ -14,6 +14,7 @@ const LAYERS = [
   ["theme"],
   ["viewer"],
   ["api_client"],
+  ["hooks"],
 ];
 const TESTS = ["[.]test[.]tsx?$", "_for_test[.]tsx?$"];
 

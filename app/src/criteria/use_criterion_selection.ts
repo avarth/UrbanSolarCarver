@@ -8,6 +8,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { failureTextOf, getCriterionSettings, reportServiceProblem } from "../api_client/client";
 import { useProjectSession } from "../api_client/project_session";
+import { useChangedDuringRender } from "../hooks/use_changed_during_render";
 import type { FormStart, SettingsForm } from "../settings_form/form_state";
 import type { CriterionListProps } from "./CriterionList";
 import type { CriteriaHook } from "./use_criteria";
@@ -55,11 +56,9 @@ export function useCriterionSelection(source: CriterionSelectionSource): Criteri
   const whenShown = useRef<{ id: string; then: () => void } | null>(null);
   const wanted = criteria.selectedId;
   // A refusal of an earlier request is not said while the request for the newly selected criterion is out.
-  const [wantedSeen, setWantedSeen] = useState(wanted);
-  if (wantedSeen !== wanted) {
-    setWantedSeen(wanted);
+  useChangedDuringRender(wanted, () => {
     if (wanted !== "" && wanted !== shownCriterionId) setFailure(null);
-  }
+  });
   const load: SelectionLoad = failure !== null && failure.id === wanted ? { state: "failed", problem: failure.problem }
     : wanted !== "" && wanted !== shownCriterionId ? { state: "loading" } : { state: "ready" };
 
