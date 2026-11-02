@@ -1,7 +1,7 @@
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { TypicalBuildingLibraryEntry, TypicalBuildingReply } from "../api_client/client";
-import { addStyleSheetForTest, click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { addStyleSheetForTest, click, holdReply, press, renderForTest, settle, type, typeAndLeave, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { buildingGroupSummary, effectColour, libraryGroupsOf, libraryLineOf, SUN_DOWN_COLOUR, SUN_DOWN_COLOUR_DARK, TypicalBuildingSheet, withRoom } from "./TypicalBuildingSheet";
 import { PROGRESS_MILLISECONDS, useTypicalBuilding, type TypicalBuildingValues } from "./use_typical_building";
 import { inProjectSession } from "../api_client/project_session_for_test";
@@ -77,7 +77,7 @@ class FakeBuildingService {
              ...(this.calculated === null ? {} : { underheating_kh: 12957.1, overheating_kh: 5110, hours_below: 3201, hours_above: 2083, counted_hours: 2386 }) };
   }
 
-  handle(method: string, address: string, body: unknown): Response | Promise<Response> {
+  async handle(method: string, address: string, body: unknown): Promise<Response> {
     this.requests.push(`${method} ${address}`);
     const libraryPath = "/api/typical-building-library";
     if (address === libraryPath && method === "GET") return json(this.library());
@@ -109,7 +109,11 @@ class FakeBuildingService {
         return json(this.reply());
       };
       if (this.finishCalculation === null) return finish();
-      return new Promise<Response>((resolve) => { this.finishCalculation = () => resolve(finish()); });
+      let release = () => {};
+      const released = new Promise<void>((resolve) => { release = resolve; });
+      this.finishCalculation = release;
+      await holdReply(released);                // settle does not wait for a calculation held on purpose
+      return finish();
     }
     if (method === "PUT") {
       const request = body as { values: TypicalBuildingValues; library_id?: string };
@@ -172,11 +176,6 @@ function SheetProbe({ includesHarm = false, hasWeatherFile = true }: SheetProps)
                                onClose={() => { closed += 1; }} />;
 }
 
-/** Lets the fake service's replies arrive. */
-async function settle() {
-  for (let round = 0; round < 8; round++) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
-}
-
 async function openSheet(props: { includesHarm?: boolean; hasWeatherFile?: boolean } = {}) {
   rendered = renderForTest(<Sheet {...props} />);
   await settle();
@@ -193,14 +192,6 @@ const entryButton = (id: string) => find<HTMLButtonElement>(`[data-library-entry
 const advancedToggle = () => find<HTMLButtonElement>(".typical-building-advanced-toggle")!;
 const lastSaved = () => service.saved.at(-1)!;
 
-function typeInto(field: HTMLInputElement, text: string) {
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, text);
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  act(() => field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
-}
-
 function choose(select: HTMLSelectElement, value: string) {
   act(() => {
     select.value = value;
@@ -215,10 +206,7 @@ async function submitDialog(name?: string) {
   const dialog = libraryDialog()!;
   if (name !== undefined) {
     const field = dialog.querySelector<HTMLInputElement>("input")!;
-    act(() => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, name);
-      field.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    type(field, name);
   }
   await act(async () => { dialog.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
   await settle();
@@ -269,7 +257,7 @@ test("the library lists the examples in the groups the service names; choosing o
 test("a changed value is saved without the entry; the library says Changed from it, and an example can only be saved as new", async () => {
   await openSheet();
   openGroup("use");
-  typeInto(group("use").querySelector<HTMLInputElement>('[data-building-field="t_set_heating"] input')!, "19");
+  typeAndLeave(group("use").querySelector<HTMLInputElement>('[data-building-field="t_set_heating"] input')!, "19");
   await settle();
   expect(lastSaved()).toEqual({ values: { ...ZONE_B, t_set_heating: 19 } });
   expect(summaryOf("library")).toBe("Changed from Apartment, zone Β");
@@ -298,7 +286,7 @@ test("an own entry takes the changed values with Save to library, and is renamed
   service.libraryName = "My flat";
   await openSheet();
   openGroup("fabric");
-  typeInto(group("fabric").querySelector<HTMLInputElement>('[data-building-field="u_wall"] input')!, "0.3");
+  typeAndLeave(group("fabric").querySelector<HTMLInputElement>('[data-building-field="u_wall"] input')!, "0.3");
   await settle();
   expect(summaryOf("library")).toBe("Changed from My flat");
   click(buttonNamed("Save to library"));
@@ -334,7 +322,7 @@ test("thermal mass is one number, the thermal capacity; the schedule is one of t
   const capacity = group("fabric").querySelector('[data-building-field="mass_capacity_kj_m2k"]')!;
   expect(capacity.querySelector(".setting-label")!.textContent).toBe("Thermal capacity");
   expect(capacity.querySelector(".setting-unit")!.textContent).toBe("kJ/m²K");
-  typeInto(capacity.querySelector<HTMLInputElement>("input")!, "300");
+  typeAndLeave(capacity.querySelector<HTMLInputElement>("input")!, "300");
   await settle();
   expect(lastSaved().values).toEqual({ ...ZONE_B, mass_capacity_kj_m2k: 300 });
   click(group("fabric").querySelector(".panel-section-header")!);
@@ -386,10 +374,10 @@ test("summer shading takes a factor and the dates of its period; empty is no sha
   choose(start.querySelector<HTMLSelectElement>("select")!, "6");
   await settle();
   expect(lastSaved().values.shading_start).toBe("06-15");
-  typeInto(start.querySelector<HTMLInputElement>("input")!, "1");
+  typeAndLeave(start.querySelector<HTMLInputElement>("input")!, "1");
   await settle();
   expect(lastSaved().values.shading_start).toBe("06-01");
-  typeInto(group("shading").querySelector<HTMLInputElement>('[data-building-field="shading_factor"] input')!, "");
+  typeAndLeave(group("shading").querySelector<HTMLInputElement>('[data-building-field="shading_factor"] input')!, "");
   await settle();
   expect(lastSaved().values.shading_factor).toBeNull();
   expect(group("shading").querySelector('[data-building-field="shading_start"]')).toBeNull();
@@ -422,7 +410,7 @@ test("a refused value shows its error at its field, opens Advanced and its group
   await openSheet();
   click(advancedToggle());
   openGroup("room");
-  typeInto(group("room").querySelector<HTMLInputElement>('input[aria-label="South-west"]')!, "0.95");
+  typeAndLeave(group("room").querySelector<HTMLInputElement>('input[aria-label="South-west"]')!, "0.95");
   await settle();
   expect(group("room").querySelector('[data-building-field="wwr"] .setting-error')!.textContent).toBe("South-west: Give a number from 0 to 0.9.");
   expect(group("room").querySelector<HTMLInputElement>('input[aria-label="South-west"]')!.value).toBe("0.95");
@@ -477,7 +465,7 @@ test("Calculate draws the effect of each hour's sun, grey with the sun down, and
   expect(find(".typical-building-results-out-of-date")).toBeNull();
 
   openGroup("use");
-  typeInto(group("use").querySelector<HTMLInputElement>('[data-building-field="t_set_heating"] input')!, "19");
+  typeAndLeave(group("use").querySelector<HTMLInputElement>('[data-building-field="t_set_heating"] input')!, "19");
   await settle();
   expect(find(".typical-building-results-out-of-date")).not.toBeNull();
   expect(find(".typical-building-out-of-date")!.textContent).toBe("The building or the weather file changed since this was calculated.");
@@ -503,7 +491,7 @@ test("Calculate waits for a weather file; Escape closes the sheet", async () => 
   await openSheet({ hasWeatherFile: false });
   expect(calculateButton().disabled).toBe(true);
   expect(find(".typical-building-calculate .run-button-reason")!.textContent).toBe("Add a weather file in Carve (Inputs) to calculate the typical building");
-  act(() => find(".typical-building-sheet")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  press(find(".typical-building-sheet")!, "Escape");
   expect(closed).toBe(1);
 });
 
@@ -573,7 +561,7 @@ test("the short windows (reading, no building chosen) are the same modal window,
   expect(closed).toBe(2);
   click(find<HTMLButtonElement>('button[aria-label="Close"]')!);
   expect(closed).toBe(3);
-  act(() => find("h2")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  press(find("h2")!, "Escape");
   expect(closed).toBe(4);
 });
 
@@ -581,10 +569,10 @@ test("Escape closes the window; in a library dialog over it, Escape closes only 
   await openSheet();
   click(buttonNamed("Save as new"));
   const inner = libraryDialog()!;
-  act(() => inner.querySelector("input")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  press(inner.querySelector("input")!, "Escape");
   expect(closed).toBe(0);
   expect([...document.querySelectorAll(".project-dialog h2")].map((title) => title.textContent)).toEqual(["Typical building"]);
-  act(() => find("h2")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  press(find("h2")!, "Escape");
   expect(closed).toBe(1);
 });
 
@@ -643,7 +631,7 @@ test("choosing the first building changes the window's shape without losing the 
   const window = find('[role="dialog"]')!;
   expect(window.contains(document.activeElement)).toBe(true);
   expect(document.activeElement).not.toBe(document.body);
-  act(() => document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  press(document.activeElement!, "Escape");
   expect(closed).toBe(1);
 });
 

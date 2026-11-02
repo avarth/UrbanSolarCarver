@@ -1,7 +1,6 @@
-import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { CriterionEntry } from "../api_client/client";
-import { addStyleSheetForTest, click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { addStyleSheetForTest, click, press, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { CriterionCard, type CriterionCardProps } from "./CriterionCard";
 
 let rendered: RenderedOverlay | null = null;
@@ -29,12 +28,6 @@ function renderCard(overrides: Partial<CriterionCardProps> = {}) {
 
 const card = () => rendered!.container.querySelector<HTMLElement>(".criterion-card")!;
 const handle = () => card().querySelector<HTMLElement>(".criterion-card-handle")!;
-
-function press(element: Element, key: string) {
-  act(() => {
-    element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
-  });
-}
 
 test("a card shows the criterion's colour, name, mode symbol and its line", () => {
   renderCard();
@@ -82,18 +75,15 @@ test("a card shows its whole name on up to two lines in a row of its own, its li
 test("the running criterion's card says Running and is marked busy; the others are not", () => {
   renderCard({ line: "Running", running: true });
   expect(card().querySelector(".criterion-card-line")!.textContent).toBe("Running");
-  expect(card().classList.contains("criterion-card-running")).toBe(true);
   expect(card().getAttribute("aria-busy")).toBe("true");
   rendered!.unmount();
   renderCard();
-  expect(card().classList.contains("criterion-card-running")).toBe(false);
   expect(card().getAttribute("aria-busy")).toBeNull();
 });
 
 test("the selected card is marked", () => {
   renderCard({ selected: true });
   expect(card().getAttribute("aria-current")).toBe("true");
-  expect(card().classList.contains("criterion-card-selected")).toBe(true);
 });
 
 test("a press on the card selects it", () => {
@@ -127,8 +117,15 @@ test("the switch is named after the criterion and is on for a criterion the chai
 
 test("a criterion switched off is greyed, its switch is off and its line reads Off; switching it on asks for it to be used", () => {
   const onSetBypassed = vi.fn();
+  // Greyed as the style sheet draws it: its swatch faded (jsdom resolves no var(), so the muted text colour is not read).
+  const removeStyles = addStyleSheetForTest("src/theme/panels.css");
+  const swatchOpacity = () => getComputedStyle(card().querySelector(".criterion-card-swatch")!).opacity;
+  renderCard();
+  expect(swatchOpacity()).not.toBe("0.45");
+  rendered!.unmount();
   renderCard({ entry: { ...DAYLIGHT, bypassed: true }, line: "Off", onSetBypassed });
-  expect(card().classList.contains("criterion-card-bypassed")).toBe(true);
+  expect(swatchOpacity()).toBe("0.45");
+  removeStyles();
   const toggle = card().querySelector<HTMLInputElement>('[role="switch"]')!;
   expect(toggle.checked).toBe(false);
   expect(card().querySelector(".criterion-card-line")!.textContent).toBe("Off");

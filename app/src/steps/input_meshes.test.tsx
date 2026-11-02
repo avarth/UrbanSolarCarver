@@ -1,9 +1,8 @@
-import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { InputFileInfo } from "../api_client/client";
 import { messages } from "../messages";
 import { inProjectSession } from "../api_client/project_session_for_test";
-import { renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { renderForTest, settle, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { joinedGeometryOf, useInputGeometry, type InputGeometry } from "./input_meshes";
 
 let rendered: RenderedOverlay | null = null;
@@ -25,10 +24,6 @@ function InputGeometryProbe({ files }: { files: InputFileInfo[] }) {
       {drawingProblems.map((problem) => <p key={problem}>{problem}</p>)}
     </div>
   );
-}
-
-async function settle() {
-  for (let round = 0; round < 5; round++) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
 }
 
 test("a file the service accepted that the view cannot parse is named with the reason, and the other files are still drawn", async () => {

@@ -491,6 +491,7 @@ class TestUiCommand:
         assert projects_folder.is_dir()
 
     def test_the_browser_opens_only_once_the_server_listens(self, monkeypatch, tmp_path, built_front_end):
+        import threading
         import time
         import uvicorn
         import webbrowser
@@ -498,9 +499,27 @@ class TestUiCommand:
 
         opened_urls = []
         urls_opened_before_listening = []
+        looked_twice = threading.Event()
+
+        class ServerThatCountsTheLooks(uvicorn.Server):
+            """Counts how often another thread finds it not yet listening, so the fake run below waits for the browser
+            thread to have looked and seen it not listening (twice) instead of sleeping for longer than its polling."""
+            looks_while_not_listening = 0
+
+            @property
+            def started(self):
+                if not self._started and threading.current_thread() is not threading.main_thread():
+                    self.looks_while_not_listening += 1
+                    if self.looks_while_not_listening >= 2:
+                        looked_twice.set()
+                return self._started
+
+            @started.setter
+            def started(self, value):
+                self._started = value
 
         def run(server, sockets=None):
-            time.sleep(0.3)     # longer than the polling of the thread that waits to open the browser
+            assert looked_twice.wait(10), "the thread that opens the browser never looked whether the server listens"
             urls_opened_before_listening.extend(opened_urls)
             server.started = True
             deadline = time.monotonic() + 10
@@ -508,7 +527,8 @@ class TestUiCommand:
                 time.sleep(0.01)
 
         monkeypatch.setattr(GpuWarmUp, "start", lambda self: None)
-        monkeypatch.setattr(uvicorn.Server, "run", run)
+        monkeypatch.setattr(uvicorn, "Server", ServerThatCountsTheLooks)
+        monkeypatch.setattr(ServerThatCountsTheLooks, "run", run)
         monkeypatch.setattr(webbrowser, "open", opened_urls.append)
 
         result = _invoke(["ui", "--projects-folder", str(tmp_path / "projects")])
@@ -518,17 +538,20 @@ class TestUiCommand:
 
     def test_stopping_does_not_wait_for_a_browser_that_is_still_opening(self, monkeypatch, tmp_path, built_front_end):
         import threading
-        import time
         import uvicorn
         import webbrowser
         from urbansolarcarver.local_web_service.gpu_warm_up import GpuWarmUp
 
         browser_asked = threading.Event()
         browser_may_return = threading.Event()
+        browser_returned = threading.Event()
 
         def open_that_blocks(url):      # webbrowser.open can block, for example while a browser starts
             browser_asked.set()
-            browser_may_return.wait(10)
+            # Set only once the command has returned. A command that waits for the browser thread longer than this lets the
+            # wait run out, and browser_returned is then set before the command returns; the bound only stops the test hanging.
+            browser_may_return.wait(20)
+            browser_returned.set()
 
         def run(server, sockets=None):  # listens, then stops as Ctrl+C stops it, while the browser is still opening
             server.started = True
@@ -537,15 +560,13 @@ class TestUiCommand:
         monkeypatch.setattr(GpuWarmUp, "start", lambda self: None)
         monkeypatch.setattr(uvicorn.Server, "run", run)
         monkeypatch.setattr(webbrowser, "open", open_that_blocks)
-        threading.Timer(6, browser_may_return.set).start()      # frees the thread in any case
 
-        started = time.monotonic()
         result = _invoke(["ui", "--projects-folder", str(tmp_path / "projects")])
-        elapsed = time.monotonic() - started
+        returned_while_the_browser_was_opening = not browser_returned.is_set()
         browser_may_return.set()
 
         assert result.exit_code == 0, result.output
-        assert elapsed < 4, f"the command waited {elapsed:.1f} s for the browser"
+        assert returned_while_the_browser_was_opening, "the command waited for the browser to open"
 
     def test_no_browser_prints_the_url_and_opens_nothing(self, monkeypatch, tmp_path, built_front_end):
         import webbrowser

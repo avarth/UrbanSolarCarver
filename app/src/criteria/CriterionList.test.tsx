@@ -1,7 +1,7 @@
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { CriterionEntry } from "../api_client/client";
-import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { click, press, renderForTest, type, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { CriterionList, type CriterionListProps } from "./CriterionList";
 
 let rendered: RenderedOverlay | null = null;
@@ -29,12 +29,6 @@ const cards = () => [...rendered!.container.querySelectorAll<HTMLElement>(".crit
 const card = (name: string) => cards().find((candidate) => candidate.querySelector(".criterion-card-name")!.textContent === name)!;
 const dialog = () => rendered!.container.querySelector<HTMLElement>('[role="dialog"]');
 const buttonNamed = (root: Element, label: string) => [...root.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === label)!;
-
-function press(element: Element, key: string) {
-  act(() => {
-    element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
-  });
-}
 
 function chooseFromMenu(cardName: string, label: string) {
   click(card(cardName).querySelector(".action-menu-button")!);
@@ -123,10 +117,7 @@ test("Delete asks first, then deletes; Rename opens its dialog with the name; Du
   chooseFromMenu("Solar usefulness on facades", "Rename");
   const field = dialog()!.querySelector<HTMLInputElement>("input")!;
   expect(field.value).toBe("Solar usefulness on facades");
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "Winter sun");
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  type(field, "Winter sun");
   await act(async () => dialog()!.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
   expect(onRename).toHaveBeenCalledExactlyOnceWith("4", "Winter sun");
   chooseFromMenu("Daylight on windows", "Duplicate");

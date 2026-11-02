@@ -61,24 +61,42 @@ def _free_port():
         return s.getsockname()[1]
 
 
+def _start_daemon(gh, home, authkey):
+    """Start a daemon on a free port and wait until it answers a ping; (process, session).
+
+    The daemon takes a port number, not a socket, so the port is free when chosen and another test worker can take it before
+    the daemon binds it. The daemon then stops at once saying the port is in use, and another free port is tried."""
+    from _daemon_home import isolated_home_env
+    log = home / "daemon.log"
+    for _ in range(3):
+        port = _free_port()
+        with open(log, "wb") as output:
+            proc = subprocess.Popen([sys.executable, "-m", "urbansolarcarver.daemon", "--port", str(port), "--device", "cpu"],
+                                    stdout=output, stderr=subprocess.STDOUT, env=isolated_home_env(home))
+        session = types.SimpleNamespace(authkey=authkey, host="localhost", port=port)
+        for _ in range(240):
+            if proc.poll() is not None:
+                break
+            # Ping only once the daemon says it bound the port: until then the port can be another program's.
+            if "[daemon] listening on" in log.read_text(encoding="utf-8", errors="replace") and gh.ping(session, timeout=1):
+                return proc, session
+            time.sleep(0.5)
+        else:
+            proc.kill()
+            pytest.fail("daemon did not start")
+        said = log.read_text(encoding="utf-8", errors="replace")
+        if "already in use" not in said:
+            pytest.fail("daemon exited during startup:\n" + said)
+    pytest.fail("three free ports were taken before the daemon could bind them")
+
+
 @pytest.mark.slow
 def test_call_daemon_against_a_real_daemon(gh, tmp_path):
-    from _daemon_home import isolated_home_env
     from urbansolarcarver.daemon_client import resolve_daemon_authkey
     # A temporary home keeps the test away from the real ~/.urbansolarcarver/.daemon_authkey.
     authkey = resolve_daemon_authkey(tmp_path / ".urbansolarcarver" / ".daemon_authkey")
-    port = _free_port()
-    proc = subprocess.Popen([sys.executable, "-m", "urbansolarcarver.daemon", "--port", str(port),
-                             "--device", "cpu"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                            env=isolated_home_env(tmp_path))
-    session = types.SimpleNamespace(authkey=authkey, host="localhost", port=port)
+    proc, session = _start_daemon(gh, tmp_path, authkey)
     try:
-        for _ in range(240):
-            if gh.ping(session, timeout=1):
-                break
-            time.sleep(0.5)
-        else:
-            pytest.fail("daemon did not start")
         with pytest.raises(gh.DaemonError, match="FileNotFoundError"):
             gh.call_daemon(session, "preprocessing", {"config": "missing.yaml"})
     finally:

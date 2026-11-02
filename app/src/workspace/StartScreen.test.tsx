@@ -1,7 +1,7 @@
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { HealthReply, ProjectsFolderReply } from "../api_client/client";
-import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { click, renderForTest, type, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import type { ProjectActions } from "./ProjectMenu";
 import { exampleTitleOf, newestFirst, StartScreen, type ProjectsFolderChange } from "./StartScreen";
 
@@ -86,10 +86,7 @@ test("Create project sends the name; a refusal is shown under the field", async 
   const onCreateProject = vi.fn(async () => "A project named 'Plot 7' already exists.");
   rendered = renderForTest(startScreen(WARMING_UP, { onCreateProject }));
   const field = rendered.container.querySelector<HTMLInputElement>(".start-name-field")!;
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, " Plot 7 ");
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  type(field, " Plot 7 ");
   await act(async () => {
     rendered!.container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
   });
@@ -171,10 +168,7 @@ test("while the folder picker is open, every choice of the start screen waits, d
   let answer: (outcome: ProjectsFolderChange) => void = () => {};
   rendered = renderForTest(startScreen(WARMING_UP, { onChangeProjectsFolder: () => new Promise((resolve) => { answer = resolve; }) }));
   const field = rendered.container.querySelector<HTMLInputElement>(".start-name-field")!;
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "Plot 9");
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  type(field, "Plot 9");
   click(changeFolderButton()!);
   const pickerLineId = folderLine().querySelector('[role="status"]')!.id;
   const waiting = [
@@ -198,10 +192,7 @@ test("after a rename the focus goes to the renamed project's menu once the list 
   click(menuOf("Older")!);
   click([...rendered.container.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent === "Rename")!);
   const dialogField = rendered.container.querySelector<HTMLInputElement>('[role="dialog"] input')!;
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(dialogField, "Oldest");
-    dialogField.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  type(dialogField, "Oldest");
   await act(async () => {
     rendered!.container.querySelector('[role="dialog"] form')!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
   });
@@ -215,10 +206,7 @@ test("after a delete the focus goes to the projects heading once the project is 
   click(rendered.container.querySelector('[aria-label="Actions for Older"]')!);
   click([...rendered.container.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent === "Delete")!);
   const dialogField = rendered.container.querySelector<HTMLInputElement>('[role="dialog"] input')!;
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(dialogField, "Older");
-    dialogField.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  type(dialogField, "Older");
   await act(async () => {
     rendered!.container.querySelector('[role="dialog"] form')!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
   });
@@ -248,10 +236,7 @@ test("a rename the next list does not show gives up on the focus: a later list d
   click(menuOf("Older")!);
   click([...rendered.container.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent === "Rename")!);
   const dialogField = rendered.container.querySelector<HTMLInputElement>('[role="dialog"] input')!;
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(dialogField, "Oldest");
-    dialogField.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  type(dialogField, "Oldest");
   await act(async () => {
     rendered!.container.querySelector('[role="dialog"] form')!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
   });

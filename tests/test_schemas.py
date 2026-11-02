@@ -1,7 +1,11 @@
 """Validation tests for the Pydantic config schema and load_config overrides and relative paths. The voxel grid
 resolution cap is tested in test_voxelization.py."""
+import re
+
 import pytest
 from pydantic import ValidationError
+
+from urbansolarcarver.mode_registry import MODES
 
 
 def _make_config(**overrides):
@@ -69,14 +73,54 @@ class TestGridStepValidation:
             _make_config(voxel_size=1.0, grid_step=2.0)
 
     def test_grid_step_unset_by_default_is_half_the_voxel_size(self):
+        """The app does not read this rule from the engine: SAMPLE_SPACING_PER_VOXEL_SIZE = 0.5 is written into
+        app/src/settings_form/SettingsStep.tsx, whose line says at what spacing the test surfaces are sampled. A change of the
+        factor here must change it there too; this test and the description are what tell."""
         from urbansolarcarver.pydantic_schemas import resolve_grid_step
         cfg = _make_config(voxel_size=0.5, grid_step=None)
         assert cfg.grid_step is None
         assert resolve_grid_step(cfg.grid_step, cfg.voxel_size) == 0.25
+        assert resolve_grid_step(None, 1.0) == 0.5
+        assert resolve_grid_step(None, 0.25) == 0.125
         assert resolve_grid_step(0.3, 1.0) == 0.3
         from urbansolarcarver.pydantic_schemas import UserConfig
         assert UserConfig.model_fields["grid_step"].default is None
-        assert "None (default): half the voxel size" in UserConfig.model_fields["grid_step"].description
+        assert "None (default): half the voxel size." in UserConfig.model_fields["grid_step"].description
+
+
+class TestSlopeLimit:
+    """The settings form shows the automatic slope limit by reading the number from the max_slope_deg description that GET schema
+    sends (AUTOMATIC_SLOPE_LIMIT_IN_DESCRIPTION in app/src/settings_form/SettingField.tsx, the same pattern as below), and
+    decides by the mode's score kind (GET modes) whether that number or "off" applies. These tests check that the description
+    says what resolve_max_slope_deg does, for every mode the service lists."""
+
+    # SettingField.tsx: AUTOMATIC_SLOPE_LIMIT_IN_DESCRIPTION. The parenthesised list after it names the weighted modes.
+    AUTOMATIC_LIMIT = r"None \(default\): (\d+(?:\.\d+)?) for the weighted modes"
+
+    @staticmethod
+    def _description():
+        from urbansolarcarver.pydantic_schemas import UserConfig
+        return UserConfig.model_json_schema()["properties"]["max_slope_deg"]["description"]
+
+    @pytest.mark.parametrize("mode", sorted(MODES))
+    def test_an_unset_slope_limit_is_the_number_the_description_gives_in_the_weighted_modes_and_off_in_the_others(self, mode):
+        from urbansolarcarver.pydantic_schemas import resolve_max_slope_deg
+        found = re.search(self.AUTOMATIC_LIMIT, self._description())
+        assert found, "the app's pattern no longer finds the automatic slope limit in the description"
+        expected = float(found[1]) if MODES[mode].score_kind == "weighted_sum" else None
+        assert resolve_max_slope_deg(mode, None) == expected
+
+    def test_the_description_names_exactly_the_weighted_modes(self):
+        named = re.search(self.AUTOMATIC_LIMIT + r" \(([^)]*)\)", self._description())
+        assert named
+        assert {name.strip() for name in named[2].split(",")} == {
+            name for name, spec in MODES.items() if spec.score_kind == "weighted_sum"}
+
+    def test_an_explicit_slope_limit_applies_as_given_and_90_switches_it_off(self):
+        from urbansolarcarver.pydantic_schemas import resolve_max_slope_deg
+        for mode in MODES:
+            assert resolve_max_slope_deg(mode, 30.0) == 30.0, mode
+            assert resolve_max_slope_deg(mode, 90.0) is None, mode
 
 
 class TestDateValidation:

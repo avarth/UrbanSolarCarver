@@ -2,7 +2,7 @@
 // of Delete, Reset only for an example's project, the items that wait while a run is active, and the keyboard.
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
-import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { click, press, renderForTest, type, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { projectFolderPath, projectNameProblem } from "./ProjectDialogs";
 import { ProjectMenu, type ProjectActions } from "./ProjectMenu";
 
@@ -30,19 +30,6 @@ const menuItems = () => [...rendered!.container.querySelectorAll<HTMLButtonEleme
 const menuItem = (label: string) => menuItems().find((item) => item.textContent === label)!;
 const dialog = () => rendered!.container.querySelector<HTMLElement>('[role="dialog"]');
 const dialogButton = (label: string) => [...dialog()!.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === label)!;
-
-function type(input: HTMLInputElement, text: string) {
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, text);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-}
-
-function press(element: Element, key: string) {
-  act(() => {
-    element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
-  });
-}
 
 async function submit(form: HTMLFormElement) {
   await act(async () => {

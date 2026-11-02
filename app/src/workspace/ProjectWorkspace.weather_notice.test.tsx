@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { ModeInfo } from "../api_client/client";
 import {
   FakeService, MODES, NOTHING_RUN, SCHEMA, buttonIn, container, endWorkspaceTest, openPanelSection, openStep, openWorkspace, pressRunAnalysis, project,
-  settle, startWorkspaceTest, stepRow, waitForTheSave,
+  settle, startWorkspaceTest, stepIsOpen, waitForTheSave,
 } from "./project_workspace_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
@@ -26,7 +26,7 @@ const BRISBANE = { location: "Brisbane, AUS", latitude: -27.38 };
 const GOLDEN = { location: "Golden, CO, USA", latitude: 39.74 };
 
 async function addWeatherFile() {
-  if (!stepRow("Inputs").classList.contains("step-open")) openStep("Inputs");
+  if (!stepIsOpen("Inputs")) openStep("Inputs");
   const weatherPicker = container().querySelector<HTMLInputElement>('input[type="file"][accept=".epw"]')!;
   Object.defineProperty(weatherPicker, "files", { value: [new File(["LOCATION"], "weather.epw")], configurable: true });
   act(() => weatherPicker.dispatchEvent(new Event("change", { bubbles: true })));

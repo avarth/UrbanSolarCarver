@@ -1,6 +1,6 @@
-"""Pipeline tests: full runs on a tiny cube mesh, stage-boundary validation, config
-override parsing, simulated weights, edge taper, default-threshold reporting and
-score smoothing."""
+"""Pipeline tests: a benefit run stage by stage on a plot across the street from a neighbour's facade, the
+run_pipeline wrapper against the stages, stage-boundary validation, config override parsing, simulated weights, edge
+taper, default-threshold reporting and score smoothing."""
 import json
 import os
 import pytest
@@ -19,121 +19,59 @@ _SKIP_EPW = pytest.mark.skipif(
 
 
 @_SKIP_EPW
-def test_full_pipeline_benefit(tmp_path, tiny_cube_mesh, tiny_surface_mesh):
-    """Run preprocessing → thresholding → exporting on a tiny cube."""
-    from urbansolarcarver import load_config, preprocessing, thresholding, exporting
+def test_full_pipeline_benefit(tmp_path):
+    """Preprocessing, thresholding and exporting called one by one, in benefit mode, on the plot scene: the
+    carving takes the plot's side toward the neighbour, and each stage writes its manifest and diagnostics."""
+    from _plot_scene import assert_carves_the_north_side, plot_scene
+    from urbansolarcarver import preprocessing, thresholding, exporting
 
-    # Write test meshes
-    vol_path = tmp_path / "max_volume.ply"
-    srf_path = tmp_path / "test_surface.ply"
-    tiny_cube_mesh.export(str(vol_path))
-    tiny_surface_mesh.export(str(srf_path))
-
-    # Write a minimal config
-    cfg_dict = {
-        "max_volume_path": str(vol_path),
-        "test_surface_path": str(srf_path),
-        "epw_path": _EPW,
-        "out_dir": str(tmp_path / "out"),
-        "mode": "benefit",
-        "voxel_size": 2.0,
-        "grid_step": 2.0,
-        "ray_length": 50.0,
-        "ray_batch_size": 50000,
-        "threshold": "carve_fraction",
-        "carve_fraction": 0.5,
-        "start_month": 1, "start_day": 1, "start_hour": 8,
-        "end_month": 1, "end_day": 1, "end_hour": 16,
-        "apply_smoothing": False,
-        "min_voxels": 1,
-        "min_face_count": 1,
-        "device": "cpu",
-    }
-    import yaml
-    cfg_path = tmp_path / "config.yaml"
-    cfg_path.write_text(yaml.dump(cfg_dict), encoding="utf-8")
-
-    cfg = load_config(str(cfg_path))
+    scene = plot_scene(tmp_path)
+    cfg = scene.config(tmp_path / "out", "benefit", _EPW, threshold="carve_fraction", carve_fraction=0.7)
     base = tmp_path / "out"
 
-    # Stage 1: preprocessing
     pre = preprocessing(cfg, base / "preprocessing")
-    assert pre.volume_path.exists(), "scores.npy not written"
-    assert (pre.out_dir / "manifest.json").exists(), "preprocessing manifest missing"
     manifest = json.loads((pre.out_dir / "manifest.json").read_text())
-    assert "scores_path" in manifest
-    assert "shape" in manifest
-
-    # Stage 2: thresholding
+    assert manifest["mode"] == "benefit" and manifest["context_path"] == str(scene.context)
     thr = thresholding(pre, cfg, base / "thresholding")
-    assert thr.mask_path.exists(), "mask.npy not written"
-    assert (thr.out_dir / "manifest.json").exists(), "thresholding manifest missing"
-
-    # Stage 3: exporting
     result = exporting(thr, cfg, base / "exporting")
-    assert result.export_path.exists(), "exported mesh not written"
+    assert result.export_path.is_file()
 
-    # Check diagnostics exist
-    pre_diag = pre.out_dir / "diagnostics"
-    assert (pre_diag / "diagnostic.json").exists(), "preprocessing diagnostics missing"
-    thr_diag = thr.out_dir / "diagnostics"
-    assert (thr_diag / "diagnostic.json").exists(), "thresholding diagnostics missing"
+    voxels = scene.voxels(thr.out_dir)
+    assert_carves_the_north_side(voxels)
+    # Every hour of the January day lies below the balance point, so benefit weighs the sky as irradiance does and
+    # removes the same voxels (test_modes.py pins irradiance at 1272). Measured 2026-11-02; after a deliberate change
+    # of the scene or the scoring, take the new value from the thresholding diagnostics.
+    assert int(voxels.removed.sum()) == pytest.approx(1272, rel=0.02)
 
-    # Check preprocessing diagnostic has expected fields
-    pre_summary = json.loads((pre_diag / "diagnostic.json").read_text())
-    assert "score_stats" in pre_summary
-    assert "mode" in pre_summary
-    assert "voxel_size" in pre_summary
-    assert "timings" in pre_summary
-
-    # Check thresholding diagnostic has expected fields
-    thr_summary = json.loads((thr_diag / "diagnostic.json").read_text())
-    assert "threshold_method" in thr_summary
-    assert "voxels_kept" in thr_summary
-    assert "retention_pct" in thr_summary
+    # The diagnostics each stage writes for the run report.
+    pre_summary = json.loads((pre.out_dir / "diagnostics" / "diagnostic.json").read_text())
+    assert pre_summary["mode"] == "benefit" and pre_summary["voxel_size"] == 1.0
+    assert {"score_stats", "timings"} <= set(pre_summary)
+    thr_summary = json.loads((thr.out_dir / "diagnostics" / "diagnostic.json").read_text())
+    assert thr_summary["threshold_method"] == "carve_fraction"
+    assert thr_summary["voxels_kept"] == int(voxels.kept.sum())
+    assert thr_summary["retention_pct"] == pytest.approx(100.0 * voxels.kept.mean(), abs=0.01)
     assert "timings" in thr_summary
-    # The surface under the cube sees the low January sun through it: half the score carved keeps part of the cube.
-    assert 0 < thr_summary["retention_pct"] < 100
 
 
-@_SKIP_EPW
-def test_run_pipeline_convenience(tmp_path, tiny_cube_mesh, tiny_surface_mesh):
-    """Test the run_pipeline() convenience wrapper."""
-    from urbansolarcarver import run_pipeline, load_config
+def test_run_pipeline_convenience(tmp_path):
+    """run_pipeline runs the stages into ``out_dir/<stage>`` and keeps the voxels the stages called one by one keep.
+    Daylight on the 10 m cube, which needs no weather file: which voxels a mode carves is checked above and in
+    test_modes.py."""
+    from _stage_scene import daylight_cube_config
+    from urbansolarcarver import exporting, preprocessing, run_pipeline, thresholding
 
-    vol_path = tmp_path / "max_volume.ply"
-    srf_path = tmp_path / "test_surface.ply"
-    tiny_cube_mesh.export(str(vol_path))
-    tiny_surface_mesh.export(str(srf_path))
-
-    import yaml
-    cfg_dict = {
-        "max_volume_path": str(vol_path),
-        "test_surface_path": str(srf_path),
-        "epw_path": _EPW,
-        "out_dir": str(tmp_path / "out"),
-        "mode": "benefit",
-        "voxel_size": 2.0,
-        "grid_step": 2.0,
-        "ray_length": 50.0,
-        "ray_batch_size": 50000,
-        "threshold": "carve_fraction",
-        "carve_fraction": 0.5,
-        "start_month": 1, "start_day": 1, "start_hour": 8,
-        "end_month": 1, "end_day": 1, "end_hour": 16,
-        "apply_smoothing": False,
-        "min_voxels": 1,
-        "min_face_count": 1,
-        "device": "cpu",
-    }
-    cfg_path = tmp_path / "config.yaml"
-    cfg_path.write_text(yaml.dump(cfg_dict), encoding="utf-8")
-
-    cfg = load_config(str(cfg_path))
-    result = run_pipeline(cfg, tmp_path / "pipeline_out")
-    assert result.exporting.export_path.exists()
-    diagnostic = json.loads((result.exporting.out_dir / "diagnostics" / "diagnostic.json").read_text(encoding="utf-8"))
-    assert 0 < diagnostic["voxels_removed"] < diagnostic["voxels_original"]
+    cfg = daylight_cube_config(tmp_path)
+    result = run_pipeline(cfg, tmp_path / "wrapped")
+    assert [p.parent for p in (result.preprocessing.out_dir, result.thresholding.out_dir, result.exporting.out_dir)] \
+        == [tmp_path / "wrapped"] * 3
+    assert [p.name for p in (result.preprocessing.out_dir, result.thresholding.out_dir, result.exporting.out_dir)] \
+        == ["preprocessing", "thresholding", "exporting"]
+    thr = thresholding(preprocessing(cfg, tmp_path / "staged" / "pre"), cfg, tmp_path / "staged" / "thr")
+    exporting(thr, cfg, tmp_path / "staged" / "exp")
+    wrapped_mask = np.load(result.thresholding.mask_path)
+    np.testing.assert_array_equal(wrapped_mask, np.load(thr.mask_path))
+    assert 0 < wrapped_mask.sum() < np.load(result.preprocessing.out_dir / "voxel_grid.npy").sum()
 
 
 # ---------------------------------------------------------------------------

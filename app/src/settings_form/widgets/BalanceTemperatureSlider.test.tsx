@@ -1,7 +1,7 @@
 import { act, useReducer } from "react";
 import { afterEach, expect, test } from "vitest";
 import type { ModeInfo } from "../../api_client/client";
-import { renderForTest, type RenderedOverlay } from "../../viewer_overlays/render_for_test";
+import { press, renderForTest, type RenderedOverlay } from "../../viewer_overlays/render_for_test";
 import { formReducer, initialFormState, type FormState } from "../form_state";
 import { settingsForStep } from "../presentation";
 import { SettingField } from "../SettingField";
@@ -61,14 +61,6 @@ function drag(fromX: number, ...throughX: number[]) {
   pointer("pointerdown", fromX);
   for (const x of throughX) pointer("pointermove", x);
   pointer("pointerup", throughX.at(-1) ?? fromX);
-}
-
-/** Presses *key* on *element* with the focus on it; returns whether the widget took the key. */
-function keyDown(element: HTMLElement, key: string): boolean {
-  act(() => element.focus());
-  const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
-  act(() => { element.dispatchEvent(event); });
-  return event.defaultPrevented;
 }
 
 test("one strip from 10 to 30 °C whose two handles are the ends of the dead band, each with its value in a bubble above it", () => {
@@ -138,24 +130,24 @@ test("disabled (the carving lock): both handles say so and leave the tab order; 
     expect(end.getAttribute("aria-disabled")).toBe("true");
     expect(end.tabIndex).toBe(-1);
   }
-  keyDown(lowerHandle(), "ArrowLeft");
+  press(lowerHandle(), "ArrowLeft", { focus: true });
   drag(30, 10);
   expect(latest!.userValues).toEqual({});
 });
 
 test("arrows move an end by the step of the track, Page Up and Page Down by 2 °C, Home and End to the ends of the track", () => {
   renderBalance();
-  expect(keyDown(upperHandle(), "ArrowRight")).toBe(true);
+  expect(press(upperHandle(), "ArrowRight", { focus: true })).toBe(true);
   expect(latest!.userValues).toEqual({ balance_temperature: 15.25, balance_offset: 2.25 });            // 13 to 17.5
-  keyDown(upperHandle(), "PageUp");
+  press(upperHandle(), "PageUp", { focus: true });
   expect(latest!.userValues).toEqual({ balance_temperature: 16.25, balance_offset: 3.25 });            // 13 to 19.5
-  keyDown(lowerHandle(), "PageDown");
-  keyDown(lowerHandle(), "ArrowDown");
+  press(lowerHandle(), "PageDown", { focus: true });
+  press(lowerHandle(), "ArrowDown", { focus: true });
   expect(latest!.userValues).toEqual({ balance_temperature: 15, balance_offset: 4.5 });                // 10.5 to 19.5
-  keyDown(lowerHandle(), "Home");
-  keyDown(upperHandle(), "End");
+  press(lowerHandle(), "Home", { focus: true });
+  press(upperHandle(), "End", { focus: true });
   expect(latest!.userValues).toEqual({ balance_temperature: 20, balance_offset: 10 });                 // 10 to 30
-  keyDown(upperHandle(), "Enter");
+  press(upperHandle(), "Enter", { focus: true });
   expect(latest!.userValues).toEqual({ balance_temperature: 20, balance_offset: 10 });
 });
 
@@ -174,42 +166,42 @@ test("on one spot (a dead band of 0) the direction of the move picks the end, fo
 
 test("on one spot, a key toward the other end moves the focus to that end's handle, which steps; a key toward its own end steps it", () => {
   renderBalance(form({ balance_offset: 0 }));
-  expect(keyDown(lowerHandle(), "ArrowRight")).toBe(true);
+  expect(press(lowerHandle(), "ArrowRight", { focus: true })).toBe(true);
   expect(document.activeElement).toBe(upperHandle());
   expect(latest!.userValues).toEqual({ balance_temperature: 15.25, balance_offset: 0.25 });
-  keyDown(upperHandle(), "ArrowRight");                    // off the spot: the focused handle steps
+  press(upperHandle(), "ArrowRight", { focus: true });     // off the spot: the focused handle steps
   expect(document.activeElement).toBe(upperHandle());
   expect(latest!.userValues).toEqual({ balance_temperature: 15.5, balance_offset: 0.5 });
   rendered!.unmount();
   renderBalance(form({ balance_offset: 0 }));
-  keyDown(lowerHandle(), "ArrowLeft");                     // its own end
+  press(lowerHandle(), "ArrowLeft", { focus: true });      // its own end
   expect(document.activeElement).toBe(lowerHandle());
   expect(latest!.userValues).toEqual({ balance_temperature: 14.75, balance_offset: 0.25 });
 });
 
 test("on one spot, Home and End pick the end by their direction too: Home the lower end, End the upper one", () => {
   renderBalance(form({ balance_offset: 0 }));             // both ends at 15
-  keyDown(upperHandle(), "Home");
+  press(upperHandle(), "Home", { focus: true });
   expect(document.activeElement).toBe(lowerHandle());
   expect(latest!.userValues).toEqual({ balance_temperature: 12.5, balance_offset: 2.5 });             // 10 to 15
   rendered!.unmount();
   renderBalance(form({ balance_offset: 0 }));
-  keyDown(lowerHandle(), "End");
+  press(lowerHandle(), "End", { focus: true });
   expect(document.activeElement).toBe(upperHandle());
   expect(latest!.userValues).toEqual({ balance_temperature: 22.5, balance_offset: 7.5 });             // 15 to 30
-  keyDown(upperHandle(), "Home");                                                                      // off the spot: to the lower end
+  press(upperHandle(), "Home", { focus: true });                                                       // off the spot: to the lower end
   expect(document.activeElement).toBe(upperHandle());
   expect(latest!.userValues).toEqual({ balance_temperature: 15, balance_offset: 0 });
 });
 
 test("both ends pinned at an end of the track step back from it", () => {
   renderBalance(form({ balance_temperature: 35, balance_offset: 0 }));       // both at 35, drawn at 30
-  keyDown(upperHandle(), "ArrowLeft");
+  press(upperHandle(), "ArrowLeft", { focus: true });
   expect(document.activeElement).toBe(lowerHandle());
   expect(latest!.userValues).toEqual({ balance_temperature: 32.25, balance_offset: 2.75 });             // 29.5 to 35
   rendered!.unmount();
   renderBalance(form({ balance_temperature: 5, balance_offset: 0 }));        // both at 5, drawn at 10
-  keyDown(lowerHandle(), "ArrowRight");
+  press(lowerHandle(), "ArrowRight", { focus: true });
   expect(document.activeElement).toBe(upperHandle());
   expect(latest!.userValues).toEqual({ balance_temperature: 7.75, balance_offset: 2.75 });              // 5 to 10.5
 });

@@ -1,7 +1,7 @@
 import { act, useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ModeInfo } from "../../api_client/client";
-import { addStyleSheetForTest, click, renderForTest, type RenderedOverlay } from "../../viewer_overlays/render_for_test";
+import { addStyleSheetForTest, click, press, renderForTest, type RenderedOverlay } from "../../viewer_overlays/render_for_test";
 import type { ColdPeriodState, Hemisphere } from "../analysis_period";
 import { formReducer, initialFormState, shownValue, type FormState } from "../form_state";
 import { settingsForStep } from "../presentation";
@@ -75,7 +75,6 @@ function drag(strip: HTMLElement, fromX: number, ...throughX: number[]) {
   pointer(strip, "pointerup", throughX.at(-1) ?? fromX);
 }
 
-const keyDown = (element: HTMLElement, key: string) => act(() => { element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })); });
 const presetButton = (text: string) => [...rendered!.container.querySelectorAll<HTMLButtonElement>(".period-preset")].find((button) => button.textContent === text)!;
 
 test("a year strip and an hour strip with two handles each, named apart, saying their values, which the bubbles over them show", () => {
@@ -139,23 +138,23 @@ test("a drag that crosses the end hour and comes back before the release does no
 
 test("arrows move a date handle a day, Page Up and Page Down a month, Home and End to the ends of the year", () => {
   renderPeriod();
-  keyDown(handle("Start date"), "ArrowLeft");
+  press(handle("Start date"), "ArrowLeft");
   expect(periodValues()).toMatchObject({ start_month: 12, start_day: 20 });
-  keyDown(handle("Start date"), "PageDown");
+  press(handle("Start date"), "PageDown");
   expect(periodValues()).toMatchObject({ start_month: 11, start_day: 20 });
-  keyDown(handle("End date"), "PageUp");
+  press(handle("End date"), "PageUp");
   expect(periodValues()).toMatchObject({ end_month: 12, end_day: 31 });
-  keyDown(handle("Start date"), "Home");
+  press(handle("Start date"), "Home");
   expect(periodValues()).toMatchObject({ start_month: 1, start_day: 1 });
-  keyDown(handle("End date"), "ArrowLeft");
-  keyDown(handle("End date"), "End");
+  press(handle("End date"), "ArrowLeft");
+  press(handle("End date"), "End");
   expect(periodValues()).toMatchObject({ end_month: 12, end_day: 31 });
   expect(handle("Start date").getAttribute("aria-valuetext")).toBe("1 January");
 });
 
 test("a date handle moved past the other by key gives a period across the new year", () => {
   renderPeriod();
-  keyDown(handle("Start date"), "ArrowRight");
+  press(handle("Start date"), "ArrowRight");
   expect(periodValues()).toMatchObject({ start_month: 12, start_day: 22, end_month: 12, end_day: 21 });
   expect(rangePiecesIn(strips()[0])).toBe(2);
   expect(bubbles().slice(0, 2)).toEqual(["22 Dec", "21 Dec"]);
@@ -163,14 +162,14 @@ test("a date handle moved past the other by key gives a period across the new ye
 
 test("arrows move an hour handle an hour, Page Up and Page Down six hours; past the end hour on one date the end date moves to the next day", () => {
   renderPeriod();
-  keyDown(handle("End hour"), "ArrowRight");
+  press(handle("End hour"), "ArrowRight");
   expect(periodValues()).toMatchObject({ end_hour: 15 });
-  keyDown(handle("Start hour"), "PageDown");
+  press(handle("Start hour"), "PageDown");
   expect(periodValues()).toMatchObject({ start_hour: 4 });
-  keyDown(handle("Start hour"), "End");
+  press(handle("Start hour"), "End");
   expect(periodValues()).toEqual({ ...WINTER_DAY, start_hour: 23, end_day: 22, end_hour: 15 });
   expect(bubbles()).toEqual(["21 Dec", "22 Dec", `23${NBSP}h`, `15${NBSP}h`]);
-  keyDown(handle("End hour"), "Home");
+  press(handle("End hour"), "Home");
   expect(periodValues()).toMatchObject({ end_hour: 0, end_day: 22 });
 });
 
@@ -212,7 +211,7 @@ test("disabled (the carving lock): no key, drag or preset changes the period", (
   renderPeriod(form(), true);
   expect(handle("Start date").getAttribute("aria-disabled")).toBe("true");
   expect(handle("Start date").tabIndex).toBe(-1);
-  keyDown(handle("Start date"), "ArrowLeft");
+  press(handle("Start date"), "ArrowLeft");
   drag(strips()[1], 100, 225);
   expect(presetButton("Whole year").disabled).toBe(true);
   expect(changes).toEqual([]);
@@ -237,7 +236,7 @@ test("a period stored as one date with hours across midnight is shown as the eng
   expect([...rendered!.container.querySelectorAll(".period-preset")].map((button) => button.getAttribute("aria-pressed"))).toEqual(["false", "false", "false", "false"]);
   expect(changes).toEqual([]);
   // The next change applies the rule: one night.
-  keyDown(handle("End hour"), "ArrowRight");
+  press(handle("End hour"), "ArrowRight");
   expect(changes).toEqual([{ end_day: 22, end_hour: 3 }]);
   expect(bubbles()).toEqual(["21 Dec", "22 Dec", `22${NBSP}h`, `3${NBSP}h`]);
   expect(note()).toBeNull();
@@ -317,7 +316,7 @@ test("the keyboard focus on the cold period preset shows its tooltip, Escape clo
   act(() => presetButton(COLD_PERIOD).blur());
   act(() => presetButton(COLD_PERIOD).focus());
   expect(coldTooltip()!.textContent).toBe(FOUND_TEXT);
-  keyDown(presetButton(COLD_PERIOD), "Escape");
+  press(presetButton(COLD_PERIOD), "Escape");
   expect(coldTooltip()).toBeNull();
 });
 

@@ -21,32 +21,47 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
+def _start_daemon(home: Path, key: bytes):
+    """Start a daemon on a free port and wait until it answers a ping; (address, process).
+
+    The daemon takes a port number, not a socket, so the port is free when chosen and another test worker can take it before
+    the daemon binds it. The daemon then stops at once saying the port is in use, and another free port is tried."""
+    log = home / "daemon.log"
+    for _ in range(3):
+        port = _free_port()
+        with open(log, "wb") as output:
+            proc = subprocess.Popen(
+                [sys.executable, "-m", "urbansolarcarver.daemon", "--port", str(port), "--device", "cpu"],
+                stdout=output, stderr=subprocess.STDOUT, env=isolated_home_env(home),
+            )
+        addr = ("localhost", port)
+        for _ in range(240):
+            if proc.poll() is not None:
+                break
+            # Connect only once the daemon says it bound the port: until then the port can be another program's.
+            if "[daemon] listening on" in log.read_text(encoding="utf-8", errors="replace"):
+                with Client(addr, authkey=key) as c:     # waits for the accept, after the kernel warm-up
+                    c.send({"cmd": "ping"})
+                    c.recv()
+                return addr, proc
+            time.sleep(0.5)
+        else:
+            proc.kill()
+            pytest.fail("daemon did not become ready")
+        said = log.read_text(encoding="utf-8", errors="replace")
+        if "already in use" not in said:
+            pytest.fail("daemon exited during startup:\n" + said)
+    pytest.fail("three free ports were taken before the daemon could bind them")
+
+
 @pytest.fixture(scope="module")
 def daemon(tmp_path_factory):
     # The daemon reads its key from the home folder; a temporary home keeps
     # the tests away from the real ~/.urbansolarcarver/.daemon_authkey.
     home = tmp_path_factory.mktemp("home")
     key = resolve_daemon_authkey(home / ".urbansolarcarver" / ".daemon_authkey")
-    port = _free_port()
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "urbansolarcarver.daemon", "--port", str(port), "--device", "cpu"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        env=isolated_home_env(home),
-    )
-    addr = ("localhost", port)
+    addr, proc = _start_daemon(home, key)
     try:
-        for _ in range(240):
-            if proc.poll() is not None:
-                pytest.fail("daemon exited during startup")
-            try:
-                with Client(addr, authkey=key) as c:
-                    c.send({"cmd": "ping"})
-                    c.recv()
-                break
-            except OSError:
-                time.sleep(0.5)
-        else:
-            pytest.fail("daemon did not become ready")
         yield addr, key, proc
     finally:
         try:

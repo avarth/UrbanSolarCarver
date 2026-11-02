@@ -4,7 +4,7 @@
 import { act, useRef, useState } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { MODE_TILES } from "../modes";
-import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { click, press, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { ModeMenu } from "./ModeMenu";
 
 let rendered: RenderedOverlay | null = null;
@@ -35,12 +35,6 @@ function Harness({ disabledReason = null, onChoose = () => {}, onClose = () => {
 
 const openButton = () => [...rendered!.container.querySelectorAll("button")].find((button) => button.textContent === "Add criterion")!;
 const items = () => [...rendered!.container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
-
-function press(element: Element, key: string) {
-  act(() => {
-    element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
-  });
-}
 
 test("the menu has one item per mode in the order of the tiles: symbol, name and its one line under it", () => {
   rendered = renderForTest(<Harness />);

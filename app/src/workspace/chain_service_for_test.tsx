@@ -1,15 +1,23 @@
 // A fake service of a project whose criteria are a chain, and the project opened against it at the Criteria step, with the
-// queries of its cards and panel: shared by ProjectWorkspace.criterion_cards.test.tsx and ProjectWorkspace.saves_and_runs.test.tsx.
-// Each test file mocks ../viewer/scene with FakeViewerScene itself and calls startWorkspaceTest and endWorkspaceTest.
+// queries of its cards and panel: shared by ProjectWorkspace.criterion_cards, .criteria, .chain_runs, .saves_and_runs, .three_d and
+// .simulate (.test.tsx), and by simulate_service_for_test.tsx, which builds on it. Each test file mocks ../viewer/scene with
+// FakeViewerScene itself and calls startWorkspaceTest and endWorkspaceTest. Its replies are typed with the service's types
+// (json<Reply>), so a reply that drifts from generated_types.ts fails npm run typecheck.
 import { act } from "react";
 import { expect } from "vitest";
-import type { ChainSummary, CriterionCarvingSummary, CriterionEntry, ProjectDetail } from "../api_client/client";
+import type {
+  ChainSummary, ConfigErrorReply, CriterionCarvingSummary, CriterionEntry, CriterionSettingsReply, ProjectDetail, RunSummary, StageStatusReply, StartRunReply,
+} from "../api_client/client";
+import type { components } from "../api_client/generated_types";
+import { holdReply } from "../viewer_overlays/render_for_test";
 import { plainModeName } from "../modes";
 import { type PipelineStage, type StageState } from "../stages";
 import {
   CARVED, CARVING, CRITERION_KEYS, FakeService, buttonIn, container, json, openPanelSection, openStep, openWorkspace, project, settle, showCriterionCards, showCriterionEditor, stepRow,
 } from "./project_workspace_for_test";
 
+type ErrorDetailReply = components["schemas"]["ErrorDetailReply"];
+type MissingInputsReply = components["schemas"]["MissingInputsReply"];
 export type CriterionStages = Record<"preprocessing" | "thresholding", StageState>;
 const PIPELINE_STAGES: readonly PipelineStage[] = ["preprocessing", "thresholding", "exporting", "massing"];
 export const CURRENT: CriterionStages = { preprocessing: "current", thresholding: "current" };
@@ -37,7 +45,7 @@ export class ChainService extends FakeService {
   /** The stages a run executes for each criterion (POST runs replies them as criterion_stages); null: FakeService answers. */
   runCriterionStages: Record<string, string[]> | null = null;
   /** The status and body a request to run is refused with; null: it starts. */
-  runRefusal: { status: number; body: unknown } | null = null;
+  runRefusal: { status: number; body: ErrorDetailReply | MissingInputsReply | ConfigErrorReply } | null = null;
   /** GET run/score-points?criterion={id}: the packed score points of each criterion; a criterion without them is not there (404). */
   scorePointsOf: Record<string, ArrayBuffer> = {};
   /** GET run/carved-by-criterion: the packed layer; null: not there (404, as the service answers until every criterion has run). */
@@ -60,26 +68,26 @@ export class ChainService extends FakeService {
     if (path === "/stage-status") {
       this.requests.push(`${method} ${fullPath}`);
       const active = this.entries.filter((entry) => !entry.bypassed).map((entry) => [entry.id, this.criterionStages[entry.id]]);
-      return json({ stages: this.stages, criteria: Object.fromEntries(active) });
+      return json<StageStatusReply>({ stages: this.stages, criteria: Object.fromEntries(active) });
     }
     if (path === "/run/summary") {
       this.requests.push(`${method} ${fullPath}`);
-      return json({ ...this.summary, criteria: this.summaryCriteria, chain: this.summaryChain });
+      return json<RunSummary>({ ...this.summary, criteria: this.summaryCriteria, chain: this.summaryChain });
     }
     if (path === "/run/score-points" || path === "/run/carved-by-criterion") {
       this.requests.push(`${method} ${fullPath}`);
-      if (path === "/run/carved-by-criterion") await this.carvedByCriterionAnswerWhen;
+      if (path === "/run/carved-by-criterion") await holdReply(this.carvedByCriterionAnswerWhen);
       const packed = path === "/run/carved-by-criterion" ? this.carvedByCriterion : this.scorePointsOf[new URLSearchParams(fullPath.split("?")[1]).get("criterion") ?? ""];
-      return packed === undefined || packed === null ? json({ detail: "Not found" }, 404) : new Response(packed);
+      return packed === undefined || packed === null ? json<ErrorDetailReply>({ detail: "Not found" }, 404) : new Response(packed);
     }
     if (method === "POST" && path === "/runs" && (this.runRefusal !== null || this.runCriterionStages !== null)) {
       this.requests.push(`${method} ${fullPath}`);
-      if (this.runRefusal !== null) return json(this.runRefusal.body, this.runRefusal.status);
+      if (this.runRefusal !== null) return json<ErrorDetailReply | MissingInputsReply | ConfigErrorReply>(this.runRefusal.body, this.runRefusal.status);
       const { produce } = JSON.parse(String(init!.body)) as { produce: string[] };
       this.runsStarted.push(produce);
       const ofCriteria = Object.values(this.runCriterionStages!).flat();
       const stages = PIPELINE_STAGES.filter((stage) => ofCriteria.includes(stage) || (produce.includes(stage) && (stage === "exporting" || stage === "massing")));
-      return json({ status: "started", run_id: `r${this.runsStarted.length}`, stages, criterion_stages: this.runCriterionStages });
+      return json<StartRunReply>({ status: "started", run_id: `r${this.runsStarted.length}`, stages, criterion_stages: this.runCriterionStages! });
     }
     if (!path.startsWith("/criteria")) return answerOfFakeService(address, init);
     this.requests.push(`${method} ${fullPath}`);
@@ -87,7 +95,7 @@ export class ChainService extends FakeService {
     if (method === "PUT" && path === "/criteria/order") {
       const ids = body.ids as string[];
       this.entries = ids.map((id) => this.entries.find((entry) => entry.id === id)!);
-      return json(this.entries);
+      return json<CriterionEntry[]>(this.entries);
     }
     if (method === "POST" && path === "/criteria") {
       const id = String(Math.max(...this.entries.map((entry) => Number(entry.id))) + 1);
@@ -96,24 +104,24 @@ export class ChainService extends FakeService {
                                       settings: { mode, ...this.modes.find((candidate) => candidate.name === mode)?.starting_values } };
       this.entries = [...this.entries, entry];
       this.criterionStages[id] = { preprocessing: "missing", thresholding: "missing" };
-      return json(entry);
+      return json<CriterionEntry>(entry);
     }
     const [, , id, part, fileName] = path.split("/");
     const entry = this.entries.find((candidate) => candidate.id === id);
-    if (entry === undefined) return json({ detail: `The project has no criterion ${id}.` }, 404);
+    if (entry === undefined) return json<ErrorDetailReply>({ detail: `The project has no criterion ${id}.` }, 404);
     const replace = (changed: CriterionEntry) => {
       this.entries = this.entries.map((candidate) => (candidate.id === changed.id ? changed : candidate));
-      return json(changed);
+      return json<CriterionEntry>(changed);
     };
     if (method === "GET" && part === "settings") {
-      await this.settingsAnswerWhen[id];
-      if (this.settingsRefusedWith[id] !== undefined) return json({ detail: `The settings of criterion ${id} could not be read.` }, this.settingsRefusedWith[id]);
-      return json({ criterion_id: id, settings: { ...this.sharedSettings, ...entry.settings } });
+      await holdReply(this.settingsAnswerWhen[id]);
+      if (this.settingsRefusedWith[id] !== undefined) return json<ErrorDetailReply>({ detail: `The settings of criterion ${id} could not be read.` }, this.settingsRefusedWith[id]);
+      return json<CriterionSettingsReply>({ criterion_id: id, settings: { ...this.sharedSettings, ...entry.settings } });
     }
     if (method === "PATCH" && part === undefined) {
       this.patches.push({ id, body });
-      await this.patchesAnswerWhen;
-      if (body.name === "") return json({ detail: "A criterion needs a name." }, 422);
+      await holdReply(this.patchesAnswerWhen);
+      if (body.name === "") return json<ErrorDetailReply>({ detail: "A criterion needs a name." }, 422);
       const values = body.values as Record<string, unknown> | undefined;
       const startingValues = this.modes.find((candidate) => candidate.name === values?.mode)?.starting_values ?? {};
       const settings = values === undefined ? entry.settings
@@ -122,7 +130,7 @@ export class ChainService extends FakeService {
                        bypassed: typeof body.bypassed === "boolean" ? body.bypassed : entry.bypassed });
     }
     if (method === "DELETE" && part === undefined) {
-      if (this.entries.length === 1) return json({ detail: "A project needs at least one criterion." }, 422);
+      if (this.entries.length === 1) return json<ErrorDetailReply>({ detail: "A project needs at least one criterion." }, 422);
       this.entries = this.entries.filter((candidate) => candidate.id !== id);
       // The stored files no criterion left uses go, as the service discards them.
       this.storedTestSurfaces = this.storedTestSurfaces.filter((file) => !(entry.test_surface_files ?? []).includes(file.name)
@@ -133,7 +141,7 @@ export class ChainService extends FakeService {
       const copy = { ...entry, id: String(Math.max(...this.entries.map((candidate) => Number(candidate.id))) + 1), name: `${entry.name} copy` };
       this.entries = [...this.entries, copy];
       this.criterionStages[copy.id] = { preprocessing: "missing", thresholding: "missing" };
-      return json(copy);
+      return json<CriterionEntry>(copy);
     }
     const files = entry.test_surface_files ?? [];
     if (method === "POST" && part === "test-surfaces") {
@@ -151,7 +159,7 @@ export class ChainService extends FakeService {
       this.criterionStages[id] = OUT_OF_DATE;
       return replace({ ...entry, test_surface_files: [...files, decodeURIComponent(fileName)] });
     }
-    return json({ detail: "Not found" }, 404);
+    return json<ErrorDetailReply>({ detail: "Not found" }, 404);
   }
 
   storedFileCount(name: string): number {

@@ -1,21 +1,9 @@
 import { act, createElement } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { ApiError, serviceProblemOf } from "../api_client/client";
+import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { renderForTest } from "../viewer_overlays/render_for_test";
 import { NOTICE_MILLISECONDS, runningCriterion, useRunLoop, type RunLoop, type RunOutcome } from "./run_state";
-
-class FakeWebSocket {
-  static opened: FakeWebSocket[] = [];
-  onmessage: ((message: { data: string }) => void) | null = null;
-  onclose: ((event: { code: number; reason: string }) => void) | null = null;
-  constructor(readonly address: string) {
-    FakeWebSocket.opened.push(this);
-  }
-  close() {}
-  send(event: object) {
-    act(() => this.onmessage?.({ data: JSON.stringify(event) }));
-  }
-}
 
 function replyWith(body: unknown, status = 200) {
   return vi.fn().mockImplementation(async () => new Response(JSON.stringify(body), { status }));

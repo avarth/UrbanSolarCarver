@@ -1,92 +1,84 @@
-"""Smoke tests that the tilted_plane, time-based, irradiance, benefit and daylight
-modes run end to end on a tiny mesh, plus checks of the benefit-mode weight formula."""
-import json
+"""What the tilted_plane, time-based, irradiance and daylight modes carve on a plot across the street from a
+neighbour's facade (tests/_plot_scene.py), a site turned by north_deg, and checks of the benefit-mode weight formula.
+Benefit's carving is checked by test_pipeline.py::test_full_pipeline_benefit."""
+import math
 
 import numpy as np
 import pytest
 import yaml
 from pathlib import Path
 
+from _plot_scene import FACADE_NORTHING, assert_carves_the_north_side, plot_scene
 
-def _write_config(tmp_path, vol_path, srf_path, epw_path, mode, **extra):
-    """Write a minimal YAML config and return loaded UserConfig."""
-    from urbansolarcarver import load_config
-    cfg_dict = {
-        "max_volume_path": str(vol_path),
-        "test_surface_path": str(srf_path),
-        "out_dir": str(tmp_path / "out"),
-        "mode": mode,
-        "voxel_size": 2.0,
-        "grid_step": 2.0,
-        "ray_length": 50.0,
-        "ray_batch_size": 50000,
-        "threshold": 0.5,
-        "apply_smoothing": False,
-        "min_voxels": 1,
-        "min_face_count": 1,
-        "device": "cpu",
-    }
-    if epw_path:
-        cfg_dict["epw_path"] = str(epw_path)
-        cfg_dict.update(start_month=1, start_day=1, start_hour=8,
-                        end_month=1, end_day=1, end_hour=16)
-    cfg_dict.update(extra)
-    cfg_path = tmp_path / "config.yaml"
-    cfg_path.write_text(yaml.dump(cfg_dict), encoding="utf-8")
-    return load_config(str(cfg_path))
+# Weighted modes use the relative carve_fraction threshold: a raw numeric cutoff like 0.5 is meaningless against
+# cumulative kWh/m² scores (it would carve every voxel any ray touched).
+CARVE_FRACTION = {"threshold": "carve_fraction", "carve_fraction": 0.7}
+
+# Ladybug's SkyMatrix takes north as metadata only: it does not pass it to gendaymtx, so the patch values of the
+# irradiance and benefit weights do not turn with north_deg (sky_patches.compute_EPW_based_weights). A turned site
+# then gets the sun from the model's -Y whichever way north points.
+NORTH_IGNORED_BY_THE_SKY_MATRIX = ("Bug: compute_EPW_based_weights passes north to Ladybug's SkyMatrix, which only "
+                                   "records it; the weights of every north_deg are those of north_deg 0")
 
 
-def _assert_carves_part_of_the_cube(result):
-    """The test surface under the cube looks up through it: some voxels go, not all."""
-    diagnostic = json.loads((result.exporting.out_dir / "diagnostics" / "diagnostic.json").read_text(encoding="utf-8"))
-    assert 0 < diagnostic["voxels_removed"] < diagnostic["voxels_original"]
-
-
-def _run_mode(tmp_path, vol_path, srf_path, epw_path, mode, **extra):
-    """Run full pipeline for a mode and return the PipelineResult."""
+def _carve(folder, mode, epw_path=None, north_deg=0.0, **values):
+    """Run *mode* to exporting on the plot scene written into *folder*; return the scene's voxels of the run."""
     from urbansolarcarver import run_pipeline
-    cfg = _write_config(tmp_path, vol_path, srf_path, epw_path, mode, **extra)
-    return run_pipeline(cfg, tmp_path / "pipeline_out")
+    scene = plot_scene(folder, north_deg=north_deg)
+    config = scene.config(folder / "run", mode, epw_path, **values)
+    result = run_pipeline(config, folder / "run")
+    return scene.voxels(result.thresholding.out_dir)
 
 
-# --- tilted_plane: no EPW needed, always runs ---
+def test_tilted_plane_removes_what_rises_above_the_plane_from_the_facades_foot(tmp_path):
+    # 30 degrees, not the starting 45, at which an angle measured from the vertical would give the same plane.
+    angle = 30.0
+    voxels = _carve(tmp_path, "tilted_plane", tilted_plane_angle_deg=angle, threshold=None)
+    assert_carves_the_north_side(voxels)
+    # The plane rises from the facade's foot (its lowest sample points) across the street and over the plot. The
+    # ray crosses a voxel column at heights between the plane's values at the column's two edges, and every voxel
+    # at or above a cell it crosses goes: no voxel whose top lies below the plane goes, and none whose bottom lies
+    # above it stays.
+    rise = math.tan(math.radians(angle))
+    plane_low = (FACADE_NORTHING - (voxels.northing + 0.5)) * rise
+    plane_high = (FACADE_NORTHING - (voxels.northing - 0.5)) * rise
+    assert not (voxels.removed & (voxels.height + 0.5 < plane_low)).any()
+    assert not (voxels.kept & (voxels.height - 0.5 > plane_high)).any()
 
-def test_smoke_tilted_plane(tmp_path, tmp_mesh_files):
-    vol_path, srf_path = tmp_mesh_files
-    result = _run_mode(
-        tmp_path, vol_path, srf_path, epw_path=None,
-        mode="tilted_plane", tilted_plane_angle_deg=45.0,
-        threshold=None,
-    )
-    assert result.exporting.export_path.exists()
-    import trimesh
-    mesh = trimesh.load(str(result.exporting.export_path))
-    assert len(mesh.vertices) > 0
-    _assert_carves_part_of_the_cube(result)
+
+# The removed voxels measured 2026-11-02 on the scene's settings, on the CPU. After a deliberate change of the scene
+# or of the scoring, take the new value from the run's thresholding diagnostics (voxels_original - voxels_kept).
+@pytest.mark.parametrize("mode,extra,removed", [
+    ("time-based", {}, 2077),
+    ("irradiance", CARVE_FRACTION, 1272),
+    ("daylight", CARVE_FRACTION, 1297),
+])
+def test_each_sun_and_sky_mode_carves_the_plots_side_toward_the_neighbour(tmp_path, request, mode, extra, removed):
+    epw_path = None if mode == "daylight" else request.getfixturevalue("example_epw_path")
+    voxels = _carve(tmp_path, mode, epw_path, **extra)
+    assert_carves_the_north_side(voxels)
+    # Within 2 %: irradiance with its weights taken from the opposite sky (each patch given the value of the one
+    # 180 degrees round) removes 1532 voxels, still on the north side.
+    assert int(voxels.removed.sum()) == pytest.approx(removed, rel=0.02)
 
 
-# --- EPW-dependent modes ---
-
-# Weighted modes use the relative carve_fraction threshold: a raw numeric
-# cutoff like 0.5 is meaningless against cumulative kWh/m² scores (it would
-# carve every voxel any ray touched, producing an empty envelope).
 @pytest.mark.parametrize("mode,extra", [
     ("time-based", {}),
-    ("irradiance", {"threshold": "carve_fraction", "carve_fraction": 0.7}),
-    ("benefit", {"threshold": "carve_fraction", "carve_fraction": 0.7}),
-    ("daylight", {"threshold": "carve_fraction", "carve_fraction": 0.7}),
+    pytest.param("irradiance", CARVE_FRACTION,
+                 marks=pytest.mark.xfail(strict=True, reason=NORTH_IGNORED_BY_THE_SKY_MATRIX)),
+    pytest.param("benefit", CARVE_FRACTION,
+                 marks=pytest.mark.xfail(strict=True, reason=NORTH_IGNORED_BY_THE_SKY_MATRIX)),
 ])
-def test_smoke_epw_modes(tmp_path, tmp_mesh_files, example_epw_path, mode, extra):
-    vol_path, srf_path = tmp_mesh_files
-    result = _run_mode(
-        tmp_path, vol_path, srf_path, example_epw_path,
-        mode=mode, **extra,
-    )
-    assert result.exporting.export_path.exists()
-    import trimesh
-    mesh = trimesh.load(str(result.exporting.export_path))
-    assert len(mesh.vertices) > 0
-    _assert_carves_part_of_the_cube(result)
+def test_a_site_turned_by_north_deg_is_carved_as_the_same_site_unturned(tmp_path, example_epw_path, mode, extra):
+    # Daylight is left out: the overcast sky is the same in every direction.
+    unturned = _carve(tmp_path / "unturned", mode, example_epw_path, **extra)
+    turned = _carve(tmp_path / "turned", mode, example_epw_path, north_deg=90.0, **extra)
+    # A quarter turn maps the 1 m voxel grid onto itself, so in the site's frame the same voxels go. (The
+    # irradiance weights, which stay unturned, remove 1463 voxels on the turned site against 1272 on the plain one.)
+    def removed(voxels):
+        return {tuple(np.round(row, 3)) for row in voxels.site[voxels.removed]}
+    assert removed(turned) == removed(unturned)
+    assert_carves_the_north_side(turned)
 
 
 # --- Benefit weight semantics (documented Heaviside formula) ---

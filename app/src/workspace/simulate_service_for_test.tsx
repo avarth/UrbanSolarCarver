@@ -1,11 +1,15 @@
 // A fake service of a project with studies (the Simulate workspace), and the project opened against it in Simulate, with the
 // queries of the studies panel: shared by ProjectWorkspace.simulate.test.tsx. Each test file mocks ../viewer/scene with
-// FakeViewerScene itself and calls startWorkspaceTest and endWorkspaceTest.
+// FakeViewerScene itself and calls startWorkspaceTest and endWorkspaceTest. Its replies are typed with the service's types (json<Reply>).
 import { act } from "react";
-import type { CriterionEntry, InputFileInfo, MetricInfo, SkyDome, StudyEntry, StudyWithState } from "../api_client/client";
+import type { CriterionEntry, InputFileInfo, MetricInfo, SkyDome, StartRunReply, StudiesReply, StudyEntry, StudyWithState } from "../api_client/client";
+import type { components } from "../api_client/generated_types";
 import { ChainService, CURRENT, FACADES, OUT_OF_DATE, openChainWith, type CriterionStages } from "./chain_service_for_test";
 import { buttonIn, container, json, settle, switchMode } from "./project_workspace_for_test";
 import type { PipelineStage, StageState } from "../stages";
+
+type ErrorDetailReply = components["schemas"]["ErrorDetailReply"];
+type MissingInputsReply = components["schemas"]["MissingInputsReply"];
 
 const PERIOD = { start_month: 12, start_day: 21, start_hour: 10, end_month: 12, end_day: 21, end_hour: 14, time_basis: "standard" };
 
@@ -50,7 +54,7 @@ export class SimulateService extends ChainService {
   surroundingsFiles: InputFileInfo[] = [];
   terrainFiles: InputFileInfo[] = [];
   /** The status and body a request to simulate is refused with; null: it starts. */
-  simulateRefusal: { status: number; body: unknown } | null = null;
+  simulateRefusal: { status: number; body: ErrorDetailReply | MissingInputsReply } | null = null;
   /** Counts the simulations started. */
   simulationsStarted = 0;
   /** The body of every PATCH studies/{id}, with the id. */
@@ -75,15 +79,15 @@ export class SimulateService extends ChainService {
     const path = address.replace("/api/projects/p", "").split("?")[0];
     if (path === "/simulate" && method === "POST") {
       this.requests.push(`${method} ${path}`);
-      if (this.simulateRefusal !== null) return json(this.simulateRefusal.body, this.simulateRefusal.status);
+      if (this.simulateRefusal !== null) return json<ErrorDetailReply | MissingInputsReply>(this.simulateRefusal.body, this.simulateRefusal.status);
       this.simulationsStarted += 1;
-      return json({ status: "started", run_id: `s${this.simulationsStarted}`, stages: ["simulate"], criterion_stages: {} });
+      return json<StartRunReply>({ status: "started", run_id: `s${this.simulationsStarted}`, stages: ["simulate"], criterion_stages: {} });
     }
     if (!path.startsWith("/studies")) return answerOfChain(address, init);
     this.requests.push(`${method} ${path}`);
     const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : {};
     if (method === "GET" && path === "/studies") {
-      return json({ studies: this.studies, metrics: METRICS.map((info) => ({ ...info, available: this.hasWeatherFile || !info.needs_epw })) });
+      return json<StudiesReply>({ studies: this.studies, metrics: METRICS.map((info) => ({ ...info, available: this.hasWeatherFile || !info.needs_epw })) });
     }
     if (method === "POST" && path === "/studies") {
       const id = String(Math.max(0, ...this.studies.map((each) => Number(each.entry.id))) + 1);
@@ -95,22 +99,22 @@ export class SimulateService extends ChainService {
       const files = [...(criterion?.test_surface_files ?? [])];
       const added = files.length === 0 ? study(id, metric, files, "refused", "Add study surfaces", settings) : study(id, metric, files, "not_run", null, settings);
       this.studies = [...this.studies, added];
-      return json(added.entry);
+      return json<StudyEntry>(added.entry);
     }
     const [, , id, part, fileName] = path.split("/");
     const found = this.studies.find((each) => each.entry.id === id);
-    if (found === undefined) return json({ detail: `There is no study '${id}'.` }, 404);
+    if (found === undefined) return json<ErrorDetailReply>({ detail: `There is no study '${id}'.` }, 404);
     const replace = (entry: StudyEntry, state: StudyWithState["state"] = found.state === "current" ? "out_of_date" : found.state) => {
       this.studies = this.studies.map((each) => (each.entry.id === id ? { ...each, entry, state } : each));
-      return json(entry);
+      return json<StudyEntry>(entry);
     };
     if (method === "GET" && part === "values") {
       const values = this.valuesOf[id];
-      return values === undefined ? json({ detail: `The study '${id}' has no result yet.` }, 404) : new Response(values);
+      return values === undefined ? json<ErrorDetailReply>({ detail: `The study '${id}' has no result yet.` }, 404) : new Response(values);
     }
     if (method === "GET" && part === "sky-patches") {
       const dome = this.skyDomeOf[id];
-      return dome === undefined ? json({ detail: `The study '${id}' has no sky patches.` }, 404) : json(dome);
+      return dome === undefined ? json<ErrorDetailReply>({ detail: `The study '${id}' has no sky patches.` }, 404) : json<SkyDome>(dome);
     }
     if (method === "PATCH" && part === undefined && Object.keys(body).length === 1 && "target" in body) {
       this.studyPatches.push({ id, body });
@@ -118,7 +122,7 @@ export class SimulateService extends ChainService {
     }
     if (method === "PATCH" && part === undefined) {
       this.studyPatches.push({ id, body });
-      if (body.name === "") return json({ detail: "A study needs a name." }, 422);
+      if (body.name === "") return json<ErrorDetailReply>({ detail: "A study needs a name." }, 422);
       const metric = typeof body.metric === "string" ? body.metric : found.entry.metric;
       const start = metric === found.entry.metric ? found.entry.settings! : METRICS.find((info) => info.name === metric)!.default_settings;
       const settings = { ...start, ...(body.values as Record<string, unknown> | undefined) };
@@ -132,7 +136,7 @@ export class SimulateService extends ChainService {
     }
     const files = found.entry.test_surface_files ?? [];
     if (method === "POST" && part === "test-surfaces") {
-      if (this.uploadRefusal !== null) return json({ detail: this.uploadRefusal }, 422);
+      if (this.uploadRefusal !== null) return json<ErrorDetailReply>({ detail: this.uploadRefusal }, 422);
       const uploaded = ((init!.body as FormData).get("file") as File).name;
       if (this.storedTestSurfaces.some((file) => file.name === uploaded)) {
         // The same name with other content replaces the stored file: everything that lists it is out of date.
@@ -147,7 +151,7 @@ export class SimulateService extends ChainService {
     const name = decodeURIComponent(fileName ?? "");
     if (method === "PUT" && part === "test-surfaces") return replace({ ...found.entry, test_surface_files: [...files, name] }, "not_run");
     if (method === "DELETE" && part === "test-surfaces") return replace({ ...found.entry, test_surface_files: files.filter((each) => each !== name) });
-    return json({ detail: "Not found" }, 404);
+    return json<ErrorDetailReply>({ detail: "Not found" }, 404);
   }
 }
 

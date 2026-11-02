@@ -1,6 +1,6 @@
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
-import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { click, renderForTest, type, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { DeleteCriterionDialog, RenameCriterionDialog } from "./CriterionDialogs";
 
 let rendered: RenderedOverlay | null = null;
@@ -12,13 +12,6 @@ afterEach(() => {
 
 const dialog = () => rendered!.container.querySelector<HTMLElement>('[role="dialog"]');
 const dialogButton = (label: string) => [...dialog()!.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === label)!;
-
-function type(input: HTMLInputElement, text: string) {
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, text);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-}
 
 async function submit() {
   await act(async () => {

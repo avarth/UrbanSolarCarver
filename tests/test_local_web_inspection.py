@@ -232,6 +232,10 @@ def test_the_routes_answer_and_an_unknown_file_is_404(tmp_path):
 
 @pytest.mark.slow
 def test_the_district_example_is_inspected_within_seconds(store, example_project_templates):
+    """Inspect stays interactive on a real example. A file read twice is caught without the clock by
+    test_an_unchanged_file_is_read_once; what is left to time is the first reading, nearly all of it load_mesh making the
+    normals consistent (trimesh fix_winding: 0.66 of 0.70 s alone, 2026-11-02). The bound is about 10 times that, so it holds
+    under -n 8 and fails on a change that makes the reading an order of magnitude slower."""
     example_project_templates.copy_example_project(store, "district", "multiple_buildings")
     started = time.perf_counter()
     reply = project_inspection(store, "district")
@@ -240,7 +244,7 @@ def test_the_district_example_is_inspected_within_seconds(store, example_project
             inspection_geometry(store, "district", entry.file_name)
     elapsed = time.perf_counter() - started
     assert any(entry.role == "test_surfaces" for entry in reply.files)
-    assert elapsed < 5
+    assert elapsed < 8
 
 
 # ---- Saving turned surfaces and restoring the original ----

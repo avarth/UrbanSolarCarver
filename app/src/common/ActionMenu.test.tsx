@@ -1,9 +1,8 @@
 // The menu of actions behind a small button (a project's, a criterion card's): its items, an item that waits with its reason, the
 // choice it reports and how its button opens and closes it. The keyboard inside the menu and what closes it are useMenuPopup's
 // (menu_popup.test.tsx); ProjectMenu.test.tsx covers its placement in the window and the project's dialogs.
-import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
-import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { click, press, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { ActionMenu, type ActionMenuItem } from "./ActionMenu";
 
 let rendered: RenderedOverlay | null = null;
@@ -22,12 +21,6 @@ const ITEMS: ActionMenuItem[] = [
 const menuButton = () => rendered!.container.querySelector<HTMLButtonElement>(".action-menu-button")!;
 const menuItems = () => [...rendered!.container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
 const menuItem = (label: string) => menuItems().find((item) => item.textContent === label)!;
-
-function press(element: Element, key: string) {
-  act(() => {
-    element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
-  });
-}
 
 test("the menu lists its items, reports the one chosen and closes", () => {
   const onChoose = vi.fn();

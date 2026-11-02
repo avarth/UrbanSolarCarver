@@ -6,13 +6,14 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
 import { packScorePoints } from "../viewer/packed_results_for_test";
+import { byRole } from "../viewer_overlays/render_for_test";
 import type { OpenProjectSettingsSaver } from "./ProjectWorkspace";
 import type { PipelineStage, StageState } from "../stages";
 import { FACADES, ROOFS, WINDOWS, card, openChain, periodFieldText, select } from "./chain_service_for_test";
 import {
   CARVED, CARVING, ENVELOPE, FakeService, MASSING, NOTHING_RUN, TRIANGLE_OBJ, buildPart, buttonIn, container,
   dimmedCarvingLayers, endWorkspaceTest, openPanelSection, openStep, openWorkspace, panelSectionOpen, pinnedBar, pressRunAnalysis, project, reasonOf, settle,
-  startWorkspaceTest, stepRow, thresholdField, thresholdOf, togglePanelSection, type, typeAndLeave, voxelSizeField, waitForTheSave,
+  startWorkspaceTest, stepIsOpen, stepRow, thresholdField, thresholdOf, togglePanelSection, type, typeAndLeave, voxelSizeField, waitForTheSave,
 } from "./project_workspace_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
@@ -51,7 +52,7 @@ test("a settings change saves; Run analysis starts a run; its events finish it; 
 
   expect(service.count("GET /run/summary")).toBe(1);
   expect(service.count("GET /stage-status")).toBe(2);
-  expect(stepRow("Criteria").classList.contains("step-open")).toBe(true);    // a finished analysis opens Criteria
+  expect(stepIsOpen("Criteria")).toBe(true);                                 // a finished analysis opens Criteria
   expect(stepRow("Criteria").textContent).toContain("Update when I change the threshold");     // the carving rule, no longer waiting
   expect(stepRow("Criteria").textContent).not.toContain("Run the analysis to see the carving");
   expect(dimmedCarvingLayers()).toEqual([]);
@@ -81,7 +82,8 @@ test("a save the service refuses keeps Run analysis from starting a run, and say
 
 // The shared settings are saved with PUT shared-settings, the settings of the criterion (the mode among them) with PATCH criteria/1.
 const settingsSaves = () => service.requests.filter((request) => request.startsWith("PUT") || request.startsWith("PATCH"));
-const modeTiles = () => [...container().querySelectorAll<HTMLElement>('[role="radio"]')];
+/** The tile of the mode named *name*, by its accessible name (not its place in mode_tiles.json). */
+const modeTile = (name: string) => byRole(container(), "radio", name);
 const siteAndGridSummaryText = () => stepRow("Site and grid").querySelector(".step-summary")!.textContent;
 
 test("saving the voxel size sends only shared settings", async () => {
@@ -130,12 +132,12 @@ test("a mode change starts the criterion from the new mode's values", async () =
   openStep("Criteria");
   expect(periodFieldText()).toContain("21 Mar");
   openPanelSection("Mode");
-  act(() => modeTiles()[4].click());                                  // Daylight
+  act(() => modeTile("Daylight").click());
   await waitForTheSave();
   await settle();
   expect(settingsSaves()).toEqual(["PATCH /criteria/1"]);
   expect(service.savedValues).toEqual([{ mode: "daylight" }]);         // not the period of Solar time-based, nor the shared voxel size
-  act(() => modeTiles()[1].click());                                  // Solar time-based again: its own period, not the one set before
+  act(() => modeTile("Solar time-based").click());                    // again: its own period, not the one set before
   await waitForTheSave();
   await settle();
   expect(settingsSaves()).toEqual(["PATCH /criteria/1", "PATCH /criteria/1"]);
@@ -158,7 +160,7 @@ test("a shared change refused for the criterion's mode is saved again once a mod
   expect(container().querySelector(".step-error")!.textContent).toBe("Add a weather file to run this mode");
 
   openStep("Criteria");
-  act(() => modeTiles()[4].click());                                  // Daylight reads no weather file
+  act(() => modeTile("Daylight").click());                            // Daylight reads no weather file
   await waitForTheSave();
   await settle();
   await waitForTheSave();                                             // the shared settings, sent again after the criterion's save
@@ -244,7 +246,7 @@ test("a refused mode change locks the carving: the old mode's carving is not sho
   await openWorkspace(service, project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
   openStep("Criteria");
   openPanelSection("Mode");
-  act(() => modeTiles()[4].click());                                  // Daylight
+  act(() => modeTile("Daylight").click());
   // Locked at once, before the save is sent: the stored settings, which the stage status describes, are still Solar time-based.
   expect(stepRow("Criteria").textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
   await waitForTheSave();
@@ -471,7 +473,7 @@ test("the Build envelope and massing of Criteria opens the step, builds both par
   openStep("Criteria");
   await act(async () => buttonIn(pinnedBar(), "Build envelope and massing").click());
   await settle();
-  expect(stepRow("Envelope and massing").classList.contains("step-open")).toBe(true);
+  expect(stepIsOpen("Envelope and massing")).toBe(true);
   expect(service.runsStarted).toEqual([["exporting", "massing"]]);
   const run = FakeWebSocket.opened[0];
   run.send({ type: "stage_progress", stage: "exporting", done: 0, total: 1 });
@@ -501,8 +503,8 @@ test("a workspace made again for a renamed project opens with the steps it had o
   service = new FakeService(CARVED, CARVING);
   const stepsReported = vi.fn();
   await openWorkspace(service, project(CARVED), { startSteps: { open: "criteria", view: "criteria" }, onStepsChange: stepsReported });
-  expect(stepRow("Criteria").classList.contains("step-open")).toBe(true);
-  expect(stepRow("Inputs").classList.contains("step-open")).toBe(false);
+  expect(stepIsOpen("Criteria")).toBe(true);
+  expect(stepIsOpen("Inputs")).toBe(false);
   expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
   expect(FakeViewerScene.latest!.visibleLayers.has("max_volume")).toBe(true);         // the layers of Criteria, the maximum volume as a ghost
   openStep("Export");

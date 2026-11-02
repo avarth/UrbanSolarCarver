@@ -3,7 +3,7 @@
 // ModeMenu.test.tsx test only what those menus add.
 import { act, useRef } from "react";
 import { afterEach, expect, test, vi } from "vitest";
-import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { click, press, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { useMenuPopup, type MenuAlign } from "./menu_popup";
 
 let rendered: RenderedOverlay | null = null;
@@ -46,12 +46,6 @@ const popupStyle = () => rendered!.container.querySelector<HTMLElement>(".popup"
 const anchorButton = () => [...rendered!.container.querySelectorAll("button")].find((button) => button.textContent === "Open")!;
 const open = () => click(anchorButton());
 const items = () => [...rendered!.container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
-
-function press(element: Element, key: string) {
-  act(() => {
-    element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
-  });
-}
 
 test("the popup opens 4 px under its anchor, by its left edge for start", () => {
   stubLayout({ top: 100, bottom: 120, left: 40, right: 140 }, 800, 200);

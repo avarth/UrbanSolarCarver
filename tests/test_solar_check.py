@@ -290,23 +290,29 @@ def test_check_settings_refuse_a_metric_without_its_inputs():
 @REQUIRES_WARP_CPU
 @pytest.mark.slow
 def test_check_of_a_run_compares_the_maximum_volume_with_the_envelope_and_the_massing(tmp_path):
-    from _stage_scene import daylight_cube_config
+    from _plot_scene import plot_scene
     from urbansolarcarver.api import run_pipeline
     from urbansolarcarver.check_settings import CheckSettings
     from urbansolarcarver.solar_check import load_solar_check, simulate_study
-    config = daylight_cube_config(tmp_path)
+    config = plot_scene(tmp_path).config(tmp_path / "run", "daylight", threshold="carve_fraction", carve_fraction=0.7)
     run_pipeline(config, config.out_dir, produce=("exporting", "massing"))
     result = simulate_study(config.test_surface_path, config.max_volume_path, CheckSettings.for_config(config),
-                            run_folder=config.out_dir, out_dir=tmp_path / "run" / "check", voxel_size=config.voxel_size,
-                            device="cpu")
+                            run_folder=config.out_dir, context_path=config.context_path,
+                            out_dir=tmp_path / "run" / "check", voxel_size=config.voxel_size, device="cpu")
     assert list(result.values) == ["open", "max_volume", "envelope", "massing"]
     # The check samples the points the analysis did.
     np.testing.assert_allclose(result.points.points, np.load(tmp_path / "run" / "preprocessing" / "test_points.npy"),
                                atol=1e-6)
     assert result.points.quads.shape == (len(result.points.points), 4, 3)
-    # The test surface lies inside the cube: before carving the cube hides its sky, the result opens it.
-    assert result.values["max_volume"].max() < result.values["envelope"].mean()
-    assert (result.values["envelope"] <= result.values["open"] + 1e-6).all()
+    # Across the street the 18 m maximum volume hides part of the neighbour facade's sky at every point (sky
+    # component 21 to 33 % against 40 % open, measured 2026-11-02); the envelope, carved on the plot's side toward the
+    # facade, gives back at every point, and on average half of what the maximum volume hid (0.51). An envelope
+    # carved on the far side, with the full height kept toward the facade, would give back nothing.
+    open_sky, hidden, carved = (result.values[name] for name in ("open", "max_volume", "envelope"))
+    assert (hidden < open_sky - 5.0).all()
+    assert (carved > hidden).all()
+    assert (carved - hidden).mean() > 0.4 * (open_sky - hidden).mean()
+    assert (carved <= open_sky + 1e-6).all()
     summary = json.loads((tmp_path / "run" / "check" / "check_summary.json").read_text(encoding="utf-8"))
     assert summary["metric"] == "sky_component" and summary["unit"] == "%" and summary["baseline"] == "max_volume"
     envelope = summary["columns"]["envelope"]

@@ -110,12 +110,13 @@ def test_a_real_server_gives_the_browser_the_refusal_codes(projects_folder):
     from websockets.exceptions import ConnectionClosed
     from websockets.sync.client import connect
 
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
+    # The test binds the socket and hands it to uvicorn, so no other program can take the port between choosing and binding it.
+    listening = socket.socket()
+    listening.bind(("127.0.0.1", 0))
+    port = listening.getsockname()[1]
     app = create_app(projects_folder, TOKEN, port, worker=make_worker(ProjectStore(projects_folder)))
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
-    server_thread = threading.Thread(target=server.run, daemon=True)
+    server_thread = threading.Thread(target=server.run, kwargs={"sockets": [listening]}, daemon=True)
     server_thread.start()
     try:
         deadline = time.monotonic() + 20
@@ -137,6 +138,7 @@ def test_a_real_server_gives_the_browser_the_refusal_codes(projects_folder):
     finally:
         server.should_exit = True
         server_thread.join(timeout=20)
+        listening.close()
 
 
 # ---- Basics ----

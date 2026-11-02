@@ -1,8 +1,8 @@
-import { act, useReducer } from "react";
+import { useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { ApiError, type ModeInfo } from "../api_client/client";
 import { formReducer, initialFormState, type FormState } from "./form_state";
-import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { click, renderForTest, type, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import type { SaveOutcome } from "./form_state";
 import {
   runAnalysisAfterSaving, runAnalysisBlocker, SaveFailureNotice, saveFailureTextOf, SettingsStep, SettingsToFix, settingsToFixByStep, settingsToFixCount,
@@ -218,20 +218,13 @@ function SettingsStepWithItsForm({ start }: { start: FormState }) {
   return <SettingsStep form={state} onChange={(values) => dispatch({ type: "values_changed", values })} disabledReason={null} />;
 }
 
-function typeInto(field: HTMLInputElement, text: string): void {
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, text);
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-}
-
 const fieldNamed = (setting: string) => rendered!.container.querySelector<HTMLElement>(`[data-setting="${setting}"]`)!;
 const notesUnder = (setting: string) => [...fieldNamed(setting).querySelectorAll(".setting-note")].map((note) => note.textContent);
 
 test("under Voxel size a quiet line gives the sample spacing the engine uses, half the voxel size; there is no field for it", () => {
   rendered = renderForTest(<SettingsStepWithItsForm start={form()} />);
   expect(notesUnder("voxel_size")).toEqual(["62 voxels per side, 238\u202f328 in total", "Test surfaces sampled every 0.5\u00a0m"]);
-  typeInto(fieldNamed("voxel_size").querySelector<HTMLInputElement>("input[type='number']")!, "0.25");
+  type(fieldNamed("voxel_size").querySelector<HTMLInputElement>("input[type='number']")!, "0.25");
   expect(notesUnder("voxel_size")[1]).toBe("Test surfaces sampled every 0.125\u00a0m");
   expect(rendered.container.querySelector('[data-setting="grid_step"]')).toBeNull();
   expect(fieldNamed("voxel_size").querySelector("[role='status']")).toBeNull();      // nothing is lowered any more, so nothing to announce

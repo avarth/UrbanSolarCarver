@@ -1,7 +1,6 @@
-import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ModeInfo } from "../../api_client/client";
-import { renderForTest, type RenderedOverlay } from "../../viewer_overlays/render_for_test";
+import { renderForTest, type, type RenderedOverlay } from "../../viewer_overlays/render_for_test";
 import { formReducer, initialFormState, type FormState } from "../form_state";
 import { settingsForStep } from "../presentation";
 import { SettingField } from "../SettingField";
@@ -38,14 +37,6 @@ function viewOf(step: Parameters<typeof settingsForStep>[0], name: string) {
   return settingsForStep(step, "daylight").flatMap((group) => [...group.essential, ...group.folded]).find((view) => view.name === name)!;
 }
 
-/** Sets *text* as the value the way the browser does when the user types or drags, so React's change handler runs. */
-function setValue(field: HTMLInputElement, text: string): void {
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, text);
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-}
-
 const slider = () => rendered!.container.querySelector<HTMLInputElement>("input[type='range']")!;
 const numberField = () => rendered!.container.querySelector<HTMLInputElement>("input[type='number']")!;
 
@@ -56,10 +47,10 @@ test("a ranged setting has a slider over its practical range, labelled by the se
   const label = rendered.container.querySelector("label.setting-label")!;
   expect(slider().getAttribute("aria-labelledby")).toBe(label.id);
   expect(slider().getAttribute("aria-valuetext")).toBe("1 m");
-  setValue(slider(), "2.5");
+  type(slider(), "2.5");
   expect(onChange).toHaveBeenLastCalledWith({ voxel_size: 2.5 });
   // The number field takes what the engine accepts outside the slider: 8 m is more than the slider's 5.
-  setValue(numberField(), "8");
+  type(numberField(), "8");
   expect(onChange).toHaveBeenLastCalledWith({ voxel_size: 8 });
 });
 
@@ -73,7 +64,7 @@ test("a value outside the slider's range pins the handle at the end of the track
 test("a slider step passes on a clean number, without the noise of floating point", () => {
   const onChange = vi.fn();
   rendered = renderForTest(<SettingField view={viewOf("settings", "voxel_size")} form={form()} onChange={onChange} />);
-  setValue(slider(), "0.30000000000000004");
+  type(slider(), "0.30000000000000004");
   expect(onChange).toHaveBeenLastCalledWith({ voxel_size: 0.3 });
 });
 
@@ -81,7 +72,7 @@ test("a share stored as 0 to 1 slides in percent and is stored as a share", () =
   const onChange = vi.fn();
   rendered = renderForTest(<SettingField view={viewOf("envelope_and_massing", "plate_tolerance")} form={form()} onChange={onChange} />);
   expect([slider().min, slider().max, slider().step, slider().value]).toEqual(["0", "100", "1", "20"]);
-  setValue(slider(), "35");
+  type(slider(), "35");
   expect(onChange).toHaveBeenLastCalledWith({ plate_tolerance: 0.35 });
 });
 
@@ -99,7 +90,7 @@ test("an empty automatic setting starts its hollow handle at the value the engin
   expect(slider().getAttribute("aria-valuetext")).toBe("automatic, 2.2 m");
   expect(numberField().placeholder).toBe("automatic");
   expect(onChange).not.toHaveBeenCalled();
-  setValue(slider(), "2.3");
+  type(slider(), "2.3");
   expect(onChange).toHaveBeenLastCalledWith({ score_smoothing: 2.3 });
   rendered.rerender(<SettingField view={viewOf("carving", "max_slope_deg")} form={described} onChange={onChange} />);
   expect(slider().value).toBe("75");

@@ -8,7 +8,7 @@ import { FakeWebSocket } from "./api_client/fake_websocket_for_test";
 import type { WorkspaceSteps } from "./workspace/ProjectWorkspace";
 import type { InspectTurns } from "./inspect/UnsavedTurnsDialog";
 import { initialRunState, runReducer, type RunLoop, type RunOrigin, type RunRecord } from "./common/run_state";
-import { click, renderForTest, type RenderedOverlay } from "./viewer_overlays/render_for_test";
+import { click, holdReply, renderForTest, settle, type, type RenderedOverlay } from "./viewer_overlays/render_for_test";
 
 // The open project stands in for the workspace here: the page's own part is which project it opens, when it opens it afresh,
 // and what its settings saver sends around a rename, reset or delete. The stand-in saves as the settings form does: with the
@@ -220,14 +220,14 @@ class FakeService {
     if (path === "/api/modes") return json([]);
     if (path === "/api/criterion-keys") return this.criterionKeysReply?.() ?? json(["mode", "threshold"]);
     if (path === "/api/examples") {
-      await this.examplesAnswerWhen;
+      await holdReply(this.examplesAnswerWhen);
       return json(this.examples);
     }
     if (method === "GET" && path === "/api/projects") return json(this.projects);
     if (method === "POST" && path === "/api/projects") return json(projectDetail(JSON.parse(String(init!.body)).name));
     if (path === "/api/projects-folder") return json(this.folder);
     if (method === "POST" && path === "/api/projects-folder/choose") {
-      await this.pickerClosesWhen;
+      await holdReply(this.pickerClosesWhen);
       this.folder = { ...this.folder, path: "E:\\Other projects", source: "preference" };
       this.projects = this.projectsOfOtherFolder;
       return json({ status: "changed", path: this.folder.path, problem: null });
@@ -264,10 +264,6 @@ class FakeService {
   }
 }
 
-const settle = () => act(async () => {
-  for (let tick = 0; tick < 5; tick++) await new Promise((resolve) => setTimeout(resolve, 0));
-});
-
 async function renderApp(service: FakeService) {
   vi.stubGlobal("fetch", vi.fn(service.answer));
   rendered = renderForTest(<App />);
@@ -281,13 +277,6 @@ const startChoice = (name: string) =>
   [...page().querySelectorAll<HTMLButtonElement>(".start-choice")].find((button) => button.querySelector(".start-choice-name")!.textContent === name);
 const topBarMenuButton = () => page().querySelector<HTMLButtonElement>(".top-bar .project-menu-button");
 const dialog = () => page().querySelector<HTMLElement>('[role="dialog"]')!;
-
-function type(input: HTMLInputElement, text: string) {
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, text);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-}
 
 async function chooseFromTopBarMenu(item: string) {
   click(topBarMenuButton()!);

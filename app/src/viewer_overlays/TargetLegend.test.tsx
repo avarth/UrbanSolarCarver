@@ -2,7 +2,7 @@ import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { studyPaletteColour } from "../viewer/study_palettes";
 import { TargetLegend, type TargetLegendProps } from "./TargetLegend";
-import { renderForTest, type RenderedOverlay } from "./render_for_test";
+import { press, renderForTest, type RenderedOverlay } from "./render_for_test";
 
 let rendered: RenderedOverlay | null = null;
 
@@ -26,13 +26,6 @@ function renderLegend(props: Partial<TargetLegendProps> = {}) {
 
 function pointer(type: "pointerdown" | "pointermove" | "pointerup", clientX: number) {
   act(() => { bar().dispatchEvent(new PointerEvent(type, { bubbles: true, clientX, pointerId: 1, button: 0 })); });
-}
-
-function keyDown(element: HTMLElement, key: string): boolean {
-  act(() => element.focus());
-  const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
-  act(() => { element.dispatchEvent(event); });
-  return event.defaultPrevented;
 }
 
 const cssColour = (hex: string) => { const probe = document.createElement("span"); probe.style.color = hex; return probe.style.color; };
@@ -85,15 +78,15 @@ test("the high end dragged onto the low end stops a step above it, so the range 
 
 test("arrow keys move an end by 1 % of the bar, Home and End to its limits, Delete puts it back to its default", () => {
   const onRangeEndChange = renderLegend();
-  expect(keyDown(mark("low")!, "ArrowRight")).toBe(true);
+  expect(press(mark("low")!, "ArrowRight", { focus: true })).toBe(true);
   expect(onRangeEndChange).toHaveBeenLastCalledWith("low", 2.08);
-  keyDown(mark("high")!, "PageUp");
+  press(mark("high")!, "PageUp", { focus: true });
   expect(onRangeEndChange).toHaveBeenLastCalledWith("high", 6.8);
-  keyDown(mark("low")!, "End");
+  press(mark("low")!, "End", { focus: true });
   expect(onRangeEndChange).toHaveBeenLastCalledWith("low", 5.92);       // up to a step short of the high end
-  keyDown(mark("high")!, "Delete");
+  press(mark("high")!, "Delete", { focus: true });
   expect(onRangeEndChange).toHaveBeenLastCalledWith("high", null);
-  expect(keyDown(mark("low")!, "a")).toBe(false);
+  expect(press(mark("low")!, "a", { focus: true })).toBe(false);
 });
 
 test("by share the scale is 0 to 100 % in viridis, the switch is offered, and no palette is chosen", () => {
@@ -115,7 +108,7 @@ test("while disabled the ends do not move", () => {
   expect(mark("low")!.getAttribute("aria-disabled")).toBe("true");
   pointer("pointerdown", 100);
   pointer("pointerup", 100);
-  keyDown(mark("low")!, "ArrowRight");
+  press(mark("low")!, "ArrowRight", { focus: true });
   expect(onRangeEndChange).not.toHaveBeenCalled();
 });
 

@@ -10,7 +10,7 @@ import pytest
 
 from urbansolarcarver.local_web_service.projects import SERVICE_OWNED_SETTINGS
 from urbansolarcarver.mode_registry import MODES
-from urbansolarcarver.pydantic_schemas import UserConfig, resolve_max_slope_deg
+from urbansolarcarver.pydantic_schemas import UserConfig
 from urbansolarcarver.stage_settings import (
     ExportingSettings, MassingSettings, PreprocessingSettings, RunOptions, ThresholdingSettings,
 )
@@ -151,12 +151,11 @@ def test_every_decimal_setting_with_an_engine_range_has_a_slider():
 
 def test_the_automatic_values_the_form_reads_are_in_the_engine_descriptions():
     """An empty slope limit or score smoothing slider starts at the value the engine uses, which the front end reads from these
-    descriptions (SettingField.tsx: AUTOMATIC_SLOPE_LIMIT_IN_DESCRIPTION, SLOPE_LIMIT_OFF_IN_DESCRIPTION,
-    AUTOMATIC_SMOOTHING_IN_DESCRIPTION): a change of their wording must change those patterns too."""
+    descriptions (SettingField.tsx: SLOPE_LIMIT_OFF_IN_DESCRIPTION, AUTOMATIC_SMOOTHING_IN_DESCRIPTION): a change of their
+    wording must change those patterns too. AUTOMATIC_SLOPE_LIMIT_IN_DESCRIPTION is checked, for every mode, in
+    test_schemas.py (TestSlopeLimit)."""
     properties = UserConfig.model_json_schema()["properties"]
     slope, smoothing = properties["max_slope_deg"]["description"], properties["score_smoothing"]["description"]
-    weighted_limit = re.search(r"None \(default\): (\d+(?:\.\d+)?) for the weighted modes", slope)
-    assert weighted_limit and float(weighted_limit[1]) == resolve_max_slope_deg("irradiance", None)
     off = re.search(r"(\d+(?:\.\d+)?): off\b", slope)
     assert off and float(off[1]) == 90.0 == properties["max_slope_deg"]["anyOf"][0]["maximum"]
     assert re.search(r"auto: (\d+(?:\.\d+)?) × voxel_size", smoothing)[1] == "1.1"

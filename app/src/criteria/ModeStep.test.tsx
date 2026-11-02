@@ -1,6 +1,6 @@
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
-import { addStyleSheetForTest, renderForTest, click, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { addStyleSheetForTest, byRole, click, press, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { ModeStep, tileAfterArrowKey } from "./ModeStep";
 
 let rendered: RenderedOverlay | null = null;
@@ -10,46 +10,41 @@ afterEach(() => {
   rendered = null;
 });
 
-function press(target: Element, key: string): void {
-  act(() => {
-    target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
-  });
-}
-
 function focus(element: HTMLElement): void {
   act(() => element.focus());
 }
 
+const MODE_NAMES = ["Angle rule", "Solar time-based", "Solar energy", "Solar usefulness", "Daylight", "Night cooling"];
 const tiles = () => [...rendered!.container.querySelectorAll<HTMLElement>('[role="radio"]')];
+/** The tile of the mode named *name* (its accessible name), so a new order of mode_tiles.json cannot make a test pick another mode. */
+const tile = (name: string) => byRole(rendered!.container, "radio", name);
 
 /** The "i" of the tile named *name*. */
 function infoButtonOf(name: string): HTMLButtonElement {
-  const tile = tiles().find((candidate) => candidate.querySelector(".mode-tile-name")!.textContent === name)!;
-  return tile.parentElement!.querySelector<HTMLButtonElement>(".mode-tile-info")!;
+  return tile(name).parentElement!.querySelector<HTMLButtonElement>(".mode-tile-info")!;
 }
 
 test("the six tiles form one radio group, in the order of R2 3, with the chosen mode checked and alone in the tab order", () => {
   rendered = renderForTest(<ModeStep mode="time-based" onChoose={() => {}} disabledReason={null} weatherDropZone={null} />);
   expect(rendered.container.querySelector('[role="radiogroup"]')).not.toBeNull();
-  expect(tiles().map((tile) => tile.querySelector(".mode-tile-name")!.textContent))
-    .toEqual(["Angle rule", "Solar time-based", "Solar energy", "Solar usefulness", "Daylight", "Night cooling"]);
-  expect(tiles().map((tile) => tile.getAttribute("aria-checked"))).toEqual(["false", "true", "false", "false", "false", "false"]);
-  expect(tiles().map((tile) => tile.tabIndex)).toEqual([-1, 0, -1, -1, -1, -1]);
+  expect(tiles().map((each) => each.querySelector(".mode-tile-name")!.textContent)).toEqual(MODE_NAMES);
+  expect(tiles().map((each) => each.getAttribute("aria-checked"))).toEqual(["false", "true", "false", "false", "false", "false"]);
+  expect(tiles().map((each) => each.tabIndex)).toEqual([-1, 0, -1, -1, -1, -1]);
   expect(rendered.container.textContent).toContain("Choosing a mode fills its starting values in the settings below.");
 });
 
 test("a tile shows its symbol and its name only", () => {
   rendered = renderForTest(<ModeStep mode="time-based" onChoose={() => {}} disabledReason={null} weatherDropZone={null} />);
-  for (const tile of tiles()) {
-    expect(tile.querySelectorAll("svg")).toHaveLength(1);                                   // one symbol
-    expect(tile.textContent).toBe(tile.querySelector(".mode-tile-name")!.textContent);    // and no text but the name
+  for (const each of tiles()) {
+    expect(each.querySelectorAll("svg")).toHaveLength(1);                                   // one symbol
+    expect(each.textContent).toBe(each.querySelector(".mode-tile-name")!.textContent);    // and no text but the name
   }
 });
 
 test("every symbol has strokes in a colour of the theme, and the sun discs are filled in the sun colour", () => {
   rendered = renderForTest(<ModeStep mode="time-based" onChoose={() => {}} disabledReason={null} weatherDropZone={null} />);
-  for (const tile of tiles()) {
-    const symbol = tile.querySelector("svg")!;
+  for (const each of tiles()) {
+    const symbol = each.querySelector("svg")!;
     // Every stroke and fill is a token of the theme (or currentColor, the tile's text colour, or none): a hard-coded colour keeps its
     // light-theme value in the dark theme. The svg itself is included, since its stroke is the one the parts without their own inherit.
     const parts = [symbol, ...symbol.querySelectorAll("*")];
@@ -60,32 +55,34 @@ test("every symbol has strokes in a colour of the theme, and the sun discs are f
     // and no symbol is drawn in the text colour alone
     expect(strokeColours.some((colour) => /^var\(--colour-(accent|test-surface-on-dark|muted)\)$/.test(colour))).toBe(true);
   }
-  const sunDiscs = (index: number) => tiles()[index].querySelectorAll('svg [fill="var(--colour-sun)"]').length;
-  expect([0, 1, 2, 3, 4, 5].map(sunDiscs)).toEqual([0, 1, 1, 1, 0, 0]);
+  const sunDiscs = (name: string) => tile(name).querySelectorAll('svg [fill="var(--colour-sun)"]').length;
+  expect(Object.fromEntries(MODE_NAMES.map((name) => [name, sunDiscs(name)])))
+    .toEqual({ "Angle rule": 0, "Solar time-based": 1, "Solar energy": 1, "Solar usefulness": 1, Daylight: 0, "Night cooling": 0 });
 });
 
 test("each tile is described by its tooltip's text for a screen reader, before any tooltip is open", () => {
   rendered = renderForTest(<ModeStep mode="time-based" onChoose={() => {}} disabledReason={null} weatherDropZone={null} />);
   expect(document.querySelector('[role="tooltip"]')).toBeNull();
-  const description = document.getElementById(tiles()[3].getAttribute("aria-describedby")!)!;
+  const description = document.getElementById(tile("Solar usefulness").getAttribute("aria-describedby")!)!;
   expect(description.textContent).toBe("Sun in hours that need heating. Like solar energy, counting only hours cold enough to need heating. "
     + "Needs a weather file and an analysis period. Engine name: benefit");
-  expect(tiles()[3].contains(description)).toBe(false);       // not part of the tile's name
+  expect(tile("Solar usefulness").contains(description)).toBe(false);       // not part of the tile's name
 });
 
 test("arrow keys move the focus, Space or Enter chooses", () => {
   const onChoose = vi.fn();
   rendered = renderForTest(<ModeStep mode="time-based" onChoose={onChoose} disabledReason={null} weatherDropZone={null} />);
-  focus(tiles()[0]);
-  press(tiles()[0], "ArrowRight");
-  expect(document.activeElement).toBe(tiles()[1]);
+  focus(tile("Angle rule"));
+  press(tile("Angle rule"), "ArrowRight");
+  expect(document.activeElement).toBe(tile("Solar time-based"));
   expect(onChoose).not.toHaveBeenCalled();
-  press(tiles()[1], "ArrowDown");
-  expect(document.activeElement).toBe(tiles()[4]);
-  press(tiles()[4], " ");
+  press(tile("Solar time-based"), "ArrowDown");
+  expect(document.activeElement).toBe(tile("Daylight"));
+  press(tile("Daylight"), " ");
   expect(onChoose).toHaveBeenLastCalledWith("daylight");
-  press(tiles()[4], "ArrowLeft");
-  press(tiles()[3], "Enter");
+  press(tile("Daylight"), "ArrowLeft");
+  expect(document.activeElement).toBe(tile("Solar usefulness"));
+  press(tile("Solar usefulness"), "Enter");
   expect(onChoose).toHaveBeenLastCalledWith("benefit");
 });
 
@@ -99,7 +96,7 @@ test("the arrows go round a row and stay in a column", () => {
 
 test("focus on a tile shows its tooltip in the spec's order; Escape closes it", () => {
   rendered = renderForTest(<ModeStep mode="time-based" onChoose={() => {}} disabledReason={null} weatherDropZone={null} />);
-  focus(tiles()[3]);
+  focus(tile("Solar usefulness"));
   const tooltip = document.querySelector('[role="tooltip"]')!;
   expect([...tooltip.children].map((part) => part.textContent)).toEqual([
     "Solar usefulness",
@@ -109,13 +106,13 @@ test("focus on a tile shows its tooltip in the spec's order; Escape closes it", 
     "Engine name: benefit",
   ]);
   expect(tooltip.querySelector("code")!.textContent).toBe("benefit");
-  press(tiles()[3], "Escape");
+  press(tile("Solar usefulness"), "Escape");
   expect(document.querySelector('[role="tooltip"]')).toBeNull();
 });
 
 test("the tile's i opens the same tooltip by click, and is hidden from a screen reader, which has the text as the tile's description", () => {
   rendered = renderForTest(<ModeStep mode="time-based" onChoose={() => {}} disabledReason={null} weatherDropZone={null} />);
-  for (const name of ["Angle rule", "Solar time-based", "Solar energy", "Solar usefulness", "Daylight", "Night cooling"]) {
+  for (const name of MODE_NAMES) {
     expect(infoButtonOf(name).getAttribute("aria-hidden")).toBe("true");
     expect(infoButtonOf(name).hasAttribute("aria-expanded")).toBe(false);
   }
@@ -138,7 +135,7 @@ test("Night cooling, chosen, is said under the tiles to be experimental; no othe
 test("during a run the mode cannot change, and the reason is shown; the weather drop zone sits under the tiles", () => {
   const onChoose = vi.fn();
   rendered = renderForTest(<ModeStep mode="time-based" onChoose={onChoose} disabledReason="A run is in progress" weatherDropZone={<p>weather box</p>} />);
-  click(tiles()[4]);
+  click(tile("Daylight"));
   expect(onChoose).not.toHaveBeenCalled();
   expect(rendered.container.textContent).toContain("A run is in progress");
   expect(rendered.container.querySelector(".mode-step")!.lastElementChild!.textContent).toBe("weather box");
@@ -171,14 +168,14 @@ test("a click on a tile leaves no tooltip open once the pointer has left the til
   const outside = document.createElement("button");
   document.body.appendChild(outside);
   rendered = renderForTest(<ModeStep mode="time-based" onChoose={() => {}} disabledReason={null} weatherDropZone={null} />);
-  movePointer(outside, tiles()[3]);
-  clickWithPointer(tiles()[3]);
+  movePointer(outside, tile("Solar usefulness"));
+  clickWithPointer(tile("Solar usefulness"));
   expect(document.querySelector('[role="tooltip"]')!.textContent).toContain("Solar usefulness");    // hovered
-  movePointer(tiles()[3], outside);
+  movePointer(tile("Solar usefulness"), outside);
   expect(document.querySelector('[role="tooltip"]')).toBeNull();
   // The keyboard focus still shows the tooltip.
-  focus(tiles()[1]);
-  press(tiles()[1], "ArrowRight");
+  focus(tile("Solar time-based"));
+  press(tile("Solar time-based"), "ArrowRight");
   expect(document.querySelector('[role="tooltip"]')!.textContent).toContain("Solar energy");
   outside.remove();
 });
@@ -193,7 +190,7 @@ test("a tooltip pinned with the i closes when another tile is chosen or the poin
   click(info("Daylight"));
   expect(document.querySelector('[role="tooltip"]')!.textContent).toContain("overcast sky");
   // Another tile of the grid is chosen: the pinned tooltip goes.
-  clickWithPointer(tiles()[2]);
+  clickWithPointer(tile("Solar energy"));
   expect(onChoose).toHaveBeenLastCalledWith("irradiance");
   rendered.rerender(<ModeStep mode="irradiance" onChoose={onChoose} disabledReason={null} weatherDropZone={null} />);
   expect(document.querySelector('[role="tooltip"]')).toBeNull();
@@ -213,7 +210,7 @@ test("a tooltip pinned with the i closes when another tile is chosen or the poin
 test("the tooltip lets the pointer through, so a click on the tile under it reaches the tile", () => {
   const removeStyles = [addStyleSheetForTest("src/settings_form/settings_form.css"), addStyleSheetForTest("src/theme/panels.css")];
   rendered = renderForTest(<ModeStep mode="time-based" onChoose={() => {}} disabledReason={null} weatherDropZone={null} />);
-  focus(tiles()[0]);
+  focus(tile("Angle rule"));
   const tooltip = document.querySelector<HTMLElement>('[role="tooltip"]')!;
   expect(getComputedStyle(tooltip).pointerEvents).toBe("none");
   removeStyles.forEach((remove) => remove());

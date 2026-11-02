@@ -9,8 +9,7 @@ import {
 } from "./chain_service_for_test";
 import {
   buttonIn, container, endWorkspaceTest, openPanelSection, openPanelSections, openStep, pinnedBar, reasonOf, settle, showCriterionCards, startWorkspaceTest, stepRow, thresholdField,
-  togglePanelSection,
-  unmountWorkspace, waitForTheSave,
+  togglePanelSection, type, unmountWorkspace, waitForTheSave,
 } from "./project_workspace_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
@@ -100,7 +99,7 @@ test("switching a card off greys it and reads Off", async () => {
   await act(async () => card("Spring sun on windows").querySelector<HTMLInputElement>('[role="switch"]')!.click());
   await settle();
   expect(service.patches).toEqual([{ id: "2", body: { bypassed: true } }]);
-  expect(card("Spring sun on windows").classList.contains("criterion-card-bypassed")).toBe(true);
+  expect(card("Spring sun on windows").querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(false);     // as stored: off
   expect(cardLine("Spring sun on windows")).toBe("Off");
   expect(selectedCardName()).toBe("Winter sun on facades");
   expect(service.count("GET /stage-status")).toBeGreaterThan(0);
@@ -127,7 +126,7 @@ test("a switch-off whose reply comes after another card was pressed keeps the ca
   await select("Daylight on roofs");                              // while the bypass is on its way
   await act(async () => answerPatches());
   await settle();
-  expect(card("Winter sun on facades").classList.contains("criterion-card-bypassed")).toBe(true);
+  expect(card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(false);
   expect(selectedCardName()).toBe("Daylight on roofs");
 });
 
@@ -330,10 +329,7 @@ test("renaming a card sends the new name and the card shows it", async () => {
   await openChain([FACADES, WINDOWS]);
   await chooseFromMenu("Spring sun on windows", "Rename");
   const field = container().querySelector<HTMLInputElement>('[role="dialog"] input')!;
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "Courtyard windows");
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  type(field, "Courtyard windows");
   await act(async () => field.form!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
   await settle();
   expect(service.patches).toEqual([{ id: "2", body: { name: "Courtyard windows" } }]);

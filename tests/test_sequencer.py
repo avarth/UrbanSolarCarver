@@ -169,8 +169,8 @@ def _parallel_batches_need_two_workers():
 def test_final_progress_call_survives_a_late_finished_batch(monkeypatch):
     """The calling thread can see an empty queue just before the last tokens
     arrive; those tokens are still reported, so (total, total) is never lost."""
+    import concurrent.futures
     import queue
-    import time
     import types
 
     import torch
@@ -178,6 +178,12 @@ def test_final_progress_call_survives_a_late_finished_batch(monkeypatch):
     from urbansolarcarver.run_context import run_context
 
     _parallel_batches_need_two_workers()
+    workers = []
+
+    class PoolThatKeepsItsWorkers(concurrent.futures.ThreadPoolExecutor):
+        def submit(self, *args, **kwargs):
+            workers.append(super().submit(*args, **kwargs))
+            return workers[-1]
 
     class LateQueue(queue.Queue):
         first_get = True
@@ -185,10 +191,12 @@ def test_final_progress_call_survives_a_late_finished_batch(monkeypatch):
         def get(self, block=True, timeout=None):
             if LateQueue.first_get:
                 LateQueue.first_get = False
-                time.sleep(0.5)  # the workers finish every batch meanwhile
+                # Every worker has finished (its batches are in the queue) when the calling thread first sees the queue empty.
+                concurrent.futures.wait(workers, timeout=10)
                 raise queue.Empty
             return super().get(block, timeout)
 
+    monkeypatch.setattr(concurrent.futures, "ThreadPoolExecutor", PoolThatKeepsItsWorkers)
     monkeypatch.setattr(carving, "queue", types.SimpleNamespace(Queue=LateQueue, Empty=queue.Empty))
     calls = []
     context = RunContext(on_progress=lambda stage, done, total: calls.append((done, total)))
@@ -200,25 +208,40 @@ def test_final_progress_call_survives_a_late_finished_batch(monkeypatch):
     assert [done for done, _ in calls] == list(range(1, 10))
 
 
-def test_a_failing_worker_stops_the_other_workers():
-    import time
+def test_a_failing_worker_stops_the_other_workers(monkeypatch):
+    """After a batch fails, no worker launches a batch after the one it had started. The other workers hold their batch
+    until _run_batches tells its workers to stop (its stop event is set), so the count does not depend on how the threads are
+    scheduled."""
+    import threading
+    import types
 
     import torch
-    from urbansolarcarver.carving import _run_batches
+    from urbansolarcarver import carving
 
     _parallel_batches_need_two_workers()
+    told_to_stop, gave_up_waiting = threading.Event(), threading.Event()
+
+    class StopEventThatTells(threading.Event):
+        def set(self):
+            super().set()
+            told_to_stop.set()
+
+    monkeypatch.setattr(carving, "threading", types.SimpleNamespace(Event=StopEventThatTells))
     launched = []
 
     def launch(start, end, buffer):
         launched.append(start)
         if start == 1:
             raise RuntimeError("batch failed")
-        time.sleep(0.05)
+        # Batch 0 runs alone on the calling thread. Waiting once is enough to show workers that are never told to stop.
+        if start != 0 and not gave_up_waiting.is_set() and not told_to_stop.wait(5):
+            gave_up_waiting.set()
 
     batches = [(i, i + 1) for i in range(41)]
     with pytest.raises(RuntimeError, match="batch failed"):
-        _run_batches(batches, launch, torch.zeros(4), torch.device("cpu"), parallel=True)
-    assert len(launched) < 20
+        carving._run_batches(batches, launch, torch.zeros(4), torch.device("cpu"), parallel=True)
+    # Batch 0, then at most the first batch of each of the (at most 4) workers; workers that do not stop launch all theirs (32).
+    assert {0, 1} <= set(launched) and len(launched) <= 5, sorted(launched)
 
 
 def test_start_from_error_names_the_stages_of_a_one_shot_produce(tmp_path):

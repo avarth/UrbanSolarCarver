@@ -2,7 +2,7 @@ import { act, useMemo, useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ModeInfo, RunSummary } from "../api_client/client";
 import { formReducer, initialFormState, type FormState } from "../settings_form/form_state";
-import { addStyleSheetForTest, click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { addStyleSheetForTest, click, press, renderForTest, type, typeAndLeave, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import type { ScorePoints } from "../viewer/score_points_decoder";
 import { CarvingStep, readAutoUpdate, type CarvingStepProps } from "../criteria/CarvingStep";
 import { EnvelopeAndMassingStep, storeyRows, type EnvelopeAndMassingStepProps, type PlatesFile } from "../steps/EnvelopeAndMassingStep";
@@ -69,13 +69,6 @@ function carvingProps(overrides: Partial<CarvingStepProps> = {}): CarvingStepPro
   };
 }
 
-function typeInto(input: HTMLInputElement, text: string) {
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, text);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-}
-
 test("Solar time-based: Shadow tolerated with its slider ends and the histogram, with no number tiles under it", () => {
   rendered = renderForTest(<CarvingStep {...carvingProps()} />);
   const text = rendered.container.textContent!;
@@ -94,7 +87,7 @@ test("with auto-update on the threshold runs when the user leaves the field; off
   const onThresholdCommit = vi.fn(), onChange = vi.fn(), onUpdateCarving = vi.fn();
   rendered = renderForTest(<CarvingStep {...carvingProps({ onThresholdCommit, onChange })} />);
   const field = rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!;
-  typeInto(field, "2.5");
+  type(field, "2.5");
   expect(onThresholdCommit).not.toHaveBeenCalled();
   act(() => field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
   expect(onThresholdCommit).toHaveBeenCalledExactlyOnceWith({ threshold: { method: "cutoff", value: 2.5 } });
@@ -102,7 +95,7 @@ test("with auto-update on the threshold runs when the user leaves the field; off
   rendered.unmount();
 
   rendered = renderForTest(<CarvingStep {...carvingProps({ autoUpdate: false, onChange, onUpdateCarving })} />);
-  typeInto(rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!, "3");
+  type(rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!, "3");
   expect(onChange).toHaveBeenCalledWith({ threshold: { method: "cutoff", value: 3 } });
   click([...rendered.container.querySelectorAll("button")].find((button) => button.textContent === "Update carving")!);
   expect(onUpdateCarving).toHaveBeenCalledOnce();
@@ -123,13 +116,9 @@ test("a threshold typed back to the stored value while another value waits behin
   }
   rendered = renderForTest(<CarvingWithQueue />);
   const field = () => rendered!.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!;
-  const typeAndLeave = (text: string) => {
-    typeInto(field(), text);
-    act(() => field().dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
-  };
-  typeAndLeave("1");                  // run A, for 1: the form holds 1
-  typeAndLeave("2");                  // waits behind A
-  typeAndLeave("1");                  // back to the stored value: 1 waits instead of 2
+  typeAndLeave(field(), "1");          // run A, for 1: the form holds 1
+  typeAndLeave(field(), "2");          // waits behind A
+  typeAndLeave(field(), "1");          // back to the stored value: 1 waits instead of 2
   expect(field().value).toBe("1");
   await act(async () => { endRuns.shift()!(); await new Promise((resolve) => setTimeout(resolve, 0)); });
   expect(appliedValues).toEqual([1, 1]);
@@ -140,15 +129,11 @@ test("leaving the threshold field at the stored number submits nothing after the
   const onThresholdCommit = vi.fn();
   rendered = renderForTest(<CarvingStep {...carvingProps({ onThresholdCommit })} />);
   const field = () => rendered!.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!;
-  const typeAndLeave = (text: string) => {
-    typeInto(field(), text);
-    act(() => field().dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
-  };
-  typeAndLeave("2");
+  typeAndLeave(field(), "2");
   expect(onThresholdCommit.mock.calls).toEqual([[{ threshold: { method: "cutoff", value: 2 } }]]);
   // The form now holds 3, set without this control's run (an edit with auto-update off, another carving setting's run).
   rendered.rerender(<CarvingStep {...carvingProps({ onThresholdCommit, form: formFor("time-based", { threshold: { method: "cutoff", value: 3 } }) })} />);
-  typeAndLeave("3");
+  typeAndLeave(field(), "3");
   expect(onThresholdCommit.mock.calls).toEqual([[{ threshold: { method: "cutoff", value: 2 } }]]);
   expect(field().value).toBe("3");
 });
@@ -194,7 +179,7 @@ test("the histogram: title, Log and Linear, the cutoff label, the key, the axis 
   expect(text).toContain("KeptCarved");
   expect(text).toContain("The slope limit removed 312 voxels below the cutoff.");
   const chart = rendered.container.querySelector("svg")!;
-  act(() => chart.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
+  press(chart, "ArrowRight");
   expect(rendered.container.querySelector(".score-histogram-readout")!.textContent).toBe("0 to 0.24 m²·h1 kept, 0 carved");
   click(rendered.container.querySelectorAll(".segmented-switch button")[1]);
   expect(rendered.container.querySelectorAll(".segmented-switch button")[1].getAttribute("aria-pressed")).toBe("true");
@@ -277,7 +262,7 @@ test("dimmed and greyed results keep their text at full opacity in the muted col
   try {
     rendered = renderForTest(<CarvingStep {...carvingProps({ carvingDimmed: true })} />);
     const carvingResults = rendered.container.querySelector(".carving-content-dimmed")!;
-    act(() => carvingResults.querySelector("svg")!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
+    press(carvingResults.querySelector("svg")!, "ArrowRight");
     expect(carvingResults.querySelector(".score-histogram-readout")).not.toBeNull();
     const carvingTexts = textBearingElementsIn(carvingResults);
     expect(carvingTexts.map((element) => element.textContent)).toEqual(expect.arrayContaining(["Scores of the voxels", "Kept", "1.5"]));
@@ -449,16 +434,16 @@ test("with auto-update on, a carving number field runs once the user leaves it, 
   rendered = renderForTest(<CarvingStep {...carvingProps({ onChange, onCarvingSettingCommit })} />);
   unfoldCarvingSettings(rendered.container);
   const field = rendered.container.querySelector<HTMLInputElement>('[data-setting="carve_above_min_consecutive"] input')!;
-  typeInto(field, "4");
-  typeInto(field, "45");
+  type(field, "4");
+  type(field, "45");
   expect(onChange.mock.calls).toEqual([[{ carve_above_min_consecutive: 4 }], [{ carve_above_min_consecutive: 45 }]]);
   expect(onCarvingSettingCommit).not.toHaveBeenCalled();
   act(() => field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
   expect(onCarvingSettingCommit).toHaveBeenCalledOnce();
   act(() => field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
   expect(onCarvingSettingCommit).toHaveBeenCalledOnce();            // nothing changed since: no second run
-  typeInto(field, "3");
-  act(() => field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  type(field, "3");
+  press(field, "Enter");
   expect(onCarvingSettingCommit).toHaveBeenCalledTimes(2);
   click(rendered.container.querySelector<HTMLInputElement>('[data-setting="carve_above"] input')!);
   expect(onChange).toHaveBeenLastCalledWith({ carve_above: false });
@@ -470,13 +455,13 @@ test("with auto-update on, a carving slider changes the form while dragged and r
   rendered = renderForTest(<CarvingStep {...carvingProps({ onChange, onCarvingSettingCommit })} />);
   unfoldCarvingSettings(rendered.container);
   const slider = rendered.container.querySelector<HTMLInputElement>('[data-setting="max_slope_deg"] input[type="range"]')!;
-  typeInto(slider, "60");
-  typeInto(slider, "55");
+  type(slider, "60");
+  type(slider, "55");
   expect(onChange.mock.calls).toEqual([[{ max_slope_deg: 60 }], [{ max_slope_deg: 55 }]]);
   expect(onCarvingSettingCommit).not.toHaveBeenCalled();
   act(() => slider.dispatchEvent(new Event("pointerup", { bubbles: true })));
   expect(onCarvingSettingCommit).toHaveBeenCalledOnce();
-  typeInto(slider, "56");
+  type(slider, "56");
   act(() => slider.dispatchEvent(new KeyboardEvent("keyup", { key: "ArrowRight", bubbles: true })));
   expect(onCarvingSettingCommit).toHaveBeenCalledTimes(2);
   act(() => slider.dispatchEvent(new KeyboardEvent("keyup", { key: "Tab", bubbles: true })));
@@ -488,7 +473,7 @@ test("with auto-update off, carving settings only change the form", () => {
   rendered = renderForTest(<CarvingStep {...carvingProps({ autoUpdate: false, onChange, onCarvingSettingCommit })} />);
   unfoldCarvingSettings(rendered.container);
   const field = rendered.container.querySelector<HTMLInputElement>('[data-setting="carve_above_min_consecutive"] input')!;
-  typeInto(field, "2");
+  type(field, "2");
   act(() => field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
   expect(onChange).toHaveBeenCalledWith({ carve_above_min_consecutive: 2 });
   expect(onCarvingSettingCommit).not.toHaveBeenCalled();
@@ -684,7 +669,7 @@ test("the line follows the Carve amount slider before it is let go, as a preview
   // 95 % of the 15.6 is 14.8: the cut falls at the point scoring 1, which keeps two of the four points.
   const onThresholdCommit = vi.fn();
   rendered = renderForTest(<CarvingStep {...weightedCarvingProps({}, { onThresholdCommit })} />);
-  typeInto(rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=range]")!, "95");
+  type(rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=range]")!, "95");
   expect(onThresholdCommit).not.toHaveBeenCalled();
   expect(rendered.container.querySelector(".histogram-cutoff-label")!.textContent).toBe("1");
   expect(rendered.container.querySelector(".score-histogram-preview-note")!.textContent)
@@ -714,8 +699,8 @@ test("a run report that cannot be read says so instead of an empty panel", async
 
 /** Types *text* one character at a time, as a keyboard does: each keystroke is an input event with the text so far. */
 function typeKeys(input: HTMLInputElement, text: string) {
-  typeInto(input, "");
-  for (let length = 1; length <= text.length; length++) typeInto(input, text.slice(0, length));
+  type(input, "");
+  for (let length = 1; length <= text.length; length++) type(input, text.slice(0, length));
 }
 
 test("Carve amount typed past 100 keystroke by keystroke keeps the stored amount and runs nothing on leave", () => {

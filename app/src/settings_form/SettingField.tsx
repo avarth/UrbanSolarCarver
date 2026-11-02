@@ -75,7 +75,7 @@ export function gridLineOf(form: FormState): string | null {
 }
 
 // The engine's automatic slope limit of the weighted modes, as the description of max_slope_deg in GET schema states it
-// (resolve_max_slope_deg; SettingGroup.test.ts checks the two agree).
+// (resolve_max_slope_deg; tests/test_schemas.py::TestSlopeLimit checks the two agree, with this same pattern).
 const AUTOMATIC_SLOPE_LIMIT_IN_DESCRIPTION = /None \(default\): (\d+(?:\.\d+)?) for the weighted modes/;
 
 /**

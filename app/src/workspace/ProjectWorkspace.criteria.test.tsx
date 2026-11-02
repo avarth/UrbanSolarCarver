@@ -10,7 +10,7 @@ import type { PipelineStage, StageState } from "../stages";
 import { FACADES, ROOFS, WINDOWS, deleteCriterion, openChain, select, service as chainService } from "./chain_service_for_test";
 import {
   CARVED, CARVING, ENVELOPE, FakeService, MASSING, NOTHING_RUN, TRIANGLE_OBJ, buttonIn, container, criterionEntry, endWorkspaceTest, openStep,
-  openPanelSection, openWorkspace, pinnedBar, pressRunAnalysis, project, reasonOf, settle, showCriterionCards, showCriterionEditor, startWorkspaceTest, stepRow, type,
+  openPanelSection, openWorkspace, pinnedBar, pressRunAnalysis, project, reasonOf, settle, showCriterionCards, showCriterionEditor, startWorkspaceTest, stepIsOpen, stepRow, type,
   unmountWorkspace, voxelSizeField,
 } from "./project_workspace_for_test";
 
@@ -255,7 +255,7 @@ test("a run that ends and opens the Criteria step keeps the list or the editor a
     service.stages = CARVED;
     FakeWebSocket.opened.at(-1)!.send({ type: "run_finished", stages: ["preprocessing", "thresholding"], files: [] });
     await settle();
-    expect(stepRow("Criteria").classList.contains("step-open")).toBe(true);
+    expect(stepIsOpen("Criteria")).toBe(true);
   }
   service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, project(NOTHING_RUN));

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { act, useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ModeInfo } from "../api_client/client";
-import { addStyleSheetForTest, click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { addStyleSheetForTest, click, press, renderForTest, type, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { formReducer, initialFormState, type FormState } from "./form_state";
 import { settingsForStep } from "./presentation";
 import { SettingField } from "./SettingField";
@@ -69,21 +69,6 @@ function viewOf(step: Parameters<typeof settingsForStep>[0], mode: string, name:
   return views.find((view) => view.name === name)!;
 }
 
-/** Types *text* into a field the way the browser does, so React's change handler runs. */
-function typeInto(field: HTMLInputElement | HTMLSelectElement, text: string): void {
-  const prototype = field instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
-  act(() => {
-    Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(field, text);
-    field.dispatchEvent(new Event(field instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
-  });
-}
-
-function pressEscape(target: Element): void {
-  act(() => {
-    target.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-  });
-}
-
 test("the tooltip opens on hover, focus and click, closes with Escape, and gives the config name, default and grid", () => {
   rendered = renderForTest(<SettingField view={viewOf("settings", "daylight", "voxel_size")} form={formFor("daylight")} onChange={() => {}} />);
   const infoButton = rendered.container.querySelector<HTMLButtonElement>("button.setting-info")!;
@@ -97,7 +82,7 @@ test("the tooltip opens on hover, focus and click, closes with Escape, and gives
   expect(tooltip.querySelector("code")!.textContent).toBe("voxel_size");
   expect(tooltip.textContent).toContain("62 voxels per side, 238\u202f328 in total");
   expect(infoButton.getAttribute("aria-expanded")).toBe("true");
-  pressEscape(infoButton);
+  press(infoButton, "Escape");
   expect(rendered.container.querySelector("[role='tooltip']")).toBeNull();
 
   act(() => { infoButton.dispatchEvent(new MouseEvent("mouseout", { bubbles: true })); });
@@ -119,7 +104,7 @@ test("a field has its label, its unit, and its value in the unit shown", () => {
   const numberField = rendered.container.querySelector<HTMLInputElement>("input[type='number']")!;
   expect(numberField.value).toBe("70");
   expect(rendered.container.querySelector<HTMLInputElement>("input[type='range']")!.value).toBe("70");
-  typeInto(numberField, "30");
+  type(numberField, "30");
   expect(onChange).toHaveBeenLastCalledWith({ carve_fraction: 0.3 });
 });
 
@@ -129,7 +114,7 @@ test("the analysis period is one widget that changes the six period settings", (
   expect(rendered.container.textContent).toContain("Analysis period");
   // A date handle moves the start date (R2 4.3); a preset sets both dates.
   const startDate = rendered.container.querySelector<HTMLElement>("[role='slider'][aria-label='Start date']")!;
-  act(() => { startDate.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, cancelable: true })); });
+  press(startDate, "ArrowLeft");
   expect(onChange).toHaveBeenLastCalledWith({ start_day: 20 });
   click([...rendered.container.querySelectorAll(".period-preset")].find((button) => button.textContent === "Whole year")!);
   expect(onChange).toHaveBeenLastCalledWith({ start_month: 1, start_day: 1, end_day: 31 });      // the end month is December already
@@ -147,16 +132,16 @@ test("the shadow tolerated number sets a cutoff, and the weighted modes choose a
   const onChange = vi.fn();
   rendered = renderForTest(<SettingField view={viewOf("carving", "time-based", "threshold")} form={formFor("time-based")} onChange={onChange} />);
   expect(rendered.container.textContent).toContain("Shadow tolerated");
-  typeInto(rendered.container.querySelector<HTMLInputElement>("input[type='number']")!, "5");
+  type(rendered.container.querySelector<HTMLInputElement>("input[type='number']")!, "5");
   expect(onChange).toHaveBeenLastCalledWith({ threshold: { method: "cutoff", value: 5 } });
   rendered.unmount();
   rendered = renderForTest(<SettingField view={viewOf("carving", "daylight", "threshold")} form={formFor("daylight")} onChange={onChange} />);
   expect(rendered.container.textContent).toContain("Carving rule");
   const rule = rendered.container.querySelector<HTMLSelectElement>("select")!;
   expect(rule.value).toBe("carve_fraction");
-  typeInto(rule, "headtail");
+  type(rule, "headtail");
   expect(onChange).toHaveBeenLastCalledWith({ threshold: { method: "headtail" } });
-  typeInto(rule, "carve_fraction");
+  type(rule, "carve_fraction");
   expect(onChange).toHaveBeenLastCalledWith({ threshold: null });
 });
 
@@ -209,7 +194,7 @@ test("an optional number left empty is sent as unset", () => {
   rendered = renderForTest(<SettingField view={viewOf("carving", "daylight", "score_smoothing")} form={form} onChange={onChange} />);
   const field = rendered.container.querySelector<HTMLInputElement>("input[type='number']")!;
   expect(field.value).toBe("1.2");
-  typeInto(field, "");
+  type(field, "");
   expect(onChange).toHaveBeenLastCalledWith({ score_smoothing: null });
 });
 
@@ -287,7 +272,7 @@ test("Drop pieces smaller than is shown and typed in m³ at the voxel size the f
   const field = rendered.container.querySelector<HTMLInputElement>("input[type=number]")!;
   expect(field.value).toBe("37.5");                                        // 300 voxels of 0.125 m³
   expect(rendered.container.querySelector(".setting-unit")!.textContent).toBe("m³");
-  typeInto(field, "40.2");                                                 // a decimal is taken: it is a volume
+  type(field, "40.2");                                                     // a decimal is taken: it is a volume
   expect(onChange).toHaveBeenLastCalledWith({ min_voxels: 322 });
   click(rendered.container.querySelector("button.setting-info")!);
   expect(rendered.container.querySelector("[role='tooltip']")!.textContent).toContain("default 37.5\u00a0m³");
@@ -307,9 +292,9 @@ test("Time offers standard, daylight saving and solar time, sends the engine's v
   const select = rendered.container.querySelector("select")!;
   expect([...select.querySelectorAll("option")].map((option) => option.textContent)).toEqual(["Standard time", "Daylight saving time", "Solar time"]);
   expect(select.value).toBe("standard");
-  typeInto(select, "daylight_saving");
+  type(select, "daylight_saving");
   expect(onChange).toHaveBeenCalledWith({ time_basis: "daylight_saving" });
-  typeInto(select, "solar");
+  type(select, "solar");
   expect(onChange).toHaveBeenCalledWith({ time_basis: "solar" });
   const infoButton = rendered.container.querySelector<HTMLButtonElement>("button.setting-info")!;
   act(() => { infoButton.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })); });
@@ -333,34 +318,34 @@ test("a number outside the engine's range is refused in the field, with a messag
 
   let field = fieldOf("carving", "max_slope_deg");
   expect([field.min, field.max]).toEqual(["0", "90"]);
-  typeInto(field, "0");
+  type(field, "0");
   expect(onChange).not.toHaveBeenCalled();
   expect(message()).toBe("Use a number above 0, up to 90.");
   expect(field.getAttribute("aria-invalid")).toBe("true");
   expect(field.getAttribute("aria-describedby")).toBe(rendered!.container.querySelector(".setting-error")!.id);
-  typeInto(field, "91");
+  type(field, "91");
   expect(onChange).not.toHaveBeenCalled();
-  typeInto(field, "45");
+  type(field, "45");
   expect(onChange).toHaveBeenLastCalledWith({ max_slope_deg: 45 });
   expect(message()).toBeNull();
 
   field = fieldOf("settings", "north_deg");
-  typeInto(field, "360");
+  type(field, "360");
   expect(message()).toBe("Use 0 or more, below 360.");
-  typeInto(field, "-1");
+  type(field, "-1");
   expect(message()).toBe("Use 0 or more, below 360.");
   // Leaving the field shows the value the form holds again, and the message says why the typed one was not taken.
   act(() => field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
   expect(field.value).toBe("0");
   expect(message()).toBe("Use 0 or more, below 360.");
-  typeInto(field, "359.5");
+  type(field, "359.5");
   expect(onChange).toHaveBeenLastCalledWith({ north_deg: 359.5 });
   expect(message()).toBeNull();
 
   field = fieldOf("carving", "carve_above_min_consecutive");
-  typeInto(field, "2.5");
+  type(field, "2.5");
   expect(message()).toBe("Use a whole number.");
-  typeInto(field, "0");
+  type(field, "0");
   expect(message()).toBe("Use 1 or more.");
   expect(onChange).toHaveBeenCalledTimes(2);
 });
@@ -384,8 +369,8 @@ test("a setting whose empty value is automatic shows 'automatic' in the empty fi
 
 /** Types *text* one character at a time, as a keyboard does. */
 function typeKeys(field: HTMLInputElement, text: string): void {
-  typeInto(field, "");
-  for (let length = 1; length <= text.length; length++) typeInto(field, text.slice(0, length));
+  type(field, "");
+  for (let length = 1; length <= text.length; length++) type(field, text.slice(0, length));
 }
 
 test("a number typed past its bound keystroke by keystroke leaves the value the field had before, not the part typed in range", () => {

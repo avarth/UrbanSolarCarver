@@ -1,6 +1,9 @@
-// The open project against a fake service, shared by ProjectWorkspace.saves_and_runs.test.tsx and
-// ProjectWorkspace.view_and_results.test.tsx: the fake service, the project it serves, opening the workspace and finding its parts.
-// Each test file mocks ../viewer/scene with FakeViewerScene itself (vi.mock applies to the file it is written in).
+// The open project against a fake service, shared by every ProjectWorkspace.*.test.tsx file (saves_and_runs, weather_notice,
+// chain_runs, criteria, criterion_cards, input_changes, inspect, simulate, three_d, view_and_results) and by chain_service_for_test.tsx,
+// which builds on it; a few component tests take its SCHEMA or MODES. It holds the fake service, the project it serves, opening the
+// workspace and finding its parts. Each test file mocks ../viewer/scene with FakeViewerScene itself (vi.mock applies to the file it is
+// written in). settle, type and typeAndLeave come from render_for_test.tsx and are exported again here, so a workspace test imports
+// its helpers from one file.
 import { act, useState, type ComponentProps } from "react";
 import { flushSync } from "react-dom";
 import { vi } from "vitest";
@@ -9,14 +12,18 @@ import type {
   ProjectDetail, RunSummary, StageStatusReply, StartRunReply, SunChart, SunPath, SunPositions,
 } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
+import type { components } from "../api_client/generated_types";
 import { useLeavingInspect } from "../inspect/UnsavedTurnsDialog";
 import { SAVE_DELAY_MILLISECONDS } from "../settings_form/form_state";
 import { FakeViewerScene, pretendTheBrowserHasWebGl } from "../viewer/fake_scene_for_test";
-import { renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { holdReply, renderForTest, settle, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { ProjectWorkspace } from "./ProjectWorkspace";
 import { useRunLoop } from "../common/run_state";
 import type { PipelineStage, StageState } from "../stages";
 import type { WorkspaceMode } from "../common/WorkspaceModeSwitch";
+
+type ErrorDetailReply = components["schemas"]["ErrorDetailReply"];
+type StoredFileChangedReply = components["schemas"]["StoredFileChangedReply"];
 
 export const SCHEMA = {
   properties: {
@@ -138,7 +145,7 @@ export class FakeService {
     const path = fullPath.split("?")[0];
     this.requests.push(`${method} ${fullPath}`);
     if (method === "PUT" && path === "/shared-settings") {
-      if (this.refuseSavesWith !== null) return json({ detail: "A run of this project is in progress." }, this.refuseSavesWith);
+      if (this.refuseSavesWith !== null) return json<ErrorDetailReply>({ detail: "A run of this project is in progress." }, this.refuseSavesWith);
       const { values } = JSON.parse(String(init!.body)) as { values: Record<string, unknown> };
       const criterionSettings = Object.keys(values).filter((name) => CRITERION_KEYS.has(name));
       const fieldErrors = criterionSettings.length > 0
@@ -149,7 +156,7 @@ export class FakeService {
       return json<ConfigReply>({ settings: this.sharedSettings, grid_plan: null });
     }
     if (method === "PATCH" && path === "/criteria/1") {
-      if (this.refuseSavesWith !== null) return json({ detail: "A run of this project is in progress." }, this.refuseSavesWith);
+      if (this.refuseSavesWith !== null) return json<ErrorDetailReply>({ detail: "A run of this project is in progress." }, this.refuseSavesWith);
       const { values } = JSON.parse(String(init!.body)) as { values: Record<string, unknown> };
       const fieldErrors = this.configErrorsOf(values);
       if (fieldErrors !== null) return json<ConfigErrorReply>({ field_errors: fieldErrors, grid_plan: null, criterion: "1" }, 422);
@@ -162,7 +169,7 @@ export class FakeService {
       return json<CriterionEntry>(criterionEntry(this.criterionSettings, this.criterionTestSurfaceFiles));
     }
     if (method === "POST" && path === "/criteria/1/test-surfaces") {
-      if (this.refuseSavesWith !== null) return json({ detail: "A run of this project is in progress." }, this.refuseSavesWith);
+      if (this.refuseSavesWith !== null) return json<ErrorDetailReply>({ detail: "A run of this project is in progress." }, this.refuseSavesWith);
       const fileName = ((init!.body as FormData).get("file") as File).name;
       if (!this.criterionTestSurfaceFiles.includes(fileName)) this.criterionTestSurfaceFiles = [...this.criterionTestSurfaceFiles, fileName];
       if (!this.storedTestSurfaces.some((file) => file.name === fileName)) this.storedTestSurfaces = [...this.storedTestSurfaces, { name: fileName, triangle_count: 1 }];
@@ -184,7 +191,7 @@ export class FakeService {
       return new Response(null, { status: 204 });
     }
     if (method === "POST" && path === "/runs") {
-      await this.runStartsWaitFor;
+      await holdReply(this.runStartsWaitFor);
       const { produce } = JSON.parse(String(init!.body)) as { produce: string[] };
       if (this.everythingUpToDate) return json<StartRunReply>({ status: "up_to_date", run_id: null, stages: [] });
       this.runsStarted.push(produce);
@@ -202,7 +209,7 @@ export class FakeService {
     }
     if (path === "/run/summary") return json<RunSummary>(this.summary);
     if (method === "POST" && path.startsWith("/inputs/")) {
-      await this.uploadsAnswerWhen;
+      await holdReply(this.uploadsAnswerWhen);
       const role = path.replace("/inputs/", "");
       const files = role === "weather" ? [{ name: "weather.epw", triangle_count: 0 }] : [{ name: "more.obj", triangle_count: 1 }];
       return json<InputFilesReply>({ role, files, joined_bounds: [[0, 0, 0], [1, 1, 0]], weather_location: this.uploadedWeather.location,
@@ -215,7 +222,7 @@ export class FakeService {
     if (path.startsWith("/inputs/")) return new Response(this.inputFileContents[path] ?? TRIANGLE_OBJ);
     if (path === "/run/files/exporting/export.obj" && this.summary.envelope?.mesh_file === "export.obj") return new Response(TRIANGLE_OBJ);
     if (path === "/run/files/massing/plates.obj" && this.massingOnDisk) return new Response(TRIANGLE_OBJ);
-    return json({ detail: "Not found" }, 404);
+    return json<ErrorDetailReply>({ detail: "Not found" }, 404);
   };
 
   /**
@@ -225,26 +232,26 @@ export class FakeService {
   private async answerInspect(method: string, fileName: string, route: string, init?: RequestInit): Promise<Response> {
     const fileNow = () => this.inspection.find((candidate) => candidate.role === "test_surfaces" && candidate.file_name === fileName);
     const file = fileNow();
-    if (file === undefined) return json({ detail: "Not found" }, 404);
+    if (file === undefined) return json<ErrorDetailReply>({ detail: "Not found" }, 404);
     if (method === "GET" && route === "geometry") return new Response(this.inspectGeometries[fileName].slice(0));
-    if (method !== "POST") return json({ detail: "Not found" }, 404);
-    if (this.refuseSavesWith !== null) return json({ detail: "A run of this project is in progress." }, this.refuseSavesWith);
+    if (method !== "POST") return json<ErrorDetailReply>({ detail: "Not found" }, 404);
+    if (this.refuseSavesWith !== null) return json<ErrorDetailReply>({ detail: "A run of this project is in progress." }, this.refuseSavesWith);
     const body = JSON.parse(String(init?.body ?? "{}")) as { version?: string };
     if (route === "turn") {
-      if (!file.flippable) return json({ detail: `The test surfaces file '${fileName}' is closed as a whole.` }, 422);
+      if (!file.flippable) return json<ErrorDetailReply>({ detail: `The test surfaces file '${fileName}' is closed as a whole.` }, 422);
       this.turnRequests.push({ fileName, body });
-      await this.turnsAnswerWhen;
+      await holdReply(this.turnsAnswerWhen);
     } else {
       this.restoreRequests.push({ fileName, body });
     }
     // The file as it is now: a test may change it while the reply is held.
     if (body.version !== fileNow()!.version) {
-      return json({ detail: route === "turn" ? FILE_CHANGED_SINCE_TURNED : FILE_CHANGED_SINCE_READ, stored_file_changed: true }, 409);
+      return json<StoredFileChangedReply>({ detail: route === "turn" ? FILE_CHANGED_SINCE_TURNED : FILE_CHANGED_SINCE_READ, stored_file_changed: true }, 409);
     }
-    if (route === "restore" && !file.original_kept) return json({ detail: "No original is kept." }, 404);
+    if (route === "restore" && !file.original_kept) return json<ErrorDetailReply>({ detail: "No original is kept." }, 404);
     const changed = { ...fileNow()!, original_kept: route === "turn", version: `${fileNow()!.version}*` };
     this.inspection = this.inspection.map((candidate) => (candidate.role === "test_surfaces" && candidate.file_name === fileName ? changed : candidate));
-    return json(changed);
+    return json<InspectedFile>(changed);
   }
 
   count(request: string): number {
@@ -318,9 +325,7 @@ export function unmountWorkspace() {
   rendered = null;
 }
 
-export const settle = () => act(async () => {
-  for (let tick = 0; tick < 5; tick++) await vi.advanceTimersByTimeAsync(0);
-});
+export { settle, type, typeAndLeave } from "../viewer_overlays/render_for_test";
 export const waitForTheSave = () => act(async () => { await vi.advanceTimersByTimeAsync(SAVE_DELAY_MILLISECONDS + 50); });
 
 export async function openWorkspace(
@@ -365,6 +370,9 @@ export function stepRow(title: string): HTMLElement {
   return [...container().querySelectorAll<HTMLElement>(".step")].find((row) => row.querySelector(".step-title")!.textContent === title)!;
 }
 
+/** Whether the step titled *title* is open, as its header button tells a screen reader (aria-expanded). */
+export const stepIsOpen = (title: string) => stepRow(title).querySelector(".step-header")!.getAttribute("aria-expanded") === "true";
+
 export function openStep(title: string) {
   act(() => stepRow(title).querySelector<HTMLButtonElement>(".step-header")!.click());
 }
@@ -404,18 +412,6 @@ export function togglePanelSection(title: string) {
 /** Opens the criterion panel's section titled *title*, when it is closed. */
 export function openPanelSection(title: string) {
   if (!panelSectionOpen(title)) togglePanelSection(title);
-}
-
-export function type(input: HTMLInputElement, text: string) {
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, text);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-}
-
-export function typeAndLeave(input: HTMLInputElement, text: string) {
-  type(input, text);
-  act(() => input.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
 }
 
 /** The bar pinned under the steps: Run analysis in Site and grid; Run analysis and Build envelope and massing in Criteria. */

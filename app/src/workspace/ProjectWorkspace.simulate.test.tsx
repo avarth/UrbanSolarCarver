@@ -10,6 +10,7 @@ import { studyValuesOf } from "../viewer/study_values_for_test";
 import { TARGET_SAVE_DELAY_MILLISECONDS } from "../simulate/use_study_view";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
 import { studyPaletteColour } from "../viewer/study_palettes";
+import { press } from "../viewer_overlays/render_for_test";
 import { cardLine } from "./chain_service_for_test";
 import {
   CARVING, ENVELOPE, NOTHING_RUN, FakeService, buttonIn, container, endWorkspaceTest, openStep, openWorkspace, pinnedBar, pressRunAnalysis, project, reasonOf,
@@ -29,7 +30,7 @@ afterEach(endWorkspaceTest);
 
 const panel = () => container().querySelector<HTMLElement>(".workspace-panel")!;
 const stepsScroller = () => container().querySelector<HTMLElement>(".step-list")!;
-const openStepTitle = () => container().querySelector(".step-open .step-title")?.textContent;
+const openStepTitle = () => container().querySelector('.step-header[aria-expanded="true"] .step-title')?.textContent;
 
 /** jsdom does not lay out, so scrollTop does nothing there: a settable one stands in, which a browser clears when the element is hidden. */
 function makeScrollable(element: HTMLElement) {
@@ -199,7 +200,7 @@ test("a study's settings take the focus, use a stored file, and Escape gives the
   expect([...studyPopover()!.querySelectorAll(".input-file-name")].map((name) => name.textContent)).toEqual(["facades.obj"]);
   expect(studyLine("Sky view factor")).toBe("Not run yet");
 
-  act(() => studyPopover()!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
+  press(studyPopover()!, "Escape");
   expect(studyPopover()).toBeNull();
   expect(document.activeElement).toBe(settingsButton);
   expect(settingsButton.getAttribute("aria-expanded")).toBe("false");
@@ -455,8 +456,8 @@ test("dragging the target mark or pressing arrow keys moves the target and saves
 
   // Several key presses, as a held arrow key gives: the mark moves at each, and the target is saved once, at the value it ended on.
   act(() => targetMark().focus());
-  for (let press = 0; press < 3; press++) {
-    act(() => { targetMark().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true })); });
+  for (let keyPress = 0; keyPress < 3; keyPress++) {
+    press(targetMark(), "ArrowRight");
     await act(async () => { await vi.advanceTimersByTimeAsync(50); });
   }
   expect(targetMark().getAttribute("aria-valuenow")).toBe("5.24");
@@ -465,7 +466,7 @@ test("dragging the target mark or pressing arrow keys moves the target and saves
   expect(simulateService.studyPatches).toEqual([{ id: "1", body: { target: 5 } }, { id: "1", body: { target: 5.24 } }]);
   expect(scene().layers.get("study_values")).toBe(layer);
 
-  act(() => { targetMark().dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true })); });
+  press(targetMark(), "Delete");
   await waitForTargetSave();
   expect(simulateService.studyPatches.at(-1)).toEqual({ id: "1", body: { target: null } });
   expect(simulateService.studyPatches).toHaveLength(3);
@@ -527,7 +528,7 @@ test("by share the two ends are percentages kept for the study while the app is 
   const colours = (layer as THREE.Mesh).geometry.getAttribute("color") as THREE.BufferAttribute;
   const version = colours.version;
   act(() => targetMark().focus());
-  act(() => { targetMark().dispatchEvent(new KeyboardEvent("keydown", { key: "PageUp", bubbles: true, cancelable: true })); });
+  press(targetMark(), "PageUp");
   expect(targetMark().getAttribute("aria-valuetext")).toBe("10\u00a0%");
   expect(colours.version).toBeGreaterThan(version);                  // the same layer recoloured
   await waitForTargetSave();
@@ -551,7 +552,7 @@ test("while a study's popover is open the geometry switch moves to the right of 
   expect(bar().classList.contains("simulate-geometry-bar-beside-popover")).toBe(false);
   await openStudySettings("Sun hours, 21 Dec");
   expect(bar().classList.contains("simulate-geometry-bar-beside-popover")).toBe(true);
-  act(() => studyPopover()!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
+  press(studyPopover()!, "Escape");
   expect(bar().classList.contains("simulate-geometry-bar-beside-popover")).toBe(false);
 });
 
@@ -607,7 +608,7 @@ async function openSunPanel(prepare?: Parameters<typeof openSimulate>[1]) {
   const drawing = { fillStyle: "", beginPath() {}, arc() {}, fill() {} };
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(((kind: string) => (kind === "2d" ? drawing : kind === "webgl2" ? {} : null)) as never);
   await openSimulate(undefined, prepare);
-  expect(sunPanel().classList.contains("sun-panel-collapsed")).toBe(true);
+  expect(sunPanel().querySelector(".sun-panel-toggle")!.getAttribute("aria-expanded")).toBe("false");
   await clickAndSettle(sunPanel().querySelector<HTMLButtonElement>(".sun-panel-toggle")!);
 }
 

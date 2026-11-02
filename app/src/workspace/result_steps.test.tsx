@@ -1,10 +1,9 @@
-import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import * as THREE from "three";
 import type { RunSummary } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { initialFormState, type SaveOutcome } from "../settings_form/form_state";
-import { renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { holdReply, renderForTest, settle, typeAndLeave, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import type { ScorePoints } from "../viewer/score_points_decoder";
 import { dimmedLayersOf, isStageDimmed, missingLayersOf, useResultSteps, type ResultSteps } from "./result_steps";
 import { resultsAtOpen, resultsOfStages, useResultsFollowingRun, type RunResults } from "../steps/run_results";
@@ -125,18 +124,6 @@ test("a run that had ended before the project opened is not followed again; the 
 
 // ---- Review Focus 5: threshold moves during a carving run, through the queue, the run loop and the results ----
 
-const settle = () => act(async () => {
-  for (let tick = 0; tick < 5; tick++) await new Promise((resolve) => setTimeout(resolve, 0));
-});
-
-function typeAndLeave(input: HTMLInputElement, text: string) {
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, text);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  act(() => input.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
-}
-
 const STARTED = (runId: string) => ({ status: "started", run_id: runId, stages: ["thresholding"] });
 
 test("a threshold run whose follow-up brings no run (a failed save, results up to date) does not leave the carving dimmed with old results", async () => {
@@ -212,7 +199,7 @@ test("after a follow-up with nothing to run, the carving stays dimmed until the 
   let releaseResults: () => void = () => {};
   vi.stubGlobal("fetch", vi.fn(async (address: string, init?: RequestInit) => {
     if ((init?.method ?? "GET") === "POST" && address.endsWith("/runs")) return new Response(JSON.stringify(startReplies.shift()));
-    if (address.endsWith("/run/summary") || address.endsWith("/run/score-points")) await resultsHeld;
+    if (address.endsWith("/run/summary") || address.endsWith("/run/score-points")) await holdReply(resultsHeld);
     if (address.endsWith("/run/summary")) return new Response(JSON.stringify({ carving: CARVING_SUMMARY, envelope: null, massing: null } satisfies RunSummary));
     return new Response(JSON.stringify({ detail: "none" }), { status: 404 });
   }));

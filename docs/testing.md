@@ -127,7 +127,8 @@ Before writing a scene or a fake of your own, use these.
 | Where | What |
 |---|---|
 | `tests/conftest.py` | `tiny_cube_mesh` (a 10 m cube, z -5 to 5), `tiny_surface_mesh` (a 6 m quad 1 m under it, facing up), `tmp_mesh_files`, `example_epw_path`, `project_with_inputs`, `example_project_templates` |
-| `tests/_stage_scene.py` | `daylight_cube_config`: the same cube and surface as a validated daylight config on the CPU, the smallest scene that runs every stage |
+| `tests/_stage_scene.py` | `daylight_cube_config`: the same cube and surface as a validated daylight config on the CPU, the smallest scene that runs every stage; for stage plumbing, not for which voxels a mode carves (the surface looks straight up through the cube from any side) |
+| `tests/_plot_scene.py` | `plot_scene`: a 12 x 12 x 18 m plot, a 10 m street and a 12 m neighbour whose south facade is the test surface and whose mass is the context, optionally turned by `north_deg`; `PlotScene.config(folder, mode, epw_path)` (1 m voxels, CPU) and `PlotScene.voxels` with `assert_carves_the_north_side`: which side a mode or stage carves, in about a second |
 | `tests/_chain_scene.py` | a box with two facades, on which two chained criteria decide about different voxels |
 | `tests/cases.py`, `tests/oracle.py`, `tests/montecarlo.py` | the typology scenes run end to end, an independent reference implementation, and the randomised sweep |
 | `tests/local_web_test_support.py` | projects for the local web service (`add_project_with_inputs`, `box_bytes`), `FakeEngine` (writes run_chain's folders without computing), `FakeRecycleBin` |
