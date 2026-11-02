@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import { messages } from "../messages";
 import { colourToken, type ViewportTheme } from "./colour_scales";
+import { layerHooks } from "./layer_hooks";
 import type { Point3 } from "./local_origin";
 import { pointOnHemisphere, type Hemisphere } from "./sky_dome";
 import { recolourTextSprite, textSprite, type TextSprite } from "./text_sprite";
@@ -64,7 +65,7 @@ function letterColour(theme: ViewportTheme): string {
 
 /**
  * The ring on the rim of *sphere* (the scene hemisphere, or a stand-in for an empty scene), drawn for the viewport *theme*, with
- * an applyTheme(theme) in its userData for a later change of theme.
+ * an applyTheme(theme) in its hooks for a later change of theme.
  */
 export function compassRing(sphere: Hemisphere, northDegrees: number, theme: ViewportTheme): THREE.Group {
   const { ticks, letters } = compassRingMarks(sphere, northDegrees);
@@ -86,7 +87,7 @@ export function compassRing(sphere: Hemisphere, northDegrees: number, theme: Vie
   ring.name = "compass_ring";
   ring.renderOrder = -1;
   ring.add(lines, ...labels);
-  ring.userData.applyTheme = (newTheme: ViewportTheme) => {
+  layerHooks(ring).applyTheme = (newTheme: ViewportTheme) => {
     lineMaterial.color.set(lineColour(newTheme));
     for (const label of labels) recolourTextSprite(label, letterColour(newTheme));
   };

@@ -27,6 +27,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **The 3D view's layers come from one list** in the app: each layer's object, whether the layers menu lists it, and
+  whether it is shown and dimmed are one entry, which one hook gives the scene (30 effects in the view pane down to
+  12). What a layer offers the scene (theme colours, its summary, recolouring, picking) is typed (`layer_hooks.ts`).
+  A study shown on another geometry is now recoloured in place instead of being built again.
 - **`PipelineResult` is defined in `urbansolarcarver.api_core.pipeline_result`**, below `api`, since `run_chain` builds
   it too. `from urbansolarcarver import PipelineResult` and `from urbansolarcarver.api import PipelineResult` work as
   before.

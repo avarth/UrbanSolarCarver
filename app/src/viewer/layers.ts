@@ -1,5 +1,5 @@
-// The layers of the 3D view and how each is drawn (UX 8.2). A builder returns a three.js object whose userData tells the scene
-// what it needs: a summary for the accessible name, applyTheme(theme) for colours that follow the viewport theme, and for some
+// The layers of the 3D view and how each is drawn (UX 8.2). A builder returns a three.js object whose hooks (layer_hooks.ts) tell the
+// scene what it needs: a summary for the accessible name, applyTheme(theme) for colours that follow the viewport theme, and for some
 // layers setSeeThrough(on) or hoverLabel(intersection). Every material is made dimmable (out of date: faded and desaturated).
 import * as THREE from "three";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
@@ -11,6 +11,7 @@ import { changeOf, changeTolerance, highestOf, OPEN_COLUMN, shareOfOpen, type St
 import { changeRamp, changeRampStops, cividis, colourToken, storeyColour, sunRamp, type ViewportTheme } from "./colour_scales";
 import { studyPaletteColour, type StudyPalette } from "./study_palettes";
 import type { CarvedVoxels } from "./carved_by_criterion_decoder";
+import { layerHooks } from "./layer_hooks";
 import type { Point3 } from "./local_origin";
 import type { ScorePoints } from "./score_points_decoder";
 import { pointOnHemisphere, skyPatchOutline, skyPatchShares, type Hemisphere } from "./sky_dome";
@@ -142,7 +143,7 @@ function solidWithEdges(geometry: THREE.BufferGeometry, bodyOpacity: number, edg
   const edges = edgeLines(geometry, colourToken("ink"), edgeOpacity);
   const group = new THREE.Group();
   group.add(body, edges);
-  group.userData.applyTheme = (theme: ViewportTheme) => (edges.material as THREE.LineBasicMaterial).color.set(inkColour(theme));
+  layerHooks(group).applyTheme = (theme: ViewportTheme) => (edges.material as THREE.LineBasicMaterial).color.set(inkColour(theme));
   return { group, body, edges };
 }
 
@@ -174,7 +175,7 @@ export function testSurfacesLayer(parts: readonly TestSurfacesPart[]): THREE.Obj
     if (colour === null) accentMaterials.push(material);
     layer.add(surfaces);
   }
-  layer.userData.applyTheme = (theme: ViewportTheme) => accentMaterials.forEach((material) => material.color.set(colourToken(theme === "dark" ? "test-surface-on-dark" : "accent")));
+  layerHooks(layer).applyTheme = (theme: ViewportTheme) => accentMaterials.forEach((material) => material.color.set(colourToken(theme === "dark" ? "test-surface-on-dark" : "accent")));
   return layer;
 }
 
@@ -184,7 +185,7 @@ export function contextLayer(geometry: THREE.BufferGeometry): THREE.Object3D {
   const edges = edgeLines(geometry, colourToken("ink"), SOFT_EDGE_OPACITY);
   const group = new THREE.Group();
   group.add(body, edges);
-  group.userData.applyTheme = (theme: ViewportTheme) => (edges.material as THREE.LineBasicMaterial).color.set(inkColour(theme));
+  layerHooks(group).applyTheme = (theme: ViewportTheme) => (edges.material as THREE.LineBasicMaterial).color.set(inkColour(theme));
   return group;
 }
 
@@ -196,7 +197,7 @@ export function terrainLayer(geometry: THREE.BufferGeometry): THREE.Object3D {
 /** The carved envelope: a light solid with soft edges, or translucent white while the building massing is shown inside it. */
 export function envelopeLayer(geometry: THREE.BufferGeometry): THREE.Object3D {
   const { group, body, edges } = solidWithEdges(geometry, 1, SOFT_EDGE_OPACITY);
-  group.userData.setSeeThrough = (seeThrough: boolean) => {
+  layerHooks(group).setSeeThrough = (seeThrough: boolean) => {
     const bodyMaterial = body.material as THREE.Material;
     bodyMaterial.userData.baseOpacity = seeThrough ? SEE_THROUGH_ENVELOPE_OPACITY : 1;
     bodyMaterial.depthWrite = !seeThrough;
@@ -223,10 +224,10 @@ export function buildingMassingLayer(geometry: THREE.BufferGeometry): THREE.Obje
   const edges = edgeLines(geometry, colourToken("ink"), MASSING_EDGE_OPACITY);
   const massing = new THREE.Group();
   massing.add(body, edges);
-  massing.userData.applyTheme = (theme: ViewportTheme) => (edges.material as THREE.LineBasicMaterial).color.set(inkColour(theme));
-  massing.userData.summary = messages.storeyCount(storeyCount);
-  massing.userData.storeyCount = storeyCount;
-  massing.userData.hoverLabel = (intersection: THREE.Intersection) =>
+  layerHooks(massing).applyTheme = (theme: ViewportTheme) => (edges.material as THREE.LineBasicMaterial).color.set(inkColour(theme));
+  layerHooks(massing).summary = messages.storeyCount(storeyCount);
+  layerHooks(massing).storeyCount = storeyCount;
+  layerHooks(massing).hoverLabel = (intersection: THREE.Intersection) =>
     intersection.object === body && intersection.face ? messages.storeyLabel(intersection.face.materialIndex + 1) : null;
   return massing;
 }
@@ -399,7 +400,7 @@ export function keptVoxelsLayer({ voxels, voxelSize, colourRange: [low, high], v
   const colours = Array.from(voxels.scores, (score) =>
     CIVIDIS_COLOURS[Math.min(255, Math.max(0, Math.floor(((score - low) / span) * 256)))]);
   const layer = voxelObject(voxels.centres, voxelSize, colours, "#ffffff", 1);
-  layer.userData.summary = messages.voxelCount(voxelCount);
+  layerHooks(layer).summary = messages.voxelCount(voxelCount);
   return layer;
 }
 
@@ -413,7 +414,7 @@ export interface CarvedVoxelsDrawing {
 
 /**
  * The carved voxels in the carved colour at 10 % opacity, with the maximum volume's top edges and front vertical edges above the
- * kept voxels at 60 %. Which vertical edges are in front depends on the camera: the scene calls userData.followCamera(position).
+ * kept voxels at 60 %. Which vertical edges are in front depends on the camera: the scene calls its followCamera(position).
  */
 export function carvedVoxelsLayer({ voxels, voxelSize, voxelCount, outline, keptTopAt }: CarvedVoxelsDrawing): THREE.Object3D {
   const carvedColour = colourToken("carved");
@@ -424,7 +425,7 @@ export function carvedVoxelsLayer({ voxels, voxelSize, voxelCount, outline, kept
   const outlineGeometry = new THREE.BufferGeometry().setAttribute("position", outlinePositions);
   outlineGeometry.boundingSphere = new THREE.Box3().setFromArray(outline.segments).getBoundingSphere(new THREE.Sphere());
   outlineGeometry.setDrawRange(0, 0);
-  layer.userData.followCamera = (cameraPosition: THREE.Vector3) => {
+  layerHooks(layer).followCamera = (cameraPosition: THREE.Vector3) => {
     const drawn = carvedOutlineSegments(outline, keptTopAt, [cameraPosition.x, cameraPosition.y]);
     (outlinePositions.array as Float32Array).set(drawn);
     outlinePositions.needsUpdate = true;
@@ -432,7 +433,7 @@ export function carvedVoxelsLayer({ voxels, voxelSize, voxelCount, outline, kept
   };
   const outlineMaterial = layerMaterial(new THREE.LineBasicMaterial({ color: carvedColour, depthWrite: false }), CARVED_OUTLINE_OPACITY);
   layer.add(new THREE.LineSegments(outlineGeometry, outlineMaterial));
-  layer.userData.summary = messages.voxelCount(voxelCount);
+  layerHooks(layer).summary = messages.voxelCount(voxelCount);
   return layer;
 }
 
@@ -449,7 +450,7 @@ export function carvedByCriterionLayer({ voxels, colours, voxelSize }: CarvedByC
   const carvedColour = new THREE.Color(colourToken("carved"));
   const colourOf = colours.map((colour) => new THREE.Color(colour));
   const layer = voxelObject(voxels.centres, voxelSize, Array.from(voxels.criterionIndex, (criterion) => colourOf[criterion] ?? carvedColour), "#ffffff", 1);
-  layer.userData.summary = messages.voxelCount(voxels.carvedCount);
+  layerHooks(layer).summary = messages.voxelCount(voxels.carvedCount);
   return layer;
 }
 
@@ -510,18 +511,16 @@ function paletteColours(palette: StudyPalette): THREE.Color[] {
 }
 
 /**
- * The selected study's test point patches on the geometry shown (*corners*: study_values_decoder.patchCorners), unlit so the colours
- * read as the legend's. By value (magma) or by share (viridis): the palette between the two ends of the colour
+ * The selected study's test point patches (*corners*: study_values_decoder.patchCorners, four per point), unlit so the colours
+ * read as the legend's; they are black until recolour(view) paints them for a view of these points. By value (magma) or by share (viridis): the palette between the two ends of the colour
  * range, in percent of each point's no-build value or in the study's unit; a value beyond an end takes that end's colour. By change from the maximum
  * volume: the change ramp (viridis) from no change to the largest gain, a loss in the carved colour, a change within the tolerance none. The
- * patches lie on test surfaces, so they are pulled forward in depth as those are. A new range, palette, colouring or Change of the same
- * values and geometry recolours the patches in place (userData.recolour); the palettes do not depend on the viewport theme.
+ * patches lie on test surfaces, so they are pulled forward in depth as those are. A new range, palette, colouring, Change or geometry
+ * shown recolours the same patches; the palettes do not depend on the viewport theme.
  */
-export function studyValuesLayer(view: StudyView, corners: Float32Array): THREE.Object3D {
-  const count = view.values.values[view.geometry].length;
+export function studyValuesLayer(corners: Float32Array): THREE.Object3D {
+  const count = corners.length / 12;
   const colours = new Float32Array(count * 4 * 3);
-  const drawn = { view };
-  paintStudyValues(colours, view);
   // Two triangles per patch, around its corners in order: 0 1 2 and 0 2 3.
   const index = new Uint32Array(count * 6);
   for (let point = 0, at = 0; point < count; point++, at += 6) {
@@ -545,16 +544,11 @@ export function studyValuesLayer(view: StudyView, corners: Float32Array): THREE.
     vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8,
   }));
   const patches = new THREE.Mesh(geometry, material);
-  const repaint = () => {
-    paintStudyValues(colours, drawn.view);
+  layerHooks(patches).recolour = (view: StudyView) => {
+    paintStudyValues(colours, view);
     colourAttribute.needsUpdate = true;
   };
-  /** *next* has the same values and geometry as the view the layer was made for: its target or Change differ. */
-  patches.userData.recolour = (next: StudyView) => {
-    drawn.view = next;
-    repaint();
-  };
-  patches.userData.summary = messages.studyPointCount(count);
+  layerHooks(patches).summary = messages.studyPointCount(count);
   return patches;
 }
 
@@ -618,7 +612,7 @@ function addArrow(segments: number[], centre: Point3, normal: Point3, area: numb
  * surface colour and the back faces in the orange of --colour-surface-back, so which way each surface faces shows at a glance. A
  * surface in *turned* is drawn turned, its triangles wound the other way in the index. A file that is not selected is drawn at 35 %
  * strength. With *arrows*, one arrow per surface runs from its centre along its normal (against it when turned), 0.3 sqrt(area) m
- * long, from 1 m to 10 m; the arrows take no part in picking. userData.fileAndSurfaceOf(intersection) names the file and the
+ * long, from 1 m to 10 m; the arrows take no part in picking. Its fileAndSurfaceOf(intersection) names the file and the
  * surface that a hit on one of the meshes landed on, or null for anything else. Like the test surfaces, the meshes are pulled
  * forward in depth, since they lie on the faces of a context model or of the maximum volume.
  */
@@ -659,15 +653,15 @@ export function inspectSurfacesLayer(files: readonly InspectLayerFile[], options
     }
     layer.add(group);
   }
-  layer.userData.summary = messages.inspectSurfaceCount(surfaceCount);
-  layer.userData.arrowCount = arrowCount;
-  layer.userData.applyTheme = (theme: ViewportTheme) => {
+  layerHooks(layer).summary = messages.inspectSurfaceCount(surfaceCount);
+  layerHooks(layer).arrowCount = arrowCount;
+  layerHooks(layer).applyTheme = (theme: ViewportTheme) => {
     const dark = theme === "dark";
     fronts.forEach((material) => material.color.set(colourToken(dark ? "test-surface-on-dark" : "accent")));
     backs.forEach((material) => material.color.set(colourToken(dark ? "surface-back-on-dark" : "surface-back")));
     arrowMaterials.forEach((material) => material.color.set(inkColour(theme)));
   };
-  layer.userData.fileAndSurfaceOf = (intersection: THREE.Intersection): { fileName: string; surface: number } | null => {
+  layerHooks(layer).fileAndSurfaceOf = (intersection: THREE.Intersection): { fileName: string; surface: number } | null => {
     const file = filesOfMeshes.get(intersection.object);
     const triangle = intersection.faceIndex;
     if (!file || triangle === undefined || triangle === null) return null;
@@ -723,7 +717,7 @@ export function sunPathLayer(objects: SunPathObjects, sphere: Hemisphere): THREE
     labels.push(label);
     layer.add(disc, label);
   }
-  layer.userData.applyTheme = (theme: ViewportTheme) => labels.forEach((label) => recolourTextSprite(label, inkColour(theme)));
+  layerHooks(layer).applyTheme = (theme: ViewportTheme) => labels.forEach((label) => recolourTextSprite(label, inkColour(theme)));
   return layer;
 }
 
@@ -756,7 +750,7 @@ export function sunStudyLayer(objects: SunStudyObjects, sphere: Hemisphere): THR
     disc.scale.setScalar(2 * SUN_DISC_SHARE * sphere.radius);
     layer.add(disc);
   }
-  layer.userData.applyTheme = (theme: ViewportTheme) => labels.forEach((label) => recolourTextSprite(label, inkColour(theme)));
+  layerHooks(layer).applyTheme = (theme: ViewportTheme) => labels.forEach((label) => recolourTextSprite(label, inkColour(theme)));
   return layer;
 }
 
@@ -791,8 +785,8 @@ export function skyDomeLayer(skyDome: SkyDome, sphere: Hemisphere): THREE.Object
   const material = layerMaterial(new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, transparent: true, depthWrite: false }));
   const dome = new THREE.Mesh(geometry, material);
   const shares = skyPatchShares(skyDome.weights);
-  dome.userData.summary = messages.skyPatchCount(skyDome.directions.length);
-  dome.userData.applyTheme = (theme: ViewportTheme) => {
+  layerHooks(dome).summary = messages.skyPatchCount(skyDome.directions.length);
+  layerHooks(dome).applyTheme = (theme: ViewportTheme) => {
     const colour = new THREE.Color();
     let vertex = 0;
     shares.forEach((share, patch) => {

@@ -12,6 +12,7 @@ import { changeRamp, colourToken } from "./colour_scales";
 import { studyPaletteColour, type StudyPalette } from "./study_palettes";
 import type { Point3 } from "./local_origin";
 import type { ScorePoints } from "./score_points_decoder";
+import type { StudyView } from "./study_values";
 
 function scorePoints(indices: number[], scores: number[], kept: number[] | null): ScorePoints {
   return {
@@ -200,10 +201,17 @@ const hexOf = (colour: string) => new THREE.Color(colour).getHexString();
 const magma = (t: number) => hexOf(studyPaletteColour("magma", t));
 const viridis = (t: number) => hexOf(studyPaletteColour("viridis", t));
 
+/** The study values layer for *corners*, painted for *view* as ViewerPane paints it once made. */
+function paintedStudyLayer(view: StudyView, corners: Float32Array): THREE.Object3D {
+  const layer = studyValuesLayer(corners);
+  layer.userData.recolour(view);
+  return layer;
+}
+
 test("the study values layer colours each point's patch by its value, the palette between the two ends of the range", () => {
   setColourTokens();
   const { view, corners } = studyView(false, [0, 4]);
-  const layer = studyValuesLayer(view, corners);
+  const layer = paintedStudyLayer(view, corners);
   expect(LAYER_NAMES).toContain("study_values");
   const geometry = (layer as THREE.Mesh).geometry;
   expect(geometry.getAttribute("position").count).toBe(4 * 4);
@@ -216,7 +224,7 @@ test("values beyond an end of the range take that end's colour, not a colour of 
   setColourTokens();
   // Range 1 to 3: 0 is below the low end, 4 above the high end, 1.0005 just above the low end.
   const { view, corners } = studyView(false, [1, 3]);
-  expect(patchColours(studyValuesLayer(view, corners))).toEqual([magma(0), magma(0.5), magma(1), magma(0)]);
+  expect(patchColours(paintedStudyLayer(view, corners))).toEqual([magma(0), magma(0.5), magma(1), magma(0)]);
 });
 
 test("by share each point is coloured by its value over its no-build value in percent; no no-build value counts as 100 %", () => {
@@ -226,7 +234,7 @@ test("by share each point is coloured by its value over its no-build value in pe
   const values = decodeStudyValues(studyValuesOf({ open: [4, 8, 4, 0], max_volume: [1, 1, 1, 0], envelope: [0, 4, 4, 0] }));
   const view = { values, geometry: "envelope" as const, change: false, colourBy: "share" as const, range: [0, 100] as [number, number],
                  palette: "magma" as const, unit: "h", dimmed: false };
-  const layer = studyValuesLayer(view, patchCorners(values, [0, 0, 0]));
+  const layer = paintedStudyLayer(view, patchCorners(values, [0, 0, 0]));
   expect(patchColours(layer)).toEqual([magma(0), magma(0.5), magma(1), magma(1)]);
   layer.userData.recolour({ ...view, range: [50, 100] });        // the range in percent: 50 % and below take the low end's colour
   expect(patchColours(layer)).toEqual([magma(0), magma(0), magma(1), magma(1)]);
@@ -235,7 +243,7 @@ test("by share each point is coloured by its value over its no-build value in pe
 test("a new range, palette or Change recolours the same layer in place", () => {
   setColourTokens();
   const { view, corners } = studyView(false, [0, 4]);
-  const layer = studyValuesLayer(view, corners);
+  const layer = paintedStudyLayer(view, corners);
   const colours = (layer as THREE.Mesh).geometry.getAttribute("color") as THREE.BufferAttribute;
   const version = colours.version;
   layer.userData.recolour({ ...view, range: [2, 4] });
@@ -259,7 +267,7 @@ test("changeTolerance on 527,633 points takes under 1 s: the Change view of that
   const values = decodeStudyValues(studyValuesOf({ open, max_volume: open.map((value) => value * 0.8), envelope: open.map((value) => value * 0.9) }));
   const corners = patchCorners(values, [0, 0, 0]);
   const started = performance.now();
-  const layer = studyValuesLayer({ values, geometry: "envelope", change: true, colourBy: "share", range: [0, 100], palette: "magma", unit: "h", dimmed: false }, corners);
+  const layer = paintedStudyLayer({ values, geometry: "envelope", change: true, colourBy: "share", range: [0, 100], palette: "magma", unit: "h", dimmed: false }, corners);
   const elapsed = performance.now() - started;
   expect(layer.userData.summary).toBe("527 633 points");
   expect(elapsed).toBeLessThan(1000);
@@ -269,14 +277,14 @@ test("with Change the layer colours the change from the maximum volume in viridi
   setColourTokens();
   const { view, corners } = studyView(true, [0, 4]);
   // Changes -1, 1, 3 and 0.0005: a loss, a third of the largest gain, the largest gain, and less than the tolerance (0.004), none.
-  expect(patchColours(studyValuesLayer(view, corners))).toEqual([hexOf("#c8553d"), hexOf(changeRamp(1 / 3)), viridis(1), viridis(0)]);
+  expect(patchColours(paintedStudyLayer(view, corners))).toEqual([hexOf("#c8553d"), hexOf(changeRamp(1 / 3)), viridis(1), viridis(0)]);
 });
 
 test("study values are drawn in front of the test surfaces they lie on, unlit, and leave the corners they are given as they are", () => {
   setColourTokens();
   const { view, corners } = studyView(false, [0, 4]);
   const before = Float32Array.from(corners);
-  const layer = studyValuesLayer(view, corners) as THREE.Mesh;
+  const layer = paintedStudyLayer(view, corners) as THREE.Mesh;
   const material = layer.material as THREE.MeshBasicMaterial;
   expect(material).toBeInstanceOf(THREE.MeshBasicMaterial);
   expect([material.polygonOffset, material.polygonOffsetFactor, material.polygonOffsetUnits]).toEqual([true, -2, -8]);

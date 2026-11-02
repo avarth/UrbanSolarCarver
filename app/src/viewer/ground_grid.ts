@@ -4,6 +4,7 @@ import * as THREE from "three";
 import { messages } from "../messages";
 import { formattedNumber } from "../format_numbers";
 import { colourToken, type ViewportTheme } from "./colour_scales";
+import { layerHooks } from "./layer_hooks";
 import { recolourTextSprite, textSprite, type TextSprite } from "./text_sprite";
 
 export interface GridSpacing {
@@ -84,7 +85,7 @@ function fadingLines(xLines: number[], yLines: number[], centre: [number, number
   return new THREE.LineSegments(geometry, material);
 }
 
-/** The grid around *centre* (the model's footprint centre in local coordinates), with an applyTheme(theme) in its userData. */
+/** The grid around *centre* (the model's footprint centre in local coordinates), with an applyTheme(theme) in its hooks. */
 export function groundGrid(spacing: GridSpacing, centre: [number, number]): THREE.Group {
   const halfExtent = spacing.extentMetres;
   const xLines = gridLineCoordinates(spacing, centre[0], halfExtent);
@@ -116,7 +117,7 @@ export function groundGrid(spacing: GridSpacing, centre: [number, number]): THRE
   }
   grid.add(...labels);
 
-  grid.userData.applyTheme = (theme: ViewportTheme) => {
+  layerHooks(grid).applyTheme = (theme: ViewportTheme) => {
     (minor.material as THREE.ShaderMaterial).uniforms.lineColour.value.set(colourToken(`grid-minor-${theme}`));
     for (const lines of [major, strongest]) (lines.material as THREE.ShaderMaterial).uniforms.lineColour.value.set(colourToken(`grid-major-${theme}`));
     for (const label of labels) recolourTextSprite(label, colourToken(theme === "dark" ? "muted-on-dark" : "muted"));

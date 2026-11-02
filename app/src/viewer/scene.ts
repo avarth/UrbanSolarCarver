@@ -16,6 +16,7 @@ import { groundGrid, groundGridSpacing } from "./ground_grid";
 import type { Point3 } from "./local_origin";
 import { LAYER_NAMES, SURROUNDING_LAYERS, applyLayerAppearance, dimmedAppearance, disposeLayer, type LayerName } from "./layers";
 import type { Hemisphere } from "./sky_dome";
+import { layerHooks } from "./layer_hooks";
 import { isSolidMesh, SunShading } from "./sun_shading";
 import type { ShadeHours } from "./sun_study";
 import { fitTextSpritesToView } from "./text_sprite";
@@ -251,8 +252,8 @@ export class ViewerScene {
     if (object) {
       object.name = name;
       if (OVER_THE_COUNT_LAYERS.includes(name)) object.traverse((child) => child.layers.set(OVER_THE_COUNT));
-      object.userData.applyTheme?.(this.theme);
-      object.userData.followCamera?.(this.camera.position);
+      layerHooks(object).applyTheme?.(this.theme);
+      layerHooks(object).followCamera?.(this.camera.position);
       this.scene.add(object);
     }
     this.refreshLayers();
@@ -315,9 +316,7 @@ export class ViewerScene {
   setViewportTheme(theme: ViewportTheme): void {
     this.theme = theme;
     this.scene.background = new THREE.Color(viewportBackground(theme));
-    this.grid?.userData.applyTheme(theme);
-    this.ring?.userData.applyTheme(theme);
-    for (const slot of this.slots.values()) slot.object?.userData.applyTheme?.(theme);
+    for (const object of [this.grid, this.ring, ...[...this.slots.values()].map((slot) => slot.object)]) if (object) layerHooks(object).applyTheme?.(theme);
     const dark = theme === "dark";
     this.hoverLabel.style.background = colourToken(dark ? "overlay-on-dark" : "panel");
     this.hoverLabel.style.color = colourToken(dark ? "ink-on-dark" : "ink");
@@ -378,7 +377,7 @@ export class ViewerScene {
     const shown: LayerDescription[] = [];
     for (const name of LAYER_NAMES) {
       const slot = this.slots.get(name)!;
-      if (slot.object && slot.visible) shown.push({ label: messages.layerNames[name], detail: slot.object.userData.summary ?? null, dimmed: slot.dimmed });
+      if (slot.object && slot.visible) shown.push({ label: messages.layerNames[name], detail: layerHooks(slot.object).summary ?? null, dimmed: slot.dimmed });
     }
     return describeView(shown);
   }
@@ -416,7 +415,7 @@ export class ViewerScene {
 
   private refreshLayers(): void {
     const envelope = this.slots.get("envelope")!, massing = this.slots.get("building_massing")!;
-    envelope.object?.userData.setSeeThrough?.(this.envelopeSeeThrough || (envelope.visible && massing.visible && massing.object !== null));
+    if (envelope.object) layerHooks(envelope.object).setSeeThrough?.(this.envelopeSeeThrough || (envelope.visible && massing.visible && massing.object !== null));
     for (const [name, slot] of this.slots) {
       if (!slot.object) continue;
       slot.object.visible = slot.visible;
@@ -457,7 +456,7 @@ export class ViewerScene {
       disposeLayer(aid);
     }
     this.grid = groundGrid(groundGridSpacing(longestSide || EMPTY_SCENE_RADIUS_METRES), [centre.x, centre.y]);
-    this.grid.userData.applyTheme(this.theme);
+    layerHooks(this.grid).applyTheme?.(this.theme);
     this.ring = compassRing(this.sceneHemisphere ?? EMPTY_SCENE_HEMISPHERE, this.northDegrees, this.theme);
     this.ring.traverse((child) => child.layers.set(OVER_THE_COUNT));
     this.scene.add(this.grid, this.ring);
@@ -550,7 +549,7 @@ export class ViewerScene {
     this.camera.near = Math.max(0.01, distance / 1000);
     this.camera.far = distance * 20 + 4000;         // the grid reaches 1 km past the model
     this.camera.updateProjectionMatrix();
-    for (const slot of this.slots.values()) slot.object?.userData.followCamera?.(this.camera.position);
+    for (const slot of this.slots.values()) if (slot.object) layerHooks(slot.object).followCamera?.(this.camera.position);
     const state = this.cameraState();
     for (const listener of this.cameraListeners) listener(state);
     this.sunShading.invalidate();
@@ -588,12 +587,13 @@ export class ViewerScene {
     this.pendingHover = null;
     const massing = this.slots.get("building_massing")!;
     let label: string | null = null;
-    if (pointer && massing.object && massing.visible && massing.object.userData.hoverLabel) {
+    const hoverLabelOf = massing.object && layerHooks(massing.object).hoverLabel;
+    if (pointer && massing.object && massing.visible && hoverLabelOf) {
       const raycaster = new THREE.Raycaster();
       const width = this.container.clientWidth, height = this.container.clientHeight;
       raycaster.setFromCamera(new THREE.Vector2((pointer.x / width) * 2 - 1, -(pointer.y / height) * 2 + 1), this.camera);
       const hit = raycaster.intersectObject(massing.object, true).find((intersection) => intersection.object instanceof THREE.Mesh);
-      label = hit ? massing.object.userData.hoverLabel(hit) : null;
+      label = hit ? hoverLabelOf(hit) : null;
     }
     if (!pointer) return;
     this.hoverLabel.style.display = label ? "block" : "none";
