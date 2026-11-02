@@ -1,6 +1,7 @@
 // The open project as its requests need it: the launch token, the project's name, and where a failed request goes when the
 // service is the cause (access lost, engine stopped). ProjectWorkspace provides it; the hooks and panels of the open project read
-// it, instead of each being handed the three.
+// it, instead of each being handed the three. A rename makes a new workspace (App keys it by the project's name), so the name
+// does not change while a session lasts: what reads it once (a queue, a listener) may keep it.
 import { createContext, useContext } from "react";
 
 export interface ProjectSession {

@@ -31,6 +31,11 @@ versioning follows [Semantic Versioning](https://semver.org/).
   whether it is shown and dimmed are one entry, which one hook gives the scene (30 effects in the view pane down to
   12). What a layer offers the scene (theme colours, its summary, recolouring, picking) is typed (`layer_hooks.ts`).
   A study shown on another geometry is now recoloured in place instead of being built again.
+- **The open project's plumbing in the app**: the token, the project's name and the handler of failed requests come
+  from one context (`api_client/project_session.ts`) instead of being handed to 16 hooks and panels;
+  `reportServiceProblem` replaces 24 copies of the same check, `configErrorOf` four readers of a refused save's field
+  errors. Three small hooks in a new `hooks/` folder (`useChangedDuringRender`, `useLatest`, `useKeyedValue`) replace
+  about 20 hand-written copies. Nothing the app does changes.
 - **`PipelineResult` is defined in `urbansolarcarver.api_core.pipeline_result`**, below `api`, since `run_chain` builds
   it too. `from urbansolarcarver import PipelineResult` and `from urbansolarcarver.api import PipelineResult` work as
   before.
