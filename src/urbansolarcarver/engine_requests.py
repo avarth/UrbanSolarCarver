@@ -322,16 +322,20 @@ def _run(request: RunRequest, config: user_config, context: RunContext) -> RunRe
 
 
 def _run_chain(request: RunRequest, chain: ChainConfig, context: RunContext) -> RunReply:
-    """Run a chain; the reply is a normal run's, filled from the last criterion's folders and the chain's
-    exporting and massing."""
+    """Run a chain; the reply is a normal run's, filled for each criterion stage from the folder of the last criterion
+    that ran it (a run that traces only some criteria may leave the last one untouched) and from the chain's exporting
+    and massing."""
     from . import api
     from .api_core.chain import criterion_folder
     result = api.run_chain(chain, request.run_folder, produce=request.produce,
                            start_from=request.start_from, context=context, trace=request.trace_criteria,
                            threshold_from=request.threshold_from_criterion)
-    last_id, last = chain.criteria[-1].id, result.criteria[-1]
-    folders = {stage: criterion_folder(request.run_folder, last_id, stage)
-               for stage in ("preprocessing", "thresholding") if getattr(last, stage) is not None}
+    folders = {}
+    for stage in ("preprocessing", "thresholding"):
+        ran = [criterion.id for criterion, criterion_result in zip(chain.criteria, result.criteria)
+               if getattr(criterion_result, stage) is not None]
+        if ran:
+            folders[stage] = criterion_folder(request.run_folder, ran[-1], stage)
     folders.update({stage: stage_folder(request.run_folder, stage)
                     for stage in ("exporting", "massing") if getattr(result, stage) is not None})
     return _run_reply(folders, result, context)

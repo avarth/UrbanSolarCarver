@@ -99,14 +99,18 @@ def _apply_score_smoothing(raw, kind, voxel_size, score_smoothing, occ=None):
             f"score_smoothing={requested_m:g} m is {requested_m / voxel_size:.2g} voxels; clipped to "
             f"{sigma_voxels:g} voxels ({radius_m:g} m).",
         )
+    # A NaN or Inf score has no score mass (it is carved on its own, as check_finite_scores warns): it adds 0 to the blur of
+    # its neighbours and keeps its own value, instead of spreading to every voxel the kernel reaches.
+    finite = np.isfinite(raw)
+    blurred = np.where(finite, raw, 0.0).astype(np.float32)
     if occ is None:
-        smoothed = gaussian_filter(raw.astype(np.float32), sigma=sigma_voxels)
-        return smoothed, True, radius_m, sigma_voxels
+        smoothed = gaussian_filter(blurred, sigma=sigma_voxels)
+        return np.where(finite, smoothed, raw).astype(np.float32), True, radius_m, sigma_voxels
     w = occ.astype(np.float32)
-    num = gaussian_filter(np.where(occ, raw, 0.0).astype(np.float32), sigma=sigma_voxels)
+    num = gaussian_filter(np.where(occ, blurred, 0.0).astype(np.float32), sigma=sigma_voxels)
     den = gaussian_filter(w, sigma=sigma_voxels)
-    smoothed = np.where(occ, num / np.maximum(den, 1e-12), 0.0).astype(np.float32)
-    return smoothed, True, radius_m, sigma_voxels
+    smoothed = np.where(occ, num / np.maximum(den, 1e-12), 0.0)
+    return np.where(occ & ~finite, raw, smoothed).astype(np.float32), True, radius_m, sigma_voxels
 
 
 def _resolve_threshold(scores, spec, removal_scores=None):

@@ -451,7 +451,7 @@ class TestDefaultThresholdReporting:
         zeroed = scores.copy()
         zeroed[0, 0, :] = 0.0
         scores[0, 0, :] = np.nan
-        # Smoothing off: the Gaussian would spread the NaN to its neighbours (see the next test).
+        # Smoothing off; the next test does the same through the default smoothing.
         with pytest.warns(UserWarning, match="thresholding: scores contain 8 NaN and 0 Inf"):
             result = self._run_thresholding(tmp_path, "nonfinite", scores, score_smoothing=0)
         mask = np.load(result.mask_path)
@@ -462,19 +462,18 @@ class TestDefaultThresholdReporting:
         rest[0, 0, :] = False
         np.testing.assert_array_equal(mask[rest], reference[rest])
 
-    @pytest.mark.xfail(strict=True, raises=AssertionError, reason=(
-        "Source bug: _apply_score_smoothing runs gaussian_filter over NaN scores, so every voxel within the kernel "
-        "radius of a NaN voxel becomes NaN and is carved (one NaN voxel in a 20^3 grid carves 729 at sigma 1.1)."))
     def test_a_nonfinite_score_carves_no_neighbour_through_the_default_smoothing(self, tmp_path):
-        """With the default smoothing, the voxels around a NaN column are carved as in the same run with 0 there."""
+        """With the default smoothing, the voxels around a NaN column are carved as in the same run with 0 there: the NaN adds
+        no score to its neighbours' blur instead of spreading to them. A fixed cutoff and no slope limit keep the column's own
+        smoothed value (which the run with 0 has and the NaN run has not) out of the comparison."""
         rng = np.random.default_rng(13)
         scores = rng.uniform(0, 100, size=(8, 8, 8)).astype(np.float32)
         zeroed = scores.copy()
         zeroed[0, 0, :] = 0.0
         scores[0, 0, :] = np.nan
         with pytest.warns(UserWarning, match="thresholding: scores contain"):
-            mask = np.load(self._run_thresholding(tmp_path, "nonfinite", scores).mask_path)
-        reference = np.load(self._run_thresholding(tmp_path, "zeroed", zeroed).mask_path)
+            mask = np.load(self._run_thresholding(tmp_path, "nonfinite", scores, threshold=50.0, max_slope_deg=90).mask_path)
+        reference = np.load(self._run_thresholding(tmp_path, "zeroed", zeroed, threshold=50.0, max_slope_deg=90).mask_path)
         assert not mask[0, 0, :].any()
         rest = np.ones(mask.shape, dtype=bool)
         rest[0, 0, :] = False

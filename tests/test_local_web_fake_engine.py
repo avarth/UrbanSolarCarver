@@ -33,10 +33,8 @@ def the_requests():
     choice of criteria does not depend on the leaf stages asked for (each request costs about 15 ms)."""
     requests = [("preprocessing", ["thresholding"], trace, threshold_from) for trace in TRACES for threshold_from in THRESHOLD_FROMS]
     requests += [("preprocessing", ["exporting"], trace, threshold_from) for trace in (None, ["b"]) for threshold_from in (None, "a")]
-    # Preprocessing alone, which ignores threshold_from_criterion, and only with the last criterion traced: without it, the
-    # engine's reply fails (see the xfail test below).
-    requests += [("preprocessing", ["preprocessing"], trace, threshold_from)
-                 for trace in TRACES if trace is None or "c" in trace for threshold_from in (None, "a")]
+    # Preprocessing alone, which ignores threshold_from_criterion.
+    requests += [("preprocessing", ["preprocessing"], trace, threshold_from) for trace in TRACES for threshold_from in (None, "a")]
     # From thresholding, run_chain ignores trace_criteria.
     requests += [("thresholding", ["thresholding"], trace, threshold_from) for trace in (None, ["b"]) for threshold_from in THRESHOLD_FROMS]
     requests += [("thresholding", ["massing"], None, threshold_from) for threshold_from in (None, "b")]
@@ -113,10 +111,6 @@ def test_the_fake_engine_traces_and_thresholds_the_criteria_run_chain_does(tmp_p
                              "choice of criteria:\n" + "\n".join(differences))
 
 
-@pytest.mark.xfail(raises=IndexError, strict=True,
-                   reason="engine_requests._run_reply takes the manifest of the last criterion's folders, and a chain run that "
-                          "produces only preprocessing without tracing the last criterion leaves it none (POST /runs with "
-                          "produce ['preprocessing'] reaches it; the app always asks for thresholding too)")
 def test_a_chain_run_of_preprocessing_alone_that_leaves_the_last_criterion_untraced_replies(chain_file, tmp_path, stages_run_chain_calls):
     request = RunRequest(cmd="run", produce=["preprocessing"], start_from="preprocessing", config=str(chain_file),
                          run_folder=str(tmp_path / "run"), trace_criteria=["a"])

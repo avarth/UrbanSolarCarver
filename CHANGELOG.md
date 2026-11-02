@@ -81,6 +81,13 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A NaN score no longer carves its neighbours.** The score smoothing before thresholding blurred NaN and Inf scores into
+  every voxel the kernel reached, which were then carved too (one NaN voxel in a 20 m cube of 1 m voxels carved 729). A
+  non-finite score now adds nothing to its neighbours' blur and is carved on its own, as the warning about it says. Runs
+  without non-finite scores are unchanged.
+- **A chain run of preprocessing alone that leaves the last criterion out no longer fails.** The engine took the reply's
+  folders from the last criterion only, which had none (`IndexError`); it now takes each stage's folder from the last
+  criterion that ran it. The app always asks for thresholding too; `POST /projects/{name}/runs` could send such a request.
 - **Simulate drew some test points' patches in the wrong place.** On a panel whose sampling plane had to be turned to face outward, each
   point's patch was mirrored through the panel's centre, so it showed another point's value (on the Allatini example about a third
   of the patches; a facade could read darker at the top than at the bottom). The test points, their values and the carving
