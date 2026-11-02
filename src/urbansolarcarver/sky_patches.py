@@ -62,12 +62,39 @@ def _load_view_sphere() -> "ViewSphere":
 
 def _load_sky_matrix() -> type:
     """
-    Return the ladybug_radiance SkyMatrix class, importing it on first call.
+    Return a ladybug_radiance SkyMatrix class whose patch values turn with
+    its ``north``, creating it on first call.
+
+    Ladybug's SkyMatrix only records ``north`` for drawing (its RadiationDome
+    turns the patch directions instead); it runs gendaymtx without it, so
+    the values are those of a sky whose north is +Y.  USC traces the patches
+    in the model's frame, so the values must be those of the turned sky.
+    gendaymtx's ``-r`` turns the sky about the zenith, counterclockwise seen
+    from above, which is Ladybug's sense of ``north``: the sun is binned into
+    the patch it lies in after the turn.
     """
     global _sky_matrix_cls
     if _sky_matrix_cls is None:
-        from ladybug_radiance.skymatrix import SkyMatrix
-        _sky_matrix_cls = SkyMatrix
+        import os
+        import subprocess
+        from ladybug_radiance.skymatrix import SkyMatrix, GENDAYMTX_EXE
+
+        class TurnedSkyMatrix(SkyMatrix):
+            __slots__ = ()
+
+            def _run_gendaymtx(self, wea_file, wea_duration):
+                # SkyMatrix._run_gendaymtx with -r added.
+                assert GENDAYMTX_EXE is not None, 'No Radiance installation was found.'
+                density = 2 if self.high_density else 1
+                values = []
+                for component in ('-d', '-s'):
+                    cmds = [GENDAYMTX_EXE, '-m', str(density), component, '-O1', '-A',
+                            '-r', str(float(self.north)), wea_file]
+                    process = subprocess.Popen(cmds, stdout=subprocess.PIPE, shell=os.name == 'nt')
+                    values.append(self._parse_mtx_data(process.communicate()[0], wea_duration, density))
+                return values[0], values[1]
+
+        _sky_matrix_cls = TurnedSkyMatrix
     return _sky_matrix_cls
 
 def _summed_patch_irradiance(sky_matrix, expected_patches: int, dtype) -> np.ndarray:
@@ -600,7 +627,9 @@ def compute_EPW_based_weights(
         ``include_harm``, hot hours are above T_bal + ΔT.
     north : float, default 0
         North direction in degrees clockwise from +Y (USC convention).
-        Converted to Ladybug's counterclockwise convention internally.
+        The weights are those of the sky turned by it, indexed by the
+        patches in the model's frame (irradiance and benefit; the other
+        skies are the same in every direction).
     include_harm : bool, default False
         Benefit mode only.  Subtract hot-hour radiation per patch and
         clip at zero (experimental, see above).
@@ -666,7 +695,8 @@ def compute_EPW_based_weights(
         raise TypeError(f"mode must be a non-empty string, got {mode!r}")
 
     # USC's north is degrees clockwise from +Y; Ladybug's SkyMatrix north is
-    # counterclockwise ("90 is West"), so negate to convert.
+    # counterclockwise ("90 is West"), so negate to convert.  The sky matrix
+    # class turns its patch values by it (_load_sky_matrix).
     lb_north = -float(north)
 
     key = mode.strip().lower()

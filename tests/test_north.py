@@ -5,9 +5,6 @@ code must negate the angle.  These tests pin that conversion for all three
 places north matters: sun vectors (time-based), sky matrices
 (irradiance/benefit), and the tilted-plane octant lookup.
 """
-import os
-import types
-
 import numpy as np
 import pytest
 import torch
@@ -27,38 +24,23 @@ def test_sun_vectors_rotate_clockwise_with_north_deg(example_epw_path):
     np.testing.assert_allclose(v90, [v0[1], -v0[0], v0[2]], atol=1e-5)
 
 
-def test_sky_matrix_receives_negated_north(monkeypatch):
-    """USC north (CW) must be negated before reaching Ladybug SkyMatrix (CCW)."""
-    import urbansolarcarver.sky_patches as sp
+@pytest.mark.parametrize("north_deg", [0.0, 90.0, 200.0])
+def test_the_brightest_sky_patch_of_a_clear_hour_is_where_the_sun_is(example_epw_path, north_deg):
+    """The sky weights turn with north_deg as the sun vectors do: on a clear winter noon (28 Jan 12:00 in the bundled
+    Denver file, sun altitude 32°) the patch with the most irradiance is the one the sun lies in. Measured: 4° at
+    north 0 and 90, 12° at 200 (a patch spans up to 20° of azimuth). Weights left unturned put the sun 74° away at
+    north 90."""
+    from ladybug.dt import DateTime
+    from urbansolarcarver.sky_patches import compute_EPW_based_weights, fetch_tregenza_patch_directions
+    from urbansolarcarver.sun import get_sun_vectors
 
-    captured = {}
-
-    class FakeSky:
-        direct_values = np.ones(145, dtype=np.float32)
-        diffuse_values = np.ones(145, dtype=np.float32)
-
-    class FakeSkyMatrix:
-        @classmethod
-        def from_components(cls, location, direct_normal_irradiance,
-                            diffuse_horizontal_irradiance, hoys=None, north=0,
-                            high_density=False, ground_reflectance=0.2):
-            captured["north"] = north
-            return FakeSky()
-
-    class FakeWeatherFile:
-        @staticmethod
-        def solar_irradiance_wea():
-            return types.SimpleNamespace(location=None, direct_normal_irradiance=None,
-                                         diffuse_horizontal_irradiance=None)
-
-    monkeypatch.setattr(sp, "_sky_matrix_cls", FakeSkyMatrix)
-    monkeypatch.setattr(sp, "read_weather_file", lambda path: FakeWeatherFile())
-    monkeypatch.setattr(os.path, "isfile", lambda p: True)
-    weights = sp.compute_EPW_based_weights(
-        "irradiance", "dummy.epw", [12], torch.device("cpu"), north=90.0,
-    )
-    assert captured["north"] == -90.0
-    assert weights.shape[0] == 145
+    hoy = 660
+    cpu = torch.device("cpu")
+    weights = compute_EPW_based_weights("irradiance", str(example_epw_path), [hoy], cpu, north=north_deg).numpy()
+    sun = get_sun_vectors(str(example_epw_path), [DateTime.from_hoy(hoy)], min_altitude=1.0, north_deg=north_deg)
+    sun = sun.numpy()[0] / np.linalg.norm(sun.numpy()[0])
+    brightest = fetch_tregenza_patch_directions(cpu).numpy()[weights.argmax()]
+    assert np.degrees(np.arccos(np.clip(brightest @ sun, -1.0, 1.0))) < 15.0
 
 
 class TestTiltedPlaneOctantNorth:

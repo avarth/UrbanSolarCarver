@@ -14,12 +14,6 @@ from _plot_scene import FACADE_NORTHING, assert_carves_the_north_side, plot_scen
 # cumulative kWh/m² scores (it would carve every voxel any ray touched).
 CARVE_FRACTION = {"threshold": "carve_fraction", "carve_fraction": 0.7}
 
-# Ladybug's SkyMatrix takes north as metadata only: it does not pass it to gendaymtx, so the patch values of the
-# irradiance and benefit weights do not turn with north_deg (sky_patches.compute_EPW_based_weights). A turned site
-# then gets the sun from the model's -Y whichever way north points.
-NORTH_IGNORED_BY_THE_SKY_MATRIX = ("Bug: compute_EPW_based_weights passes north to Ladybug's SkyMatrix, which only "
-                                   "records it; the weights of every north_deg are those of north_deg 0")
-
 
 def _carve(folder, mode, epw_path=None, north_deg=0.0, **values):
     """Run *mode* to exporting on the plot scene written into *folder*; return the scene's voxels of the run."""
@@ -62,22 +56,36 @@ def test_each_sun_and_sky_mode_carves_the_plots_side_toward_the_neighbour(tmp_pa
     assert int(voxels.removed.sum()) == pytest.approx(removed, rel=0.02)
 
 
-@pytest.mark.parametrize("mode,extra", [
-    ("time-based", {}),
-    pytest.param("irradiance", CARVE_FRACTION,
-                 marks=pytest.mark.xfail(strict=True, reason=NORTH_IGNORED_BY_THE_SKY_MATRIX)),
-    pytest.param("benefit", CARVE_FRACTION,
-                 marks=pytest.mark.xfail(strict=True, reason=NORTH_IGNORED_BY_THE_SKY_MATRIX)),
+def _removed_in_the_sites_frame(voxels):
+    return {tuple(np.round(row, 3)) for row in voxels.site[voxels.removed]}
+
+
+# A quarter or half turn maps the 1 m voxel grid onto itself. The sun positions turn exactly with north; the sky
+# patches stay in the model's frame, and only half a turn maps every Tregenza patch onto another (the rings hold
+# 30, 30, 24, 24, 18, 12 and 6 patches). With one ray to each patch centre, so that no sub-ray jitter (drawn from
+# the sample point's index) differs, the same voxels then go.
+@pytest.mark.parametrize("mode,extra,north_deg", [
+    ("time-based", {}, 90.0),
+    ("irradiance", {**CARVE_FRACTION, "rays_per_patch": 1}, 180.0),
+    ("benefit", {**CARVE_FRACTION, "rays_per_patch": 1}, 180.0),
 ])
-def test_a_site_turned_by_north_deg_is_carved_as_the_same_site_unturned(tmp_path, example_epw_path, mode, extra):
+def test_a_site_turned_by_north_deg_is_carved_as_the_same_site_unturned(tmp_path, example_epw_path, mode, extra,
+                                                                        north_deg):
     # Daylight is left out: the overcast sky is the same in every direction.
     unturned = _carve(tmp_path / "unturned", mode, example_epw_path, **extra)
-    turned = _carve(tmp_path / "turned", mode, example_epw_path, north_deg=90.0, **extra)
-    # A quarter turn maps the 1 m voxel grid onto itself, so in the site's frame the same voxels go. (The
-    # irradiance weights, which stay unturned, remove 1463 voxels on the turned site against 1272 on the plain one.)
-    def removed(voxels):
-        return {tuple(np.round(row, 3)) for row in voxels.site[voxels.removed]}
-    assert removed(turned) == removed(unturned)
+    turned = _carve(tmp_path / "turned", mode, example_epw_path, north_deg=north_deg, **extra)
+    assert _removed_in_the_sites_frame(turned) == _removed_in_the_sites_frame(unturned)
+    assert_carves_the_north_side(turned)
+
+
+def test_a_site_turned_a_quarter_by_north_deg_loses_about_the_same_voxels(tmp_path, example_epw_path):
+    # A quarter turn does not map the Tregenza patches onto each other, so the turned sky is binned into other
+    # patches. Measured: 1253 voxels against 1272 unturned, 33 of them different; weights left unturned remove 1463.
+    unturned = _carve(tmp_path / "unturned", "irradiance", example_epw_path, **CARVE_FRACTION)
+    turned = _carve(tmp_path / "turned", "irradiance", example_epw_path, north_deg=90.0, **CARVE_FRACTION)
+    assert int(turned.removed.sum()) == pytest.approx(int(unturned.removed.sum()), rel=0.03)
+    different = _removed_in_the_sites_frame(turned) ^ _removed_in_the_sites_frame(unturned)
+    assert len(different) < 0.05 * int(unturned.removed.sum())
     assert_carves_the_north_side(turned)
 
 

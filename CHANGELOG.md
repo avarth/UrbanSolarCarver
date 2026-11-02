@@ -87,6 +87,13 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **North now turns the sky of irradiance and benefit.** Ladybug's sky matrix only records its north and runs Radiance's
+  gendaymtx without it, so the patch weights of every `north_deg` were those of north 0: a turned site got the sun
+  from the model's -Y. The sky is now turned by gendaymtx's `-r` before the sun is binned into the patches, which
+  stay in the model's frame. The plot test scene turned a quarter now loses 1,253 voxels against 1,272 unturned
+  (1,463 before). This changes the carving, Simulate's solar energy and useful solar energy and the sky dome of
+  every project whose North is not 0; results computed before are not marked out of date, so run them again.
+  Time-based, daylight and radiative cooling are unchanged.
 - **A NaN score no longer carves its neighbours.** The score smoothing before thresholding blurred NaN and Inf scores into
   every voxel the kernel reached, which were then carved too (one NaN voxel in a 20 m cube of 1 m voxels carved 729). A
   non-finite score now adds nothing to its neighbours' blur and is carved on its own, as the warning about it says. Runs
