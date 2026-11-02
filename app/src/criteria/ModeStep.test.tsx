@@ -50,8 +50,15 @@ test("every symbol has strokes in a colour of the theme, and the sun discs are f
   rendered = renderForTest(<ModeStep mode="time-based" onChoose={() => {}} disabledReason={null} weatherDropZone={null} />);
   for (const tile of tiles()) {
     const symbol = tile.querySelector("svg")!;
-    const strokeColours = [...symbol.querySelectorAll("[stroke]")].map((part) => part.getAttribute("stroke"));
-    expect(strokeColours.some((colour) => /^var\(--colour-(accent|test-surface-on-dark|muted)\)$/.test(colour!))).toBe(true);
+    // Every stroke and fill is a token of the theme (or currentColor, the tile's text colour, or none): a hard-coded colour keeps its
+    // light-theme value in the dark theme. The svg itself is included, since its stroke is the one the parts without their own inherit.
+    const parts = [symbol, ...symbol.querySelectorAll("*")];
+    const strokeColours = parts.filter((part) => part.hasAttribute("stroke")).map((part) => part.getAttribute("stroke")!);
+    const fillColours = parts.filter((part) => part.hasAttribute("fill")).map((part) => part.getAttribute("fill")!);
+    expect(strokeColours.filter((colour) => !/^(var\(--colour-[a-z-]+\)|currentColor)$/.test(colour))).toEqual([]);
+    expect(fillColours.filter((colour) => !/^(var\(--colour-[a-z-]+\)|none)$/.test(colour))).toEqual([]);
+    // and no symbol is drawn in the text colour alone
+    expect(strokeColours.some((colour) => /^var\(--colour-(accent|test-surface-on-dark|muted)\)$/.test(colour))).toBe(true);
   }
   const sunDiscs = (index: number) => tiles()[index].querySelectorAll('svg [fill="var(--colour-sun)"]').length;
   expect([0, 1, 2, 3, 4, 5].map(sunDiscs)).toEqual([0, 1, 1, 1, 0, 0]);

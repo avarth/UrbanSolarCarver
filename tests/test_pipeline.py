@@ -218,8 +218,8 @@ class TestOverrideParsing:
 @_SKIP_EPW
 def test_benefit_with_weights_artifact(tmp_path, tiny_cube_mesh,
                                           tiny_surface_mesh):
-    """Full benefit preprocessing consuming a simulated-weights artifact: runs
-    green and records the artifact's provenance in the diagnostics."""
+    """Full benefit preprocessing consuming a simulated-weights artifact: each hour's sun and sky are scaled by the
+    artifact's benefit weight, and the artifact's provenance is recorded in the diagnostics."""
     import numpy as _np
     from urbansolarcarver import preprocessing
     from urbansolarcarver.load_config import user_config
@@ -230,24 +230,34 @@ def test_benefit_with_weights_artifact(tmp_path, tiny_cube_mesh,
     tiny_cube_mesh.export(str(vol_path))
     tiny_surface_mesh.export(str(srf_path))
 
-    artifact = write_simulated_weights(
-        tmp_path / "u.json",
-        _np.full(8760, 0.8), _np.zeros(8760),
-        {"method": "test-schedule", "generated": "2026",
-         "archetype": {"mass_class": "medium"}},
-    )
-    cfg = user_config(
-        max_volume_path=str(vol_path), test_surface_path=str(srf_path),
-        out_dir=str(tmp_path / "out"), mode="benefit", epw_path=_EPW,
-        start_month=1, start_day=1, start_hour=8,
-        end_month=1, end_day=5, end_hour=16,
-        voxel_size=2.0, grid_step=2.0, ray_length=50.0,
-        min_voxels=1, min_face_count=1, device="cpu",
-        simulated_weights_path=str(artifact),
-    )
-    result = preprocessing(cfg, tmp_path / "out")
-    scores = np.load(result.volume_path)
-    assert scores.sum() > 0, "artifact-weighted carve produced no scores"
+    def run(name, benefit):
+        artifact = write_simulated_weights(
+            tmp_path / f"{name}.json",
+            _np.full(8760, benefit), _np.zeros(8760),
+            {"method": "test-schedule", "generated": "2026",
+             "archetype": {"mass_class": "medium"}},
+        )
+        cfg = user_config(
+            max_volume_path=str(vol_path), test_surface_path=str(srf_path),
+            out_dir=str(tmp_path / name), mode="benefit", epw_path=_EPW,
+            start_month=1, start_day=1, start_hour=8,
+            end_month=1, end_day=5, end_hour=16,
+            voxel_size=2.0, grid_step=2.0, ray_length=50.0,
+            min_voxels=1, min_face_count=1, device="cpu",
+            simulated_weights_path=str(artifact),
+        )
+        return preprocessing(cfg, tmp_path / name)
+
+    result = run("weighted", 0.8)
+    scores = np.load(result.volume_path).astype(np.float64)
+    full = np.load(run("all_ones", 1.0).volume_path).astype(np.float64)
+    assert (full > 0).all(), "every voxel of the cube lies between the surface and the sky"
+    # Every hour of 1 to 5 January in Golden is below the balance point, so the balance-point filter gives weight 1
+    # to each hour, as the all-ones artifact does: an ignored artifact gives a ratio of 1.00. The Perez sky of an
+    # hour depends on its direct and diffuse irradiance nonlinearly, so scaling both by 0.8 scales the patch weights
+    # by about 0.8, not exactly (measured: 0.793 of the total, 0.747 to 0.852 per voxel).
+    assert scores.sum() / full.sum() == pytest.approx(0.8, abs=0.02)
+    assert ((scores / full > 0.7) & (scores / full < 0.9)).all()
     diag = json.loads(
         (result.out_dir / "diagnostics" / "diagnostic.json").read_text())
     assert diag["simulated_weights"]["method"] == "test-schedule"
@@ -433,13 +443,42 @@ class TestDefaultThresholdReporting:
     def test_thresholding_warns_on_nonfinite_scores(self, tmp_path):
         """Standalone thresholding (CLI/daemon/GH) must warn about NaN/Inf
         scores loaded from disk (preprocessing's guard does not cover this
-        path) and must not crash on the default carve_fraction strategy."""
+        path) and must not crash on the default carve_fraction strategy.
+        NaN voxels are always carved and count for no score mass, so the rest
+        of the mask is that of the same scores with 0 in their place."""
         rng = np.random.default_rng(13)
         scores = rng.uniform(0, 100, size=(8, 8, 8)).astype(np.float32)
+        zeroed = scores.copy()
+        zeroed[0, 0, :] = 0.0
+        scores[0, 0, :] = np.nan
+        # Smoothing off: the Gaussian would spread the NaN to its neighbours (see the next test).
+        with pytest.warns(UserWarning, match="thresholding: scores contain 8 NaN and 0 Inf"):
+            result = self._run_thresholding(tmp_path, "nonfinite", scores, score_smoothing=0)
+        mask = np.load(result.mask_path)
+        reference = np.load(self._run_thresholding(tmp_path, "zeroed", zeroed, score_smoothing=0).mask_path)
+        assert not mask[0, 0, :].any()
+        assert reference[0, 0, :].any()          # the comparison would be empty if 0 scores were carved too
+        rest = np.ones(mask.shape, dtype=bool)
+        rest[0, 0, :] = False
+        np.testing.assert_array_equal(mask[rest], reference[rest])
+
+    @pytest.mark.xfail(strict=True, raises=AssertionError, reason=(
+        "Source bug: _apply_score_smoothing runs gaussian_filter over NaN scores, so every voxel within the kernel "
+        "radius of a NaN voxel becomes NaN and is carved (one NaN voxel in a 20^3 grid carves 729 at sigma 1.1)."))
+    def test_a_nonfinite_score_carves_no_neighbour_through_the_default_smoothing(self, tmp_path):
+        """With the default smoothing, the voxels around a NaN column are carved as in the same run with 0 there."""
+        rng = np.random.default_rng(13)
+        scores = rng.uniform(0, 100, size=(8, 8, 8)).astype(np.float32)
+        zeroed = scores.copy()
+        zeroed[0, 0, :] = 0.0
         scores[0, 0, :] = np.nan
         with pytest.warns(UserWarning, match="thresholding: scores contain"):
-            result = self._run_thresholding(tmp_path, "nonfinite", scores)
-        assert result.mask_path.exists()
+            mask = np.load(self._run_thresholding(tmp_path, "nonfinite", scores).mask_path)
+        reference = np.load(self._run_thresholding(tmp_path, "zeroed", zeroed).mask_path)
+        assert not mask[0, 0, :].any()
+        rest = np.ones(mask.shape, dtype=bool)
+        rest[0, 0, :] = False
+        np.testing.assert_array_equal(mask[rest], reference[rest])
 
 
 # ---------------------------------------------------------------------------
@@ -494,7 +533,9 @@ class TestScoreSmoothing:
 
         diag = json.loads((result.out_dir / "diagnostics" / "diagnostic.json").read_text())
         assert diag["score_smooth_applied"] is True
-        assert diag["score_smoothing_sigma_voxels"] > 0
+        # The setting is in metres: 1 m at 0.5 m voxels is a sigma of 2 voxels (1 if taken as voxels, 0.5 if divided twice).
+        assert diag["score_smoothing_m"] == pytest.approx(1.0)
+        assert diag["score_smoothing_sigma_voxels"] == pytest.approx(2.0)
 
     def test_smoothing_auto_default(self, tmp_path):
         """score_smoothing=None should auto-compute as 1.1 × voxel_size."""

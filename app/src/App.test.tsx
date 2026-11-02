@@ -6,12 +6,15 @@ import {
 import { App, DeviceStatus, freeProjectName, LastRunTime, lastRunSecondsWith, pollHealth } from "./App";
 import { FakeWebSocket } from "./api_client/fake_websocket_for_test";
 import type { WorkspaceSteps } from "./workspace/ProjectWorkspace";
+import type { InspectTurns } from "./inspect/UnsavedTurnsDialog";
 import { initialRunState, runReducer, type RunLoop, type RunOrigin, type RunRecord } from "./common/run_state";
 import { click, renderForTest, type RenderedOverlay } from "./viewer_overlays/render_for_test";
 
 // The open project stands in for the workspace here: the page's own part is which project it opens, when it opens it afresh,
 // and what its settings saver sends around a rename, reset or delete. The stand-in saves as the settings form does: with the
-// config saver of the project, flushed when the workspace closes, and handed to the page.
+// config saver of the project, flushed when the workspace closes, and handed to the page. Like the workspace, it hands the page its
+// turns of Inspect once on mount (onInspectTurnsReady), takes them back and says nothing is unsaved when it closes; a test says when
+// Inspect holds turns not saved through workspaceInspect.reportUnsaved, as the workspace does through onInspectUnsavedChange.
 const workspaceMounts = vi.hoisted(() => [] as string[]);
 const workspaceSettings = vi.hoisted(() => ({
   saver: null as { schedule: (values: Record<string, unknown>) => void } | null, delay: 0,
@@ -22,14 +25,20 @@ const workspaceSettings = vi.hoisted(() => ({
 const workspaceSteps = vi.hoisted(() => ({
   startedWith: [] as (WorkspaceSteps | undefined)[], report: null as ((steps: WorkspaceSteps) => void) | null, runs: null as RunLoop | null,
 }));
+// Inspect's turns of the latest workspace: what each Save of them resolves with (in order; null or none left: saved), and the
+// Saves and Discards the page asked for.
+const workspaceInspect = vi.hoisted(() => ({
+  reportUnsaved: null as ((unsaved: boolean) => void) | null, saveReplies: [] as (string | null)[], saves: 0, discards: 0,
+}));
 vi.mock("./workspace/ProjectWorkspace", async () => {
   const { useEffect, useEffectEvent } = await import("react");
   const { createConfigSaver } = await import("./settings_form/form_state");
   const { putSharedSettings } = await import("./api_client/client");
   return {
-    ProjectWorkspace: ({ token, project, runs, criterionKeys, mode, startSteps, onStepsChange, onSettingsSaverReady }: {
+    ProjectWorkspace: ({ token, project, runs, criterionKeys, mode, startSteps, onStepsChange, onSettingsSaverReady, onInspectUnsavedChange, onInspectTurnsReady }: {
       token: string; project: ProjectDetail; runs: RunLoop; criterionKeys: ReadonlySet<string>; mode: string; startSteps?: WorkspaceSteps; onStepsChange?: (steps: WorkspaceSteps) => void;
       onSettingsSaverReady?: (saver: { flush: () => Promise<string>; cancel: () => void; waitForInputChanges: () => Promise<void> } | null) => void;
+      onInspectUnsavedChange?: (unsaved: boolean) => void; onInspectTurnsReady?: (turns: InspectTurns | null) => void;
     }) => {
       workspaceSteps.runs = runs;
       workspaceSteps.report = onStepsChange ?? null;
@@ -40,9 +49,29 @@ vi.mock("./workspace/ProjectWorkspace", async () => {
         const saver = createConfigSaver((values) => putSharedSettings(token, project.name, values), () => {}, workspaceSettings.delay);
         workspaceSettings.saver = saver;
         onSettingsSaverReady?.({ flush: saver.flush, cancel: saver.cancel, waitForInputChanges: async () => { await workspaceSettings.inputChangesEndWhen; } });
+        let unsaved = false;
+        workspaceInspect.reportUnsaved = (now) => {
+          unsaved = now;
+          onInspectUnsavedChange?.(now);
+        };
+        onInspectTurnsReady?.({
+          saveAll: async () => {
+            workspaceInspect.saves += 1;
+            const reason = workspaceInspect.saveReplies.shift() ?? null;
+            if (reason === null) workspaceInspect.reportUnsaved!(false);
+            return reason;
+          },
+          discardAll: () => {
+            workspaceInspect.discards += 1;
+            workspaceInspect.reportUnsaved!(false);
+          },
+          waitForUnderWay: async () => null, underWay: () => false, unsaved: () => unsaved,
+        });
         return () => {
           onSettingsSaverReady?.(null);
           void saver.flush();
+          onInspectTurnsReady?.(null);
+          onInspectUnsavedChange?.(false);
         };
       });
       useEffect(() => open(), []);
@@ -65,6 +94,10 @@ afterEach(() => {
   workspaceSettings.saver = null;
   workspaceSettings.delay = 0;
   workspaceSettings.inputChangesEndWhen = null;
+  workspaceInspect.reportUnsaved = null;
+  workspaceInspect.saveReplies = [];
+  workspaceInspect.saves = 0;
+  workspaceInspect.discards = 0;
   window.localStorage.clear();
 });
 
@@ -748,4 +781,82 @@ test("a reset of the open project to its example opens it in Carve, as it opens 
   expect(workspaceMounts).toEqual(["Plot 7", "Plot 7"]);
   expect(workspaceMode()).toBe("design");
   expect(modePressed()).toEqual([["Carve", "true"], ["Simulate", "false"], ["Inspect", "false"]]);
+});
+
+// Back to the projects from Inspect: App wraps the product-name button in the same leave as the mode switch (UnsavedTurnsDialog).
+const backToProjects = () => buttonNamed("UrbanSolarCarver");
+const unsavedTurnsDialog = () => [...page().querySelectorAll<HTMLElement>('[role="dialog"]')]
+  .find((shown) => shown.querySelector("h2")?.textContent === "Save the turned surfaces before leaving Inspect?") ?? null;
+const onStartScreen = () => page().querySelector(".fake-workspace") === null && startChoice("Plot 7") !== undefined;
+
+async function inspectWithTurnsNotSaved() {
+  await openPlot7();
+  click(modeButton("Inspect"));
+  act(() => workspaceInspect.reportUnsaved!(true));
+  expect(workspaceMode()).toBe("inspect");
+}
+
+test("back to the projects from Inspect with turns not saved asks first; Stay keeps the project open in Inspect", async () => {
+  const service = new FakeService();
+  await renderApp(service);
+  await inspectWithTurnsNotSaved();
+  click(backToProjects());
+  await settle();
+  expect(unsavedTurnsDialog()).not.toBeNull();
+  expect(page().querySelector(".fake-workspace")).not.toBeNull();             // nothing is closed while the dialog waits
+  expect(workspaceMounts).toEqual(["Plot 7"]);
+  click(buttonNamed("Stay", unsavedTurnsDialog()!));
+  await settle();
+  expect(unsavedTurnsDialog()).toBeNull();
+  expect(workspaceMode()).toBe("inspect");
+  expect(topBarMenuButton()!.textContent).toContain("Plot 7");
+  expect([workspaceInspect.saves, workspaceInspect.discards]).toEqual([0, 0]);
+  // the turns are still not saved: the next press asks again
+  click(backToProjects());
+  await settle();
+  expect(unsavedTurnsDialog()).not.toBeNull();
+});
+
+test("back to the projects from Inspect: Save saves the turns, then the start screen shows; a refused save keeps the dialog with its reason", async () => {
+  const service = new FakeService();
+  workspaceInspect.saveReplies = ["The turns of facades.obj could not be saved."];
+  await renderApp(service);
+  await inspectWithTurnsNotSaved();
+  click(backToProjects());
+  await settle();
+  await act(async () => click(buttonNamed("Save", unsavedTurnsDialog()!)));
+  await settle();
+  expect(workspaceInspect.saves).toBe(1);
+  expect(unsavedTurnsDialog()!.textContent).toContain("The turns of facades.obj could not be saved.");
+  expect(page().querySelector(".fake-workspace")).not.toBeNull();
+  await act(async () => click(buttonNamed("Save", unsavedTurnsDialog()!)));
+  await settle();
+  expect(workspaceInspect.saves).toBe(2);
+  expect(unsavedTurnsDialog()).toBeNull();
+  expect(onStartScreen()).toBe(true);
+  expect(workspaceInspect.discards).toBe(0);
+});
+
+test("back to the projects from Inspect: Discard drops the turns and the start screen shows, with nothing saved", async () => {
+  const service = new FakeService();
+  await renderApp(service);
+  await inspectWithTurnsNotSaved();
+  click(backToProjects());
+  await settle();
+  await act(async () => click(buttonNamed("Discard", unsavedTurnsDialog()!)));
+  await settle();
+  expect([workspaceInspect.saves, workspaceInspect.discards]).toEqual([0, 1]);
+  expect(unsavedTurnsDialog()).toBeNull();
+  expect(onStartScreen()).toBe(true);
+});
+
+test("back to the projects from Inspect once every turn is saved leaves at once", async () => {
+  const service = new FakeService();
+  await renderApp(service);
+  await inspectWithTurnsNotSaved();
+  act(() => workspaceInspect.reportUnsaved!(false));
+  click(backToProjects());
+  await settle();
+  expect(unsavedTurnsDialog()).toBeNull();
+  expect(onStartScreen()).toBe(true);
 });

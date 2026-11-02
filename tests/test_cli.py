@@ -47,13 +47,15 @@ def test_schema_for_mode_shows_own_fields_and_hides_others(mode):
     assert {"voxel_size", "carve_above", "out_dir"} <= names
 
 
-def test_dry_run_flag_exists():
-    """--dry-run should appear in preprocessing help."""
-    from typer.testing import CliRunner
-    from urbansolarcarver.carver_cli import app
-    runner = CliRunner()
-    result = runner.invoke(app, ["preprocessing", "--help"])
-    assert "--dry-run" in result.output
+def test_preprocessing_dry_run_prints_the_grid_estimate_and_writes_nothing(tmp_path):
+    config = _write_cube_config(tmp_path)
+    result = _invoke(["preprocessing", "-c", str(config), "--dry-run"])
+    assert result.exit_code == 0, result.output
+    # The 10 m cube at 1 m voxels, half a voxel of margin on each side: the (11, 11, 11) grid preprocessing builds.
+    assert "Dry-run estimate (daylight)" in result.output
+    assert "Grid: 11 x 11 x 11" in result.output and "Voxels: 1,331" in result.output
+    assert "Preprocessing complete" not in result.output
+    assert not (tmp_path / "run").exists()
 
 
 class TestArchetypeCommand:
@@ -122,13 +124,6 @@ class TestArchetypeCommand:
         assert "INVALID archetype" in res.output
 
 
-def test_massing_command_exists():
-    from typer.testing import CliRunner
-    from urbansolarcarver.carver_cli import app
-    result = CliRunner().invoke(app, ["massing", "--help"], env={"COLUMNS": "200"})
-    assert result.exit_code == 0 and "--from" in result.output and "--config" in result.output
-
-
 # ---------------------------------------------------------------------------
 # The run contract: produce / start-from, issues printed, clean errors
 # ---------------------------------------------------------------------------
@@ -146,6 +141,26 @@ def _invoke(args):
     from typer.testing import CliRunner
     from urbansolarcarver.carver_cli import app
     return CliRunner().invoke(app, args, env={"COLUMNS": "200"})
+
+
+def test_massing_from_a_thresholding_manifest_writes_the_plates(tmp_path):
+    """`usc massing --from` reads the thresholding manifest it is given: here one outside the run folder, where the
+    command would find none by itself."""
+    import json
+    config = _write_cube_config(tmp_path)
+    assert _invoke(["preprocessing", "-c", str(config)]).exit_code == 0
+    elsewhere = tmp_path / "elsewhere" / "thresholding"
+    assert _invoke(["thresholding", "-c", str(config), "--out", str(elsewhere)]).exit_code == 0
+    assert _invoke(["massing", "-c", str(config)]).exit_code == 1          # no manifest in run/thresholding
+
+    result = _invoke(["massing", "-c", str(config), "--from", str(elsewhere / "manifest.json")])
+    assert result.exit_code == 0, result.output
+    plates = json.loads((tmp_path / "run" / "massing" / "plates.json").read_text(encoding="utf-8"))
+    manifest = json.loads((tmp_path / "run" / "massing" / "manifest.json").read_text(encoding="utf-8"))
+    upstream = json.loads((elsewhere / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["upstream_run_id"] == upstream["run_id"]
+    assert plates["plates"] and f"Floor plates: {len(plates['plates'])}" in result.output
+    assert plates["total_floor_area_m2"] == pytest.approx(sum(p["area_m2"] for p in plates["plates"]))
 
 
 def test_run_produce_massing_skips_exporting(tmp_path):

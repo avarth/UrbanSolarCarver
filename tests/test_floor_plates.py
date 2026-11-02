@@ -120,9 +120,16 @@ class TestFaces:
 
     def test_round_tower_uses_arc_length(self):
         circle = Point(0, 0).buffer(10, quad_segs=16)
-        _, _, facades, faces = _faces(circle, vs=0.5)
+        _, xy, facades, faces = _faces(circle, vs=0.5)
         assert (faces.face == 0).all()
         assert faces.u.min() >= 0 and faces.u.max() <= facades[0].length + 1e-9
+        # The ring starts at (10, 0) and runs anticlockwise, so a cell at angle t lies about 10 t along it. A cell takes
+        # the position of its nearest point on the 64-sided outline, which near the centre can be up to half an edge
+        # (0.49 m) from the point straight out from the centre; the polygon's perimeter is 0.03 m shorter than the
+        # circle's. A projection on a straight line, or an arc length at the cell's own radius, is metres off.
+        assert np.allclose(facades[0].start, (10, 0))
+        angle = np.mod(np.arctan2(xy[:, 1], xy[:, 0]), 2 * np.pi)
+        assert np.abs(faces.u - 10 * angle).max() < 0.55
 
 
 def _bays(polygon, vs, width):

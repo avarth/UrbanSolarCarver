@@ -39,18 +39,16 @@ class TestScoreStatistics:
         assert result == {"count": 0}
 
     def test_normal_array(self):
-        scores = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-        result = score_statistics(scores)
-        assert result["count"] == 5
-        assert result["min"] == 1.0
-        assert result["max"] == 5.0
-        assert result["mean"] == pytest.approx(3.0)
-        assert "median" in result
-        assert "std" in result
-        assert "p5" in result
-        assert "p95" in result
-        assert "nonzero_count" in result
-        assert "nonzero_fraction" in result
+        """Each statistic of a small array, worked by hand. The array is skewed (median 2.5, mean 10/3) and holds a zero, so
+        the median and the mean, and the counts of all and of non-zero scores, differ."""
+        scores = np.array([0.0, 1.0, 2.0, 3.0, 4.0, 10.0])
+        assert score_statistics(scores) == pytest.approx({
+            "count": 6, "min": 0.0, "max": 10.0, "mean": 10 / 3, "median": 2.5,
+            "std": np.sqrt(95) / 3,          # population std (ddof 0): variance 130/6 - (10/3)² = 95/9
+            # Linear interpolation between the sorted values at q/100 x 5: 0.25, 1.25, 3.75 and 4 + 0.75 x 6.
+            "p5": 0.25, "p25": 1.25, "p75": 3.75, "p95": 8.5,
+            "nonzero_count": 5, "nonzero_fraction": 5 / 6,
+        })
 
     def test_with_inf(self):
         scores = np.array([1.0, np.inf, 3.0])

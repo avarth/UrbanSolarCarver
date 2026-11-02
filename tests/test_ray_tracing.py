@@ -30,7 +30,7 @@ class TestGenerateSkyPatchRays:
         assert point_idx[0].item() == 0  # from point 0
 
     def test_multiple_points_and_patches(self):
-        """Multiple points x multiple patches should produce correct ray count."""
+        """Every (point, patch) pair gives one ray that starts at its point and runs along its patch, in patch-major order."""
         pts = np.array([[0, 0, 0], [1, 0, 0]], dtype=np.float32)
         norms = np.array([[0, 0, 1], [0, 0, 1]], dtype=np.float32)
         # 3 patches, all above hemisphere
@@ -40,10 +40,14 @@ class TestGenerateSkyPatchRays:
             [0.0, 0.5, 0.866],
         ], dtype=torch.float32)
         origins, dirs, ids, point_idx = generate_sky_patch_rays(pts, norms, patch_dirs, torch.device("cpu"))
-        # 2 points x 3 patches = 6 rays (all patches are above the surface)
-        assert origins.shape[0] == 6
-        # point_idx should map each ray back to its source point (0 or 1)
-        assert set(point_idx.tolist()) == {0, 1}
+        # 2 points x 3 patches = 6 rays (all patches are above the surface), ordered by patch, then by point: the docstring's
+        # order, which keeps the threads that run together on one direction.
+        assert ids.tolist() == [0, 0, 1, 1, 2, 2]
+        assert point_idx.tolist() == [0, 1, 0, 1, 0, 1]
+        # Each ray starts at its own point and runs along its own patch (a swapped index would pair a point with another
+        # point's origin or a patch with another patch's direction).
+        torch.testing.assert_close(origins, torch.from_numpy(pts)[point_idx])
+        torch.testing.assert_close(dirs, patch_dirs[ids])
 
 
 class TestGenerateSunRays:
@@ -185,4 +189,35 @@ class TestAutoBatchSize:
         result = auto_batch_size(torch.device("cpu"), fallback=50_000)
         assert isinstance(result, int)
         assert result > 0
+
+
+# 96 bytes per ray out of vram_fraction of the free memory, clamped to 10,000 to 5,000,000 rays.
+@pytest.mark.parametrize("free_bytes, total_bytes, vram_fraction, expected", [
+    (480_000_000, 12_000_000_000, 0.6, 3_000_000),       # 288 MB / 96 B; the total memory plays no part
+    (480_000_000, 12_000_000_000, 0.3, 1_500_000),       # half the fraction, half the batch
+    (1_000_000, 12_000_000_000, 0.6, 10_000),             # 6,250 rays fit: raised to the minimum
+    (12_000_000_000, 12_000_000_000, 0.6, 5_000_000),     # 75 million rays fit: lowered to the maximum
+])
+def test_a_gpu_batch_is_the_share_of_free_memory_over_96_bytes_per_ray(monkeypatch, free_bytes, total_bytes, vram_fraction,
+                                                                        expected):
+    """The sizing reads only torch.cuda.mem_get_info, so a fake of it tests the rule without a GPU."""
+    asked = []
+
+    def fake_mem_get_info(device):
+        asked.append(device)
+        return free_bytes, total_bytes
+
+    monkeypatch.setattr(torch.cuda, "mem_get_info", fake_mem_get_info)
+    device = torch.device("cuda", 0)
+    batch = auto_batch_size(device, vram_fraction=vram_fraction)
+    assert batch == expected and isinstance(batch, int)
+    assert asked == [device]
+
+
+def test_a_gpu_whose_memory_cannot_be_read_gets_the_fallback(monkeypatch):
+    def unreadable(device):
+        raise RuntimeError("CUDA driver not ready")
+
+    monkeypatch.setattr(torch.cuda, "mem_get_info", unreadable)
+    assert auto_batch_size(torch.device("cuda", 0), fallback=50_000) == 50_000
 

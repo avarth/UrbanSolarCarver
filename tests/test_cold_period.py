@@ -8,6 +8,7 @@ from urbansolarcarver.cold_period import (
     cold_day_span,
     cold_period_from_weather_file,
     daily_mean_temperatures,
+    month_and_day,
 )
 from _epw import resolve_epw
 
@@ -84,11 +85,23 @@ def test_daily_means_refuse_a_series_that_is_not_one_year_of_hours():
         daily_mean_temperatures(np.zeros(100))
 
 
+def test_month_and_day_count_from_1_january_in_a_non_leap_year():
+    assert month_and_day(0) == (1, 1)
+    assert month_and_day(31) == (2, 1)
+    assert month_and_day(58) == (2, 28)
+    assert month_and_day(59) == (3, 1)       # no 29 February
+    assert month_and_day(364) == (12, 31)
+    with pytest.raises(ValueError):
+        month_and_day(365)
+
+
 @pytest.mark.skipif(not resolve_epw(), reason="no EPW available")
 def test_the_cold_period_of_golden_colorado_runs_from_autumn_to_spring():
     period = cold_period_from_weather_file(resolve_epw(), base_temperature=13.0)
     assert isinstance(period, ColdPeriod)
-    assert period.start_month in (9, 10, 11) and period.end_month in (3, 4, 5)
+    # Days 272 to 134 of the Golden TMY3 file with the default smoothing window. After a deliberate change of the
+    # smoothing or of the weather file, take the new dates from cold_period_from_weather_file(resolve_epw(), 13.0).
+    assert period == ColdPeriod(start_month=9, start_day=30, end_month=5, end_day=15)
 
 
 @pytest.mark.skipif(not resolve_epw(), reason="no EPW available")

@@ -10,6 +10,7 @@ import { studyValuesOf } from "../viewer/study_values_for_test";
 import { TARGET_SAVE_DELAY_MILLISECONDS } from "../simulate/use_study_view";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
 import { studyPaletteColour } from "../viewer/study_palettes";
+import { cardLine } from "./chain_service_for_test";
 import {
   CARVING, ENVELOPE, NOTHING_RUN, FakeService, buttonIn, container, endWorkspaceTest, openStep, openWorkspace, pinnedBar, pressRunAnalysis, project, reasonOf,
   settle, startWorkspaceTest, stepRow, switchMode,
@@ -277,18 +278,22 @@ test("the popover's files box takes a new file and lists it on the study", async
 });
 
 test("a new file with a stored name replaces it: the criteria and studies that list it follow the new content", async () => {
+  // Study 2 (another metric, so its row has its own name) and criterion 1 (FACADES) list facades.obj and are current.
   await openSimulate(undefined, (service) => {
-    service.studies = [study("1", "sky_view", [], "refused", "Add study surfaces"), study("2", "sky_view", ["facades.obj"], "current")];
+    service.studies = [study("1", "sky_view", [], "refused", "Add study surfaces"), study("2", "sky_component", ["facades.obj"], "current")];
   });
+  expect(studyLine("Overcast sky component")).not.toBe("Out of date");
   await openStudySettings("Sky view factor");
-  const statusReads = simulateService.count("GET /stage-status");
   await chooseStudyFiles(new File(["v 0 0 1"], "facades.obj"));
-  expect(simulateService.replacedFiles).toEqual(["facades.obj"]);
+  // The file goes to study 1 under its own name, so the service replaces the stored facades.obj rather than adding another file.
+  const upload = vi.mocked(fetch).mock.calls.find(([address, init]) => String(address).endsWith("/studies/1/test-surfaces") && init?.method === "POST")!;
+  expect(((upload[1]!.body as FormData).get("file") as File).name).toBe("facades.obj");
   expect(popoverFiles()).toEqual(["facades.obj"]);
-  expect(simulateService.storedFileCount("facades.obj")).toBe(1);
-  expect(simulateService.count("GET /stage-status")).toBe(statusReads + 1);          // the criterion that lists it is out of date
-  expect(simulateService.count("GET /studies")).toBeGreaterThan(1);
   expect(studyLine("Sky view factor")).toBe("Not run yet");
+  // The app reads the studies and the criteria again: what else lists the file is shown out of date.
+  expect(studyLine("Overcast sky component")).toBe("Out of date");
+  await switchMode("design");                                                         // back to the Criteria step, open as it was
+  expect(cardLine("Winter sun on facades")).toBe("Out of date");
 });
 
 test("a file the service refuses is named with its reason, and the study keeps what it had", async () => {

@@ -91,13 +91,22 @@ class TestCoplanarityCheck:
         assert pts.shape == (0, 3)
         assert analysis_mesh is None
 
-    def test_sample_step_larger_than_face(self):
-        """When sample_step exceeds the face size, skip gracefully (no crash)."""
+    @pytest.mark.parametrize("offset", [0.0, 0.3], ids=["corner on the lattice", "off the lattice"])
+    def test_sample_step_larger_than_face(self, offset):
+        """A face smaller than sample_step still gets one sample point, on the face and with its normal: zero points would
+        leave it unprotected, and preprocessing would refuse a surface made only of such faces.
+
+        At offset 0 the lattice point at the world origin lies on the quad's corner; at 0.3 no lattice point is near it, and
+        the point comes from the edge seeding.
+        """
         from urbansolarcarver.surface_sampling import discretize_surface_with_normals
         mesh = self._make_planar_mesh(normal_spread_deg=0.0)  # 1x1 quad
+        mesh.apply_translation([offset, offset, 0.0])
         pts, norms, analysis_mesh, _w, _ts = discretize_surface_with_normals(mesh, sample_step=10.0)
-        # Either 0 points (face too small) or a few points; it must not raise
-        assert pts.shape[1] == 3
+        assert pts.shape == (1, 3)
+        x, y, z = pts[0]
+        assert offset <= x <= offset + 1.0 and offset <= y <= offset + 1.0 and z == 0.0
+        np.testing.assert_allclose(norms, [[0.0, 0.0, 1.0]])
 
 
 class TestEdgeSampling:
@@ -163,14 +172,22 @@ class TestEdgeSampling:
         )
 
     def test_thin_rectangle_gets_edge_points(self):
-        """A rectangle thinner than sample_step should still get edge points."""
+        """A rectangle thinner than sample_step gets edge points along its whole length.
+
+        The 0.1 x 3 m strip lies at x 0.2 to 0.3, between the lattice columns x = 0 and 0.5, so no grid point falls inside
+        it: without the edge seeding it would get only the fallback point at its centre (0.25, 1.5), 1.5 m from its ends.
+        """
         from urbansolarcarver.surface_sampling import sample_planar_surface
-        # Width 0.1, height 3.0, step 0.5: too thin for interior grid points
+        step = 0.5
         mesh = self._make_flat_quad(0.1, 3.0)
-        pts, norms, qv, qf, _w = sample_planar_surface(mesh, sample_step=0.5)
-        assert len(pts) >= 2, (
-            f"Thin rectangle should have edge points, got {len(pts)}"
-        )
+        mesh.apply_translation([0.2, 0.0, 0.0])
+        pts, norms, qv, qf, _w = sample_planar_surface(mesh, sample_step=step)
+        assert ((pts[:, 0] >= 0.2) & (pts[:, 0] <= 0.3) & (pts[:, 2] == 0.0)).all(), "every point lies on the strip"
+        # Every place on the strip's centre line has a sample point within one step. Measured: 0.35 m at most, in the
+        # 0.70 m gap between the first two points (y 0.15 and 0.85), where the deduplication drops the points between.
+        along = np.arange(0.0, 3.0 + 1e-9, step / 20)
+        nearest = np.min(np.hypot(pts[None, :, 0] - 0.25, pts[None, :, 1] - along[:, None]), axis=1)
+        assert nearest.max() < step, f"a part of the strip is {nearest.max():.2f} m from every sample point"
 
 
 class TestEdgeTaper:

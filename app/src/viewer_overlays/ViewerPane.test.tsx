@@ -480,5 +480,21 @@ test("framing leaves out what a panel covers on the left of the view: a floating
 
 test("the scene asks the view how much of its left a panel covers, each time it frames", () => {
   rendered = renderForTest(<ViewerPane {...viewWithSkyDome("daylight")} />);
-  expect(FakeViewerScene.latest!.leftInsetSource!()).toBe(0);
+  const source = FakeViewerScene.latest!.leftInsetSource!;
+  expect(source()).toBe(0);
+  // A panel opened after the scene was made: the source measures the pane's own canvas against it when asked, not once at the start.
+  const rect = (left: number, right: number) => ({ left, right, top: 0, bottom: 800, width: right - left, height: 800, x: left, y: 0, toJSON() {} }) as DOMRect;
+  const canvas = rendered.container.querySelector<HTMLElement>(".viewer-canvas")!;
+  const floating = document.createElement("div");
+  floating.setAttribute("data-covers-view-left", "");
+  document.body.append(floating);
+  try {
+    canvas.getBoundingClientRect = () => rect(340, 1440);
+    floating.getBoundingClientRect = () => rect(352, 652);
+    expect(source()).toBe(312);
+    floating.hidden = true;
+    expect(source()).toBe(0);
+  } finally {
+    floating.remove();
+  }
 });

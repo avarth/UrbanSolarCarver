@@ -135,14 +135,29 @@ def test_read_ply_matches_usc_double_writer(gh, tmp_path):
     np.testing.assert_array_equal(np.array(faces), box.faces)
 
 
+@pytest.mark.slow
 def test_read_plates(tmp_path, gh):
-    import json
-    path = tmp_path / "plates.json"
-    path.write_text(json.dumps({"plates": [{"floor": 0, "plate": 0, "z_bottom": 0.0, "z_top": 5.0,
-                                            "outline": [[0, 0], [1, 0], [1, 1], [0, 0]], "holes": []}],
-                                "floor_area_m2_per_floor": [0.5], "total_floor_area_m2": 0.5}))
-    plates = gh.read_plates(path)
-    assert len(plates) == 1 and plates[0]["z_top"] == 5.0
+    """read_plates reads the plates.json the massing stage writes, with the keys USC_Massing builds its Breps from
+    (z_bottom, z_top, outline and holes as rings of world x, y): a change of the writer's format fails here.
+
+    The scene is the cube of _stage_scene (x and y -5 to 5 m, z -5 to 5 m) carved above its test surface, with 3 m floors.
+    """
+    import warnings
+    from _stage_scene import daylight_cube_config
+    from urbansolarcarver import massing, preprocessing, thresholding
+    config = daylight_cube_config(tmp_path)
+    run = tmp_path / "run"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        pre = preprocessing(config, run / "preprocessing")
+        result = massing(thresholding(pre, config, run / "thresholding"), config, run / "massing")
+    plates = gh.read_plates(result.plates_path)
+    assert len(plates) == result.n_plates > 0
+    for plate in plates:
+        assert -5.0 <= plate["z_bottom"] < plate["z_top"] <= 5.0
+        for ring in [plate["outline"]] + plate["holes"]:
+            assert len(ring) >= 4 and ring[0] == ring[-1]       # closed, as rg.PolylineCurve needs it
+            assert all(len(point) == 2 and -5.0 <= point[0] <= 5.0 and -5.0 <= point[1] <= 5.0 for point in ring)
 
 
 REPO_ROOT = GH_DIR.parent

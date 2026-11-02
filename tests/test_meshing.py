@@ -7,30 +7,29 @@ import torch
 
 class TestMeshFromVoxels:
     def test_cubic_mesh_has_axis_aligned_normals(self, tiny_cube_mesh):
-        """Cubic meshing should produce only axis-aligned face normals."""
+        """Cubic meshing of the 10 m cube at 2 m voxels gives a closed box of 125 voxels with only axis-aligned face
+        normals."""
         from urbansolarcarver.voxelization import voxelize_mesh
         from urbansolarcarver.meshing import mesh_from_voxels
         grid, origin, extent, res = voxelize_mesh(tiny_cube_mesh, voxel_size=2.0)
         mesh = mesh_from_voxels(grid, origin, voxel_size=2.0)
-        if len(mesh.faces) == 0:
-            pytest.skip("No faces produced (tiny mesh)")
+        # An empty mesh is the regression to catch, so it fails here rather than skipping.
+        assert len(mesh.faces) > 0
+        assert mesh.is_watertight
+        assert mesh.volume == pytest.approx(125 * 2.0 ** 3)       # 5 x 5 x 5 voxels of 8 m3
         # Each face normal should have exactly one non-zero component
         normals = np.abs(mesh.face_normals)
         dominant = normals.max(axis=1)
         assert np.allclose(dominant, 1.0, atol=0.01), "Non-axis-aligned normals in cubic mesh"
 
-    def test_mesh_within_original_bounds(self, tiny_cube_mesh):
-        """Mesh reconstructed from voxels should be within original bounds (+ margin)."""
+    def test_mesh_lies_on_the_bounds_of_the_original(self, tiny_cube_mesh):
+        """The 10 m cube is a whole number of 2 m voxels, so the mesh rebuilt from them has the cube's own bounds."""
         from urbansolarcarver.voxelization import voxelize_mesh
         from urbansolarcarver.meshing import mesh_from_voxels
         grid, origin, extent, res = voxelize_mesh(tiny_cube_mesh, voxel_size=2.0)
         mesh = mesh_from_voxels(grid, origin, voxel_size=2.0)
-        if len(mesh.vertices) == 0:
-            pytest.skip("No vertices produced")
-        orig_min, orig_max = tiny_cube_mesh.bounds
-        margin = 2.0  # one voxel margin
-        assert np.all(mesh.bounds[0] >= orig_min - margin)
-        assert np.all(mesh.bounds[1] <= orig_max + margin)
+        assert len(mesh.vertices) > 0
+        np.testing.assert_allclose(mesh.bounds, tiny_cube_mesh.bounds, atol=1e-6)
 
 
 class TestSmoothedMeshPath:
@@ -63,12 +62,16 @@ class TestSmoothedMeshPath:
         assert (frac > 0.05).any(), "all vertices on lattice; SDF was binarized"
 
     def test_world_alignment(self):
-        """Voxel [4:20) at voxel_size=1 spans world [4, 20] (+/- smoothing)."""
+        """Voxel [4:20) at voxel_size=1 spans world [4, 20]: the field is sampled at voxel centres, half a voxel
+        inside each voxel, and the mesh is moved back by that half voxel."""
         from urbansolarcarver.meshing import mesh_from_voxels_smoothed
         origin = np.array([100.0, 200.0, 300.0])
         mesh = mesh_from_voxels_smoothed(self._cube_voxels(), origin, 1.0)
         lo, hi = mesh.bounds - origin
-        assert np.all(lo > 2.5) and np.all(hi < 21.5), f"bounds off: {lo}..{hi}"
+        # Measured 3.994..20.006 (the smoothed edges bulge by under 0.01 m); without the half-voxel offset every
+        # bound moves by 0.5.
+        np.testing.assert_allclose(lo, 4.0, atol=0.1)
+        np.testing.assert_allclose(hi, 20.0, atol=0.1)
 
     def test_finalize_mesh_smooth_path(self):
         """The full smoothed finalize path (prune → SDF → MC → cleanup →

@@ -56,17 +56,36 @@ def test_full_mask_exports_the_voxelized_volume_in_place(tmp_path, offset):
 
 
 def test_diagnostics_and_report(tmp_path):
+    """The diagnostics count the voxels the mesh is made of: a lone voxel added to the mask is removed by the cleanup,
+    counted as such, and missing from the mesh volume and the report."""
+    from scipy import ndimage
     from urbansolarcarver import exporting
     cfg, thr = _run_to_thresholding(tmp_path, np.zeros(3))
+    occupancy = np.load(tmp_path / "run" / "preprocessing" / "voxel_grid.npy").astype(bool)
+    mask = np.load(thr.mask_path)
+    # A voxel none of whose 26 neighbours is kept: the cubic path's cleanup drops it (fewer than 2 neighbours).
+    lone = tuple(np.argwhere(~ndimage.binary_dilation(mask, structure=np.ones((3, 3, 3))) & occupancy)[0])
+    mask[lone] = True
+    np.save(thr.mask_path, mask)
+    kept_by_mask = int((mask & occupancy).sum())
+
     result = exporting(thr, cfg, tmp_path / "run" / "exporting")
 
     assert result.export_path.name == "export.ply"
     diag = json.loads((tmp_path / "run" / "exporting" / "diagnostics" / "diagnostic.json")
                       .read_text(encoding="utf-8"))
-    assert diag["voxels_original"] == diag["voxels_retained"] + diag["voxels_removed"]
-    assert diag["voxels_removed_by_cleanup"] >= 0
+    assert diag["voxels_original"] == int(occupancy.sum())
+    assert diag["voxels_removed_by_cleanup"] == 1
+    assert diag["voxels_retained"] == kept_by_mask - 1
+    assert diag["voxels_removed"] == diag["voxels_original"] - diag["voxels_retained"]
+    # 1 m voxels: the closed mesh holds one cubic metre per retained voxel.
+    mesh = trimesh.load(result.export_path, force="mesh")
+    assert mesh.is_watertight
+    assert mesh.volume == pytest.approx(diag["voxels_retained"] * 1.0 ** 3)
+    assert diag["mesh_volume_m3"] == pytest.approx(mesh.volume)
     # The run report goes into the run folder when out_dir is <run>/exporting.
-    assert (tmp_path / "run" / "run_report.md").is_file()
+    report = (tmp_path / "run" / "run_report.md").read_text(encoding="utf-8")
+    assert f"- **Mesh volume:** {diag['voxels_retained']:,.1f} m³" in report
 
 
 def test_the_report_gives_the_sample_spacing_used_for_an_unset_grid_step(tmp_path):

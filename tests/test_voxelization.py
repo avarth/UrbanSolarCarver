@@ -7,10 +7,17 @@ import torch
 
 class TestVoxelizeInvariants:
     def test_voxelize_produces_filled_grid(self, tiny_cube_mesh):
+        """The 10 m cube at 2 m voxels, padded by the default 20 % of its side (2 m), gives a 7-voxel grid from -7 m whose
+        filled voxels are exactly the solid 5 x 5 x 5 block with centres inside the cube (-4 to 4 m); the centres at +-6 m lie
+        outside. A hollow shell would leave the 27 inner voxels empty, a shifted origin would move the block."""
         from urbansolarcarver.voxelization import voxelize_mesh
         grid, origin, extent, res = voxelize_mesh(tiny_cube_mesh, voxel_size=2.0)
-        assert grid.sum() > 0, "Voxelization produced empty grid"
         assert grid.dtype == torch.uint8
+        assert res == 7 and extent == pytest.approx(14.0)
+        np.testing.assert_allclose(origin, [-7.0, -7.0, -7.0])
+        expected = np.zeros((7, 7, 7), dtype=np.uint8)
+        expected[1:6, 1:6, 1:6] = 1
+        np.testing.assert_array_equal(grid.cpu().numpy(), expected)
 
     def test_voxelize_grid_is_cubic(self, tiny_cube_mesh):
         from urbansolarcarver.voxelization import voxelize_mesh

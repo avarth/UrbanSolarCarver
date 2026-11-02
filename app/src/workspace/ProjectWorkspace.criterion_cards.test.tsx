@@ -295,22 +295,21 @@ test("reordering with the keyboard sends the new order and the cards follow it",
   expect(document.activeElement).toBe(card("Spring sun on windows").querySelector(".criterion-card-handle"));     // the focus stays on the handle moved
 });
 
-test("a file added to two criteria is stored once and replacing it dates both", async () => {
-  await openChain([FACADES, WINDOWS]);
+test("a new file under the name of a file two criteria use is sent under that name, listed once, and dates both", async () => {
+  // Criterion 1 uses criterion 2's windows.obj too (taking it is `use a file from another criterion`); both are current.
+  await openChain([{ ...FACADES, test_surface_files: ["facades.obj", "windows.obj"] }, WINDOWS]);
+  expect(cardLine("Winter sun on facades")).not.toBe("Out of date");
+  expect(cardLine("Spring sun on windows")).not.toBe("Out of date");
   openPanelSection("Test surfaces");
-  // Criterion 1 takes criterion 2's file too, from the list of the other criteria's files.
-  await act(async () => panel().querySelector<HTMLButtonElement>('[aria-label="Use windows.obj"]')!.click());
-  await settle();
-  expect(service.requests).toContain("PUT /criteria/1/test-surfaces/windows.obj");
-  expect(protectedFiles()).toEqual(["facades.obj", "windows.obj"]);
-  expect(service.storedFileCount("windows.obj")).toBe(1);
-  service.criterionStages = { 1: CURRENT, 2: CURRENT };
-  // A new windows.obj, uploaded to criterion 1, replaces the stored file both use.
+  // A new windows.obj dropped on criterion 1 is an upload under the stored name, which the service takes as a replacement.
   const drop = new Event("drop", { bubbles: true, cancelable: true });
   Object.defineProperty(drop, "dataTransfer", { value: { files: [new File(["v 0 0 1"], "windows.obj")] } });
   await act(async () => panel().querySelector(".input-box")!.dispatchEvent(drop));
   await settle();
-  expect(service.storedFileCount("windows.obj")).toBe(1);
+  const upload = vi.mocked(fetch).mock.calls.find(([address, init]) => String(address).endsWith("/criteria/1/test-surfaces") && init?.method === "POST")!;
+  expect(((upload[1]!.body as FormData).get("file") as File).name).toBe("windows.obj");
+  expect(protectedFiles()).toEqual(["facades.obj", "windows.obj"]);
+  // Criterion 2 was not the one the file was dropped on: the app reads the stages again and shows it out of date as well.
   expect(cardLine("Winter sun on facades")).toBe("Out of date");
   expect(cardLine("Spring sun on windows")).toBe("Out of date");
 });

@@ -293,11 +293,17 @@ def test_sun_path_curves_are_unit_vectors_from_the_east_to_the_west():
     assert day.period_path[0] != day.period_path[-1]
 
 
-def test_the_stored_north_rotates_the_sun_path():
+@pytest.mark.parametrize("north_deg", [90.0, 30.0])
+def test_the_stored_north_rotates_the_sun_path(north_deg):
     unrotated = sun_path_for_config(golden_config()).days[0].markers[1].vector     # 12 h, sun due south
-    rotated = sun_path_for_config(golden_config(north_deg=90.0)).days[0].markers[1].vector
+    rotated = sun_path_for_config(golden_config(north_deg=north_deg)).days[0].markers[1].vector
     assert unrotated[1] < -0.5 and abs(unrotated[0]) < 0.1
-    assert abs(rotated[1]) < 0.1 and abs(rotated[0]) > 0.5
+    # north_deg turns the sun clockwise in plan, as the engine does (test_local_web_sun_study.py): north 90 turns the noon sun
+    # (-0.004, -0.892) into (-0.892, 0.004); the opposite sign would give (0.892, -0.004). 30 degrees also tells a rotation
+    # from a swap of x and y. The vectors are float32, hence 1e-6.
+    angle = math.radians(north_deg)
+    x, y, z = unrotated
+    assert rotated == pytest.approx([x * math.cos(angle) + y * math.sin(angle), -x * math.sin(angle) + y * math.cos(angle), z], abs=1e-6)
 
 
 def test_markers_below_the_minimum_altitude_are_left_out():

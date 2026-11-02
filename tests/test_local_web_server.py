@@ -15,6 +15,7 @@ import warnings
 import zipfile
 from pathlib import Path
 
+import numpy as np
 import pytest
 import send2trash
 import yaml
@@ -28,10 +29,12 @@ from local_web_test_support import (
     GOLDEN_EPW, FakeRecycleBin, WaitsForCancel, box_bytes, has_vertex_normals, make_link_to_folder, make_worker, write_fake_finished_run_with_envelope,
     write_envelope_as_exported, write_fake_run, write_joined_test_surfaces_without_normals,
 )
+from test_local_web_score_points import decode as decode_score_points, decode_carved_by_criterion
 from urbansolarcarver import __version__
 from urbansolarcarver.local_web_service import create_app
 from urbansolarcarver.local_web_service import folder_picker, folder_picker_child, stage_records, user_preferences
 from urbansolarcarver.local_web_service.folder_picker import FolderPickerUnavailable
+from urbansolarcarver.local_web_service.example_catalog import read_examples
 from urbansolarcarver.local_web_service.gpu_warm_up import GpuWarmUp
 from urbansolarcarver.local_web_service.projects import ProjectStore
 from urbansolarcarver.local_web_service.server import (
@@ -397,10 +400,19 @@ def test_example_project_joins_two_test_surface_files(client):
 
 
 def test_every_example_creates_a_project_with_the_files_it_lists(client):
-    for example in client.get("/api/examples").json():
-        detail = client.post(f"/api/projects/{example['name']}/examples/{example['name']}").json()
-        assert detail["inputs"]["max_volume"] and detail["inputs"]["test_surfaces"] and detail["inputs"]["weather"]
-        assert detail["settings"]["mode"] in MODES
+    examples = {example.name: example for example in read_examples()}
+    listed = [example["name"] for example in client.get("/api/examples").json()]
+    assert sorted(listed) == sorted(examples)
+    for name in listed:
+        example = examples[name]
+        detail = client.post(f"/api/projects/{name}/examples/{name}").json()
+        inputs = detail["inputs"]
+        # Each file in the role examples.json gives it, and only there: a file joined into another role changes two of these.
+        for role in ("max_volume", "test_surfaces", "context", "terrain"):
+            assert sorted(file["name"] for file in inputs[role]) == sorted(getattr(example, role)), (name, role)
+            assert all(file["triangle_count"] > 0 for file in inputs[role]), (name, role)
+        assert len(inputs["weather"]) == (1 if example.weather else 0), name
+        assert detail["settings"]["mode"] == example.mode and detail["example"] == name
 
 
 def test_an_example_cannot_replace_a_project_or_use_a_bad_name(client):
@@ -1417,13 +1429,20 @@ def test_warm_up_runs_once_and_shows_running_meanwhile():
 
 
 @pytest.mark.slow
-def test_default_warm_up_prepares_the_cpu_or_names_why_it_cannot():
+def test_default_warm_up_prepares_the_cpu():
+    import torch
+
+    from urbansolarcarver.errors import WarpBackendUnavailableError
+    from urbansolarcarver.warp_kernels import require_dda_backend
+    try:
+        require_dda_backend(torch.device("cpu"))
+    except WarpBackendUnavailableError as error:     # only an environment where Warp cannot run on the CPU may fail the warm-up
+        pytest.skip(str(error))
     warm_up = GpuWarmUp("cpu")
     warm_up.start()
     state = wait_for_warm_up(warm_up, deadline_seconds=120.0)
-    assert state.state in ("cpu", "failed") and state.device_name is None
-    assert (state.problem is None) == (state.state == "cpu")
-    assert (state.cuda_available is None) == (state.state == "failed")
+    assert state.state == "cpu", state.problem
+    assert state.device_name is None and state.problem is None and state.cuda_available == torch.cuda.is_available()
 
 
 # ---- Carve further ----
@@ -1620,15 +1639,26 @@ def test_an_unknown_criterion_is_404_with_its_id_in_every_route(client_with_two_
 
 def test_results_of_a_criterion_and_of_the_chain_are_served(client_with_two_criteria, projects_folder):
     client = client_with_two_criteria
-    write_fake_run(projects_folder / "p")
-    write_fake_run(projects_folder / "p", criterion_id="2", after_criterion_id="1")
-    for query in ({}, {"criterion": "1"}, {"criterion": "2"}):
+    # Criterion 1 kept the occupied voxels (flat index < 18) with an even index, criterion 2 those of them divisible by 4, so a
+    # route that served one criterion for another would send other kept flags.
+    flat = np.arange(24).reshape(4, 3, 2)
+    kept_by_first = (flat < 18) & (flat % 2 == 0)
+    write_fake_run(projects_folder / "p", mask=kept_by_first)
+    write_fake_run(projects_folder / "p", criterion_id="2", mask=kept_by_first & (flat % 4 == 0), after_criterion_id="1")
+    for query, kept_every in (({}, 4), ({"criterion": "1"}, 2), ({"criterion": "2"}, 4)):     # without a criterion: the last
         reply = client.get("/api/projects/p/run/score-points", params=query)
         assert reply.status_code == 200 and reply.headers["content-type"] == "application/octet-stream", query
+        header, indices, _scores, kept, _compared = decode_score_points(reply.content)
+        assert header["occupied_count"] == 18 and (kept == (indices % kept_every == 0)).all(), query
     assert client.get("/api/projects/p/run/sky-patches", params={"criterion": "1"}).status_code == 404     # a time-based run has no patches
     carved = client.get("/api/projects/p/run/carved-by-criterion")
-    assert carved.status_code == 200 and carved.headers["content-type"] == "application/octet-stream" and len(carved.content) > 4
+    assert carved.status_code == 200 and carved.headers["content-type"] == "application/octet-stream"
     assert carved.headers["cache-control"] == "no-cache"
+    header, carved_by = decode_carved_by_criterion(carved.content)
+    expected = np.zeros((4, 3, 2), dtype="u1")
+    expected[(flat < 18) & (flat % 2 == 1)] = 1                     # occupied, not kept by criterion 1
+    expected[(flat < 18) & (flat % 2 == 0) & (flat % 4 != 0)] = 2   # kept by criterion 1, not by criterion 2
+    assert header["criterion_ids"] == ["1", "2"] and (carved_by == expected).all()
 
 
 def test_the_chain_results_are_404_before_a_run(client_with_two_criteria):

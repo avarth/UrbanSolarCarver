@@ -1,6 +1,6 @@
 """Tests for the preprocessing stage's helpers: NaN/Inf score warnings and score
-statistics (api_core/_diagnostics.py), ray generation from zero sample points,
-and the manifest a real run writes."""
+statistics (api_core/_diagnostics.py), the refusal of a test surface that gives
+no sample points, and the manifest a real run writes."""
 import json
 import warnings
 import pytest
@@ -58,22 +58,59 @@ class TestScoreStatisticsIntegration:
         assert stats == {"count": 0}
 
 
-class TestEmptySamplePoints:
-    """Guard against empty sample points before ray generation."""
+def _cube_and_test_surface_config(tmp_path, test_surface):
+    """The conftest cube as the max volume, *test_surface* as the test surface, sampled every 2 m."""
+    import trimesh
+    from urbansolarcarver.load_config import user_config
+    trimesh.creation.box(extents=(10.0, 10.0, 10.0)).export(str(tmp_path / "max_volume.ply"))
+    test_surface.export(str(tmp_path / "test_surface.ply"))
+    return user_config(max_volume_path=str(tmp_path / "max_volume.ply"), test_surface_path=str(tmp_path / "test_surface.ply"),
+                       out_dir=str(tmp_path / "out"), mode="daylight", voxel_size=2.0, grid_step=2.0, device="cpu")
 
-    def test_generate_sky_patch_rays_with_empty_points(self):
-        """generate_sky_patch_rays with 0 points should return 0 rays (no crash)."""
-        import torch
-        from urbansolarcarver.ray_tracing import generate_sky_patch_rays
-        pts = np.empty((0, 3), dtype=np.float32)
-        norms = np.empty((0, 3), dtype=np.float32)
-        patch_dirs = torch.tensor([[0, 0, 1]], dtype=torch.float32)
-        # The ray generator returns empty arrays without warning; preprocessing
-        # raises its own error for an empty test surface before reaching it.
-        origins, dirs, ids, point_idx = generate_sky_patch_rays(
-            pts, norms, patch_dirs, torch.device("cpu")
-        )
-        assert origins.shape[0] == 0
+
+def _bent_panel():
+    """A 6 m panel under the cube with one corner raised so its two triangles are 20 degrees apart (the tolerance is 5)."""
+    import trimesh
+    raised = -6.0 + 6.0 * np.tan(np.radians(20.0))
+    return trimesh.Trimesh([[-3, -3, -6], [3, -3, -6], [3, 3, raised], [-3, 3, -6]], [[0, 1, 2], [0, 2, 3]], process=False)
+
+
+def _zero_area_panel():
+    import trimesh
+    return trimesh.Trimesh([[0, 0, -6], [1, 0, -6], [2, 0, -6]], [[0, 1, 2]], process=False)
+
+
+@pytest.mark.parametrize("test_surface", [_bent_panel, _zero_area_panel], ids=["non-planar", "zero area"])
+def test_preprocessing_refuses_a_test_surface_that_gives_no_sample_points(tmp_path, test_surface):
+    """Every component skipped leaves nothing to protect: the run stops before tracing and writes no manifest.
+
+    sample_surface raises this error; the InputError after it in _run_preprocessing ("No sample points were generated")
+    is not reached, since sample_surface never returns zero points.
+    """
+    from urbansolarcarver import preprocessing
+    from urbansolarcarver.errors import InputError
+    config = _cube_and_test_surface_config(tmp_path, test_surface())
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")     # the warning that the component was skipped
+        with pytest.raises(InputError, match="No points sampled from test surfaces"):
+            preprocessing(config, tmp_path / "out")
+    assert not (tmp_path / "out" / "manifest.json").exists()
+    assert not (tmp_path / "out" / "scores.npy").exists()
+
+
+def test_a_test_surface_smaller_than_the_sample_spacing_is_sampled_once(tmp_path):
+    """A 1 cm square sampled every 2 m is not refused: it gets one sample point, on the square."""
+    import trimesh
+    from urbansolarcarver import preprocessing
+    from urbansolarcarver.pydantic_schemas import PreprocessingManifest
+    square = trimesh.Trimesh([[0.3, 0.3, -6], [0.31, 0.3, -6], [0.31, 0.31, -6], [0.3, 0.31, -6]], [[0, 1, 2], [0, 2, 3]],
+                             process=False)
+    result = preprocessing(_cube_and_test_surface_config(tmp_path, square), tmp_path / "out")
+    assert PreprocessingManifest.model_validate_json(result.manifest_path.read_text()).sample_point_count == 1
+    (point,) = np.load(tmp_path / "out" / "test_points.npy")
+    # Within float32 rounding of the square's closed outline (the points are traced in float32).
+    assert 0.3 - 1e-6 <= point[0] <= 0.31 + 1e-6 and 0.3 - 1e-6 <= point[1] <= 0.31 + 1e-6
+    assert point[2] == pytest.approx(-6.0)
 
 
 def test_manifest_written_by_preprocessing(tmp_path, tmp_mesh_files):

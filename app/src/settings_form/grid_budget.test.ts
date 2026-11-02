@@ -15,5 +15,8 @@ test("a size that lands on a step stays there despite floating point noise", () 
 test("a grid is over the budget only when it has more voxels than the budget", () => {
   expect(gridIsOverBudget({ resolution: 884, voxel_size: 0.06, total_voxels: 690_807_104, extent: 53, budget_voxels: 500_000_000 })).toBe(true);
   expect(gridIsOverBudget({ resolution: 62, voxel_size: 1, total_voxels: 238_328, extent: 62, budget_voxels: 500_000_000 })).toBe(false);
+  // 500³ voxels exactly at the budget is still within it, one voxel over is not (check_voxel_grid_budget refuses only a count above it)
+  expect(gridIsOverBudget({ resolution: 500, voxel_size: 0.1, total_voxels: 125_000_000, extent: 50, budget_voxels: 125_000_000 })).toBe(false);
+  expect(gridIsOverBudget({ resolution: 500, voxel_size: 0.1, total_voxels: 125_000_000, extent: 50, budget_voxels: 124_999_999 })).toBe(true);
   expect(gridIsOverBudget(null)).toBe(false);
 });

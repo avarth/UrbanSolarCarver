@@ -196,10 +196,24 @@ class TestAttribution:
     def test_lag_is_captured(self, weight_series):
         """Credit must extend beyond the hour of arrival: midday winter
         gains (arriving when the zone may be gain-rich) still show high
-        benefit because the mass releases them into the cold night."""
+        benefit because the mass releases them into the cold night.
+
+        The same zone with a tenth of its thermal mass (16.5 kJ/(m²K),
+        lighter than any ISO class) stores little of the noon gain, so its
+        January noon benefit drops. Measured: 0.733 for the zone, 0.392
+        with a tenth of the mass. Crediting only the hour of arrival gives
+        0.143 for the zone and 0.233 with a tenth of the mass (computed
+        from simulate with each January noon gain perturbed by 1 W), which
+        fails both assertions.
+        """
+        import dataclasses
         benefit, _harm = weight_series
-        jan_noon = benefit[12:31 * 24:24]
-        assert jan_noon.mean() > 0.5
+        jan_noons = slice(12, 31 * 24, 24)
+        assert benefit[jan_noons].mean() > 0.6
+        name = "medium_office"
+        params = _params_from_reference(name)
+        light, _ = attribute_solar_gains(dataclasses.replace(params, c_m=params.c_m / 10), *_driving(name))
+        assert benefit[jan_noons].mean() - light[jan_noons].mean() > 0.2
 
 
 # ---------------------------------------------------------------------------

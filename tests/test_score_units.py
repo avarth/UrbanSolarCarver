@@ -2,14 +2,11 @@
 sky-patch weight a voxel blocks times that area (kWh for Solar energy and Solar usefulness, m² of weighted sky for Daylight and
 Night cooling), as the time-based score is shaded area times duration (m²·h).
 
-The scene: a horizontal test square of side grid_step (at most 0.5 m) at z = 0, centred under a max volume box of 0.9 m 10 m above
-it, which is one 1 m voxel. Every sample point's zenith ray crosses that voxel and no other ray does (the next Tregenza ring is 6° off the
-zenith, over 1 m to the side at that height), so the voxel's score is the number of sample points times the zenith patch's weight
-times grid_step².
+The scene: a horizontal test square of side grid_step, or of a side given (at most 0.5 m), at z = 0, centred under a max
+volume box of 0.9 m 10 m above it, which is one 1 m voxel. Every sample point's zenith ray crosses that voxel and no other ray
+does (the next Tregenza ring is 6° off the zenith, over 1 m to the side at that height), so the voxel's score is the number of
+sample points (with edge taper, the sum of their taper weights) times the zenith patch's weight times grid_step².
 """
-import importlib
-from types import SimpleNamespace
-
 import numpy as np
 import pytest
 import torch
@@ -24,13 +21,14 @@ from urbansolarcarver.sky_patches import fetch_tregenza_patch_directions
 VOXEL_HEIGHT_ABOVE_THE_SQUARE = 10.0
 
 
-def _write_test_square_under_one_voxel(folder, sample_spacing):
-    """The scene of the module description; returns the max volume and test surface paths."""
+def _write_test_square_under_one_voxel(folder, side):
+    """The scene of the module description, with a square of *side* (at most 0.5 m); returns the max volume and test surface
+    paths."""
     max_volume = trimesh.creation.box(bounds=[[0.05, 0.05, VOXEL_HEIGHT_ABOVE_THE_SQUARE], [0.95, 0.95, VOXEL_HEIGHT_ABOVE_THE_SQUARE + 0.9]])
-    corner = 0.5 - sample_spacing / 2
+    corner = 0.5 - side / 2
     square = trimesh.Trimesh(
-        vertices=[[corner, corner, 0.0], [corner + sample_spacing, corner, 0.0],
-                  [corner + sample_spacing, corner + sample_spacing, 0.0], [corner, corner + sample_spacing, 0.0]],
+        vertices=[[corner, corner, 0.0], [corner + side, corner, 0.0],
+                  [corner + side, corner + side, 0.0], [corner, corner + side, 0.0]],
         faces=[[0, 1, 2], [0, 2, 3]])
     max_volume_path, test_surface_path = folder / "max_volume.ply", folder / "test_surface.ply"
     max_volume.export(str(max_volume_path))
@@ -38,12 +36,14 @@ def _write_test_square_under_one_voxel(folder, sample_spacing):
     return max_volume_path, test_surface_path
 
 
-def _occupied_voxel_score_and_zenith_weight(tmp_path, mode, sample_spacing, **settings):
+def _occupied_voxel_score_and_zenith_weight(tmp_path, mode, sample_spacing, square_side=None, **settings):
+    """The occupied voxel's score, the zenith weight its sample points block (count times the zenith patch's weight) and the
+    manifest; the square's side is the sample spacing unless given."""
     # One ray per patch centre: the voxel straight above the square takes exactly the zenith patch's ray.
     settings.setdefault("rays_per_patch", 1)
     folder = tmp_path / f"{mode}_{sample_spacing}"
     folder.mkdir()
-    max_volume_path, test_surface_path = _write_test_square_under_one_voxel(folder, sample_spacing)
+    max_volume_path, test_surface_path = _write_test_square_under_one_voxel(folder, square_side or sample_spacing)
     config = user_config(max_volume_path=str(max_volume_path), test_surface_path=str(test_surface_path), out_dir=str(folder / "out"),
                          mode=mode, voxel_size=1.0, grid_step=sample_spacing, device="cpu", **settings)
     result = preprocessing(config, folder / "out")
@@ -74,23 +74,25 @@ def test_a_solar_energy_score_is_the_kwh_it_blocks(tmp_path, example_epw_path):
     assert manifest.score_unit == MODES["irradiance"].score_unit == "kWh"
 
 
-def test_the_weighted_carver_output_is_scaled_by_the_area_each_sample_point_stands_for(monkeypatch):
-    """Edge taper weights go into the carver per ray; the area is one factor on its output, so the two multiply."""
-    preprocessing_module = importlib.import_module("urbansolarcarver.api_core.preprocessing")
-    carver_scores = np.array([0.0, 1.0, 3.0], dtype=np.float32)
-    received = {}
+def test_an_edge_tapered_score_is_the_taper_weight_of_each_sample_point_times_its_area(tmp_path):
+    """Edge taper weights each sample point's rays, and the area a point stands for multiplies the result: the voxel's score is
+    the sum of the points' taper weights times the zenith patch's weight times grid_step².
 
-    def fake_carver(*args, point_weights=None, ray_batch_size=0):
-        received["point_weights"] = point_weights
-        return SimpleNamespace(raw_voxel_scores=carver_scores.copy(), patch_weights=np.ones(145, dtype=np.float32))
-
-    monkeypatch.setattr(preprocessing_module, "carve_with_sky_patch_rays", fake_carver)
-    edge_weights = np.array([0.5, 1.0])
-    scores, kind, _patch_weights = preprocessing_module._compute_raw_scores(
-        None, None, None, None, None, None, SimpleNamespace(mode="radiative_cooling", grid_step=0.5),
-        SimpleNamespace(ray_batch_size=0), point_weights=edge_weights)
-    assert kind == "weighted_sum" and received["point_weights"] is edge_weights
-    np.testing.assert_allclose(scores, carver_scores * 0.25)
+    A 0.5 m square sampled every 0.125 m with a 0.2 m taper gives 18 points whose weights run from 0 to 1 (sum 7.25, sum of
+    squares 4.4375), so a score without the taper, without the area or with the weight applied twice differs.
+    """
+    side, spacing, taper = 0.5, 0.125, 0.2
+    score, zenith_weight_of_all_points, manifest = _occupied_voxel_score_and_zenith_weight(
+        tmp_path, "daylight", spacing, square_side=side, edge_taper=taper)
+    zenith_weight = zenith_weight_of_all_points / manifest.sample_point_count
+    # The taper weights from the saved points, by their distance to the square's outline (the module's square is centred on
+    # x = y = 0.5).
+    points = np.load(tmp_path / f"daylight_{spacing}" / "out" / "test_points.npy")
+    low, high = 0.5 - side / 2, 0.5 + side / 2
+    distance_to_outline = np.minimum.reduce([points[:, 0] - low, high - points[:, 0], points[:, 1] - low, high - points[:, 1]])
+    taper_weights = np.clip(distance_to_outline / taper, 0.0, 1.0)
+    assert 0.0 < taper_weights.sum() < manifest.sample_point_count     # the taper does lower some points
+    assert score == pytest.approx(taper_weights.sum() * zenith_weight * spacing ** 2, rel=1e-5)
 
 
 def test_every_mode_names_the_unit_of_its_scores():

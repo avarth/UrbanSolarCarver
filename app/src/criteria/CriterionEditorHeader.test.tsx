@@ -3,6 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import type { CriterionEntry } from "../api_client/client";
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { CriterionEditorHeader, type CriterionEditorHeaderProps } from "./CriterionEditorHeader";
+import { ModeTileSymbol } from "./ModeTileSymbols";
 
 let rendered: RenderedOverlay | null = null;
 
@@ -33,9 +34,12 @@ const button = (label: string) => [...header().querySelectorAll<HTMLButtonElemen
 
 test("the header shows the colour, name, mode symbol and the line, with the whole line as its title", () => {
   renderHeader();
-  expect(header().querySelector<HTMLElement>(".criterion-card-swatch")!.style.background).not.toBe("");
+  expect(header().querySelector<HTMLElement>(".criterion-card-swatch")!.style.background).toBe("rgb(204, 102, 119)");   // DAYLIGHT's #cc6677
   expect(header().querySelector(".criterion-editor-name")!.textContent).toBe("Daylight on windows");
-  expect(header().querySelector(".mode-tile-symbol")).not.toBeNull();
+  // The daylight tile's symbol (mode_tiles.json): drawn on its own, it gives the same markup as the header's.
+  const daylightSymbol = renderForTest(<ModeTileSymbol symbol="overcast_sky_dome" />);
+  expect(header().querySelector(".mode-tile-symbol")!.outerHTML).toBe(daylightSymbol.container.innerHTML);
+  daylightSymbol.unmount();
   const line = header().querySelector(".criterion-editor-line")!;
   expect(line.textContent).toBe(LINE);
   expect(line.getAttribute("title")).toBe(LINE);
