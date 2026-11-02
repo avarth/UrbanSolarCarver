@@ -11,7 +11,7 @@ import pytest
 
 import montecarlo
 
-pytestmark = [pytest.mark.slow, pytest.mark.sweep]  # end-to-end scenes, tens of seconds in all, 95% of it in the reference marcher
+pytestmark = [pytest.mark.slow, pytest.mark.sweep]  # end-to-end scenes, tens of seconds each, most of it in the reference marcher
 
 SEEDS = [
     1006,  # tilted_plane, octant table, carve_above, rotated, UTM

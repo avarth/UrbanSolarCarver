@@ -667,10 +667,13 @@ def test_calculate_with_the_engine_gives_the_numbers_of_its_file(client, project
 
 
 @pytest.mark.slow
-def test_every_example_calculates_on_the_bundled_weather_file(tmp_path):
-    """Each example's weights on the Golden weather file (about 7 s each); the numbers are printed (-s) for the docs."""
+@pytest.mark.parametrize("use", ["apartment", "office"])      # two tests of four examples, so two workers share them
+def test_every_example_calculates_on_the_bundled_weather_file(tmp_path, use):
+    """Each example's weights on the Golden weather file (about 10 s each); the numbers are printed (-s) for the docs."""
     numbers = {}
-    for entry in typical_building.library():
+    entries = [entry for entry in typical_building.library() if entry.id.startswith(f"kenak-{use}-")]
+    assert len(entries) == 4
+    for entry in entries:
         archetype = typical_building.archetype_of(entry.values, BUNDLED_EPW)
         out = simulated_weights.generate_simulated_weights(str(BUNDLED_EPW), archetype, tmp_path / f"{entry.id}.json")
         benefit, harm, meta = simulated_weights.read_simulated_weights(out)
@@ -680,9 +683,8 @@ def test_every_example_calculates_on_the_bundled_weather_file(tmp_path):
               f"hours that count {numbers[entry.id][2]}")
         assert numbers[entry.id][0] > 0 and numbers[entry.id][1] > 0 and 0 < numbers[entry.id][2] <= sun_up.sum()
         assert not (benefit[~sun_up] > 0.5).all()           # the mass carries some of the day's sun into the night
-    for use in ("apartment", "office"):
-        underheating = [numbers[f"kenak-{use}-{zone}"][0] for zone in "abcd"]
-        assert underheating == sorted(underheating, reverse=True)     # the colder zones' walls are better insulated
+    underheating = [numbers[f"kenak-{use}-{zone}"][0] for zone in "abcd"]
+    assert underheating == sorted(underheating, reverse=True)     # the colder zones' walls are better insulated
 
 
 # ---- Values added later, and retired ----

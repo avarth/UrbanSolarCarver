@@ -142,28 +142,30 @@ def march(run: Run, origins, normals, dirs, weights=None, ray_length=DEFAULT_RAY
         o, n, d, t_near, t_far = o[live], n[live], d[live], t_near[live], t_far[live]
         if w is not None:
             w = w[live]
-        k = np.arange(int(math.ceil(min(diag, ray_length) / step)) + 1)
+        # The steps of the chunk's longest ray in the grid; only the (ray, step) pairs before each ray's own exit are computed.
+        k = np.arange(min(int(math.ceil(min(diag, ray_length) / step)) + 1, int(math.ceil((t_far - t_near).max() / step)) + 1))
         t = t_near[:, None] + (k[None, :] + 0.5) * step
-        valid = t < t_far[:, None]
-        pos = o[:, None, :] + t[..., None] * d[:, None, :]
+        ray_id, kk = np.nonzero(t < t_far[:, None])
+        pos = o[ray_id] + t[ray_id, kk][:, None] * d[ray_id]
         idx = np.floor((pos - lo) / run.vs).astype(np.int64)
-        inb = valid & np.all((idx >= 0) & (idx < shape), axis=2)
+        inb = np.all((idx >= 0) & (idx < shape), axis=1)
+        ray_id, idx = ray_id[inb], idx[inb]
         centre = lo + (idx + 0.5) * run.vs
-        half_extent = 0.5 * run.vs * np.abs(n).sum(axis=1)
-        dist = np.einsum("rkj,rj->rk", centre - o[:, None, :], n)
-        front = dist > half_extent[:, None] + 1e-9
-        skin = inb & ~front & (dist > -half_extent[:, None] + 1e-9)
-        skin[inb] &= run.occ[tuple(idx[inb].T)]
-        sr, sk = np.nonzero(skin)
-        behind, has_mass = _behind_voxel(run, idx[sr, sk], o[sr], n[sr])
-        keep = inb & front
-        keep[sr[~has_mass], sk[~has_mass]] = True
-        own_skin_flat.append(np.ravel_multi_index(tuple(idx[sr, sk][has_mass].T), tuple(shape)))
+        half_extent = 0.5 * run.vs * np.abs(n).sum(axis=1)[ray_id]
+        dist = np.einsum("ij,ij->i", centre - o[ray_id], n[ray_id])
+        front = dist > half_extent + 1e-9
+        skin = ~front & (dist > -half_extent + 1e-9)
+        skin[skin] = run.occ[tuple(idx[skin].T)]
+        sp = np.nonzero(skin)[0]
+        behind, has_mass = _behind_voxel(run, idx[sp], o[ray_id[sp]], n[ray_id[sp]])
+        keep = front
+        keep[sp[~has_mass]] = True
+        own_skin_flat.append(np.ravel_multi_index(tuple(idx[sp][has_mass].T), tuple(shape)))
         own_behind_flat.append(np.ravel_multi_index(tuple(behind[has_mass].T), tuple(shape)))
-        ray_id, kk = np.nonzero(keep)
+        ray_id, idx = ray_id[keep], idx[keep]
         if ray_id.size == 0:
             continue
-        flat = np.ravel_multi_index(tuple(idx[ray_id, kk].T), tuple(shape))
+        flat = np.ravel_multi_index(tuple(idx.T), tuple(shape))
         pair = np.unique(ray_id.astype(np.int64) * n_vox + flat)
         r, v = np.divmod(pair, n_vox)
         np.add.at(out, v, 1.0 if w is None else w[r])

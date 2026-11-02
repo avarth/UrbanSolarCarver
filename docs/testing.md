@@ -16,9 +16,9 @@ Times are wall times on an 8-core / 16-thread AMD Zen 2 with an RTX 3060, measur
 | Tier | When | Command | Time |
 |---|---|---|---|
 | 0 | While editing | `python -m pytest tests/test_floor_plates.py -m "not slow"` | seconds |
-| 1 | After every change | `python -m pytest -m "not slow" -n 8` | about 70 s |
-| 2 | Before each commit | `python -m pytest -m "not sweep" -n 8` | about 3 min |
-| 3 | Before merging | `python -m pytest -n 8` | about 4 min |
+| 1 | After every change | `python -m pytest -m "not slow" -n 8` | about 55 s |
+| 2 | Before each commit | `python -m pytest -m "not sweep" -n 8` | about 2.5 min |
+| 3 | Before merging | `python -m pytest -n 8` | about 2.7 min |
 
 When `app/` changed, also run the front-end checks of the same tier (see below): `npm test` takes about 32 s (12 s of it ESLint),
 `npm run typecheck` 5 s and `npm run build` 7 s.
@@ -144,8 +144,12 @@ Before writing a scene or a fake of your own, use these.
 
 ## Running in parallel
 
-`-n 8` starts 8 worker processes and hands out single tests to them; each worker pays about 8 s of imports and
-collection once. Tests must not depend on one another or on a shared file: each uses its own `tmp_path`. The engine computes each
+`-n 8` starts 8 worker processes and hands out tests to them; each worker pays about 10 s of imports and collection
+once. `pyproject.toml` adds `--dist worksteal`: a worker that runs out of tests takes some from another's queue. With
+the default scheduling, tests given out in a block (the eight Monte Carlo cases, 15 to 38 s each) kept one worker
+busy for 210 s while the others had stopped at about 110 to 160 s; the whole suite took 235 s, with worksteal 188 s.
+A test that runs over about 40 s still ends up alone at the end of the run: split it with `parametrize` so two workers
+share it. Tests must not depend on one another or on a shared file: each uses its own `tmp_path`. The engine computes each
 sky matrix in a temporary folder of its own, so workers computing sky matrices at the same time do not share
 Ladybug's weather folder. When another checkout is testing on
 the same machine at the same time, `-n 4` leaves it room.
