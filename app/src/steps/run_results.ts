@@ -2,7 +2,8 @@
 // envelope and building massing meshes and plates.json. Each is fetched again when a stage that writes it has run (UX 6.3:
 // results arrive stage by stage), and the result of the last request wins. A result a stage has not written (yet) is null. The
 // score points and the sky dome are those of the selected criterion: another criterion selected fetches them again, and so does
-// the selected one gaining results in its stage status (turned back on after a bypass).
+// the selected one gaining results in its stage status (turned back on after a bypass). The run summary, which lists only the
+// criteria that are on, is fetched again when they change.
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import type * as THREE from "three";
 import {
@@ -79,13 +80,19 @@ interface RunResultsSource {
    * delete) and with each run's thresholding. Absent or null: the layer is not asked for.
    */
   carvedByCriterionIds?: readonly string[] | null;
+  /**
+   * The criteria that are on, in chain order. The run summary lists only those, so it is fetched again when this list changes (one
+   * turned on or off, added, deleted or moved). Absent: the summary is fetched at open and after runs only.
+   */
+  activeCriterionIds?: readonly string[];
 }
 
 /**
  * The results, the function that fetches again what the given stages write (its promise resolves once every fetch has ended),
  * and the one that fetches the run summary again.
  */
-export function useRunResults({ origin, stagesWithResults, criterionId, criterionStagesWithResults, carvedByCriterionIds = null }: RunResultsSource): [RunResults, (stages: readonly string[]) => Promise<void>, () => Promise<void>] {
+export function useRunResults({ origin, stagesWithResults, criterionId, criterionStagesWithResults, carvedByCriterionIds = null,
+                               activeCriterionIds }: RunResultsSource): [RunResults, (stages: readonly string[]) => Promise<void>, () => Promise<void>] {
   const { token, project, onServiceProblem } = useProjectSession();
   const [results, setResults] = useState<RunResults>(NO_RESULTS);
   const latestRequest = useRef<Partial<Record<ResultName, number>>>({});
@@ -163,6 +170,18 @@ export function useRunResults({ origin, stagesWithResults, criterionId, criterio
       fetchResults(["carvedByCriterion"]);
     }
   }, [carvedByKey, fetchResults]);
+
+  // The criteria that are on changed: the summary, which lists only those, is fetched again (at open it comes with the other results).
+  const activeKey = activeCriterionIds?.join(",");
+  const lastActiveKey = useRef(activeKey);
+  const fetchSummary = useEffectEvent(() => {
+    fetchResults(["summary"]);
+  });
+  useEffect(() => {
+    if (activeKey === lastActiveKey.current) return;
+    lastActiveKey.current = activeKey;
+    fetchSummary();
+  }, [activeKey]);
 
   // Another criterion selected: its score points and sky dome replace the last one's, which are not shown meanwhile.
   const writtenOfCriterion = criterionStagesWithResults === undefined ? CRITERION_RESULTS

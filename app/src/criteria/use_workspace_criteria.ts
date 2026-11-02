@@ -78,6 +78,8 @@ export interface CriteriaOfResults {
   criterionStagesWithResults?: readonly string[];
   /** The criteria that are on, in chain order, when there are two or more and every one has run: the by-criterion layer is asked for then. */
   carvedByCriterionIds?: readonly string[] | null;
+  /** The criteria that are on, in chain order: the run summary lists only those, so it is fetched again when they change. */
+  activeCriterionIds?: readonly string[];
   /** Two or more criteria are on: the by-criterion layer belongs to the view, and is listed as missing while it has no data. */
   carvedByCriterionWanted?: boolean;
   /** The thresholding of some criterion that is on is not current (as shown): the by-criterion layer is dimmed. */
@@ -230,6 +232,7 @@ export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): Workspace
   const ofResults: CriteriaOfResults = {
     criterionStagesWithResults: resultsCriterionId === undefined ? undefined : stagesWithOutputOf(criterionStages[resultsCriterionId]),
     carvedByCriterionIds: carvedByCriterionWanted && everyOneCarved ? active.map((entry) => entry.id) : null,
+    activeCriterionIds: active.map((entry) => entry.id),
     carvedByCriterionWanted,
     carvedByCriterionOutOfDate: active.some((entry) => shownAs(criterionStages[entry.id] ?? NOT_RUN).thresholding !== "current"),
     criterionStages: ownStages,

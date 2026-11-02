@@ -194,7 +194,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const meshFormat = String(shownValue(form, "final_mesh_format") ?? "ply");
   const [results, reloadResults, reloadSummary] = useRunResults({
     origin: context.origin, criterionId: context.criterionId, criterionStagesWithResults: context.criterionStagesWithResults,
-    carvedByCriterionIds: context.carvedByCriterionIds,
+    carvedByCriterionIds: context.carvedByCriterionIds, activeCriterionIds: context.activeCriterionIds,
     stagesWithResults: (Object.keys(stages) as PipelineStage[]).filter((stage) => stages[stage] !== "missing"),
   });
   const [autoUpdate, setAutoUpdate] = useAutoUpdate(project);

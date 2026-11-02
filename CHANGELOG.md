@@ -87,6 +87,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A criterion turned back on shows its result again.** The run summary lists only the criteria that are on, and the app
+  fetched it at open and after runs only: a criterion turned on after the summary was read had an empty card line, and
+  the chain line kept the numbers without it, until the next run or a reload. The app now fetches the summary again
+  whenever the criteria that are on change.
 - **North now turns the sky of irradiance and benefit.** Ladybug's sky matrix only records its north and runs Radiance's
   gendaymtx without it, so the patch weights of every `north_deg` were those of north 0: a turned site got the sun
   from the model's -Y. The sky is now turned by gendaymtx's `-r` before the sun is binned into the patches, which

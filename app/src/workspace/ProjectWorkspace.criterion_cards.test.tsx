@@ -3,7 +3,8 @@
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
-  CURRENT, FACADES, OUT_OF_DATE, ROOFS, WINDOWS, card, cardLine, cardNames, chooseFromMenu, criteriaSummary, criterion, deleteCriterion, expectNoProblemShown,
+  CURRENT, FACADES, OUT_OF_DATE, ROOFS, WINDOWS, card, cardLine, cardNames, carvingSummaryOf, chooseFromMenu, criteriaSummary, criterion, deleteCriterion,
+  expectNoProblemShown,
   expectResultsOfCriterion, openChain, panel, panelFrame, periodFieldText, protectedFiles, select, selectButtonOf, selectedCardName, service,
   settingsSaves,
 } from "./chain_service_for_test";
@@ -280,6 +281,17 @@ test("turning a selected criterion that has results back on fetches its score po
   await settle();
   expect(selectedCardName()).toBe("Spring sun on windows");
   expect(service.requests).toEqual(expect.arrayContaining(["GET /run/score-points?criterion=2", "GET /run/sky-patches?criterion=2"]));
+});
+
+test("a criterion turned back on shows its result: the run summary, which lists only the criteria that are on, is fetched again", async () => {
+  await openChain([FACADES, { ...WINDOWS, bypassed: true }], { 1: CURRENT });
+  expect(cardLine("Spring sun on windows")).toBe("Off");
+  service.criterionStages["2"] = CURRENT;                          // its results from before it was turned off
+  service.summaryCriteria = [carvingSummaryOf(FACADES, 61), carvingSummaryOf(WINDOWS, 80)];     // the service lists it again once it is on
+  await act(async () => card("Spring sun on windows").querySelector<HTMLInputElement>('[role="switch"]')!.click());
+  await settle();
+  expect(cardLine("Spring sun on windows")).toBe("Removes 20 % of what reached it");
+  expect(cardLine("Winter sun on facades")).toBe("Removes 39 % of what reached it");
 });
 
 test("reordering with the keyboard sends the new order and the cards follow it", async () => {
