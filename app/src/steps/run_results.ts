@@ -6,8 +6,10 @@
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import type * as THREE from "three";
 import {
-  ApiError, getCarvedByCriterion, getRunFileJson, getRunSummary, getScorePoints, getSkyPatches, runFileUrl, serviceProblemOf, type RunSummary, type SkyDome,
+  ApiError, getCarvedByCriterion, getRunFileJson, getRunSummary, getScorePoints, getSkyPatches, reportServiceProblem, runFileUrl,
+  type RunSummary, type SkyDome,
 } from "../api_client/client";
+import { useProjectSession } from "../api_client/project_session";
 import { loadMesh } from "../viewer/loaders";
 import type { Point3 } from "../viewer/local_origin";
 import { decodeCarvedByCriterion, type CarvedByCriterion } from "../viewer/carved_by_criterion_decoder";
@@ -62,8 +64,6 @@ export function resultsAtOpen(stages: readonly string[], criterionStages?: reado
 }
 
 interface RunResultsSource {
-  token: string;
-  project: string;
   /** The local origin the meshes are drawn in; a new one reloads them. */
   origin: Point3;
   /** The stages with results when the project opens. */
@@ -78,14 +78,14 @@ interface RunResultsSource {
    * delete) and with each run's thresholding. Absent or null: the layer is not asked for.
    */
   carvedByCriterionIds?: readonly string[] | null;
-  onServiceProblem: (error: unknown) => void;
 }
 
 /**
  * The results, the function that fetches again what the given stages write (its promise resolves once every fetch has ended),
  * and the one that fetches the run summary again.
  */
-export function useRunResults({ token, project, origin, stagesWithResults, criterionId, criterionStagesWithResults, carvedByCriterionIds = null, onServiceProblem }: RunResultsSource): [RunResults, (stages: readonly string[]) => Promise<void>, () => Promise<void>] {
+export function useRunResults({ origin, stagesWithResults, criterionId, criterionStagesWithResults, carvedByCriterionIds = null }: RunResultsSource): [RunResults, (stages: readonly string[]) => Promise<void>, () => Promise<void>] {
+  const { token, project, onServiceProblem } = useProjectSession();
   const [results, setResults] = useState<RunResults>(NO_RESULTS);
   const latestRequest = useRef<Partial<Record<ResultName, number>>>({});
   const carvedByKey = carvedByCriterionIds === null ? null : carvedByCriterionIds.join(",");
@@ -138,7 +138,7 @@ export function useRunResults({ token, project, origin, stagesWithResults, crite
         // A result the stage has not written is a 404 and stays null. Any other failure that is not a refusal may be a lost
         // engine: the app asks GET health before it says so, so a mesh the view cannot read only costs that check.
         const isMissingResult = error instanceof ApiError && error.status === NOT_FOUND;
-        if (!isMissingResult && serviceProblemOf(error) !== "other") source.current.onServiceProblem(error);
+        if (!isMissingResult) reportServiceProblem(error, source.current.onServiceProblem);
       });
     });
     return Promise.all(fetches).then(() => undefined);     // each fetch handles its own failure, so none rejects

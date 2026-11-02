@@ -6,7 +6,8 @@
 // workspace shows that criterion's editor then (onShowCriterion).
 // Each change of the criteria dates thresholding (order, bypass) or adds stages, so the stage status is asked for again.
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import { failureTextOf, getCriterionSettings, serviceProblemOf } from "../api_client/client";
+import { failureTextOf, getCriterionSettings, reportServiceProblem } from "../api_client/client";
+import { useProjectSession } from "../api_client/project_session";
 import type { FormStart, SettingsForm } from "../settings_form/form_state";
 import type { CriterionListProps } from "./CriterionList";
 import type { CriteriaHook } from "./use_criteria";
@@ -17,8 +18,6 @@ export type SelectionLoad = { state: "ready" } | { state: "loading" } | { state:
 export type CriterionRequests = Pick<CriterionListProps, "onSelect" | "onReorder" | "onSetBypassed" | "onRename" | "onDuplicate" | "onDelete" | "onAdd">;
 
 interface CriterionSelectionSource {
-  token: string;
-  project: string;
   criteria: CriteriaHook;
   /** The criterion whose settings the criterion form holds (the workspace's state: the form's send reads it), and its setter. */
   shownCriterionId: string;
@@ -34,7 +33,6 @@ interface CriterionSelectionSource {
   afterDelete?: () => Promise<void>;
   /** Called whenever showCriterion selects a criterion (a refused run, a link to a setting), before its settings are read: the step shows its editor. */
   onShowCriterion?: () => void;
-  onServiceProblem: (error: unknown) => void;
 }
 
 export interface CriterionSelection {
@@ -48,7 +46,8 @@ export interface CriterionSelection {
 }
 
 export function useCriterionSelection(source: CriterionSelectionSource): CriterionSelection {
-  const { token, project, criteria, shownCriterionId, criterionForm, onServiceProblem } = source;
+  const { token, project, onServiceProblem } = useProjectSession();
+  const { criteria, shownCriterionId, criterionForm } = source;
   const followed = <Reply,>(request: Promise<Reply>): Promise<Reply> => source.followed?.(request) ?? request;
   const [failure, setFailure] = useState<{ id: string; problem: string } | null>(null);
   const [attempt, setAttempt] = useState(0);         // a press on a card whose settings were refused asks again
@@ -82,7 +81,7 @@ export function useCriterionSelection(source: CriterionSelectionSource): Criteri
       setFailure(null);
     }).catch((error) => {
       if (request !== selectionRequest.current) return;
-      if (serviceProblemOf(error) !== "other") onServiceProblem(error);
+      reportServiceProblem(error, onServiceProblem);
       setFailure({ id: wanted, problem: failureTextOf(error) });
     });
   });
@@ -101,7 +100,7 @@ export function useCriterionSelection(source: CriterionSelectionSource): Criteri
       source.refreshStageStatus();
       return null;
     } catch (error) {
-      if (serviceProblemOf(error) !== "other") onServiceProblem(error);
+      reportServiceProblem(error, onServiceProblem);
       return failureTextOf(error);
     }
   };

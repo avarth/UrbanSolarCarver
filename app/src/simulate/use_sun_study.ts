@@ -4,7 +4,10 @@
 // the 3D view draws them; a collapsed panel draws nothing. It reads GET sun-chart and sun-positions while Simulate and the panel are
 // open and the project has a weather file.
 import { useEffect, useEffectEvent, useMemo, useState } from "react";
-import { ApiError, getSunChart, getSunPositions, serviceProblemOf, type SunChart, type SunPosition, type SunPositions } from "../api_client/client";
+import {
+  ApiError, getSunChart, getSunPositions, reportServiceProblem, type SunChart, type SunPosition, type SunPositions,
+} from "../api_client/client";
+import { useProjectSession } from "../api_client/project_session";
 import { dayAndMonth, messages } from "../messages";
 import type { AnalysisPeriodField } from "../settings_form/analysis_period";
 import type { Point3 } from "../viewer/local_origin";
@@ -86,15 +89,13 @@ export function shadeRequest(period: ShadePeriod, timeBasis: TimeBasis) {
 }
 
 interface SunStudySource {
-  token: string;
-  project: string;
   /** Simulate is open: the sun is read only then. */
   active: boolean;
   hasWeatherFile: boolean;
-  onServiceProblem: (error: unknown) => void;
 }
 
-export function useSunStudy({ token, project, active, hasWeatherFile, onServiceProblem }: SunStudySource): SunStudyHook {
+export function useSunStudy({ active, hasWeatherFile }: SunStudySource): SunStudyHook {
+  const { token, project, onServiceProblem } = useProjectSession();
   const [settings, setSettings] = useState<SunStudySettings>(INITIAL_SUN_STUDY);
   const change = (changes: Partial<SunStudySettings>) => setSettings((current) => ({ ...current, ...changes }));
   const [chart, setChart] = useState<{ key: string; chart: SunChart } | null>(null);
@@ -103,7 +104,7 @@ export function useSunStudy({ token, project, active, hasWeatherFile, onServiceP
   const reads = active && hasWeatherFile && settings.open;
   const { timeBasis, view, period } = settings;
   const report = useEffectEvent((error: unknown) => {
-    if (!(error instanceof ApiError && error.status === NOT_FOUND) && serviceProblemOf(error) !== "other") onServiceProblem(error);
+    if (!(error instanceof ApiError && error.status === NOT_FOUND)) reportServiceProblem(error, onServiceProblem);
   });
 
   // The sun path's day: the moment's, or the first day of the period while the hours in shade are shown.

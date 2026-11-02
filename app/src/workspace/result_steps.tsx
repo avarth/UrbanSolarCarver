@@ -5,7 +5,8 @@
 // stage). ProjectWorkspace gives them the project's form, stage status and run loop; the results are fetched here and again as
 // each stage of a run is done.
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { downloadWithToken, failureTextOf, serviceProblemOf, type RunSummary } from "../api_client/client";
+import { downloadWithToken, failureTextOf, reportServiceProblem, type RunSummary } from "../api_client/client";
+import { useProjectSession } from "../api_client/project_session";
 import { messages } from "../messages";
 import { analysisDiffersFromStored, shownValue, type FormState, type SaveOutcome } from "../settings_form/form_state";
 import type { StepFormAction } from "../settings_form/two_forms";
@@ -133,8 +134,6 @@ export function carvingOfCriterion(summary: RunSummary | null, criterionId?: str
 }
 
 export interface ResultStepsContext extends CriteriaOfResults {
-  token: string;
-  project: string;
   /** The selected criterion, whose carving, score points and sky dome are shown; absent: the service's default. */
   criterionId?: string;
   /** The settings that belong to a criterion (GET criterion-keys): a run failing on another, a shared one, names no criterion. */
@@ -160,7 +159,6 @@ export interface ResultStepsContext extends CriteriaOfResults {
   origin: Point3;
   openStep: (step: StepName) => void;
   goToSetting: GoToSetting;
-  onServiceProblem: (error: unknown) => void;
 }
 
 /** A value of the threshold queue: the threshold settings and the mode they were given in (the queue keys it by criterion). */
@@ -190,12 +188,12 @@ export interface ResultSteps {
 }
 
 export function useResultSteps(context: ResultStepsContext): ResultSteps {
-  const { token, project, form, dispatch, flushSave, changeAndSave, stages, runs, runBlocker, projectRunActive } = context;
+  const { token, project, onServiceProblem } = useProjectSession();
+  const { form, dispatch, flushSave, changeAndSave, stages, runs, runBlocker, projectRunActive } = context;
   const meshFormat = String(shownValue(form, "final_mesh_format") ?? "ply");
   const [results, reloadResults, reloadSummary] = useRunResults({
-    token, project, origin: context.origin, criterionId: context.criterionId, criterionStagesWithResults: context.criterionStagesWithResults,
+    origin: context.origin, criterionId: context.criterionId, criterionStagesWithResults: context.criterionStagesWithResults,
     carvedByCriterionIds: context.carvedByCriterionIds,
-    onServiceProblem: context.onServiceProblem,
     stagesWithResults: (Object.keys(stages) as PipelineStage[]).filter((stage) => stages[stage] !== "missing"),
   });
   const [autoUpdate, setAutoUpdate] = useAutoUpdate(project);
@@ -306,7 +304,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     }
     if (!carvingRunsNow()) return false;
     // The service thresholds again from the first criterion whose carving is not current, this one, and the criteria after it.
-    const runOutcome = await now.runs.start(now.project, CARVING_STAGES, "carving_update", { isSuperseded, chainOrder: latest.current.context.chainOrder });
+    const runOutcome = await now.runs.start(project, CARVING_STAGES, "carving_update", { isSuperseded, chainOrder: latest.current.context.chainOrder });
     return runOutcome !== "up_to_date" && runOutcome !== "not_started";
   }, () => latest.current.showResultsTheServiceHolds(CARVING_STAGES));
   const submitThreshold = (values: Record<string, unknown>) => {
@@ -341,8 +339,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const download = (file: ExportDownload) => {
     setDownloadProblem(null);
     downloadWithToken(token, file.address, file.fileName).catch((error) => {
-      if (serviceProblemOf(error) !== "other") context.onServiceProblem(error);
-      else setDownloadProblem(failureTextOf(error));
+      if (!reportServiceProblem(error, onServiceProblem)) setDownloadProblem(failureTextOf(error));
     });
   };
   // A format change rebuilds the parts that exist (the envelope, the massing or both), so every file is in the new format at once.
@@ -445,7 +442,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
                       ...(context.carvedByCriterionWanted === true && viewerResults.carvedByCriterion === null ? ["carved_by_criterion" as const] : [])],
       runProgress: running ? runProgressShare(record.state) : null,
       overlayContent: runReportOpen
-        ? <RunReportPanel token={token} project={project} onClose={() => setRunReportOpen(false)} onServiceProblem={context.onServiceProblem} />
+        ? <RunReportPanel onClose={() => setRunReportOpen(false)} />
         : null,
     },
     results,

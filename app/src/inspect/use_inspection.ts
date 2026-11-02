@@ -15,9 +15,10 @@
 // whenever its files change).
 import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  failureTextOf, getInspection, getInspectionGeometry, isStoredFileChanged, restoreOriginal, serviceProblemOf, turnSurfaces, type InspectedFile,
-  type InspectReply,
+  failureTextOf, getInspection, getInspectionGeometry, isStoredFileChanged, reportServiceProblem, restoreOriginal, turnSurfaces,
+  type InspectedFile, type InspectReply,
 } from "../api_client/client";
+import { useProjectSession } from "../api_client/project_session";
 import { messages } from "../messages";
 import type { InspectLayerFile } from "../viewer/layers";
 import { toLocal, type Point3 } from "../viewer/local_origin";
@@ -123,17 +124,14 @@ function withTurns(turns: Turns, fileName: string, surfaces: ReadonlySet<number>
 }
 
 interface InspectionOptions {
-  token: string;
-  project: string;
   /** Inspect is shown: the inspection is read each time it becomes so. */
   active: boolean;
   /** A save or restore changed a stored file (the stage status and the stored files are asked for again). */
   onSaved: () => void;
-  /** Told a failed request that lost the token or the engine (the app's overlay says it). */
-  onServiceProblem?: (error: unknown) => void;
 }
 
-export function useInspection({ token, project, active, onSaved, onServiceProblem = () => {} }: InspectionOptions): InspectionHook {
+export function useInspection({ active, onSaved }: InspectionOptions): InspectionHook {
+  const { token, project, onServiceProblem } = useProjectSession();
   const [state, setState] = useState<InspectionState>({
     reply: null, geometries: NO_GEOMETRIES, selectedKey: null, frameRequest: 0, flipMode: false, arrows: false, turned: NO_TURNS,
     stagedOn: new Map(), sending: NO_TURNS, problem: null,
@@ -156,7 +154,7 @@ export function useInspection({ token, project, active, onSaved, onServiceProble
   const fileOf = (key: FileKey | null) => latest.current.reply?.files.find((file) => isKeyOf(key, file)) ?? null;
   const testSurfaceFile = (fileName: string) => fileOf({ role: TEST_SURFACES_ROLE, fileName });
   const failed = (error: unknown) => {
-    if (serviceProblemOf(error) !== "other") onServiceProblem(error);
+    reportServiceProblem(error, onServiceProblem);
     return failureTextOf(error);
   };
 

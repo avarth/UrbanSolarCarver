@@ -3,6 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import type { StudyEntry, StudyWithState } from "../api_client/client";
 import { renderForTest } from "../viewer_overlays/render_for_test";
 import { useStudies, type StudiesHook } from "./use_studies";
+import { inProjectSession } from "../api_client/project_session_for_test";
 
 function study(id: string): StudyWithState {
   const entry: StudyEntry = { id, name: `Study ${id}`, named_by_user: false, colour: "#336699", metric: "sky_view", settings: {}, target: null, test_surface_files: [] };
@@ -30,10 +31,10 @@ function renderedHook(reads: (() => Promise<Response>)[], writeReply: (method: s
   }));
   let latest: StudiesHook | null = null;
   function Probe() {
-    latest = useStudies("token", "p");
+    latest = useStudies();
     return null;
   }
-  const rendered = renderForTest(createElement(Probe));
+  const rendered = renderForTest(inProjectSession(createElement(Probe)));
   return { hook: () => latest!, requests, unmount: rendered.unmount };
 }
 

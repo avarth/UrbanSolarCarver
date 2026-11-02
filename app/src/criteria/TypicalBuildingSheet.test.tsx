@@ -5,6 +5,7 @@ import type { TypicalBuildingLibraryEntry, TypicalBuildingReply } from "../api_c
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { buildingGroupSummary, effectColour, libraryGroupsOf, libraryLineOf, SUN_DOWN_COLOUR, SUN_DOWN_COLOUR_DARK, TypicalBuildingSheet, withRoom } from "./TypicalBuildingSheet";
 import { PROGRESS_MILLISECONDS, useTypicalBuilding, type TypicalBuildingValues } from "./use_typical_building";
+import { inProjectSession } from "../api_client/project_session_for_test";
 
 const NBSP = " ";
 const DIGIT_GROUP = " ";
@@ -159,8 +160,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function Sheet({ includesHarm = false, hasWeatherFile = true }: { includesHarm?: boolean; hasWeatherFile?: boolean }) {
-  const building = useTypicalBuilding({ token: "t", project: "p", active: true, runActive: false, weatherRevision: 0, onServiceProblem: () => {} });
+interface SheetProps {
+  includesHarm?: boolean;
+  hasWeatherFile?: boolean;
+}
+
+const Sheet = (props: SheetProps) => inProjectSession(<SheetProbe {...props} />);
+
+function SheetProbe({ includesHarm = false, hasWeatherFile = true }: SheetProps) {
+  const building = useTypicalBuilding({ active: true, runActive: false, weatherRevision: 0 });
   return <TypicalBuildingSheet id="sheet" building={building} includesHarm={includesHarm} hasWeatherFile={hasWeatherFile} disabledReason={null}
                                onClose={() => { closed += 1; }} />;
 }

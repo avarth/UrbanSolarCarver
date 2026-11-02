@@ -11,9 +11,10 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   addTypicalBuildingLibraryEntry, ApiError, calculateTypicalBuilding, deleteTypicalBuildingLibraryEntry, failureTextOf, getTypicalBuilding,
-  getTypicalBuildingLibrary, getTypicalBuildingProgress, getTypicalBuildingWeights, putTypicalBuilding, serviceProblemOf, updateTypicalBuildingLibraryEntry,
-  type TypicalBuildingLibraryEntry, type TypicalBuildingReply, type TypicalBuildingWeightsReply,
+  getTypicalBuildingLibrary, getTypicalBuildingProgress, getTypicalBuildingWeights, putTypicalBuilding, reportServiceProblem,
+  updateTypicalBuildingLibraryEntry, type TypicalBuildingLibraryEntry, type TypicalBuildingReply, type TypicalBuildingWeightsReply,
 } from "../api_client/client";
+import { useProjectSession } from "../api_client/project_session";
 
 export type TypicalBuildingValues = Record<string, unknown>;
 
@@ -57,14 +58,11 @@ export interface TypicalBuildingHook {
 }
 
 interface TypicalBuildingOptions {
-  token: string;
-  project: string;
   active: boolean;
   /** A run of the project is under way. */
   runActive: boolean;
   /** Changes whenever the weather file is added, replaced or removed. */
   weatherRevision: number;
-  onServiceProblem: (error: unknown) => void;
 }
 
 /** The field errors of a refused save (422 with field_errors), by field; null for another failure. */
@@ -75,7 +73,8 @@ function fieldErrorsOf(error: unknown): Record<string, string> | null {
   return Object.fromEntries(fieldErrors.map((fieldError) => [fieldError.field ?? "", fieldError.message]));
 }
 
-export function useTypicalBuilding({ token, project, active, runActive, weatherRevision, onServiceProblem }: TypicalBuildingOptions): TypicalBuildingHook {
+export function useTypicalBuilding({ active, runActive, weatherRevision }: TypicalBuildingOptions): TypicalBuildingHook {
+  const { token, project, onServiceProblem } = useProjectSession();
   const [stored, setStored] = useState<TypicalBuildingReply | null>(null);
   const [shown, setShown] = useState<TypicalBuildingValues | null>(null);
   const [library, setLibrary] = useState<TypicalBuildingLibraryEntry[] | null>(null);
@@ -92,8 +91,7 @@ export function useTypicalBuilding({ token, project, active, runActive, weatherR
   const latest = useRef<TypicalBuildingReply | null>(null);
 
   const failed = (error: unknown): string | null => {
-    if (serviceProblemOf(error) !== "other") {
-      onServiceProblem(error);
+    if (reportServiceProblem(error, onServiceProblem)) {
       return null;
     }
     return failureTextOf(error);

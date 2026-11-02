@@ -1,7 +1,8 @@
 // The run report (run_report.md) in a panel over the 3D view (UX 5.6), as preformatted text in milestone 1; a report that cannot
 // be read says so. It closes with its Close button or Escape, and gives the focus back to what opened it.
 import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent } from "react";
-import { getRunFileText, serviceProblemOf } from "../api_client/client";
+import { getRunFileText, reportServiceProblem } from "../api_client/client";
+import { useProjectSession } from "../api_client/project_session";
 import { messages } from "../messages";
 import { WarningIcon } from "../settings_form/SettingField";
 import "../theme/panels.css";
@@ -9,13 +10,11 @@ import "../theme/panels.css";
 export const RUN_REPORT_PATH = "run_report.md";
 
 interface RunReportPanelProps {
-  token: string;
-  project: string;
   onClose: () => void;
-  onServiceProblem: (error: unknown) => void;
 }
 
-export function RunReportPanel({ token, project, onClose, onServiceProblem }: RunReportPanelProps) {
+export function RunReportPanel({ onClose }: RunReportPanelProps) {
+  const { token, project, onServiceProblem } = useProjectSession();
   const [report, setReport] = useState<string | null>(null);
   const [unreadable, setUnreadable] = useState(false);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -32,7 +31,7 @@ export function RunReportPanel({ token, project, onClose, onServiceProblem }: Ru
     let stale = false;
     getRunFileText(token, project, RUN_REPORT_PATH).then((text) => { if (!stale) setReport(text); }).catch((error) => {
       if (stale) return;
-      if (serviceProblemOf(error) !== "other") reportProblem(error);
+      reportServiceProblem(error, reportProblem);
       setUnreadable(true);
     });
     return () => {

@@ -9,7 +9,8 @@
 // value, 0 and 100 by default, kept for each study while the app is open. The palettes are pinned (user, 2026-10-28): magma by
 // value, viridis by share (and for Change).
 import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ApiError, getStudySkyPatches, getStudyValues, serviceProblemOf, type SkyDome, type StudyChange } from "../api_client/client";
+import { ApiError, getStudySkyPatches, getStudyValues, reportServiceProblem, type SkyDome, type StudyChange } from "../api_client/client";
+import { useProjectSession } from "../api_client/project_session";
 import { messages } from "../messages";
 import type { RunLoop } from "../common/run_state";
 import type { StageState } from "../stages";
@@ -23,8 +24,6 @@ const NOT_FOUND = 404;
 const FULL_SHARE: [number, number] = [0, 100];
 
 interface StudyViewSource {
-  token: string;
-  project: string;
   studies: StudiesHook;
   /** Simulate is open: the values are read only then. */
   active: boolean;
@@ -37,7 +36,6 @@ interface StudyViewSource {
   massingStage: StageState;
   /** The studies cannot be changed now (a run of the project): the saved ends wait. */
   editDisabled: boolean;
-  onServiceProblem: (error: unknown) => void;
 }
 
 /** The legend's content: the scale the bar spans, the two ends of the colour range on it, and what it is coloured by. */
@@ -98,8 +96,8 @@ export const TARGET_SAVE_DELAY_MILLISECONDS = 300;
 /** The palette of each colouring: magma by value, viridis by share of the no-build value. */
 const PALETTE_OF: Record<ColourBy, StudyPalette> = { value: "magma", share: "viridis" };
 
-export function useStudyView({ token, project, studies, active, runs, envelopeBuilt, massingBuilt, envelopeStage, massingStage, editDisabled,
-                               onServiceProblem }: StudyViewSource): StudyViewHook {
+export function useStudyView({ studies, active, runs, envelopeBuilt, massingBuilt, envelopeStage, massingStage, editDisabled }: StudyViewSource): StudyViewHook {
+  const { token, project, onServiceProblem } = useProjectSession();
   const [chosenGeometry, setGeometry] = useState<StudyGeometry>("max_volume");
   const [chosenChange, setChange] = useState(false);
   const [colourBy, setColourBy] = useState<ColourBy>("value");
@@ -119,7 +117,7 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
   const hasResult = selected !== null && (selected.state === "current" || selected.state === "out_of_date");
   const running = runs.activeRun !== null;
   const reportValuesProblem = useEffectEvent((error: unknown) => {
-    if (!(error instanceof ApiError && error.status === NOT_FOUND) && serviceProblemOf(error) !== "other") onServiceProblem(error);
+    if (!(error instanceof ApiError && error.status === NOT_FOUND)) reportServiceProblem(error, onServiceProblem);
   });
   // Read when a study with a result is selected, and again when a run ends (a simulation writes new values); not during a run. They
   // are let go when Simulate closes (tens of megabytes on a district) and read again when it opens.
@@ -208,7 +206,7 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
     const done = () => setSaving((current) => (current?.id === id && current.change === sent ? null : current));
     saves.current = saves.current.then(() => latestStudies.current.update(id, sent)).then(done, (error: unknown) => {
       done();
-      if (serviceProblemOf(error) !== "other") onServiceProblem(error);
+      reportServiceProblem(error, onServiceProblem);
     });
   };
   const flushSave = () => {

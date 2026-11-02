@@ -4,8 +4,10 @@
 // wait for them before a rename, reset or delete of the project.
 import { useRef, useState } from "react";
 import {
-  addInput, getInputFiles, getProject, removeInput, serviceProblemOf, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail,
+  addInput, getInputFiles, getProject, removeInput, reportServiceProblem, type InputFileInfo, type InputFilesReply, type ModeInfo,
+  type ProjectDetail,
 } from "../api_client/client";
+import { useProjectSession } from "../api_client/project_session";
 import { hemisphereOfLatitude, seasonsOfLatitude, type Hemisphere } from "../settings_form/analysis_period";
 import type { FormState, SettingsForm } from "../settings_form/form_state";
 import { localOrigin, type Bounds3, type Point3 } from "../viewer/local_origin";
@@ -17,7 +19,6 @@ import type { WeatherFileChange } from "../settings_form/weather_change_notice";
 const NO_SHIFT: Point3 = [0, 0, 0];
 
 export interface InputFilesContext {
-  token: string;
   project: ProjectDetail;
   modes: ModeInfo[];
   /** The form the steps show, read when a weather file is added. */
@@ -27,7 +28,6 @@ export interface InputFilesContext {
   refreshStageStatus: () => void;
   /** Told whenever a role's meshes are loaded: the view frames the inputs. */
   onInputsLoaded: () => void;
-  onServiceProblem: (error: unknown) => void;
 }
 
 export interface InputFiles {
@@ -67,7 +67,8 @@ export interface InputFiles {
 }
 
 export function useInputFiles(context: InputFilesContext): InputFiles {
-  const { token, project, modes, currentForm, sharedForm, refreshStageStatus, onInputsLoaded, onServiceProblem } = context;
+  const { token, onServiceProblem } = useProjectSession();
+  const { project, modes, currentForm, sharedForm, refreshStageStatus, onInputsLoaded } = context;
   // The uploads and removals of input files under way, each until its reply (and the save it may start) is in.
   const inputChangesUnderWay = useRef(new Set<Promise<unknown>>());
   const waitForInputChanges = async () => {
@@ -94,11 +95,10 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
   const hemisphereOfLastWeatherFile = useRef<Hemisphere>(hemisphereOfLatitude(project.weather_latitude));
 
   const origin = joinedBounds === null ? NO_SHIFT : localOrigin(joinedBounds);
-  const maxVolume = useInputGeometry(token, project.name, "max_volume", files.max_volume, origin, inputRevisions.max_volume, onInputsLoaded, onServiceProblem);
-  const testSurfaces = useInputGeometry(token, project.name, "test_surfaces", files.test_surfaces, origin, inputRevisions.test_surfaces, onInputsLoaded,
-                                        onServiceProblem);
-  const contextMesh = useInputGeometry(token, project.name, "context", files.context, origin, inputRevisions.context, onInputsLoaded, onServiceProblem);
-  const terrain = useInputGeometry(token, project.name, "terrain", files.terrain, origin, inputRevisions.terrain, onInputsLoaded, onServiceProblem);
+  const maxVolume = useInputGeometry("max_volume", files.max_volume, origin, inputRevisions.max_volume, onInputsLoaded);
+  const testSurfaces = useInputGeometry("test_surfaces", files.test_surfaces, origin, inputRevisions.test_surfaces, onInputsLoaded);
+  const contextMesh = useInputGeometry("context", files.context, origin, inputRevisions.context, onInputsLoaded);
+  const terrain = useInputGeometry("terrain", files.terrain, origin, inputRevisions.terrain, onInputsLoaded);
 
   const applyFilesReply = (reply: InputFilesReply) => {
     setFiles((current) => ({ ...current, [reply.role]: reply.files }));
@@ -138,8 +138,7 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
         applyFilesReply(reply);
         if (role === "weather") noteNewWeatherFile(reply);
       } catch (error) {
-        if (serviceProblemOf(error) !== "other") {
-          onServiceProblem(error);
+        if (reportServiceProblem(error, onServiceProblem)) {
           break;
         }
         problems.push(inputProblemText(error, file.name));
@@ -156,7 +155,7 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
       afterInputsChanged(role);
       return null;
     } catch (error) {
-      if (serviceProblemOf(error) !== "other") onServiceProblem(error);
+      reportServiceProblem(error, onServiceProblem);
       return inputProblemText(error, fileName);
     }
   };

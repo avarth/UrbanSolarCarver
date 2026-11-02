@@ -4,13 +4,13 @@
 // stages as the steps show them.
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { dismissInputChanges, getStageStatus, type CriterionEntry, type InputFileChange, type ProjectDetail } from "../api_client/client";
+import { useProjectSession } from "../api_client/project_session";
 import { activeCriteria, stagesByCriterionOf, type StagesByCriterion } from "../criteria/criteria_state";
 import { analysisDiffersFromStored, type FormState } from "../settings_form/form_state";
 import type { RunLoop } from "../common/run_state";
 import type { PipelineStage, StageState } from "../stages";
 
 export interface StageStatusContext {
-  token: string;
   project: ProjectDetail;
   criteria: CriterionEntry[];
   /** The two forms as one (useBothForms). */
@@ -18,7 +18,6 @@ export interface StageStatusContext {
   runs: RunLoop;
   /** The service built files changed in the project folder into the project: the roles whose files the app asks for again. */
   onInputFilesChanged: (roles: string[]) => void;
-  onServiceProblem: (error: unknown) => void;
 }
 
 export interface StageStatus {
@@ -42,7 +41,8 @@ export interface StageStatus {
 // A change of a file found at another time is another notice: a second replacement is fetched again and told again.
 const changeKey = (change: InputFileChange) => `${change.role}/${change.file_name}/${change.noticed ?? ""}`;
 
-export function useStageStatus({ token, project, criteria, form, runs, onInputFilesChanged, onServiceProblem }: StageStatusContext): StageStatus {
+export function useStageStatus({ project, criteria, form, runs, onInputFilesChanged }: StageStatusContext): StageStatus {
+  const { token, onServiceProblem } = useProjectSession();
   const [stages, setStages] = useState(project.stage_status.stages as Record<PipelineStage, StageState>);
   const [criterionStages, setCriterionStages] = useState<StagesByCriterion>(() => stagesByCriterionOf(project.criterion_status));
   // The stored analysis settings (FormState.storedAnalysisRevision) the last stage status used was asked for after.

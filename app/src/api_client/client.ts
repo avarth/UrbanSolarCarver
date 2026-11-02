@@ -101,6 +101,16 @@ export function serviceProblemOf(error: unknown): "access_lost" | "engine_stoppe
   return "engine_stopped";
 }
 
+/**
+ * Hands *error* to *onServiceProblem* when the service is the cause (access lost, engine stopped) and says whether it did; false for
+ * a failure the caller shows itself.
+ */
+export function reportServiceProblem(error: unknown, onServiceProblem: (error: unknown) => void): boolean {
+  if (serviceProblemOf(error) === "other") return false;
+  onServiceProblem(error);
+  return true;
+}
+
 function projectPath(project: string): string {
   return `/api/projects/${encodeURIComponent(project)}`;
 }

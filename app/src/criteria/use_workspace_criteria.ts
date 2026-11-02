@@ -3,7 +3,10 @@
 // cannot start in Criteria and in Site and grid, what the results need to know about the criteria (useResultSteps), and the cards'
 // lines and the chain line, which read the results (cardsOf).
 import { useLayoutEffect, useRef } from "react";
-import { serviceProblemOf, updateCriterion, type CriterionEntry, type HealthReply, type ModeInfo, type RunSummary } from "../api_client/client";
+import {
+  reportServiceProblem, updateCriterion, type CriterionEntry, type HealthReply, type ModeInfo, type RunSummary,
+} from "../api_client/client";
+import { useProjectSession } from "../api_client/project_session";
 import { messages } from "../messages";
 import type { FormStart, FormState, SettingsForm } from "../settings_form/form_state";
 import { splitSettings, type StepFormAction } from "../settings_form/two_forms";
@@ -27,8 +30,6 @@ function stagesWithOutputOf(stages: CriterionStages | undefined): string[] {
 }
 
 export interface WorkspaceCriteriaSource {
-  token: string;
-  project: string;
   criteria: CriteriaHook;
   /** The criterion whose settings the criterion form holds (the workspace's state), and its setter. */
   shownCriterionId: string;
@@ -69,7 +70,6 @@ export interface WorkspaceCriteriaSource {
   focusSetting: (settingName: string) => void;
   /** A criterion is shown for a refused run or a link to one of its settings (showCriterion): the Criteria step shows its editor. */
   onShowCriterion: () => void;
-  onServiceProblem: (error: unknown) => void;
 }
 
 /** The criteria's parts of the result steps' context (useResultSteps, which extends it). */
@@ -138,11 +138,12 @@ export interface WorkspaceCriteria {
 }
 
 export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): WorkspaceCriteria {
-  const { token, project, criteria, criterion, resultsCriterionId, criterionKeys, runs, criterionStages, shownAs, form, onServiceProblem } = source;
+  const { token, project, onServiceProblem } = useProjectSession();
+  const { criteria, criterion, resultsCriterionId, criterionKeys, runs, criterionStages, shownAs, form } = source;
   const selection = useCriterionSelection({
-    token, project, criteria, shownCriterionId: source.shownCriterionId, setShownCriterionId: source.setShownCriterionId, criterionForm: source.criterionForm,
+    criteria, shownCriterionId: source.shownCriterionId, setShownCriterionId: source.setShownCriterionId, criterionForm: source.criterionForm,
     sharedForm: source.sharedForm, refreshStageStatus: source.refreshStageStatus, followed: source.followed, afterDelete: source.reloadTestSurfaces,
-    onServiceProblem, onShowCriterion: source.onShowCriterion,
+    onShowCriterion: source.onShowCriterion,
     criterionStartOf: (settings): FormStart => ({
       schema: source.schema, modes: source.modes, settings: splitSettings(settings, criterionKeys).criterion, gridPlan: null,
     }),
@@ -221,7 +222,7 @@ export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): Workspace
       source.refreshStageStatus();
       return true;
     } catch (error) {
-      if (serviceProblemOf(error) !== "other") onServiceProblem(error);
+      reportServiceProblem(error, onServiceProblem);
       return false;
     }
   };

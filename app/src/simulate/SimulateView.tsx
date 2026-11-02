@@ -4,7 +4,8 @@
 // Design that changed what the studies trace. The simulation is a run of the app's run loop (origin "simulate"), one job at a time
 // with the runs of Design: Run waits while one of those goes on, and the studies cannot be changed while a run of the project does.
 import { useEffect, useEffectEvent, useId, useRef, useState, type ReactNode } from "react";
-import { failureTextOf, serviceProblemOf, type CriterionEntry, type InputFileInfo, type StudySource } from "../api_client/client";
+import { failureTextOf, reportServiceProblem, type CriterionEntry, type InputFileInfo, type StudySource } from "../api_client/client";
+import { useProjectSession } from "../api_client/project_session";
 import { messages } from "../messages";
 import type { ViewportTheme } from "../viewer/colour_scales";
 import type { RunLoop } from "../common/run_state";
@@ -22,7 +23,6 @@ import type { SunStudyHook } from "./use_sun_study";
 import "./simulate.css";
 
 interface SimulateViewProps {
-  project: string;
   studies: StudiesHook;
   /** The criteria, which Add study offers as shortcuts. */
   criteria: CriterionEntry[];
@@ -34,7 +34,6 @@ interface SimulateViewProps {
   runs: RunLoop;
   /** A study let a file go, which the project may then no longer store: the stored files are asked for again. */
   onStoredFilesChange: () => void;
-  onServiceProblem: (error: unknown) => void;
   /** The selected study on the view: the geometry switch, the target legend and the result card. */
   studyView: StudyViewHook;
   /** The sun tool: the Sun panel sets it, the view draws it. */
@@ -45,8 +44,9 @@ interface SimulateViewProps {
   notice?: ReactNode;
 }
 
-export function SimulateView({ project, studies, criteria, storedTestSurfaces, hasSurroundings, hasTerrain, runs, onStoredFilesChange, onServiceProblem,
-                               studyView, sunStudy, notice }: SimulateViewProps) {
+export function SimulateView({ studies, criteria, storedTestSurfaces, hasSurroundings, hasTerrain, runs, onStoredFilesChange, studyView, sunStudy,
+                               notice }: SimulateViewProps) {
+  const { project, onServiceProblem } = useProjectSession();
   const [popoverStudyId, setPopoverStudyId] = useState<string | null>(null);
   const view = useRef<HTMLDivElement>(null);
   const popoverId = useId();
@@ -69,7 +69,7 @@ export function SimulateView({ project, studies, criteria, storedTestSurfaces, h
       await request();
       return null;
     } catch (error) {
-      if (serviceProblemOf(error) !== "other") onServiceProblem(error);
+      reportServiceProblem(error, onServiceProblem);
       return failureTextOf(error);
     }
   };
@@ -83,8 +83,7 @@ export function SimulateView({ project, studies, criteria, storedTestSurfaces, h
         await studies.addFile(id, file);
         added = true;
       } catch (error) {
-        if (serviceProblemOf(error) !== "other") {
-          onServiceProblem(error);
+        if (reportServiceProblem(error, onServiceProblem)) {
           break;
         }
         problems.push(inputProblemText(error, file.name));

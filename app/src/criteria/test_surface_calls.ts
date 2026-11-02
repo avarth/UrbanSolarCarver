@@ -1,13 +1,12 @@
 // A criterion's test surfaces, added, removed and taken from another criterion through its own routes (useCriteria). The reply
 // lists file names only, so after an upload or a removal the stored files are asked for again (with their triangle counts, for the
 // box and the 3D view); the stage status follows every change, as after a change of the site's inputs.
-import { getInputFiles, serviceProblemOf, type InputFileInfo } from "../api_client/client";
+import { getInputFiles, reportServiceProblem, type InputFileInfo } from "../api_client/client";
+import { useProjectSession } from "../api_client/project_session";
 import { inputProblemText } from "../common/InputBox";
 import type { CriteriaHook } from "./use_criteria";
 
 export interface TestSurfaceContext {
-  token: string;
-  project: string;
   criteria: CriteriaHook;
   /** The criterion whose files change. */
   criterionId: string;
@@ -16,7 +15,6 @@ export interface TestSurfaceContext {
   refreshStageStatus: () => void;
   /** Follows a change until its reply is in (the app waits for it before a rename, reset or delete). */
   followed: <Reply>(change: Promise<Reply>) => Promise<Reply>;
-  onServiceProblem: (error: unknown) => void;
 }
 
 export interface TestSurfaceCalls {
@@ -30,8 +28,9 @@ export interface TestSurfaceCalls {
   reloadStoredFiles: () => Promise<void>;
 }
 
-export function testSurfaceCallsOf(context: TestSurfaceContext): TestSurfaceCalls {
-  const { token, project, criteria, criterionId, onServiceProblem } = context;
+export function useTestSurfaceCalls(context: TestSurfaceContext): TestSurfaceCalls {
+  const { token, project, onServiceProblem } = useProjectSession();
+  const { criteria, criterionId } = context;
   const reloadStoredFiles = async () => {
     try {
       context.onStoredFiles(await getInputFiles(token, project, "test_surfaces"));
@@ -49,8 +48,7 @@ export function testSurfaceCallsOf(context: TestSurfaceContext): TestSurfaceCall
       try {
         await criteria.addTestSurfaces(criterionId, [file]);
       } catch (error) {
-        if (serviceProblemOf(error) !== "other") {
-          onServiceProblem(error);
+        if (reportServiceProblem(error, onServiceProblem)) {
           break;
         }
         problems.push(inputProblemText(error, file.name));
@@ -65,7 +63,7 @@ export function testSurfaceCallsOf(context: TestSurfaceContext): TestSurfaceCall
       await afterChange();
       return null;
     } catch (error) {
-      if (serviceProblemOf(error) !== "other") onServiceProblem(error);
+      reportServiceProblem(error, onServiceProblem);
       return inputProblemText(error, fileName);
     }
   };
@@ -76,7 +74,7 @@ export function testSurfaceCallsOf(context: TestSurfaceContext): TestSurfaceCall
       context.refreshStageStatus();
       return null;
     } catch (error) {
-      if (serviceProblemOf(error) !== "other") onServiceProblem(error);
+      reportServiceProblem(error, onServiceProblem);
       return inputProblemText(error, fileName);
     }
   };

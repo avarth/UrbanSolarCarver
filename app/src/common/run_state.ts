@@ -14,7 +14,9 @@
 // missing or out of date: progress of the stage "typical_building", of no criterion, which the run's reply does not list. Its
 // first event puts it at the front of the run's order; it is not a pipeline stage (runStages leaves it out).
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ApiError, cancelRun, failureTextOf, serviceProblemOf, startRun, startSimulation as postSimulation } from "../api_client/client";
+import {
+  ApiError, cancelRun, failureTextOf, reportServiceProblem, startRun, startSimulation as postSimulation,
+} from "../api_client/client";
 import { subscribeToRunEvents, type RunEvent } from "../api_client/events";
 import { messages } from "../messages";
 import type { PipelineStage } from "../stages";
@@ -404,8 +406,7 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
       reply = await startRun(token, project, produce);
     } catch (error) {
       release();
-      if (serviceProblemOf(error) !== "other") {
-        reportProblem.current(error);
+      if (reportServiceProblem(error, reportProblem.current)) {
         return "not_started";
       }
       const settingsFailure = refusedSettingsFailure(error);
@@ -444,8 +445,9 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
       reply = await postSimulation(token, project);
     } catch (error) {
       release();
-      if (serviceProblemOf(error) !== "other") reportProblem.current(error);
-      else show({ serial, project, origin, runId: null, state: initialRunState([]), refusal: failureTextOf(error) });
+      if (!reportServiceProblem(error, reportProblem.current)) {
+        show({ serial, project, origin, runId: null, state: initialRunState([]), refusal: failureTextOf(error) });
+      }
       return "not_started";
     }
     if (reply.run_id === null) {
@@ -460,7 +462,7 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
   const cancel = useCallback(() => {
     const record = latestRecord.current;
     if (record?.runId == null || record.state.final !== null) return;
-    cancelRun(token, record.runId).catch((error) => { if (serviceProblemOf(error) !== "other") reportProblem.current(error); });
+    cancelRun(token, record.runId).catch((error) => { reportServiceProblem(error, reportProblem.current); });
   }, [token]);
 
   const replyStillHolds = useCallback((project: string) => {

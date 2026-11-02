@@ -4,10 +4,10 @@
 // and changes nothing; a failed read keeps what was shown and says why (loadProblem).
 import { useRef, useState } from "react";
 import {
-  addStudy, addStudyTestSurface, deleteStudy, failureTextOf, getStudies, removeStudyTestSurface, reorderStudies, serviceProblemOf, updateStudy,
-  useStudyTestSurface,
-  type MetricInfo, type StudyChange, type StudyEntry, type StudySource, type StudyWithState,
+  addStudy, addStudyTestSurface, deleteStudy, failureTextOf, getStudies, removeStudyTestSurface, reorderStudies, reportServiceProblem,
+  updateStudy, useStudyTestSurface, type MetricInfo, type StudyChange, type StudyEntry, type StudySource, type StudyWithState,
 } from "../api_client/client";
+import { useProjectSession } from "../api_client/project_session";
 
 export interface StudiesHook {
   studies: StudyWithState[];
@@ -43,8 +43,8 @@ interface StudiesState {
 /** A study the list does not have yet, until the list read after the change says its state. */
 const newStudy = (entry: StudyEntry): StudyWithState => ({ entry, state: "not_run", reason: null, geometries: [] });
 
-/** *onServiceProblem*: told a failed read that lost the token or the engine (the app's overlay says it). */
-export function useStudies(token: string, project: string, onServiceProblem: (error: unknown) => void = () => {}): StudiesHook {
+export function useStudies(): StudiesHook {
+  const { token, project, onServiceProblem } = useProjectSession();
   const [state, setState] = useState<StudiesState>({ studies: [], metrics: [], selectedId: null, loadProblem: null });
   // The latest state, read by calls that wait for a reply while another reply arrives.
   const latest = useRef(state);
@@ -69,7 +69,7 @@ export function useStudies(token: string, project: string, onServiceProblem: (er
                selectedId: kept ?? withResult?.entry.id ?? reply.studies[0]?.entry.id ?? null });
     } catch (error) {
       if (read !== readsAskedFor.current) return;
-      if (serviceProblemOf(error) !== "other") onServiceProblem(error);
+      reportServiceProblem(error, onServiceProblem);
       commit({ loadProblem: failureTextOf(error) });
     }
   };

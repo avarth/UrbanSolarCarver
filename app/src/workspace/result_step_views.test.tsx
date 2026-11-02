@@ -13,6 +13,7 @@ import { RunReportPanel } from "../steps/RunReportPanel";
 import { initialRunState, runReducer, type RunLoop, type RunRecord } from "../common/run_state";
 import { ScoreHistogram } from "../criteria/ScoreHistogram";
 import { createThresholdUpdateQueue } from "./threshold_queue";
+import { inProjectSession } from "../api_client/project_session_for_test";
 
 const SCHEMA = {
   properties: {
@@ -715,7 +716,7 @@ test("the cutoff line cannot be moved while the threshold cannot be changed", ()
 
 test("a run report that cannot be read says so instead of an empty panel", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: "There is no result file" }), { status: 404 })));
-  rendered = renderForTest(<RunReportPanel token="t" project="p" onClose={vi.fn()} onServiceProblem={vi.fn()} />);
+  rendered = renderForTest(inProjectSession(<RunReportPanel onClose={vi.fn()} />));
   await act(async () => {});
   expect(rendered.container.querySelector(".run-report-problem")!.textContent)
     .toBe("The run report could not be read. Build the envelope or the massing again to write it.");

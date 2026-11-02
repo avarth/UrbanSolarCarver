@@ -12,15 +12,16 @@
 // by it (Energy-weighted, in Solar usefulness).
 import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  failureTextOf, putSharedSettings, serviceProblemOf, updateCriterion, type HealthReply, type ModeInfo, type ProjectDetail,
+  failureTextOf, putSharedSettings, reportServiceProblem, updateCriterion, type HealthReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
+import { ProjectSessionContext } from "../api_client/project_session";
 import { filesOfOtherCriteria } from "../criteria/criteria_state";
 import { CriteriaStep, type CriteriaShows } from "../criteria/CriteriaStep";
 import { firstCriteriaShows } from "../criteria/criteria_shows";
 import { CriterionPanel } from "../criteria/CriterionPanel";
 import { usePanelSections } from "../criteria/PanelSection";
 import { sectionOfSetting } from "../criteria/section_summaries";
-import { testSurfaceCallsOf } from "../criteria/test_surface_calls";
+import { useTestSurfaceCalls } from "../criteria/test_surface_calls";
 import { useCriteria } from "../criteria/use_criteria";
 import { useTypicalBuilding } from "../criteria/use_typical_building";
 import { useWorkspaceCriteria } from "../criteria/use_workspace_criteria";
@@ -138,10 +139,17 @@ export interface OpenProjectSettingsSaver {
 }
 
 export function ProjectWorkspace(props: ProjectWorkspaceProps) {
+  // The token, the project's name and the app's handler of failed requests, for the hooks and panels of the open project.
+  const { token, project: { name }, onServiceProblem } = props;
+  const session = useMemo(() => ({ token, project: name, onServiceProblem }), [token, name, onServiceProblem]);
+  return <ProjectSessionContext value={session}><OpenProject {...props} /></ProjectSessionContext>;
+}
+
+function OpenProject(props: ProjectWorkspaceProps) {
   const { token, project, modes, criterionKeys, warmUpState, runs, onServiceProblem } = props;
   const criteria = useCriteria(token, project, props.startSteps?.criteria?.criterionId);
   // The studies of Simulate, kept while Design is shown (the selection stays); SimulateView reads them when Simulate opens.
-  const studies = useStudies(token, project.name, onServiceProblem);
+  const studies = useStudies();
   // The criterion whose settings the criterion form holds: the selected one, once its settings are in (a card just selected waits
   // for GET criteria/{id}/settings). Its panel, its results and the run's check of its test surfaces follow it. A project that lists
   // none (its migration failed) still has the settings of one.
@@ -185,7 +193,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   // The inspection is read again too while Inspect is shown: turns staged on a file replaced by hand are then dropped at once.
   const reloadInspection = useRef<() => void>(() => {});
   const { criterionStages, refreshStageStatus, shownAs, shownStages, everyCriterionCarved, inputChanges, dismissChanges } = useStageStatus({
-    token, project, criteria: criteria.criteria, form, runs, onServiceProblem,
+    project, criteria: criteria.criteria, form, runs,
     onInputFilesChanged: (roles) => {
       reloadInputRoles.current(roles);
       reloadInspection.current();
@@ -195,7 +203,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const [framingRequest, setFramingRequest] = useState(0);
   const frameAllInputs = () => setFramingRequest((count) => count + 1);
   const { files, origin, weather, meshes, addFiles, removeFile, storeTestSurfaceFiles, reloadRoles, followedInputChange, waitForInputChanges } = useInputFiles({
-    token, project, modes, currentForm, sharedForm, refreshStageStatus, onInputsLoaded: frameAllInputs, onServiceProblem,
+    project, modes, currentForm, sharedForm, refreshStageStatus, onInputsLoaded: frameAllInputs,
   });
   const inputChangesNotice = <InputChangesNotice changes={inputChanges} onDismiss={dismissChanges} />;
   const tellSettingsSaver = useEffectEvent((open: boolean) => {
@@ -265,14 +273,14 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const sceneSphere = useMemo(() => (inputsBounds === null ? null : sceneHemisphere(inputsBounds)), [inputsBounds]);
   const northDegrees = Number(shownValue(form, "north_deg") ?? 0);
 
-  const reportServiceProblem = useEffectEvent((error: unknown) => onServiceProblem(error));
+  const reportSaveProblem = useEffectEvent((error: unknown) => reportServiceProblem(error, onServiceProblem));
   useEffect(() => {
-    if (form.saveFailure !== null && serviceProblemOf(form.saveFailure) !== "other") reportServiceProblem(form.saveFailure);
+    if (form.saveFailure !== null) reportSaveProblem(form.saveFailure);
   }, [form.saveFailure]);
 
   // The sun path of the stored period (UX 8.2), as soon as the weather file and the period are there, before any run.
-  const sunPath = useSunPathOfStoredPeriod({ token, project: project.name, form, hasWeatherFile, northDegrees, criterionId: resultsCriterionId, onServiceProblem });
-  const { coldPeriod, answeredWeatherFileRevision } = useColdPeriod({ token, project: project.name, form, hasWeatherFile, weatherFileRevision: weather.fileRevision, onServiceProblem });
+  const sunPath = useSunPathOfStoredPeriod({ form, hasWeatherFile, northDegrees, criterionId: resultsCriterionId });
+  const { coldPeriod, answeredWeatherFileRevision } = useColdPeriod({ form, hasWeatherFile, weatherFileRevision: weather.fileRevision });
   const modeReadsPeriod = modeInfo?.needs_period ?? false;
   const periodShown = analysisPeriodOf(form, modeReadsPeriod);
   // The cold period belongs to the cold hours rule: an energy-weighted criterion is offered no cold period, by the notice nor the preset.
@@ -291,15 +299,14 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
 
   // The criterion's test surfaces (test_surface_calls.ts): the 3D view loads the stored files again after each change (a replaced
   // file keeps its name). The local origin follows the maximum volume only, so it does not change with them.
-  const testSurfaceCalls = testSurfaceCallsOf({
-    token, project: project.name, criteria, criterionId, refreshStageStatus, followed: followedInputChange, onServiceProblem,
-    onStoredFiles: storeTestSurfaceFiles,
+  const testSurfaceCalls = useTestSurfaceCalls({
+    criteria, criterionId, refreshStageStatus, followed: followedInputChange, onStoredFiles: storeTestSurfaceFiles,
   });
   // Inspect: the inspection of the input files, read when Inspect opens. A save or restore writes a stored test surface file, which
   // the stage status (the criteria and studies that list it go out of date) and the meshes Design draws follow.
   const inspecting = props.mode === "inspect";
   const inspection = useInspection({
-    token, project: project.name, active: inspecting, onServiceProblem,
+    active: inspecting,
     onSaved: () => {
       refreshStageStatus();
       void testSurfaceCalls.reloadStoredFiles();
@@ -361,11 +368,11 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
 
   // The criteria's part: the selection, the requests of the cards, why a run cannot start, and what the results and cards read.
   const workspaceCriteria = useWorkspaceCriteria({
-    token, project: project.name, criteria, shownCriterionId, setShownCriterionId, criterion, resultsCriterionId, sharedForm, criterionForm, form, dispatch,
+    criteria, shownCriterionId, setShownCriterionId, criterion, resultsCriterionId, sharedForm, criterionForm, form, dispatch,
     currentForm, schema: props.schema, modes, criterionKeys, runs, warmUpState, maxVolumeFiles: files.max_volume.length,
     testSurfaceFiles: files.test_surfaces.length, hasWeatherFile, modeNeedsWeatherFile, criterionStages, shownAs, refreshStageStatus,
     followed: followedInputChange, reloadTestSurfaces: testSurfaceCalls.reloadStoredFiles, openStep: openTheStep,
-    focusSetting: (settingName) => focusSettingInPanel(fieldSettingOf(settingName)), onShowCriterion: () => setCriteriaShows("editor"), onServiceProblem,
+    focusSetting: (settingName) => focusSettingInPanel(fieldSettingOf(settingName)), onShowCriterion: () => setCriteriaShows("editor"),
   });
   // The first time the Criteria step opens, before the first paint of it.
   const criteriaCount = criteria.criteria.length;
@@ -381,10 +388,10 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const { selection, active, ownStages } = workspaceCriteria;
   const resultSteps = useResultSteps({
     ...workspaceCriteria.ofResults,
-    token, project: project.name, criterionId: resultsCriterionId, criterionKeys,
+    criterionId: resultsCriterionId, criterionKeys,
     form, currentForm, dispatch, flushSave, changeAndSave, isWeightedMode: modeInfo?.score_kind === "weighted_sum", stages: shownStages,
     refreshStageStatus, runs, runBlocker: workspaceCriteria.runBlocker, everyCriterionCarved, projectRunActive: runActive, origin, openStep: openTheStep,
-    goToSetting: workspaceCriteria.goToSetting, onServiceProblem,
+    goToSetting: workspaceCriteria.goToSetting,
   });
   const cards = workspaceCriteria.cardsOf(resultSteps, inputsDisabledReason);
   const viewState = projectViewStateOf({
@@ -403,7 +410,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   // Which hours count of a Solar usefulness criterion; the switch changes its config, so its stages are read again.
   const energyWeighted = criterion?.energy_weighted ?? false;
   const typicalBuilding = useTypicalBuilding({
-    token, project: project.name, active: form.mode === "benefit" && energyWeighted, runActive, weatherRevision: weather.fileRevision, onServiceProblem,
+    active: form.mode === "benefit" && energyWeighted, runActive, weatherRevision: weather.fileRevision,
   });
   const changeEnergyWeighted = async (on: boolean): Promise<string | null> => {
     try {
@@ -411,9 +418,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
       refreshStageStatus();
       return null;
     } catch (error) {
-      if (serviceProblemOf(error) === "other") return failureTextOf(error);
-      onServiceProblem(error);
-      return null;
+      return reportServiceProblem(error, onServiceProblem) ? null : failureTextOf(error);
     }
   };
   const stepContent: Record<StepName, ReactNode> = {
@@ -503,14 +508,14 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const simulating = props.mode === "simulate";
   const designResults = resultSteps.viewer.results;
   const studyView = useStudyView({
-    token, project: project.name, studies, active: simulating, runs, envelopeBuilt: designResults?.envelope != null, massingBuilt: designResults?.massing != null,
-    envelopeStage: shownStages.exporting, massingStage: shownStages.massing, editDisabled: runActive, onServiceProblem,
+    studies, active: simulating, runs, envelopeBuilt: designResults?.envelope != null, massingBuilt: designResults?.massing != null,
+    envelopeStage: shownStages.exporting, massingStage: shownStages.massing, editDisabled: runActive,
   });
-  const sunStudy = useSunStudy({ token, project: project.name, active: simulating, hasWeatherFile, onServiceProblem });
+  const sunStudy = useSunStudy({ active: simulating, hasWeatherFile });
   const simulateView = (theme: ViewportTheme) => (
-    <SimulateView project={project.name} studies={studies} criteria={criteria.criteria} storedTestSurfaces={files.test_surfaces} runs={runs}
+    <SimulateView studies={studies} criteria={criteria.criteria} storedTestSurfaces={files.test_surfaces} runs={runs}
                   hasSurroundings={files.context.length > 0} hasTerrain={files.terrain.length > 0}
-                  onStoredFilesChange={() => { void testSurfaceCalls.reloadStoredFiles(); refreshStageStatus(); }} onServiceProblem={onServiceProblem} studyView={studyView} sunStudy={sunStudy}
+                  onStoredFilesChange={() => { void testSurfaceCalls.reloadStoredFiles(); refreshStageStatus(); }} studyView={studyView} sunStudy={sunStudy}
                   theme={theme} notice={inputChangesNotice} />
   );
   const simulateViewer = { overlayContent: simulateView, study: studyView.view, studyOutOfDate: studyView.studyOutOfDate,

@@ -6,7 +6,8 @@
 // answered shows that answer at once, and a reply for a base the form no longer shows is kept but not shown. The answer shown
 // says which weather file revision it is of, so the notice of a new weather file (weather_change_notice.ts) waits for that file's.
 import { useEffect, useEffectEvent, useState } from "react";
-import { getColdPeriod, serviceProblemOf, failureTextOf } from "../api_client/client";
+import { failureTextOf, getColdPeriod, reportServiceProblem } from "../api_client/client";
+import { useProjectSession } from "../api_client/project_session";
 import { shownValue, type FormState } from "./form_state";
 import { withoutFloatingPointNoise } from "./widgets/BalanceTemperatureSlider";
 import type { ColdPeriodState } from "./analysis_period";
@@ -26,13 +27,10 @@ export function coldPeriodBaseOf(form: FormState): number | null {
 }
 
 interface ColdPeriodSource {
-  token: string;
-  project: string;
   form: FormState;
   hasWeatherFile: boolean;
   /** Goes up whenever a weather file is added or replaced (the service keeps one name for it), so the cold period is asked for again. */
   weatherFileRevision: number;
-  onServiceProblem: (error: unknown) => void;
 }
 
 export interface ColdPeriodShown {
@@ -48,7 +46,8 @@ type AskedAbout = { kind: "nothing_yet" | "no_weather_file" } | { kind: "request
 const keyOfAsked = (asked: AskedAbout) => (asked.kind === "request" ? asked.key : asked.kind);
 
 /** The cold period of the weather file for the base the form shows, and which weather file revision it is of. */
-export function useColdPeriod({ token, project, form, hasWeatherFile, weatherFileRevision, onServiceProblem }: ColdPeriodSource): ColdPeriodShown {
+export function useColdPeriod({ form, hasWeatherFile, weatherFileRevision }: ColdPeriodSource): ColdPeriodShown {
+  const { token, project, onServiceProblem } = useProjectSession();
   const wanted = form.mode === MODE_WITH_COLD_PERIOD;
   const baseTemperature = coldPeriodBaseOf(form);
   const [answers, setAnswers] = useState<ReadonlyMap<string, ColdPeriodState>>(() => new Map());       // by request key
@@ -91,7 +90,7 @@ export function useColdPeriod({ token, project, form, hasWeatherFile, weatherFil
           answer({ kind: "none", baseTemperature });
         }
       }).catch((error) => {
-        if (serviceProblemOf(error) !== "other") reportProblem(error);
+        reportServiceProblem(error, reportProblem);
         setFailures((current) => new Map(current).set(key, failureTextOf(error)));
       });
     }, ASK_AFTER_MILLISECONDS);

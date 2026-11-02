@@ -9,6 +9,7 @@ import { dimmedLayersOf, isStageDimmed, missingLayersOf, useResultSteps, type Re
 import { resultsAtOpen, resultsOfStages, useResultsFollowingRun, type RunResults } from "../steps/run_results";
 import { initialRunState, runReducer, useRunLoop, type RunRecord, type RunState } from "../common/run_state";
 import type { PipelineStage, StageState } from "../stages";
+import { inProjectSession } from "../api_client/project_session_for_test";
 
 const ALL_CURRENT: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" };
 const NO_RESULTS: RunResults = { summary: null, scorePoints: null, skyDome: null, envelope: null, massing: null, platesFile: null, carvedByCriterion: null };
@@ -160,13 +161,13 @@ test("threshold moves during a carving run: one more run with the last value, an
   function Workspace() {
     const runs = useRunLoop("token", vi.fn());
     latest = useResultSteps({
-      token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false, stages,
+      form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false, stages,
       refreshStageStatus, runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
-      goToSetting: vi.fn(), onServiceProblem: vi.fn(),
+      goToSetting: vi.fn(),
     });
     return <>{latest.carvingRule}</>;
   }
-  rendered = renderForTest(<Workspace />);
+  rendered = renderForTest(inProjectSession(<Workspace />));
   await settle();
   const fetchesAtOpen = resultFetches();
   const field = () => rendered!.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!;
@@ -222,13 +223,13 @@ test("a threshold run whose follow-up brings no run (a failed save, results up t
   function Workspace() {
     const runs = useRunLoop("token", vi.fn());
     latest = useResultSteps({
-      token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false, stages,
+      form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false, stages,
       refreshStageStatus, runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
-      goToSetting: vi.fn(), onServiceProblem: vi.fn(),
+      goToSetting: vi.fn(),
     });
     return <>{latest.carvingRule}{latest.pinnedAction.criteria}</>;
   }
-  rendered = renderForTest(<Workspace />);
+  rendered = renderForTest(inProjectSession(<Workspace />));
   await settle();
   const fetchesAtOpen = resultFetches();
   const field = () => rendered!.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!;
@@ -282,13 +283,13 @@ test("after a follow-up with nothing to run, the carving stays dimmed until the 
   function Workspace() {
     const runs = useRunLoop("token", vi.fn());
     latest = useResultSteps({
-      token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: false,
+      form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: false,
       stages, refreshStageStatus: vi.fn(), runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0],
-      openStep: vi.fn(), goToSetting: vi.fn(), onServiceProblem: vi.fn(),
+      openStep: vi.fn(), goToSetting: vi.fn(),
     });
     return <>{latest.carvingRule}{latest.pinnedAction.criteria}</>;
   }
-  rendered = renderForTest(<Workspace />);
+  rendered = renderForTest(inProjectSession(<Workspace />));
   await settle();
   const field = () => rendered!.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!;
   const carvingDimmed = () => latest!.viewer.dimmedLayers!.includes("kept_voxels");
@@ -330,13 +331,13 @@ test("Run analysis answered with up to date asks for the stage status again and 
   function Workspace() {
     const runs = useRunLoop("token", vi.fn());
     const steps = useResultSteps({
-      token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: true,
+      form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: true,
       stages, refreshStageStatus, runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
-      goToSetting: vi.fn(), onServiceProblem: vi.fn(),
+      goToSetting: vi.fn(),
     });
     return <>{steps.carvingRule}{steps.pinnedAction.criteria}</>;
   }
-  rendered = renderForTest(<Workspace />);
+  rendered = renderForTest(inProjectSession(<Workspace />));
   await settle();
   const requestsAtOpen = requests.length;
   const runAnalysis = [...rendered.container.querySelectorAll("button")].find((button) => button.textContent === "Run analysis")!;
@@ -372,13 +373,13 @@ test("a threshold change whose save stores a mode or an analysis setting a refus
   function Workspace() {
     const runs = useRunLoop("token", vi.fn());
     const steps = useResultSteps({
-      token: "token", project: "p", form, currentForm: () => formNow, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false,
+      form, currentForm: () => formNow, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false,
       stages, refreshStageStatus: vi.fn(), runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: false, origin: [0, 0, 0], openStep: vi.fn(),
-      goToSetting: vi.fn(), onServiceProblem: vi.fn(),
+      goToSetting: vi.fn(),
     });
     return <>{steps.carvingRule}</>;
   }
-  rendered = renderForTest(<Workspace />);
+  rendered = renderForTest(inProjectSession(<Workspace />));
   await settle();
   typeAndLeave(rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!, "1");
   await settle();
@@ -393,13 +394,13 @@ test("the export step has no carve further: its downloads end the step, with no 
   function Workspace() {
     const runs = useRunLoop("token", vi.fn());
     const steps = useResultSteps({
-      token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: true,
+      form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: true,
       stages: ALL_CURRENT, refreshStageStatus: vi.fn(), runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: false, origin: [0, 0, 0], openStep: vi.fn(),
-      goToSetting: vi.fn(), onServiceProblem: vi.fn(),
+      goToSetting: vi.fn(),
     });
     return <>{steps.content.export}</>;
   }
-  rendered = renderForTest(<Workspace />);
+  rendered = renderForTest(inProjectSession(<Workspace />));
   await settle();
   const step = rendered.container.querySelector(".export-step")!;
   expect(step.querySelector(".carve-further")).toBeNull();

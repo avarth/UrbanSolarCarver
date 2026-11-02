@@ -7,6 +7,7 @@ import { useEffect, useEffectEvent, useState } from "react";
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { inputFileUrl, type InputFileInfo } from "../api_client/client";
+import { useProjectSession } from "../api_client/project_session";
 import { messages } from "../messages";
 import { loadMesh, MeshNotReadableError } from "../viewer/loaders";
 import type { Bounds3, Point3 } from "../viewer/local_origin";
@@ -52,8 +53,8 @@ export interface InputGeometry {
 const NOTHING_LOADED: InputGeometry = { geometry: null, byFile: {}, drawingProblems: [] };
 
 /** The joined mesh of a role's files in local coordinates; reloaded when the files, their contents or the local origin change. */
-export function useInputGeometry(token: string, project: string, role: MeshRole, files: InputFileInfo[], origin: Point3, revision: number,
-                                 onLoaded: () => void, onServiceProblem: (error: unknown) => void): InputGeometry {
+export function useInputGeometry(role: MeshRole, files: InputFileInfo[], origin: Point3, revision: number, onLoaded: () => void): InputGeometry {
+  const { token, project, onServiceProblem } = useProjectSession();
   const [loaded, setLoaded] = useState<InputGeometry>(NOTHING_LOADED);
   if (files.length === 0 && loaded !== NOTHING_LOADED) setLoaded(NOTHING_LOADED);
   // The files and the origin are read as they are when the key says to load again.

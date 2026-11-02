@@ -4,6 +4,7 @@ import type { ModeInfo } from "../api_client/client";
 import { initialFormState, type FormState } from "./form_state";
 import { renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { useColdPeriod, type ColdPeriodState } from "./cold_period_request";
+import { inProjectSession } from "../api_client/project_session_for_test";
 
 const NUMBER = { type: "number" };
 const SCHEMA = { properties: { mode: { default: "benefit", type: "string" }, balance_temperature: { ...NUMBER, default: 15 },
@@ -21,9 +22,17 @@ let requests: string[] = [];
 const FOUND = { status: "found", period: { start_month: 9, start_day: 30, end_month: 5, end_day: 15 } };
 let reply: unknown = FOUND;
 
-function ColdPeriodOf({ form, hasWeatherFile = true, weatherFileRevision = 0 }: { form: FormState; hasWeatherFile?: boolean; weatherFileRevision?: number }) {
+interface ColdPeriodProps {
+  form: FormState;
+  hasWeatherFile?: boolean;
+  weatherFileRevision?: number;
+}
+
+const ColdPeriodOf = (props: ColdPeriodProps) => inProjectSession(<ColdPeriodProbe {...props} />);
+
+function ColdPeriodProbe({ form, hasWeatherFile = true, weatherFileRevision = 0 }: ColdPeriodProps) {
   ({ coldPeriod: state, answeredWeatherFileRevision: answeredRevision } =
-    useColdPeriod({ token: "t", project: "p", form, hasWeatherFile, weatherFileRevision, onServiceProblem: () => {} }));
+    useColdPeriod({ form, hasWeatherFile, weatherFileRevision }));
   return null;
 }
 
