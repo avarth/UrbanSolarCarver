@@ -3,7 +3,7 @@
 // mode does not read), so the form sends the mode and the values the user set, never every field; the mode's starting values
 // and the schema defaults fill the rest, on the service as in the form.
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useReducer, useRef } from "react";
-import { ApiError, type ConfigErrorReply, type GridPlanReply, type ModeInfo } from "../api_client/client";
+import { configErrorOf, type ConfigErrorReply, type GridPlanReply, type ModeInfo } from "../api_client/client";
 import { gridIsOverBudget } from "./grid_budget";
 import { errorOfHiddenSetting, shownConfigErrorOf } from "./engine_errors";
 import { engineIgnoresIn } from "./engine_modes";
@@ -255,11 +255,6 @@ export function storedValue(state: FormState, name: string): unknown {
   return name in state.stored.values ? state.stored.values[name] : defaultValue({ ...state, mode: state.stored.mode }, name);
 }
 
-/** Whether a 422 body is a refused save's field errors (ConfigErrorReply), not a message alone. */
-export function isConfigErrorReply(body: unknown): body is ConfigErrorReply {
-  return typeof body === "object" && body !== null && Array.isArray((body as ConfigErrorReply).field_errors);
-}
-
 /**
  * How the last save sent ended: stored, refused with field errors (422), failed (a run in progress, the engine stopped),
  * overtaken by a newer change while it was on its way, or no save was sent at all.
@@ -304,8 +299,9 @@ export function createConfigSaver(save: (values: Record<string, unknown>) => Pro
       return "saved";
     } catch (error) {
       if (request.change !== latestChange) return "overtaken";
-      if (error instanceof ApiError && error.status === 422 && isConfigErrorReply(error.body)) {
-        dispatch({ type: "save_rejected", reply: error.body });
+      const refusal = configErrorOf(error);
+      if (refusal !== null) {
+        dispatch({ type: "save_rejected", reply: refusal });
         return "refused";
       }
       failedSave = request;

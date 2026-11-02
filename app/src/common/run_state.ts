@@ -15,7 +15,7 @@
 // first event puts it at the front of the run's order; it is not a pipeline stage (runStages leaves it out).
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
-  ApiError, cancelRun, failureTextOf, reportServiceProblem, startRun, startSimulation as postSimulation,
+  ApiError, cancelRun, configErrorOf, failureTextOf, reportServiceProblem, startRun, startSimulation as postSimulation, type FieldErrorReply,
 } from "../api_client/client";
 import { subscribeToRunEvents, type RunEvent } from "../api_client/events";
 import { messages } from "../messages";
@@ -40,7 +40,7 @@ export interface RunIssue {
 export interface RunFailure {
   error_type: string;
   message: string;
-  field_errors: { field: string | null; message: string }[];
+  field_errors: FieldErrorReply[];
   /** The criterion whose settings a refused start found invalid (ConfigErrorReply.criterion); absent or null: none named. */
   criterion?: string | null;
 }
@@ -319,11 +319,10 @@ const WEBSOCKET_CLOSE_UNAUTHORIZED = 4401;
 
 /** A refused start whose settings the service found invalid (ConfigError), as a failed run that names its fields. */
 function refusedSettingsFailure(error: unknown): RunFailure | null {
-  if (!(error instanceof ApiError) || error.status !== 422 || typeof error.body !== "object" || error.body === null) return null;
-  const { field_errors: fieldErrors, criterion } = error.body as { field_errors?: RunFailure["field_errors"]; criterion?: string | null };
-  if (!Array.isArray(fieldErrors)) return null;
-  return { error_type: "ConfigError", message: fieldErrors.map((fieldError) => fieldError.message).join(" "), field_errors: fieldErrors,
-           criterion: criterion ?? null };
+  const reply = configErrorOf(error);
+  if (reply === null) return null;
+  return { error_type: "ConfigError", message: reply.field_errors.map((fieldError) => fieldError.message).join(" "), field_errors: reply.field_errors,
+           criterion: reply.criterion ?? null };
 }
 
 /** The inputs a refused start lacked (MissingInputsReply), or undefined for another refusal. */

@@ -13,6 +13,7 @@ export type InputFilesReply = Schemas["InputFilesReply"];
 export type InputFileInfo = Schemas["InputFileInfo"];
 export type ConfigReply = Schemas["ConfigReply"];
 export type ConfigErrorReply = Schemas["ConfigErrorReply"];
+export type FieldErrorReply = Schemas["FieldErrorReply"];
 export type GridPlanReply = Schemas["GridPlanReply"];
 export type StageStatusReply = Schemas["StageStatusReply"];
 export type InputFileChange = Schemas["InputFileChange"];
@@ -115,13 +116,18 @@ function projectPath(project: string): string {
   return `/api/projects/${encodeURIComponent(project)}`;
 }
 
+/** The body of a request refused for its settings (422 with field errors: ConfigErrorReply); null for another failure. */
+export function configErrorOf(error: unknown): ConfigErrorReply | null {
+  if (!(error instanceof ApiError) || error.status !== 422 || typeof error.body !== "object" || error.body === null) return null;
+  return Array.isArray((error.body as Partial<ConfigErrorReply>).field_errors) ? (error.body as ConfigErrorReply) : null;
+}
+
 /** The service's own words for a refused request (its "detail", or the messages of its field errors); null for another failure. */
 export function refusalDetailOf(error: unknown): string | null {
   if (!(error instanceof ApiError) || typeof error.body !== "object" || error.body === null) return null;
-  const body = error.body as { detail?: unknown; field_errors?: { message: string }[] };
-  if (typeof body.detail === "string") return body.detail;
-  if (Array.isArray(body.field_errors)) return body.field_errors.map((fieldError) => fieldError.message).join(" ");
-  return null;
+  const detail = (error.body as { detail?: unknown }).detail;
+  if (typeof detail === "string") return detail;
+  return configErrorOf(error)?.field_errors.map((fieldError) => fieldError.message).join(" ") ?? null;
 }
 
 /**

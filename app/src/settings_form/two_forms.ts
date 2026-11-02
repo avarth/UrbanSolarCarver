@@ -3,10 +3,10 @@
 // the service's criterion keys (GET criterion-keys). Until the steps show the two apart, they see them as one form: each value
 // read from the form that owns it, each change sent to it.
 import { useEffect, useEffectEvent, useRef } from "react";
-import { ApiError, type ConfigErrorReply, type CriterionEntry } from "../api_client/client";
+import { ApiError, configErrorOf, type ConfigErrorReply, type CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
 import { errorOfHiddenSetting, shownConfigErrorOf } from "./engine_errors";
-import { isConfigErrorReply, shownValue, storedValue, type FormAction, type FormState, type SaveOutcome, type SettingsForm } from "./form_state";
+import { shownValue, storedValue, type FormAction, type FormState, type SaveOutcome, type SettingsForm } from "./form_state";
 import { presentedSettingOf } from "./presentation";
 
 /** Settings split into the shared ones and those of a criterion (the mode among them), by the criterion keys (GET criterion-keys). */
@@ -71,8 +71,8 @@ function splitFieldErrors(fieldErrors: readonly FieldError[], mode: string, crit
  */
 export function sharedRefusalShown(error: unknown, criterionKeys: ReadonlySet<string>, criterionOf: (id: string) => CriterionEntry | null,
                                    severalCriteria: boolean): unknown {
-  if (!(error instanceof ApiError) || error.status !== 422 || !isConfigErrorReply(error.body)) return error;
-  const reply = error.body;
+  const reply = configErrorOf(error);
+  if (reply === null || !(error instanceof ApiError)) return error;
   const refusing = reply.criterion == null ? null : criterionOf(reply.criterion);
   const mode = String(refusing?.settings?.mode ?? "");
   const fieldErrors = reply.field_errors.map((fieldError) => {

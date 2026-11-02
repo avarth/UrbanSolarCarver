@@ -1,4 +1,5 @@
 // The events of a run, over the service's WebSocket.
+import type { FieldErrorReply } from "./client";
 
 export type RunEvent =
   // criterion: the id of the criterion the stage belongs to; null for exporting and massing, and for an issue raised before any stage began.
@@ -7,7 +8,7 @@ export type RunEvent =
   | { type: "issue"; stage: string | null; criterion: string | null; study?: string | null; code: string; message: string }     // stage null: raised before any stage began (the config loading)
   | { type: "run_finished"; stages: string[]; files: string[] }
   | { type: "run_cancelled" }
-  | { type: "run_failed"; error_type: string; message: string; field_errors: { field: string | null; message: string }[] }
+  | { type: "run_failed"; error_type: string; message: string; field_errors: FieldErrorReply[] }
   // Made here, not sent by the service: the socket closed before the run's last event. The service refuses with
   // 4401 (token), 4403 (Host) or 4404 (unknown run) after accepting the connection; 1006 is a connection that dropped.
   | { type: "connection_lost"; code: number; reason: string };

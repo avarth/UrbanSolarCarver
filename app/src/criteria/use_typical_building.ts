@@ -10,7 +10,7 @@
 // half second (PROGRESS_MILLISECONDS).
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
-  addTypicalBuildingLibraryEntry, ApiError, calculateTypicalBuilding, deleteTypicalBuildingLibraryEntry, failureTextOf, getTypicalBuilding,
+  addTypicalBuildingLibraryEntry, calculateTypicalBuilding, configErrorOf, deleteTypicalBuildingLibraryEntry, failureTextOf, getTypicalBuilding,
   getTypicalBuildingLibrary, getTypicalBuildingProgress, getTypicalBuildingWeights, putTypicalBuilding, reportServiceProblem,
   updateTypicalBuildingLibraryEntry, type TypicalBuildingLibraryEntry, type TypicalBuildingReply, type TypicalBuildingWeightsReply,
 } from "../api_client/client";
@@ -67,10 +67,8 @@ interface TypicalBuildingOptions {
 
 /** The field errors of a refused save (422 with field_errors), by field; null for another failure. */
 function fieldErrorsOf(error: unknown): Record<string, string> | null {
-  if (!(error instanceof ApiError) || error.status !== 422 || typeof error.body !== "object" || error.body === null) return null;
-  const fieldErrors = (error.body as { field_errors?: { field: string | null; message: string }[] }).field_errors;
-  if (!Array.isArray(fieldErrors)) return null;
-  return Object.fromEntries(fieldErrors.map((fieldError) => [fieldError.field ?? "", fieldError.message]));
+  const reply = configErrorOf(error);
+  return reply && Object.fromEntries(reply.field_errors.map((fieldError) => [fieldError.field ?? "", fieldError.message]));
 }
 
 export function useTypicalBuilding({ active, runActive, weatherRevision }: TypicalBuildingOptions): TypicalBuildingHook {
