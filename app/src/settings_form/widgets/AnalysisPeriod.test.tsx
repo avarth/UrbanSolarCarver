@@ -1,24 +1,18 @@
 import { act, useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ModeInfo } from "../../api_client/client";
+import { serviceModes, serviceSchemaWith } from "../../api_client/service_data_for_test";
 import { addStyleSheetForTest, click, press, renderForTest, type RenderedOverlay } from "../../viewer_overlays/render_for_test";
 import type { ColdPeriodState, Hemisphere } from "../analysis_period";
 import { formReducer, initialFormState, shownValue, type FormState } from "../form_state";
 import { settingsForStep } from "../presentation";
 import { SettingField } from "../SettingField";
 
-// The engine's period settings, as GET schema gives them (pydantic_schemas.py): whole numbers, unset by default.
-const PERIOD_SETTING = { anyOf: [{ type: "integer" }, { type: "null" }], default: null };
-const SCHEMA = {
-  properties: {
-    mode: { default: "time-based", type: "string" },
-    start_month: PERIOD_SETTING, start_day: PERIOD_SETTING, start_hour: PERIOD_SETTING,
-    end_month: PERIOD_SETTING, end_day: PERIOD_SETTING, end_hour: PERIOD_SETTING,
-  },
-};
+// The engine's period settings, as GET schema gives them: whole numbers in their ranges, unset by default.
+const SCHEMA = serviceSchemaWith("mode", "start_month", "start_day", "start_hour", "end_month", "end_day", "end_hour");
+// Solar time-based, which starts on the winter day.
+const MODES = serviceModes("time-based");
 const WINTER_DAY = { start_month: 12, start_day: 21, start_hour: 10, end_month: 12, end_day: 21, end_hour: 14 };
-const MODES: ModeInfo[] = [{ name: "time-based", description: "", needs_epw: true, needs_period: true, experimental: false,
-                             score_kind: "violation_count", weight_unit: "", score_unit: "", starting_values: WINTER_DAY }];
 const NBSP = " ";
 
 let rendered: RenderedOverlay | null = null;

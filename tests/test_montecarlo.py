@@ -25,13 +25,10 @@ SEEDS = [
 ]
 
 
-@pytest.fixture(scope="module")
-def epw():
-    from _epw import resolve_epw
-    path = resolve_epw()
-    if not path:
-        pytest.skip("No EPW file found")
-    return path
+@pytest.fixture
+def epw(example_epw_path):
+    """The weather file as the string the scenes put in their configs (skips without one)."""
+    return str(example_epw_path)
 
 
 @pytest.mark.parametrize("seed", SEEDS)

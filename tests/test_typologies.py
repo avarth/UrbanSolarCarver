@@ -7,12 +7,10 @@ The randomized version of the same checks lives in montecarlo.py.
 """
 from __future__ import annotations
 
-import json
 from dataclasses import replace
 
 import numpy as np
 import pytest
-import torch
 
 import cases
 import oracle
@@ -23,13 +21,10 @@ pytestmark = pytest.mark.slow  # end-to-end scenes: tens of seconds in all
 BINARY_MODES = ("tilted_plane", "time-based")
 
 
-@pytest.fixture(scope="module")
-def epw():
-    from _epw import resolve_epw
-    path = resolve_epw()
-    if not path:
-        pytest.skip("No EPW file found")
-    return path
+@pytest.fixture
+def epw(example_epw_path):
+    """The weather file as the string the scenes put in their configs (skips without one)."""
+    return str(example_epw_path)
 
 
 def _must_carve(run, epw):

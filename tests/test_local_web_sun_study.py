@@ -2,17 +2,14 @@
 import numpy as np
 import pytest
 
-from _epw import resolve_epw
-from local_web_test_support import GOLDEN_EPW, create_project, upload
+from _epw import BUNDLED_EPW
+from local_web_test_support import create_project, upload
 from urbansolarcarver.local_web_service import sun_study
 from urbansolarcarver.local_web_service.project_names import ProjectError
 
-EPW = resolve_epw()
-REQUIRES_EPW = pytest.mark.skipif(not EPW, reason="no EPW file")
 
-
-def config(north_deg=0.0):
-    return sun_study.SunSite(EPW, north_deg)
+def config(epw, north_deg=0.0, time_basis="standard"):
+    return sun_study.SunSite(str(epw), north_deg, time_basis)
 
 
 def test_dates_are_month_and_day_of_a_year_without_29_february():
@@ -23,9 +20,8 @@ def test_dates_are_month_and_day_of_a_year_without_29_february():
             sun_study.parse_date(text)
 
 
-@REQUIRES_EPW
-def test_the_chart_has_the_key_days_the_hour_lines_and_the_chosen_day_above_the_horizon():
-    chart = sun_study.sun_chart(config(), 2, 1)
+def test_the_chart_has_the_key_days_the_hour_lines_and_the_chosen_day_above_the_horizon(example_epw_path):
+    chart = sun_study.sun_chart(config(example_epw_path), 2, 1)
     assert [day.date for day in chart.key_days] == ["03-21", "06-21", "12-21"] and chart.day.date == "02-01"
     vectors = np.array([point for day in [*chart.key_days, chart.day] for run in day.runs for point in run])
     assert np.allclose(np.linalg.norm(vectors, axis=1), 1.0, atol=1e-6) and (vectors[:, 2] > 0).all()
@@ -35,36 +31,34 @@ def test_the_chart_has_the_key_days_the_hour_lines_and_the_chosen_day_above_the_
     assert 12 in hours and 0 not in hours                                  # no sun at midnight
 
 
-@REQUIRES_EPW
-def test_positions_are_the_sun_above_the_horizon_and_a_long_range_is_sampled_on_fewer_days():
-    noon = sun_study.sun_positions(config(), (6, 21), (6, 21), 720, 720, 15)
+def test_positions_are_the_sun_above_the_horizon_and_a_long_range_is_sampled_on_fewer_days(example_epw_path):
+    site = config(example_epw_path)
+    noon = sun_study.sun_positions(site, (6, 21), (6, 21), 720, 720, 15)
     assert len(noon.positions) == 1 and noon.days_sampled == 1 and noon.positions[0].altitude > 60
-    assert sun_study.sun_positions(config(), (6, 21), (6, 21), 0, 0, 15).positions == []          # midnight
-    year = sun_study.sun_positions(config(), (1, 1), (12, 31), 0, 1440, 60)
+    assert sun_study.sun_positions(site, (6, 21), (6, 21), 0, 0, 15).positions == []          # midnight
+    year = sun_study.sun_positions(site, (1, 1), (12, 31), 0, 1440, 60)
     assert year.day_step > 1 and len(year.positions) <= sun_study.MAX_POSITIONS and year.days_sampled == len(range(0, 365, year.day_step))
-    winter = sun_study.sun_positions(config(), (12, 1), (1, 31), 720, 720, 15)                    # over the new year
+    winter = sun_study.sun_positions(site, (12, 1), (1, 31), 720, 720, 15)                    # over the new year
     assert winter.days_sampled == 62 and {position.date for position in winter.positions} >= {"12-01", "01-31"}
-    night = sun_study.sun_positions(config(), (6, 21), (6, 21), 1200, 300, 60)                   # over midnight
+    night = sun_study.sun_positions(site, (6, 21), (6, 21), 1200, 300, 60)                   # over midnight
     assert [position.minute for position in night.positions] == [300]          # 20:00 to 05:00: only 05:00 has sun (Golden, CO)
     with pytest.raises(ProjectError):
-        sun_study.sun_positions(config(), (6, 21), (6, 21), 600, 1500, 15)
+        sun_study.sun_positions(site, (6, 21), (6, 21), 600, 1500, 15)
 
 
-@REQUIRES_EPW
-def test_the_clock_is_standard_daylight_saving_or_solar_time():
-    standard = sun_study.sun_positions(config(), (6, 21), (6, 21), 660, 660, 15).positions[0]
-    saving = sun_study.sun_positions(sun_study.SunSite(EPW, 0.0, "daylight_saving"), (6, 21), (6, 21), 720, 720, 15).positions[0]
+def test_the_clock_is_standard_daylight_saving_or_solar_time(example_epw_path):
+    standard = sun_study.sun_positions(config(example_epw_path), (6, 21), (6, 21), 660, 660, 15).positions[0]
+    saving = sun_study.sun_positions(config(example_epw_path, 0.0, "daylight_saving"), (6, 21), (6, 21), 720, 720, 15).positions[0]
     assert np.allclose(standard.vector, saving.vector)                 # 12:00 daylight saving time is 11:00 standard time
-    solar_noon = sun_study.sun_positions(sun_study.SunSite(EPW, 0.0, "solar"), (3, 21), (3, 21), 720, 720, 15).positions[0]
+    solar_noon = sun_study.sun_positions(config(example_epw_path, 0.0, "solar"), (3, 21), (3, 21), 720, 720, 15).positions[0]
     assert abs(solar_noon.azimuth - 180.0) < 1.0                        # due south at solar noon in the north
     with pytest.raises(ProjectError):
-        sun_study.sun_chart(sun_study.SunSite(EPW, 0.0, "summer"), 6, 21)
+        sun_study.sun_chart(config(example_epw_path, 0.0, "summer"), 6, 21)
 
 
-@REQUIRES_EPW
-def test_north_turns_the_sun_as_the_engine_does():
-    straight = sun_study.sun_positions(config(), (6, 21), (6, 21), 720, 720, 15).positions[0].vector
-    turned = sun_study.sun_positions(config(north_deg=90.0), (6, 21), (6, 21), 720, 720, 15).positions[0].vector
+def test_north_turns_the_sun_as_the_engine_does(example_epw_path):
+    straight = sun_study.sun_positions(config(example_epw_path), (6, 21), (6, 21), 720, 720, 15).positions[0].vector
+    turned = sun_study.sun_positions(config(example_epw_path, north_deg=90.0), (6, 21), (6, 21), 720, 720, 15).positions[0].vector
     angle = np.radians(90.0)        # north_deg turns the sun clockwise in plan
     expected = [straight[0] * np.cos(angle) + straight[1] * np.sin(angle), -straight[0] * np.sin(angle) + straight[1] * np.cos(angle), straight[2]]
     assert np.allclose(turned, expected, atol=1e-6)
@@ -77,10 +71,10 @@ def test_the_routes_need_the_weather_file_and_a_date(client):
     assert client.get("/api/projects/p/sun-chart", params={"date": "02-30"}).status_code == 422
 
 
-@pytest.mark.skipif(not GOLDEN_EPW.is_file(), reason="the bundled weather file is missing")
+@pytest.mark.skipif(not BUNDLED_EPW.is_file(), reason="the bundled weather file is missing")
 def test_the_routes_follow_the_uploaded_weather_file(client):
     create_project(client, "p", "daylight")
-    upload(client, "p", "weather", ("golden.epw", GOLDEN_EPW.read_bytes()))
+    upload(client, "p", "weather", ("golden.epw", BUNDLED_EPW.read_bytes()))
     chart = client.get("/api/projects/p/sun-chart", params={"date": "02-01"}).json()
     assert chart["day"]["date"] == "02-01" and len(chart["key_days"]) == 3
     positions = client.get("/api/projects/p/sun-positions", params={"from": "12-21", "to": "12-21", "start": 480, "end": 960, "step": 60}).json()

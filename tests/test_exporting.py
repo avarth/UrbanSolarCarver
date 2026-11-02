@@ -12,25 +12,9 @@ _UTM_OFFSET = np.array([500_000.37, 4_200_000.81, 50.0])
 
 
 def _run_to_thresholding(tmp_path, offset, grid_step=1.0):
+    from _stage_scene import cube_config
     from urbansolarcarver import preprocessing, thresholding
-    from urbansolarcarver.io import save_mesh
-    from urbansolarcarver.load_config import user_config
-    volume = trimesh.creation.box(extents=(10.0, 10.0, 10.0))
-    volume.apply_translation(offset)
-    surface = trimesh.Trimesh(
-        vertices=np.array([[-3, -3, -6], [3, -3, -6], [3, 3, -6], [-3, 3, -6]], dtype=float) + offset,       # 1 m under the cube
-        faces=[[0, 1, 2], [0, 2, 3]],
-    )
-    vol_path, srf_path = tmp_path / "vol.ply", tmp_path / "srf.ply"
-    # save_mesh writes double-precision PLY (trimesh's export uses float32).
-    save_mesh(volume, str(vol_path))
-    save_mesh(surface, str(srf_path))
-    cfg = user_config(
-        max_volume_path=str(vol_path), test_surface_path=str(srf_path),
-        out_dir=str(tmp_path / "run"), mode="daylight",
-        voxel_size=1.0, grid_step=grid_step, ray_length=50.0,
-        min_voxels=1, min_face_count=1, device="cpu",
-    )
+    cfg = cube_config(tmp_path, offset, grid_step=grid_step)
     pre = preprocessing(cfg, tmp_path / "run" / "preprocessing")
     thr = thresholding(pre, cfg, tmp_path / "run" / "thresholding")
     return cfg, thr

@@ -12,8 +12,9 @@ import numpy as np
 import pytest
 import yaml
 
+from _epw import BUNDLED_EPW
 from local_web_test_support import (
-    GOLDEN_EPW, FakeEngine, box_bytes, create_project, make_worker, run_and_wait, upload, wait_until_finished,
+    FakeEngine, box_bytes, create_project, make_worker, run_and_wait, upload, wait_until_finished,
 )
 from urbansolarcarver import simulated_weights
 from urbansolarcarver.errors import ConfigError
@@ -23,7 +24,7 @@ from urbansolarcarver.local_web_service.projects import ProjectStore
 from urbansolarcarver.local_web_service.run_worker import MissingInputs
 from urbansolarcarver.local_web_service.stage_records import criterion_status
 
-pytestmark = pytest.mark.skipif(not GOLDEN_EPW.is_file(), reason="the bundled weather file is missing")
+pytestmark = pytest.mark.skipif(not BUNDLED_EPW.is_file(), reason="the bundled weather file is missing")
 
 DEFAULT = typical_building.EXAMPLES["kenak-apartment-b"].values
 OFFICE = typical_building.EXAMPLES["kenak-office-b"].values
@@ -80,7 +81,7 @@ def benefit_project(tmp_path, criteria=("benefit",)) -> tuple[ProjectStore, str]
     store = ProjectStore(tmp_path / "projects")
     store.create("p", criteria[0])
     store.add_input("p", "max_volume", "volume.ply", box_bytes([0, 0, 5]))
-    store.add_input("p", "weather", "golden.epw", GOLDEN_EPW.read_bytes())
+    store.add_input("p", "weather", "golden.epw", BUNDLED_EPW.read_bytes())
     for mode in criteria[1:]:
         store.add_criterion("p", mode)
     for criterion in store.criteria("p"):
@@ -155,12 +156,12 @@ def test_the_kenak_examples_have_the_values_of_the_reference_building():
 
 
 def test_the_average_room_is_a_box_turned_45_degrees():
-    archetype = typical_building.archetype_of(DEFAULT, GOLDEN_EPW)
+    archetype = typical_building.archetype_of(DEFAULT, BUNDLED_EPW)
     assert (archetype["width"], archetype["length"], archetype["orientation"]) == (24.0, 24.0, 45.0)
     assert archetype["wwr"] == {"north": 0.4, "east": 0.4, "south": 0.4, "west": 0.4}
     as_box = {key: value for key, value in DEFAULT.items() if key != "depth"} | {
         "room": "box", "width": 24.0, "length": 24.0, "orientation": 45.0, "wwr": {"north": 0.4, "east": 0.4, "south": 0.4, "west": 0.4}}
-    assert typical_building.archetype_of(typical_building.validate(as_box), GOLDEN_EPW) == archetype
+    assert typical_building.archetype_of(typical_building.validate(as_box), BUNDLED_EPW) == archetype
     expanded = simulated_weights.expand_shoebox({key: value for key, value in archetype.items()
                                                  if key not in ("internal_gains_w_m2", "shading_hot", "shading_hot_period")})
     assert sorted(azimuth for azimuth, _area, _g in expanded["windows"]) == [45.0, 135.0, 225.0, 315.0]
@@ -169,17 +170,17 @@ def test_the_average_room_is_a_box_turned_45_degrees():
 
 
 def test_the_air_and_the_gains_follow_the_schedule():
-    archetype = typical_building.archetype_of(DEFAULT, GOLDEN_EPW)
+    archetype = typical_building.archetype_of(DEFAULT, BUNDLED_EPW)
     vent, gains = np.asarray(archetype["ach_vent"]), np.asarray(archetype["internal_gains_w_m2"])
     assert vent.shape == gains.shape == (8760,)
     assert list(gains[:24]) == [0.0] * 6 + [6.0] * 18                           # 6:00 to 24:00 every day
     assert vent.max() == pytest.approx(0.75 / 3.0) and (vent > 0).sum() == 365 * 18
     assert archetype["ach_infiltration"] == 0.37
-    office = np.asarray(typical_building.archetype_of(OFFICE, GOLDEN_EPW)["internal_gains_w_m2"]).reshape(365, 24)
+    office = np.asarray(typical_building.archetype_of(OFFICE, BUNDLED_EPW)["internal_gains_w_m2"]).reshape(365, 24)
     # 1 January of the Golden file is a Sunday (DATA PERIODS), so the first working day is the second day of the year
     assert office[0].sum() == 0.0 and list(office[1]) == [0.0] * 8 + [28.5] * 10 + [0.0] * 6
     assert (office.sum(axis=1) > 0).sum() == 52 * 5                             # 365 days from a Sunday to a Sunday: 260 working days
-    box = typical_building.archetype_of(BOX, GOLDEN_EPW)                        # every hour: one value each
+    box = typical_building.archetype_of(BOX, BUNDLED_EPW)                        # every hour: one value each
     assert (box["ach_vent"], box["internal_gains_w_m2"]) == (0.0, BOX["gains_w_m2"])
     assert box["ach_infiltration"] == 0.5
 
@@ -210,7 +211,7 @@ def test_a_capacity_of_a_class_gives_the_zone_of_that_class():
 
 
 def test_the_weekday_of_the_first_day_comes_from_the_weather_file(tmp_path):
-    assert typical_building.first_weekday(GOLDEN_EPW) == 6
+    assert typical_building.first_weekday(BUNDLED_EPW) == 6
     no_header = tmp_path / "plain.epw"
     no_header.write_text("LOCATION,x\n1999,1,1,1,0\n", encoding="latin-1")
     assert typical_building.first_weekday(no_header) == 0 and typical_building.first_weekday(None) == 0
@@ -282,10 +283,10 @@ def test_a_missing_or_unknown_value_is_refused():
 
 def test_the_key_follows_the_values_and_the_weather_file(tmp_path):
     other_weather = tmp_path / "other.epw"
-    other_weather.write_bytes(GOLDEN_EPW.read_bytes() + b"\n")
-    key = typical_building.weights_key(DEFAULT, GOLDEN_EPW)
-    assert key == typical_building.weights_key(copy.deepcopy(DEFAULT), GOLDEN_EPW)
-    assert len({key, typical_building.weights_key(changed(DEFAULT, depth=5.0), GOLDEN_EPW),
+    other_weather.write_bytes(BUNDLED_EPW.read_bytes() + b"\n")
+    key = typical_building.weights_key(DEFAULT, BUNDLED_EPW)
+    assert key == typical_building.weights_key(copy.deepcopy(DEFAULT), BUNDLED_EPW)
+    assert len({key, typical_building.weights_key(changed(DEFAULT, depth=5.0), BUNDLED_EPW),
                 typical_building.weights_key(DEFAULT, other_weather), typical_building.weights_key(DEFAULT, None)}) == 4
 
 
@@ -439,7 +440,7 @@ def test_a_bad_value_is_refused_by_the_route_and_nothing_changes(client):
 def test_calculate_writes_the_weights_and_answers_the_numbers(client, fake_generator):
     create_project(client, "p", "benefit")
     choose_building(client)
-    assert upload(client, "p", "weather", ("golden.epw", GOLDEN_EPW.read_bytes())).status_code == 200
+    assert upload(client, "p", "weather", ("golden.epw", BUNDLED_EPW.read_bytes())).status_code == 200
     reply = client.post("/api/projects/p/typical-building/calculate")
     assert reply.status_code == 200, reply.text
     assert reply.json() | {"values": None} == {"values": None, "library_id": "kenak-apartment-b", "library_name": "Apartment, zone Β",
@@ -447,7 +448,7 @@ def test_calculate_writes_the_weights_and_answers_the_numbers(client, fake_gener
                                                "underheating_kh": 12957.1, "overheating_kh": 5110.0, "hours_below": 3201,
                                                "hours_above": 2083,
                                                "counted_hours": 500}       # the hours with the sun up only
-    assert json.dumps(fake_generator.archetypes) == json.dumps([typical_building.archetype_of(DEFAULT, GOLDEN_EPW)])
+    assert json.dumps(fake_generator.archetypes) == json.dumps([typical_building.archetype_of(DEFAULT, BUNDLED_EPW)])
     weights = client.get("/api/projects/p/typical-building/weights").json()
     assert len(weights["benefit"]) == len(weights["harm"]) == len(weights["sun_up"]) == 8760
     assert weights["benefit"][0] == 0.5 and weights["harm"][-1] == 0.234      # 3 decimals
@@ -469,7 +470,7 @@ def test_a_weights_file_without_sun_up_counts_every_hour(tmp_path):
 def test_progress_tells_the_share_done_while_the_weights_are_calculated(client, fake_generator):
     create_project(client, "p", "benefit")
     choose_building(client)
-    assert upload(client, "p", "weather", ("golden.epw", GOLDEN_EPW.read_bytes())).status_code == 200
+    assert upload(client, "p", "weather", ("golden.epw", BUNDLED_EPW.read_bytes())).status_code == 200
     assert client.get("/api/projects/p/typical-building/progress").json() == {"share_done": None}
     seen = []
     fake_generator.during = lambda: seen.append(client.get("/api/projects/p/typical-building/progress").json())
@@ -571,7 +572,7 @@ def test_a_run_without_a_building_is_refused_as_a_missing_input(tmp_path, fake_g
 
 def test_the_run_route_names_the_missing_building(client):
     create_project(client, "p", "benefit")
-    assert upload(client, "p", "weather", ("golden.epw", GOLDEN_EPW.read_bytes())).status_code == 200
+    assert upload(client, "p", "weather", ("golden.epw", BUNDLED_EPW.read_bytes())).status_code == 200
     client.patch("/api/projects/p/criteria/1", json={"energy_weighted": True})
     refused = client.post("/api/projects/p/runs", json={"produce": ["thresholding"]})
     assert refused.status_code == 422, refused.text
@@ -650,7 +651,7 @@ def test_a_failed_calculation_ends_the_run(tmp_path, monkeypatch):
 def test_calculate_with_the_engine_gives_the_numbers_of_its_file(client, projects_folder):
     create_project(client, "p", "benefit")
     choose_building(client)
-    assert upload(client, "p", "weather", ("golden.epw", GOLDEN_EPW.read_bytes())).status_code == 200
+    assert upload(client, "p", "weather", ("golden.epw", BUNDLED_EPW.read_bytes())).status_code == 200
     reply = client.post("/api/projects/p/typical-building/calculate").json()
     assert reply["state"] == "current"
     assert 0 < reply["underheating_kh"] < 8760 * 30 and 0 < reply["overheating_kh"] < 8760 * 30
@@ -670,8 +671,8 @@ def test_every_example_calculates_on_the_bundled_weather_file(tmp_path):
     """Each example's weights on the Golden weather file (about 7 s each); the numbers are printed (-s) for the docs."""
     numbers = {}
     for entry in typical_building.library():
-        archetype = typical_building.archetype_of(entry.values, GOLDEN_EPW)
-        out = simulated_weights.generate_simulated_weights(str(GOLDEN_EPW), archetype, tmp_path / f"{entry.id}.json")
+        archetype = typical_building.archetype_of(entry.values, BUNDLED_EPW)
+        out = simulated_weights.generate_simulated_weights(str(BUNDLED_EPW), archetype, tmp_path / f"{entry.id}.json")
         benefit, harm, meta = simulated_weights.read_simulated_weights(out)
         sun_up = np.asarray(meta["sun_up"], dtype=bool)
         numbers[entry.id] = (meta["underheating_kh"], meta["overheating_kh"], int(((benefit > 0.01) & sun_up).sum()))
@@ -710,7 +711,7 @@ def test_a_building_stored_before_the_window_opening_calculates_with_its_default
     earlier = {key: value for key, value in DEFAULT.items() if key not in ("vent_above", "vent_ach")}
     archetype = typical_building.archetype_of(earlier)
     assert (archetype["operation"], archetype["vent_above"], archetype["vent_ach"]) == ("free_running", 25.0, 4.0)
-    assert typical_building.weights_key(earlier, GOLDEN_EPW) == typical_building.weights_key(DEFAULT, GOLDEN_EPW)
+    assert typical_building.weights_key(earlier, BUNDLED_EPW) == typical_building.weights_key(DEFAULT, BUNDLED_EPW)
     store, name = benefit_project(tmp_path)
     project_json = store.read_project_json(name)
     project_json.typical_building = TypicalBuildingEntry(values=earlier, library_id=None, library_name=None, calculated_key=None)

@@ -1,55 +1,24 @@
 import { readFileSync } from "node:fs";
 import { act, useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
-import type { ModeInfo } from "../api_client/client";
+import { SERVICE_SCHEMA, serviceModes } from "../api_client/service_data_for_test";
 import { addStyleSheetForTest, click, press, renderForTest, type, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { formReducer, initialFormState, type FormState } from "./form_state";
 import { settingsForStep } from "./presentation";
 import { SettingField } from "./SettingField";
 import { SettingGroup } from "./SettingGroup";
 
+// The service's schema, with the slope limit's description holding a number of the test's own (60, where the engine says 75), so
+// a test sees SettingField read the automatic slope limit from the description and not from a number it knows.
 const SCHEMA = {
-  properties: {
-    mode: { default: "time-based", type: "string" },
-    voxel_size: { default: 1.0, type: "number" },
-    north_deg: { default: 0.0, type: "number" },
-    carve_fraction: { default: 0.7, type: "number" },
-    threshold: { anyOf: [{ $ref: "#/$defs/ThresholdSpec" }, { type: "null" }], default: null },
-    carve_above: { default: true, type: "boolean" },
-    carve_above_min_consecutive: { default: 1, type: "integer" },
-    // The form of the engine's description, from which SettingField reads the automatic slope limit; the number is the test's own.
-    max_slope_deg: { anyOf: [{ type: "number" }, { type: "null" }], default: null,
+  ...SERVICE_SCHEMA,
+  properties: { ...SERVICE_SCHEMA.properties,
+    max_slope_deg: { ...SERVICE_SCHEMA.properties.max_slope_deg,
                      description: "It only ever removes voxels. None (default): 60 for the weighted modes (irradiance, benefit, daylight, " +
-                       "radiative_cooling), off for time-based and tilted_plane. 90: off." },
-    score_smoothing: { anyOf: [{ type: "number" }, { type: "null" }], default: null },
-    ray_batch_size: { default: 0, type: "integer" },
-    diagnostics: { default: false, type: "boolean" },
-    start_month: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    start_day: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    start_hour: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    end_month: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    end_day: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    end_hour: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    smooth_iters: { default: 2, minimum: 0, maximum: 6, type: "integer" },
-    min_voxels: { default: 300, exclusiveMinimum: 0, type: "integer" },
-    ground_floor_height: { default: 5.0, type: "number" },
-    floor_height: { default: 3.0, type: "number" },
-    min_plate_dimension: { default: 3.0, type: "number" },
-    plate_tolerance: { default: 0.2, type: "number" },
-    plate_stacking: { default: "supported", enum: ["supported", "free"], type: "string" },
-    time_basis: { default: "standard", enum: ["standard", "daylight_saving", "solar"], type: "string" },
-    tilted_plane_angle_deg: { anyOf: [{ type: "number" }, { type: "array", items: { type: "number" } }, { type: "null" }], default: null },
-  },
+                       "radiative_cooling), off for time-based and tilted_plane. 90: off." } },
 };
 
-const MODES: ModeInfo[] = [
-  { name: "time-based", description: "", needs_epw: true, needs_period: true, experimental: false, score_kind: "violation_count", weight_unit: "", score_unit: "",
-    starting_values: { start_month: 12, start_day: 21, start_hour: 10, end_month: 12, end_day: 21, end_hour: 14 } },
-  { name: "daylight", description: "", needs_epw: false, needs_period: false, experimental: false, score_kind: "weighted_sum", weight_unit: "", score_unit: "",
-    starting_values: {} },
-  { name: "tilted_plane", description: "", needs_epw: false, needs_period: false, experimental: false, score_kind: "violation_count",
-    weight_unit: "", score_unit: "", starting_values: { tilted_plane_angle_deg: 45.0 } },
-];
+const MODES = serviceModes("time-based", "daylight", "tilted_plane");
 
 const GRID_PLAN = { resolution: 62, voxel_size: 1, total_voxels: 238328, extent: 62, budget_voxels: 500000000 };
 
@@ -304,11 +273,7 @@ test("Time offers standard, daylight saving and solar time, sends the engine's v
 test("a number outside the engine's range is refused in the field, with a message, and never reaches the form", () => {
   const onChange = vi.fn();
   const form = initialFormState({
-    schema: { properties: { ...SCHEMA.properties,
-      max_slope_deg: { anyOf: [{ type: "number", exclusiveMinimum: 0, maximum: 90 }, { type: "null" }], default: null },
-      north_deg: { default: 0.0, type: "number", minimum: 0, exclusiveMaximum: 360 },
-      carve_above_min_consecutive: { default: 1, type: "integer", minimum: 1 } } },
-    modes: MODES, settings: { mode: "daylight" }, gridPlan: GRID_PLAN });
+    schema: SCHEMA, modes: MODES, settings: { mode: "daylight" }, gridPlan: GRID_PLAN });
   const fieldOf = (step: Parameters<typeof settingsForStep>[0], name: string) => {
     rendered?.unmount();
     rendered = renderForTest(<SettingField view={viewOf(step, "daylight", name)} form={form} onChange={onChange} />);
@@ -377,8 +342,7 @@ test("a number typed past its bound keystroke by keystroke leaves the value the 
   // The form behind the field, as the app holds it: every change the field passes on is the value the next save sends.
   function NorthField() {
     const [form, dispatch] = useReducer(formReducer, initialFormState({
-      schema: { properties: { ...SCHEMA.properties, north_deg: { default: 0.0, type: "number", minimum: 0, exclusiveMaximum: 360 } } },
-      modes: MODES, settings: { mode: "daylight", north_deg: 20 }, gridPlan: GRID_PLAN }));
+      schema: SCHEMA, modes: MODES, settings: { mode: "daylight", north_deg: 20 }, gridPlan: GRID_PLAN }));
     latestNorth = form.userValues.north_deg;
     return <SettingField view={viewOf("settings", "daylight", "north_deg")} form={form} onChange={(values) => dispatch({ type: "values_changed", values })} />;
   }

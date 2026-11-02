@@ -7,8 +7,9 @@ import warnings
 
 import pytest
 
+from _epw import BUNDLED_EPW
 from local_web_test_support import (
-    GOLDEN_EPW, thresholding_diagnostic, write_diagnostic, write_fake_finished_run, write_fake_finished_run_with_envelope, write_fake_run,
+    thresholding_diagnostic, write_diagnostic, write_fake_finished_run, write_fake_finished_run_with_envelope, write_fake_run,
 )
 from urbansolarcarver.load_config import build_config_from_mode_starting_values
 from urbansolarcarver.local_web_service.project_names import ProjectError
@@ -259,7 +260,7 @@ def test_sun_marker_hours_of_a_period_over_midnight_follow_the_hours_of_the_peri
 
 def golden_config(**changes):
     values = {"mode": "time-based", "max_volume_path": "v.ply", "test_surface_path": "s.ply", "out_dir": "run",
-              "epw_path": str(GOLDEN_EPW), "start_month": 12, "start_day": 21, "start_hour": 10,
+              "epw_path": str(BUNDLED_EPW), "start_month": 12, "start_day": 21, "start_hour": 10,
               "end_month": 12, "end_day": 21, "end_hour": 14}
     return build_config_from_mode_starting_values({**values, **changes})
 
@@ -322,7 +323,7 @@ def test_computing_a_sun_path_raises_no_warning():
 @pytest.fixture
 def arctic_epw(tmp_path):
     """The Golden weather file moved to 66 N, 25 E (time zone +2): on 18 June the sun sets just after midnight."""
-    lines = GOLDEN_EPW.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
+    lines = BUNDLED_EPW.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
     location_fields = lines[0].split(",")
     location_fields[6:9] = ["66.0", "25.0", "2.0"]
     lines[0] = ",".join(location_fields)

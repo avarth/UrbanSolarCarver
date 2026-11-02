@@ -1,26 +1,13 @@
 import { afterEach, expect, test, vi } from "vitest";
-import type { ModeInfo } from "../../api_client/client";
+import { SERVICE_SCHEMA, serviceModes } from "../../api_client/service_data_for_test";
 import { renderForTest, type, type RenderedOverlay } from "../../viewer_overlays/render_for_test";
 import { formReducer, initialFormState, type FormState } from "../form_state";
 import { settingsForStep } from "../presentation";
 import { SettingField } from "../SettingField";
 
-// The engine's bounds of the settings these tests use, as GET schema gives them (pydantic_schemas.py).
-const SCHEMA = {
-  properties: {
-    mode: { default: "daylight", type: "string" },
-    voxel_size: { default: 1.0, type: "number", minimum: 0.01, maximum: 100 },
-    grid_step: { default: 1.0, type: "number", exclusiveMinimum: 0 },
-    score_smoothing: { anyOf: [{ type: "number", minimum: 0, maximum: 20 }, { type: "null" }], default: null },
-    plate_tolerance: { default: 0.2, type: "number", minimum: 0, maximum: 1 },
-    smooth_iters: { default: 2, type: "integer", minimum: 0, maximum: 6 },
-    carve_above_min_consecutive: { default: 1, type: "integer", minimum: 1 },
-    ray_batch_size: { default: 0, type: "integer", minimum: 0 },
-    diagnostics: { default: false, type: "boolean" },
-  },
-};
-const MODES: ModeInfo[] = [{ name: "daylight", description: "", needs_epw: false, needs_period: false, experimental: false,
-                             score_kind: "weighted_sum", weight_unit: "", score_unit: "", starting_values: {} }];
+// The engine's settings with their bounds and descriptions, as GET schema gives them.
+const SCHEMA = SERVICE_SCHEMA;
+const MODES = serviceModes("daylight");
 
 let rendered: RenderedOverlay | null = null;
 
@@ -78,12 +65,9 @@ test("a share stored as 0 to 1 slides in percent and is stored as a share", () =
 
 test("an empty automatic setting starts its hollow handle at the value the engine uses, and stays empty until the slider moves", () => {
   const onChange = vi.fn();
-  // The engine's descriptions name the automatic values (pydantic_schemas.py): 1.1 x voxel size; 75 ° in the weighted modes.
-  const described = initialFormState({ schema: { properties: { ...SCHEMA.properties,
-    score_smoothing: { ...SCHEMA.properties.score_smoothing, description: "None (default) = auto: 1.1 × voxel_size, recommended for most runs." },
-    max_slope_deg: { anyOf: [{ type: "number", exclusiveMinimum: 0, maximum: 90 }, { type: "null" }], default: null,
-                     description: "None (default): 75 for the weighted modes (irradiance, benefit, daylight, radiative_cooling), off for time-based and tilted_plane. 90: off." } } },
-    modes: MODES, settings: { mode: "daylight", voxel_size: 2 }, gridPlan: null });
+  // The engine's descriptions name the automatic values: 1.1 x voxel size; 75 ° in the weighted modes. A new number in a
+  // description is taken here by changing the values expected below.
+  const described = initialFormState({ schema: SCHEMA, modes: MODES, settings: { mode: "daylight", voxel_size: 2 }, gridPlan: null });
   rendered = renderForTest(<SettingField view={viewOf("carving", "score_smoothing")} form={described} onChange={onChange} />);
   expect(slider().dataset.empty).toBe("true");
   expect(slider().value).toBe("2.2");
@@ -100,8 +84,11 @@ test("an empty automatic setting starts its hollow handle at the value the engin
   rendered.rerender(<SettingField view={viewOf("carving", "max_slope_deg")} form={timeBased} onChange={onChange} />);
   expect(slider().value).toBe("90");
   expect(slider().getAttribute("aria-valuetext")).toBe("automatic, off");
-  // Without the engine's number the handle waits in the middle, and the value stays empty.
-  rendered.rerender(<SettingField view={viewOf("carving", "score_smoothing")} form={form()} onChange={onChange} />);
+  // Without the engine's number (a description of this test's own that gives none) the handle waits in the middle, and the value stays empty.
+  const withoutNumber = initialFormState({
+    schema: { ...SCHEMA, properties: { ...SCHEMA.properties, score_smoothing: { ...SCHEMA.properties.score_smoothing, description: "Radius of the blur." } } },
+    modes: MODES, settings: { mode: "daylight" }, gridPlan: null });
+  rendered.rerender(<SettingField view={viewOf("carving", "score_smoothing")} form={withoutNumber} onChange={onChange} />);
   expect(slider().value).toBe("2.5");
   expect(slider().getAttribute("aria-valuetext")).toBe("automatic");
   rendered.rerender(<SettingField view={viewOf("carving", "score_smoothing")} form={form({ score_smoothing: 1.2 })} onChange={onChange} />);

@@ -43,6 +43,12 @@ versioning follows [Semantic Versioning](https://semver.org/).
   has its test surface under the cube, as described, not inside it; its end-to-end tests now check that part of the cube
   is carved. `pytest` collects from `tests/` only. The app's fake service checks its main replies against the service's
   types, and the fake 3D scene against the real one's methods. `docs/testing.md` lists the shared scenes and fakes.
+- **The tests were reviewed one by one** for the mistake each catches. About 90 duplicate or trivial tests were deleted
+  and about 40 merged into the ones kept; tests tied to markup, CSS text or private functions now check behaviour; 30
+  weak assertions now fail on the mistake they aim at. A small plot, street and neighbour scene (`tests/_plot_scene.py`)
+  checks which side each mode carves. Tests wait on events instead of the clock, and the app tests' `settle` waits until
+  no reply is outstanding. The app tests read the service's schema and modes from a snapshot that a test keeps current
+  (`tools/write_app_test_service_data.py`), and each shared helper is written once (see `docs/testing.md`).
 - **`PipelineResult` is defined in `urbansolarcarver.api_core.pipeline_result`**, below `api`, since `run_chain` builds
   it too. `from urbansolarcarver import PipelineResult` and `from urbansolarcarver.api import PipelineResult` work as
   before.

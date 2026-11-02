@@ -1,6 +1,7 @@
 import { act, useMemo, useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
-import type { ModeInfo, RunSummary } from "../api_client/client";
+import type { RunSummary } from "../api_client/client";
+import { SERVICE_CRITERION_KEYS, SERVICE_SCHEMA, serviceModes } from "../api_client/service_data_for_test";
 import { formReducer, initialFormState, type FormState } from "../settings_form/form_state";
 import { addStyleSheetForTest, click, press, renderForTest, type, typeAndLeave, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import type { ScorePoints } from "../viewer/score_points_decoder";
@@ -14,25 +15,8 @@ import { ScoreHistogram } from "../criteria/ScoreHistogram";
 import { createThresholdUpdateQueue } from "./threshold_queue";
 import { inProjectSession } from "../api_client/project_session_for_test";
 
-const SCHEMA = {
-  properties: {
-    mode: { default: "time-based", type: "string" },
-    voxel_size: { default: 1.0, type: "number" },
-    carve_fraction: { default: 0.7, type: "number" },
-    threshold: { anyOf: [{ $ref: "#/$defs/ThresholdSpec" }, { type: "null" }], default: null },
-    carve_above: { default: true, type: "boolean" },
-    carve_above_min_consecutive: { default: 1, type: "integer" },
-    max_slope_deg: { anyOf: [{ type: "number" }, { type: "null" }], default: null },
-    score_smoothing: { anyOf: [{ type: "number" }, { type: "null" }], default: null },
-    apply_smoothing: { default: true, type: "boolean" },
-    ground_floor_height: { default: 5.0, type: "number" },
-    floor_height: { default: 3.0, type: "number" },
-    min_plate_dimension: { default: 3.0, type: "number" },
-  },
-};
-const mode = (name: string, scoreKind: ModeInfo["score_kind"]): ModeInfo =>
-  ({ name, description: "", needs_epw: false, needs_period: false, experimental: false, score_kind: scoreKind, weight_unit: "", score_unit: "", starting_values: {} });
-const MODES = [mode("time-based", "violation_count"), mode("daylight", "weighted_sum"), mode("tilted_plane", "violation_count")];
+const SCHEMA = SERVICE_SCHEMA;
+const MODES = serviceModes("time-based", "daylight", "tilted_plane");
 
 function formFor(modeName: string, settings: Record<string, unknown> = {}): FormState {
   return initialFormState({ schema: SCHEMA, modes: MODES, settings: { mode: modeName, ...settings }, gridPlan: null });
@@ -368,7 +352,7 @@ test("a failed run of another criterion names it for its own settings, not for a
   const view = (field: string) => (
     <RunProgress runs={runs({ serial: 1, project: "p", origin: "carving_run_analysis", runId: "r", state: ofCriterion2(field), refusal: null })}
                  project="p" origin="carving_run_analysis" mode="time-based" onGoToSetting={onGoToSetting} shownCriterionId="1"
-                 criterionNames={{ 1: "Facades", 2: "Windows" }} criterionKeys={new Set(["max_slope_deg"])} />
+                 criterionNames={{ 1: "Facades", 2: "Windows" }} criterionKeys={SERVICE_CRITERION_KEYS} />
   );
   const linkText = () => [...rendered!.container.querySelectorAll("button")].map((button) => button.textContent).find((text) => text!.startsWith("Go to"));
   rendered = renderForTest(view("voxel_size"));                   // a shared setting: the project's, not criterion 2's

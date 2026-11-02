@@ -127,17 +127,20 @@ Before writing a scene or a fake of your own, use these.
 | Where | What |
 |---|---|
 | `tests/conftest.py` | `tiny_cube_mesh` (a 10 m cube, z -5 to 5), `tiny_surface_mesh` (a 6 m quad 1 m under it, facing up), `tmp_mesh_files`, `example_epw_path`, `project_with_inputs`, `example_project_templates` |
-| `tests/_stage_scene.py` | `daylight_cube_config`: the same cube and surface as a validated daylight config on the CPU, the smallest scene that runs every stage; for stage plumbing, not for which voxels a mode carves (the surface looks straight up through the cube from any side) |
+| `tests/_stage_scene.py` | `cube_volume`, `surface_under_cube`, `cube_config` and `daylight_cube_config`: the same cube and surface as a validated daylight config on the CPU, the smallest scene that runs every stage; for stage plumbing, not for which voxels a mode carves (the surface looks straight up through the cube from any side) |
 | `tests/_plot_scene.py` | `plot_scene`: a 12 x 12 x 18 m plot, a 10 m street and a 12 m neighbour whose south facade is the test surface and whose mass is the context, optionally turned by `north_deg`; `PlotScene.config(folder, mode, epw_path)` (1 m voxels, CPU) and `PlotScene.voxels` with `assert_carves_the_north_side`: which side a mode or stage carves, in about a second |
 | `tests/_chain_scene.py` | a box with two facades, on which two chained criteria decide about different voxels |
 | `tests/cases.py`, `tests/oracle.py`, `tests/montecarlo.py` | the typology scenes run end to end, an independent reference implementation, and the randomised sweep |
 | `tests/local_web_test_support.py` | projects for the local web service (`add_project_with_inputs`, `box_bytes`), `FakeEngine` (writes run_chain's folders without computing), `FakeRecycleBin` |
-| `tests/_epw.py`, `tests/_daemon_home.py` | the weather file to use or skip on; the environment of a daemon subprocess |
+| `tests/_geometry.py` | `box_between(lo, hi)`: a box mesh from two corners |
+| `tests/_epw.py`, `tests/_daemon_home.py` | `BUNDLED_EPW` and `resolve_epw` (a test that needs a weather file asks for `example_epw_path`, which skips without one); `isolated_home_env` and `start_daemon(home, answers)`, a real daemon subprocess with a home folder of its own, started on a free port |
 | `app/src/workspace/project_workspace_for_test.tsx` | `FakeService`, the service an open project talks to; `json<Reply>(body)` checks a reply against the service's type when given it |
 | `app/src/workspace/chain_service_for_test.tsx`, `simulate_service_for_test.tsx` | the same for several criteria, and for Simulate |
 | `app/src/viewer/fake_scene_for_test.ts` | `FakeViewerScene`, typed against `ViewerScene`'s public methods; it records what the pane asked it to draw |
 | `app/src/api_client/project_session_for_test.tsx` | `inProjectSession(element)`: a hook or panel of an open project rendered without the workspace |
-| `app/src/api_client/fake_websocket_for_test.ts`, `app/src/viewer_overlays/render_for_test.tsx` | a run's events; rendering with React's `act` |
+| `app/src/api_client/fake_websocket_for_test.ts` | a run's events |
+| `app/src/viewer_overlays/render_for_test.tsx` | rendering with React's `act`; `click`, `press`, `type`, `typeAndLeave`, `byRole`, `accessibleName`; `settle()`, which waits until no reply is outstanding and nothing changed for two rounds (it throws, naming the unanswered requests, after 50 rounds; a reply a fake holds on purpose goes through `holdReply`); `addStyleSheetForTest` for computed styles |
+| `app/src/api_client/service_data_for_test.ts` | the service's settings schema, modes and criterion keys as the app gets them (`SERVICE_SCHEMA`, `SERVICE_MODES`, `SERVICE_CRITERION_KEYS`, `serviceSchemaWith`, `serviceModes`), from a JSON snapshot written by `python tools/write_app_test_service_data.py`; `tests/test_local_web_api_types.py` fails when the snapshot or `generated_types.ts` no longer matches the service |
 
 ## Running in parallel
 

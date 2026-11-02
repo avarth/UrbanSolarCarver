@@ -2,56 +2,13 @@
 
 What a request does is tested in test_engine_requests.py; these tests run a
 real daemon process and check the transport around the request core."""
-import socket
-import subprocess
 import sys
-import time
-from pathlib import Path
 from multiprocessing.connection import Client
 
 import pytest
 
-from _daemon_home import isolated_home_env
+from _daemon_home import start_daemon
 from urbansolarcarver.daemon_client import resolve_daemon_authkey
-
-
-def _free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("localhost", 0))
-        return s.getsockname()[1]
-
-
-def _start_daemon(home: Path, key: bytes):
-    """Start a daemon on a free port and wait until it answers a ping; (address, process).
-
-    The daemon takes a port number, not a socket, so the port is free when chosen and another test worker can take it before
-    the daemon binds it. The daemon then stops at once saying the port is in use, and another free port is tried."""
-    log = home / "daemon.log"
-    for _ in range(3):
-        port = _free_port()
-        with open(log, "wb") as output:
-            proc = subprocess.Popen(
-                [sys.executable, "-m", "urbansolarcarver.daemon", "--port", str(port), "--device", "cpu"],
-                stdout=output, stderr=subprocess.STDOUT, env=isolated_home_env(home),
-            )
-        addr = ("localhost", port)
-        for _ in range(240):
-            if proc.poll() is not None:
-                break
-            # Connect only once the daemon says it bound the port: until then the port can be another program's.
-            if "[daemon] listening on" in log.read_text(encoding="utf-8", errors="replace"):
-                with Client(addr, authkey=key) as c:     # waits for the accept, after the kernel warm-up
-                    c.send({"cmd": "ping"})
-                    c.recv()
-                return addr, proc
-            time.sleep(0.5)
-        else:
-            proc.kill()
-            pytest.fail("daemon did not become ready")
-        said = log.read_text(encoding="utf-8", errors="replace")
-        if "already in use" not in said:
-            pytest.fail("daemon exited during startup:\n" + said)
-    pytest.fail("three free ports were taken before the daemon could bind them")
 
 
 @pytest.fixture(scope="module")
@@ -60,7 +17,15 @@ def daemon(tmp_path_factory):
     # the tests away from the real ~/.urbansolarcarver/.daemon_authkey.
     home = tmp_path_factory.mktemp("home")
     key = resolve_daemon_authkey(home / ".urbansolarcarver" / ".daemon_authkey")
-    addr, proc = _start_daemon(home, key)
+
+    def answers_a_ping(port):
+        with Client(("localhost", port), authkey=key) as c:     # waits for the accept, after the kernel warm-up
+            c.send({"cmd": "ping"})
+            c.recv()
+        return True
+
+    proc, port = start_daemon(home, answers_a_ping)
+    addr = ("localhost", port)
     try:
         yield addr, key, proc
     finally:

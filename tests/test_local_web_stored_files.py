@@ -5,8 +5,9 @@ import shutil
 import pytest
 import trimesh
 
+from _epw import BUNDLED_EPW
 from local_web_test_support import (
-    ALL_CURRENT, GOLDEN_EPW, FakeEngine, box_bytes, make_worker, run_and_wait, write_fake_chain_run,
+    ALL_CURRENT, FakeEngine, box_bytes, make_worker, run_and_wait, write_fake_chain_run,
 )
 from urbansolarcarver.io import load_mesh, save_mesh
 from urbansolarcarver.local_web_service import stored_files, test_surfaces
@@ -134,7 +135,7 @@ def test_a_context_file_replaced_in_the_folder_dates_every_stage(chain_of_two):
 
 def test_a_weather_file_replaced_in_the_folder_dates_every_stage_once_recorded(chain_of_two):
     store = chain_of_two
-    store.add_input("p", "weather", "golden.epw", GOLDEN_EPW.read_bytes())
+    store.add_input("p", "weather", "golden.epw", BUNDLED_EPW.read_bytes())
     write_fake_chain_run(store, "p", ["1", "2"])
     weather_path = store.open("p") / "inputs" / "weather.epw"
     _replace_on_disk(store, "weather", "weather.epw", weather_path.read_bytes().replace(b"Golden", b"Denver", 1))
@@ -145,7 +146,7 @@ def test_a_weather_file_replaced_in_the_folder_dates_every_stage_once_recorded(c
 
 def test_a_weather_file_without_a_record_is_taken_as_it_is(chain_of_two):
     store = chain_of_two
-    store.add_input("p", "weather", "golden.epw", GOLDEN_EPW.read_bytes())
+    store.add_input("p", "weather", "golden.epw", BUNDLED_EPW.read_bytes())
     write_fake_chain_run(store, "p", ["1", "2"])
     with store.project_lock("p"):
         project_json = store.read_project_json("p")

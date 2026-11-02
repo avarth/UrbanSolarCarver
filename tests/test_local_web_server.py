@@ -20,8 +20,9 @@ import send2trash
 import yaml
 from starlette.websockets import WebSocketDisconnect
 
+from _epw import BUNDLED_EPW
 from local_web_test_support import (
-    AUTH, GOLDEN_EPW, LAST_EVENT_TYPES, PORT, SURFACE, TOKEN, VOLUME, FakeRecycleBin, WaitsForCancel, box_bytes, build_client,
+    AUTH, LAST_EVENT_TYPES, PORT, SURFACE, TOKEN, VOLUME, FakeRecycleBin, WaitsForCancel, box_bytes, build_client,
     create_project, create_project_with_inputs, decode_carved_by_criterion, decode_score_points, events_url, has_vertex_normals,
     make_worker, read_events, start_run, upload, write_envelope_as_exported, write_fake_finished_run_with_envelope, write_fake_run,
     write_joined_test_surfaces_without_normals,
@@ -525,10 +526,10 @@ def test_sun_path_is_empty_without_weather(client):
     assert client.get("/api/projects/q/sun-path").json() == {"days": []}
 
 
-@pytest.mark.skipif(not GOLDEN_EPW.is_file(), reason="the bundled weather file is missing")
+@pytest.mark.skipif(not BUNDLED_EPW.is_file(), reason="the bundled weather file is missing")
 def test_sun_path_follows_the_uploaded_weather_file(client):
     create_project(client, "p", "time-based")
-    uploaded = upload(client, "p", "weather", ("golden.epw", GOLDEN_EPW.read_bytes())).json()
+    uploaded = upload(client, "p", "weather", ("golden.epw", BUNDLED_EPW.read_bytes())).json()
     assert uploaded["weather_location"] is not None
     assert uploaded["weather_latitude"] == 39.74
     assert client.get("/api/projects/p").json()["weather_latitude"] == 39.74
@@ -543,10 +544,10 @@ def test_the_cold_period_needs_the_weather_file(client):
     assert reply.status_code == 200 and reply.json() == {"status": "no_weather_file", "period": None}
 
 
-@pytest.mark.skipif(not GOLDEN_EPW.is_file(), reason="the bundled weather file is missing")
+@pytest.mark.skipif(not BUNDLED_EPW.is_file(), reason="the bundled weather file is missing")
 def test_the_cold_period_comes_from_the_uploaded_weather_file_and_the_base_temperature(client):
     create_project(client, "p", "benefit")
-    assert upload(client, "p", "weather", ("golden.epw", GOLDEN_EPW.read_bytes())).status_code == 200
+    assert upload(client, "p", "weather", ("golden.epw", BUNDLED_EPW.read_bytes())).status_code == 200
     found = client.get("/api/projects/p/cold-period", params={"base_temperature": 13}).json()
     assert found == {"status": "found", "period": {"start_month": 9, "start_day": 30, "end_month": 5, "end_day": 15}}
     warmer_base = client.get("/api/projects/p/cold-period", params={"base_temperature": 18}).json()
@@ -1611,10 +1612,10 @@ def test_criterion_settings_read_does_not_digest_test_surfaces(client_with_two_c
     assert client.get("/api/projects/missing/criteria/1/settings").status_code == 404
 
 
-@pytest.mark.skipif(not GOLDEN_EPW.is_file(), reason="the bundled weather file is missing")
+@pytest.mark.skipif(not BUNDLED_EPW.is_file(), reason="the bundled weather file is missing")
 def test_sun_path_of_a_chosen_criterion(client_with_two_criteria):
     client = client_with_two_criteria
-    assert upload(client, "p", "weather", ("golden.epw", GOLDEN_EPW.read_bytes())).status_code == 200
+    assert upload(client, "p", "weather", ("golden.epw", BUNDLED_EPW.read_bytes())).status_code == 200
     assert client.get("/api/projects/p/sun-path").json() == {"days": []}          # the first criterion that is on: daylight, no sun path
     chosen = client.get("/api/projects/p/sun-path", params={"criterion": "2"}).json()
     assert [day["date"] for day in chosen["days"]] == ["12-21"]

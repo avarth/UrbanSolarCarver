@@ -7,6 +7,7 @@ import pytest
 import torch
 import trimesh
 
+from _geometry import box_between
 from urbansolarcarver.context_geometry import (
     context_occupancy, ground_heights, remove_below_ground, remove_context_columns,
 )
@@ -17,17 +18,10 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 VOXEL = 1.0
 
 
-def _box(lo, hi):
-    lo, hi = np.asarray(lo, float), np.asarray(hi, float)
-    box = trimesh.creation.box(extents=hi - lo)
-    box.apply_translation((lo + hi) / 2)
-    return box
-
-
 @pytest.fixture
 def cube_grid():
     """A 10 m cube from (0, 0, 0) to (10, 10, 10) voxelized at 1 m: (occupancy uint8, origin, resolution)."""
-    cube = _box((0, 0, 0), (10, 10, 10))
+    cube = box_between((0, 0, 0), (10, 10, 10))
     plan = plan_voxel_grid(cube.bounds, VOXEL, 0.2)
     grid = voxelize_solid_warp(cube.vertices, cube.faces, plan.origin, VOXEL, plan.resolution, DEVICE)
     return grid.astype(np.uint8), plan.origin, plan.resolution
@@ -55,8 +49,8 @@ def test_default_voxelization_is_unchanged():
 
 def test_centre_only_ignores_the_surface_through_rule():
     """A thin slab through voxel centres' gaps: the surface passes through voxels whose centres lie outside it."""
-    slab = _box((-3, -3, 4.1), (13, 13, 4.4))
-    plan = plan_voxel_grid(_box((0, 0, 0), (10, 10, 10)).bounds, VOXEL, 0.2)
+    slab = box_between((-3, -3, 4.1), (13, 13, 4.4))
+    plan = plan_voxel_grid(box_between((0, 0, 0), (10, 10, 10)).bounds, VOXEL, 0.2)
     default = voxelize_solid_warp(slab.vertices, slab.faces, plan.origin, VOXEL, plan.resolution, DEVICE)
     centre = voxelize_solid_warp(slab.vertices, slab.faces, plan.origin, VOXEL, plan.resolution, DEVICE,
                                  centre_only=True)
@@ -65,7 +59,7 @@ def test_centre_only_ignores_the_surface_through_rule():
 
 
 def test_context_box_inside_removes_its_whole_columns(cube_grid):
-    removal = _removal(cube_grid, _box((4, 4, 4), (6, 6, 6)))
+    removal = _removal(cube_grid, box_between((4, 4, 4), (6, 6, 6)))
     assert removal.voxels_removed == 4 * 10
     assert removal.removed_columns.sum() == 4
     occupancy, origin, _ = cube_grid
@@ -79,14 +73,14 @@ def test_context_box_inside_removes_its_whole_columns(cube_grid):
 
 def test_shared_face_removes_no_site_voxel(cube_grid):
     """A neighbour standing against the cube's +x face (a party wall) removes nothing of the site."""
-    removal = _removal(cube_grid, _box((10, 2, 0), (14, 8, 10)))
+    removal = _removal(cube_grid, box_between((10, 2, 0), (14, 8, 10)))
     assert removal.voxels_removed == 0
     assert not removal.removed_columns.any()
 
 
 def test_context_much_larger_than_the_grid_voxelizes_correctly(cube_grid):
     """A 1 km slab crossing the cube at z = 4-6 m: its parity rays start outside it, so every column is removed."""
-    removal = _removal(cube_grid, _box((-500, -500, 4), (500, 500, 6)))
+    removal = _removal(cube_grid, box_between((-500, -500, 4), (500, 500, 6)))
     occupancy = cube_grid[0]
     footprint = occupancy.any(axis=2)
     assert removal.removed_columns[footprint].all()
@@ -96,7 +90,7 @@ def test_context_much_larger_than_the_grid_voxelizes_correctly(cube_grid):
 
 def test_context_slab_inside_the_grid_marks_only_its_layers(cube_grid):
     occupancy, origin, resolution = cube_grid
-    slab = _box((-500, -500, 4), (500, 500, 6))
+    slab = box_between((-500, -500, 4), (500, 500, 6))
     inside = context_occupancy(slab.vertices, slab.faces, origin, VOXEL, resolution, DEVICE)
     k = np.arange(resolution)
     centres_z = origin[2] + (k + 0.5) * VOXEL
@@ -106,7 +100,7 @@ def test_context_slab_inside_the_grid_marks_only_its_layers(cube_grid):
 
 
 def test_context_outside_the_grid_changes_nothing(cube_grid):
-    removal = _removal(cube_grid, _box((100, 100, 0), (110, 110, 10)))
+    removal = _removal(cube_grid, box_between((100, 100, 0), (110, 110, 10)))
     assert removal.voxels_removed == 0
     np.testing.assert_array_equal(removal.occupancy, cube_grid[0])
 
@@ -188,28 +182,28 @@ def test_terrain_takes_the_highest_crossing(cube_grid):
 
 def test_context_above_the_max_volume_removes_the_columns_under_it(cube_grid):
     """A tree crown over part of the site, above the max volume: nothing is built under it."""
-    removal = _removal(cube_grid, _box((2, 2, 10.2), (4, 4, 11.9)))
+    removal = _removal(cube_grid, box_between((2, 2, 10.2), (4, 4, 11.9)))
     assert removal.removed_columns.sum() == 4
     assert removal.voxels_removed == 4 * 10
 
 
 def test_context_below_the_max_volume_removes_the_columns_over_it(cube_grid):
     """A kept low building under a max volume drawn on top of it: to build over it, remove it from the context."""
-    removal = _removal(cube_grid, _box((6, 6, -1.8), (8, 8, 0)))
+    removal = _removal(cube_grid, box_between((6, 6, -1.8), (8, 8, 0)))
     assert removal.removed_columns.sum() == 4
     assert removal.voxels_removed == 4 * 10
 
 
 def _open_box(lo, hi, axis):
-    box = _box(lo, hi)
+    box = box_between(lo, hi)
     box.update_faces(box.face_normals[:, axis] > -0.5)   # the wall facing -axis missing
     return box
 
 
 def test_open_bodies_far_from_the_grid_do_not_flip_the_parity_inside_it(cube_grid):
     """Open bodies 500 m away and intact ones beyond the site, along the grid's rows: no context near the site."""
-    far = [_open_box((-520, -5, -5), (-510, 15, 15), 0), _box((-720, -5, -5), (-710, 15, 15)), _box((700, -5, -5), (710, 15, 15)),
-           _open_box((-5, -520, -5), (15, -510, 15), 1), _box((-5, -720, -5), (15, -710, 15)), _box((-5, 700, -5), (15, 710, 15))]
+    far = [_open_box((-520, -5, -5), (-510, 15, 15), 0), box_between((-720, -5, -5), (-710, 15, 15)), box_between((700, -5, -5), (710, 15, 15)),
+           _open_box((-5, -520, -5), (15, -510, 15), 1), box_between((-5, -720, -5), (15, -710, 15)), box_between((-5, 700, -5), (15, 710, 15))]
     assert not far[0].is_watertight and not far[3].is_watertight
     removal = _removal(cube_grid, trimesh.util.concatenate(far))
     assert removal.voxels_removed == 0
@@ -218,16 +212,16 @@ def test_open_bodies_far_from_the_grid_do_not_flip_the_parity_inside_it(cube_gri
 def test_many_bodies_along_a_row_do_not_hide_context_inside_the_grid(cube_grid):
     """130 closed boxes in a row before the grid along x and along y (more crossings than a parity ray follows) and a chimney
     inside the site."""
-    rows = [_box((-1000 + 6 * k, -5, -5), (-997 + 6 * k, 15, 15)) for k in range(130)]
-    rows += [_box((-5, -1000 + 6 * k, -5), (15, -997 + 6 * k, 15)) for k in range(130)]
-    removal = _removal(cube_grid, trimesh.util.concatenate([*rows, _box((4, 4, 4), (6, 6, 6))]))
+    rows = [box_between((-1000 + 6 * k, -5, -5), (-997 + 6 * k, 15, 15)) for k in range(130)]
+    rows += [box_between((-5, -1000 + 6 * k, -5), (15, -997 + 6 * k, 15)) for k in range(130)]
+    removal = _removal(cube_grid, trimesh.util.concatenate([*rows, box_between((4, 4, 4), (6, 6, 6))]))
     assert removal.voxels_removed == 4 * 10
 
 
 @pytest.fixture
 def cube_grid_default_margin():
     """The 10 m cube at the default grid margin: voxel centres lie on its faces (whole metres)."""
-    cube = _box((0, 0, 0), (10, 10, 10))
+    cube = box_between((0, 0, 0), (10, 10, 10))
     plan = plan_voxel_grid(cube.bounds, VOXEL, 0.01)
     grid = voxelize_solid_warp(cube.vertices, cube.faces, plan.origin, VOXEL, plan.resolution, DEVICE)
     assert np.isclose(plan.origin[0] + 0.5 * VOXEL, 0.0)
@@ -235,7 +229,7 @@ def cube_grid_default_margin():
 
 
 def test_party_wall_on_voxel_centres_removes_no_site_voxel(cube_grid_default_margin):
-    removal = _removal(cube_grid_default_margin, _box((10, 2, 0), (14, 8, 10)))
+    removal = _removal(cube_grid_default_margin, box_between((10, 2, 0), (14, 8, 10)))
     assert removal.voxels_removed == 0
 
 

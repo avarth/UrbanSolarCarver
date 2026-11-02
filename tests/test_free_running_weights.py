@@ -7,10 +7,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from _epw import BUNDLED_EPW
 from urbansolarcarver import simulated_weights as sw
 from urbansolarcarver.simulated_weights import HOURS, ZoneParams
 
-GOLDEN_EPW = Path(__file__).resolve().parents[1] / "examples" / "weather" / "USA_CO_Golden-NREL.724666_TMY3.epw"
 _REF = json.loads((Path(__file__).parent / "data" / "oracle_5r1c_reference.json").read_text(encoding="utf-8"))
 VOLUME = 300.0
 
@@ -112,7 +112,7 @@ def test_a_zone_always_below_the_band_counts_most_of_its_sun():
 def test_the_generator_writes_a_free_running_zone(tmp_path):
     archetype = {"width": 10.0, "length": 10.0, "height": 3.0, "wwr": {"south": 0.4, "north": 0.2}, "u_opaque": 0.5, "u_window": 2.0,
                  "ach_vent": 0.5, "ach_infiltration": 0.2, "operation": "free_running", "vent_above": 24.0, "vent_ach": 3.0}
-    path = sw.generate_simulated_weights(str(GOLDEN_EPW), archetype, tmp_path / "w.json")
+    path = sw.generate_simulated_weights(str(BUNDLED_EPW), archetype, tmp_path / "w.json")
     benefit, harm, meta = sw.read_simulated_weights(path)
     assert (meta["method"], meta["operation"]) == ("iso13790-5r1c-free-running-perturbation", "free_running")
     assert "heating_kwh_m2" not in meta and meta["comfort_band_c"] == [20.0, 26.0]

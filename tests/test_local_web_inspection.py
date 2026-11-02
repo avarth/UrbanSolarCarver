@@ -8,7 +8,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from local_web_test_support import GOLDEN_EPW, box_bytes, build_client, create_project, upload, write_fake_chain_run
+from _epw import BUNDLED_EPW
+from local_web_test_support import box_bytes, build_client, create_project, upload, write_fake_chain_run
 from urbansolarcarver.io import load_mesh
 from urbansolarcarver.local_web_service import inspection, test_surfaces
 from urbansolarcarver.local_web_service.projects import ProjectError, ProjectStore
@@ -75,7 +76,7 @@ def store_with_files(store):
     store.add_input("p", "max_volume", "volume.ply", box_bytes([0, 0, 5]))
     store.add_input("p", "test_surfaces", "facades.obj", obj_panels([0, 20]))
     store.add_input("p", "context", "town.ply", ply_of_a_box_and_a_panel())
-    store.add_input("p", "weather", "golden.epw", GOLDEN_EPW.read_bytes())
+    store.add_input("p", "weather", "golden.epw", BUNDLED_EPW.read_bytes())
     return store
 
 

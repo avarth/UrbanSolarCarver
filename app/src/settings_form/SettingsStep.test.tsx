@@ -1,6 +1,7 @@
 import { useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
-import { ApiError, type ModeInfo } from "../api_client/client";
+import { ApiError } from "../api_client/client";
+import { SERVICE_CRITERION_KEYS as CRITERION_KEYS, SERVICE_SCHEMA, serviceModes } from "../api_client/service_data_for_test";
 import { formReducer, initialFormState, type FormState } from "./form_state";
 import { click, renderForTest, type, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import type { SaveOutcome } from "./form_state";
@@ -8,7 +9,6 @@ import {
   runAnalysisAfterSaving, runAnalysisBlocker, SaveFailureNotice, saveFailureTextOf, SettingsStep, SettingsToFix, settingsToFixByStep, settingsToFixCount,
   type RunAnalysisConditions,
 } from "./SettingsStep";
-import { CRITERION_KEYS } from "../workspace/project_workspace_for_test";
 
 let rendered: RenderedOverlay | null = null;
 
@@ -17,23 +17,8 @@ afterEach(() => {
   rendered = null;
 });
 
-const SCHEMA = {
-  properties: {
-    mode: { default: "time-based", type: "string" },
-    voxel_size: { default: 1.0, type: "number" },
-    north_deg: { default: 0.0, type: "number" },
-    start_month: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    start_day: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    start_hour: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    end_month: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    end_day: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    end_hour: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-  },
-};
-const MODES: ModeInfo[] = [
-  { name: "time-based", description: "", needs_epw: true, needs_period: true, experimental: false, score_kind: "violation_count", weight_unit: "", score_unit: "",
-    starting_values: { start_month: 12, start_day: 21, start_hour: 10, end_month: 12, end_day: 21, end_hour: 14 } },
-];
+const SCHEMA = SERVICE_SCHEMA;
+const MODES = serviceModes("time-based");
 const PLAN_WITHIN_BUDGET = { resolution: 62, voxel_size: 1, total_voxels: 238328, extent: 62, budget_voxels: 500000000 };
 const PLAN_OVER_BUDGET = { resolution: 884, voxel_size: 0.06, total_voxels: 690807104, extent: 53, budget_voxels: 500000000 };
 
@@ -239,8 +224,7 @@ test("the line keeps its place under an over-budget voxel size, and before the g
 });
 
 test("a project with surroundings shows Account for context blocking, on by default, and changing it reaches onChange", () => {
-  const schema = { properties: { ...SCHEMA.properties, context_blocks_rays: { default: true, type: "boolean" } } };
-  const withSwitch = initialFormState({ schema, modes: MODES, settings: { mode: "time-based" }, gridPlan: PLAN_WITHIN_BUDGET });
+  const withSwitch = initialFormState({ schema: SCHEMA, modes: MODES, settings: { mode: "time-based" }, gridPlan: PLAN_WITHIN_BUDGET });
   const onChange = vi.fn();
   rendered = renderForTest(<SettingsStep form={withSwitch} onChange={onChange} disabledReason={null} inputRoles={["context"]} />);
   const field = [...rendered.container.querySelectorAll<HTMLElement>(".setting-field")]

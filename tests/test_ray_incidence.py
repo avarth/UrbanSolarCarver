@@ -3,17 +3,15 @@
 The patch weights are radiation per m² facing the patch (Ladybug's sky matrix), so with the cosine a ray carries the
 radiation its surface receives from that direction, as Simulate's solar energy counts it.
 """
-from pathlib import Path
-
 import numpy as np
 import pytest
 import torch
 
+from _epw import BUNDLED_EPW
 from urbansolarcarver.mode_registry import MODES
 from urbansolarcarver.warp_kernels import dda_backend_available
 
 REQUIRES_WARP_CPU = pytest.mark.skipif(not dda_backend_available(torch.device("cpu")), reason="Warp CPU unavailable")
-GOLDEN_EPW = Path(__file__).resolve().parents[1] / "examples" / "weather" / "USA_CO_Golden-NREL.724666_TMY3.epw"
 RES, EXTENT = 20, 40.0          # 2 m voxels
 CPU = torch.device("cpu")
 
@@ -24,7 +22,7 @@ def _settings(mode="irradiance", **overrides):
     values = dict(max_volume_path="unused", test_surface_path="unused", out_dir="unused", mode=mode,
                   voxel_size=2.0, grid_step=2.0, ray_length=200.0, device="cpu")
     if MODES[mode].needs_epw:
-        values.update(epw_path=str(GOLDEN_EPW), start_month=1, start_day=1, start_hour=0,
+        values.update(epw_path=str(BUNDLED_EPW), start_month=1, start_day=1, start_hour=0,
                       end_month=12, end_day=31, end_hour=23)
     values.update(overrides)
     return PreprocessingSettings.from_config(user_config(**values))
@@ -120,7 +118,7 @@ def test_an_open_horizontal_point_receives_the_weather_files_global_radiation():
     normals = [[0.0, 0.0, 1.0], [0.0, -1.0, 0.0], [0.0, 1.0, 0.0]]   # up, south, north (north is +y)
     result = _evaluate(np.zeros((RES,) * 3, bool), points, normals, _settings())
     up, south, north = result.test_point_accessible_weight
-    ghi = sum(float(line.split(",")[13]) for line in GOLDEN_EPW.read_text().splitlines()[8:]) / 1000.0
+    ghi = sum(float(line.split(",")[13]) for line in BUNDLED_EPW.read_text().splitlines()[8:]) / 1000.0
     assert up == pytest.approx(ghi, rel=0.02)
     assert 4.0 < south / north < 5.0
 

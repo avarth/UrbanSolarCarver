@@ -1,31 +1,20 @@
 import { expect, test } from "vitest";
-import { ApiError, type ModeInfo } from "../api_client/client";
+import { ApiError } from "../api_client/client";
+import { SERVICE_CRITERION_KEYS, SERVICE_SCHEMA, serviceModes } from "../api_client/service_data_for_test";
 import { analysisDiffersFromStored, formReducer, initialFormState, shownValue, valuesToSend, type FormAction, type SettingsForm } from "./form_state";
 import { bothForms, combinedForm, combinedSaveOutcome, sharedChangeHeldBack, splitSettings } from "./two_forms";
 
-const SCHEMA = {
-  properties: {
-    mode: { default: "time-based" }, voxel_size: { default: 1.0 }, north_deg: { default: 0.0 }, carve_fraction: { default: 0.7 },
-    start_month: { default: null }, start_day: { default: null }, start_hour: { default: null },
-    end_month: { default: null }, end_day: { default: null }, end_hour: { default: null }, threshold: { default: null }, edge_taper: { default: 0.0 },
-  },
-};
-
-function modeInfo(name: string, startingValues: Record<string, unknown>): ModeInfo {
-  return { name, description: "", needs_epw: false, needs_period: false, experimental: false, score_kind: "weighted_sum",
-           weight_unit: "", score_unit: "", starting_values: startingValues };
-}
-
+const SCHEMA = SERVICE_SCHEMA;
 const period = (startMonth: number, startDay: number, startHour: number, endMonth: number, endDay: number, endHour: number) => ({
   start_month: startMonth, start_day: startDay, start_hour: startHour, end_month: endMonth, end_day: endDay, end_hour: endHour,
 });
 
-const MODES = [modeInfo("time-based", period(12, 21, 10, 12, 21, 14)), modeInfo("daylight", {})];
+const MODES = serviceModes("time-based", "daylight");       // time-based starts on 21 Dec, 10 to 14 h
 const GRID_PLAN = { resolution: 62, voxel_size: 1, total_voxels: 238328, extent: 62, budget_voxels: 500000000 };
 
 // The shared settings and those of one criterion are two forms (ProjectWorkspace): the shared one saves with PUT shared-settings,
 // the criterion's with PATCH criteria/{id}, and the steps show both as one until they are split on screen.
-const CRITERION_KEYS: ReadonlySet<string> = new Set(["mode", ...Object.keys(period(1, 1, 0, 1, 1, 0)), "threshold", "carve_fraction", "edge_taper"]);
+const CRITERION_KEYS = SERVICE_CRITERION_KEYS;
 
 test("settings split into the shared ones and the criterion's by the criterion keys, the mode among the criterion's", () => {
   expect(splitSettings({ mode: "daylight", voxel_size: 2, north_deg: 10, threshold: { method: "headtail" } }, CRITERION_KEYS))

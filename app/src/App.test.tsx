@@ -5,6 +5,7 @@ import {
 } from "./api_client/client";
 import { App, DeviceStatus, freeProjectName, LastRunTime, lastRunSecondsWith, pollHealth } from "./App";
 import { FakeWebSocket } from "./api_client/fake_websocket_for_test";
+import { SERVICE_CRITERION_KEYS, SERVICE_MODES, SERVICE_SCHEMA } from "./api_client/service_data_for_test";
 import type { WorkspaceSteps } from "./workspace/ProjectWorkspace";
 import type { InspectTurns } from "./inspect/UnsavedTurnsDialog";
 import { initialRunState, runReducer, type RunLoop, type RunOrigin, type RunRecord } from "./common/run_state";
@@ -216,9 +217,9 @@ class FakeService {
     this.requests.push(`${method} ${address}`);
     const [path, query] = address.split("?");
     if (path === "/api/health") return json({ version: "1.4.0", warm_up: { state: "ready", device_name: "GPU" } });
-    if (path === "/api/schema") return json({ properties: {} });
-    if (path === "/api/modes") return json([]);
-    if (path === "/api/criterion-keys") return this.criterionKeysReply?.() ?? json(["mode", "threshold"]);
+    if (path === "/api/schema") return json(SERVICE_SCHEMA);
+    if (path === "/api/modes") return json(SERVICE_MODES);
+    if (path === "/api/criterion-keys") return this.criterionKeysReply?.() ?? json([...SERVICE_CRITERION_KEYS]);
     if (path === "/api/examples") {
       await holdReply(this.examplesAnswerWhen);
       return json(this.examples);
@@ -302,7 +303,7 @@ test("the one-time setup loads the criterion keys and passes them to the open pr
   await renderApp(service);
   expect(service.requests).toContain("GET /api/criterion-keys");
   await openPlot7();
-  expect(page().querySelector(".fake-workspace")!.getAttribute("data-criterion-keys")).toBe("mode,threshold");
+  expect(page().querySelector(".fake-workspace")!.getAttribute("data-criterion-keys")).toBe([...SERVICE_CRITERION_KEYS].join(","));
 });
 
 test("Try an example opens the project made from that example, and creates none", async () => {

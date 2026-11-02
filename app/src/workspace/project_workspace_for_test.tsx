@@ -12,6 +12,7 @@ import type {
   ProjectDetail, RunSummary, StageStatusReply, StartRunReply, SunChart, SunPath, SunPositions,
 } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
+import { SERVICE_CRITERION_KEYS, SERVICE_MODES, SERVICE_SCHEMA } from "../api_client/service_data_for_test";
 import type { components } from "../api_client/generated_types";
 import { useLeavingInspect } from "../inspect/UnsavedTurnsDialog";
 import { SAVE_DELAY_MILLISECONDS } from "../settings_form/form_state";
@@ -25,36 +26,12 @@ import type { WorkspaceMode } from "../common/WorkspaceModeSwitch";
 type ErrorDetailReply = components["schemas"]["ErrorDetailReply"];
 type StoredFileChangedReply = components["schemas"]["StoredFileChangedReply"];
 
-export const SCHEMA = {
-  properties: {
-    mode: { default: "time-based", type: "string" },
-    voxel_size: { default: 1.0, type: "number" },
-    north_deg: { default: 0.0, type: "number" },
-    start_month: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    start_day: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    start_hour: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    end_month: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    end_day: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    end_hour: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    threshold: { anyOf: [{ $ref: "#/$defs/ThresholdSpec" }, { type: "null" }], default: null },
-    carve_above: { default: true, type: "boolean" },
-    carve_above_min_consecutive: { default: 1, type: "integer" },
-    max_slope_deg: { anyOf: [{ type: "number" }, { type: "null" }], default: null },
-  },
-};
-export const MODES: ModeInfo[] = [
-  { name: "time-based", description: "", needs_epw: true, needs_period: true, experimental: false, score_kind: "violation_count", weight_unit: "m²·h", score_unit: "m²·h",
-    starting_values: { start_month: 12, start_day: 21, start_hour: 10, end_month: 12, end_day: 21, end_hour: 14 } },
-  { name: "daylight", description: "", needs_epw: false, needs_period: false, experimental: false, score_kind: "weighted_sum", weight_unit: "", score_unit: "",
-    starting_values: {} },
-];
+// The service's schema, modes and criterion settings as GET schema, modes and criterion-keys give them (service_data_for_test.json,
+// written from the service), so the form has the bounds, defaults and descriptions the user gets.
+export const SCHEMA = SERVICE_SCHEMA;
+export const MODES: ModeInfo[] = SERVICE_MODES;
 /** The settings that belong to a criterion, as GET criterion-keys names them. */
-export const CRITERION_KEYS: ReadonlySet<string> = new Set([
-  "balance_offset", "balance_temperature", "bliss_k", "carve_above", "carve_above_min_consecutive", "carve_fraction", "dew_point_celsius", "edge_taper",
-  "end_day", "end_hour", "end_month", "id", "include_harm", "max_slope_deg", "min_altitude", "min_sky_elevation_deg", "mode", "name", "rays_per_patch",
-  "score_smoothing", "simulated_weights_path", "start_day", "start_hour", "start_month", "sun_steps_per_hour", "test_surface_path", "threshold",
-  "tilted_plane_angle_deg", "time_basis",
-]);
+export const CRITERION_KEYS: ReadonlySet<string> = SERVICE_CRITERION_KEYS;
 export const TRIANGLE_OBJ = "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n";
 export const CARVING = {
   threshold_value: 1.5, voxels_occupied: 1000, voxels_kept: 610, voxels_removed: 390, retention_pct: 61, obstruction_fraction_carved: null,

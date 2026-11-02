@@ -8,8 +8,9 @@ import json
 
 import pytest
 
+from _epw import BUNDLED_EPW
 from local_web_test_support import (
-    ALL_CURRENT, ALL_MISSING, GOLDEN_EPW, FakeEngine, box_bytes, change_settings, make_worker, run_and_wait, run_id_in,
+    ALL_CURRENT, ALL_MISSING, FakeEngine, box_bytes, change_settings, make_worker, run_and_wait, run_id_in,
     write_fake_chain_run, write_fake_stage_output,
 )
 from urbansolarcarver.stage_settings import PIPELINE_STAGES
@@ -546,7 +547,7 @@ def test_missing_inputs_names_the_weather_file_for_a_mode_that_reads_one(tmp_pat
     store = ProjectStore(tmp_path)
     store.create("p", "time-based")
     assert missing_inputs(store, "p") == ["max_volume", "test_surfaces:1", "weather"]
-    store.add_input("p", "weather", "weather.epw", GOLDEN_EPW.read_bytes())
+    store.add_input("p", "weather", "weather.epw", BUNDLED_EPW.read_bytes())
     assert missing_inputs(store, "p") == ["max_volume", "test_surfaces:1"]
 
 
@@ -582,7 +583,7 @@ def test_a_run_whose_scores_are_in_another_unit_than_the_mode_now_writes_is_out_
 def test_a_time_based_run_from_before_the_score_unit_was_recorded_stays_current(built_project):
     """Time-based scores were in m²·h already."""
     store, name, worker = built_project
-    store.add_input(name, "weather", "weather.epw", GOLDEN_EPW.read_bytes())
+    store.add_input(name, "weather", "weather.epw", BUNDLED_EPW.read_bytes())
     change_settings(store, name, mode="time-based", start_month=12, start_day=21, start_hour=10, end_month=12, end_day=21, end_hour=14)
     run_and_wait(worker, name, ["exporting", "massing"])
     assert stage_status(store, name) == ALL_CURRENT

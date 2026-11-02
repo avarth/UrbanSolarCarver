@@ -1,16 +1,13 @@
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { ModeInfo } from "../api_client/client";
+import { serviceModes, serviceSchemaWith } from "../api_client/service_data_for_test";
 import { initialFormState, type FormState } from "./form_state";
 import { renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { useColdPeriod, type ColdPeriodState } from "./cold_period_request";
 import { inProjectSession } from "../api_client/project_session_for_test";
 
-const NUMBER = { type: "number" };
-const SCHEMA = { properties: { mode: { default: "benefit", type: "string" }, balance_temperature: { ...NUMBER, default: 15 },
-                               balance_offset: { ...NUMBER, default: 2, minimum: 0 } } };
-const MODES: ModeInfo[] = ["benefit", "irradiance"].map((name) => ({ name, description: "", needs_epw: true, needs_period: true, experimental: false,
-                                                                    score_kind: "weighted_sum", weight_unit: "", score_unit: "", starting_values: {} }));
+const SCHEMA = serviceSchemaWith("mode", "balance_temperature", "balance_offset");
+const MODES = serviceModes("benefit", "irradiance");
 
 const formOf = (settings: Record<string, unknown>): FormState =>
   initialFormState({ schema: SCHEMA, modes: MODES, settings: { mode: "benefit", ...settings }, gridPlan: null });

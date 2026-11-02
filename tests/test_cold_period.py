@@ -10,7 +10,6 @@ from urbansolarcarver.cold_period import (
     daily_mean_temperatures,
     month_and_day,
 )
-from _epw import resolve_epw
 
 
 def winter_cold_year(coldest_day_index: int = 15, mean: float = 12.0, amplitude: float = 10.0) -> np.ndarray:
@@ -95,15 +94,13 @@ def test_month_and_day_count_from_1_january_in_a_non_leap_year():
         month_and_day(365)
 
 
-@pytest.mark.skipif(not resolve_epw(), reason="no EPW available")
-def test_the_cold_period_of_golden_colorado_runs_from_autumn_to_spring():
-    period = cold_period_from_weather_file(resolve_epw(), base_temperature=13.0)
+def test_the_cold_period_of_golden_colorado_runs_from_autumn_to_spring(example_epw_path):
+    period = cold_period_from_weather_file(str(example_epw_path), base_temperature=13.0)
     assert isinstance(period, ColdPeriod)
     # Days 272 to 134 of the Golden TMY3 file with the default smoothing window. After a deliberate change of the
-    # smoothing or of the weather file, take the new dates from cold_period_from_weather_file(resolve_epw(), 13.0).
+    # smoothing or of the weather file, take the new dates from cold_period_from_weather_file(<the weather file>, 13.0).
     assert period == ColdPeriod(start_month=9, start_day=30, end_month=5, end_day=15)
 
 
-@pytest.mark.skipif(not resolve_epw(), reason="no EPW available")
-def test_a_base_below_every_day_of_the_weather_file_gives_none():
-    assert cold_period_from_weather_file(resolve_epw(), base_temperature=-40.0) is None
+def test_a_base_below_every_day_of_the_weather_file_gives_none(example_epw_path):
+    assert cold_period_from_weather_file(str(example_epw_path), base_temperature=-40.0) is None

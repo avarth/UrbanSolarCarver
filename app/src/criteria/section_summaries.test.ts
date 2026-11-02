@@ -33,7 +33,8 @@ test("the settings in one line of a mode without a period: its starting values, 
   expect(criterionSettingsSummary(formFor({ mode: "daylight", voxel_size: 2 }), CRITERION_KEYS)).toBe("Starting values");
   // A carving setting is the carving rule's.
   expect(criterionSettingsSummary(formFor({ mode: "daylight", max_slope_deg: 45 }), CRITERION_KEYS)).toBe("Starting values");
-  expect(criterionSettingsSummary(formFor({ mode: "daylight", rays_per_patch: 4 }), CRITERION_KEYS)).toBe("1 setting changed");
+  expect(criterionSettingsSummary(formFor({ mode: "daylight", rays_per_patch: 4 }), CRITERION_KEYS)).toBe("Starting values");     // the default
+  expect(criterionSettingsSummary(formFor({ mode: "daylight", rays_per_patch: 1 }), CRITERION_KEYS)).toBe("1 setting changed");
   expect(criterionSettingsSummary(formFor({ mode: "radiative_cooling", dew_point_celsius: 12, bliss_k: 0.2 }), CRITERION_KEYS)).toBe("2 settings changed");
 });
 

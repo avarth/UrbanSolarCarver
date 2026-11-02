@@ -12,8 +12,9 @@ import numpy as np
 import pytest
 import trimesh
 
+from _epw import BUNDLED_EPW
 from local_web_test_support import (
-    GOLDEN_EPW, WaitsForCancel, box_bytes, build_client, change_settings, create_project_with_inputs, read_events, start_run, upload,
+    WaitsForCancel, box_bytes, build_client, change_settings, create_project_with_inputs, read_events, start_run, upload,
     wait_until_finished, write_envelope_as_exported, write_fake_chain_run, write_earlier_version_project, write_fake_stage_output,
 )
 from urbansolarcarver import solar_check
@@ -156,7 +157,7 @@ def test_a_study_whose_metric_needs_the_missing_weather_file_is_refused(service)
     store = worker.store
     sun_hours = add_study(store, "p", metric="sun_hours")
     assert state_of(store, "p", sun_hours) == ("refused", "Add a weather file")
-    store.add_input("p", "weather", "golden.epw", GOLDEN_EPW.read_bytes())
+    store.add_input("p", "weather", "golden.epw", BUNDLED_EPW.read_bytes())
     assert state_of(store, "p", sun_hours) == ("not_run", None)
 
 
@@ -199,7 +200,7 @@ def test_deleting_a_refused_study_removes_its_refusal(service, monkeypatch):
 def test_a_moved_project_keeps_its_weather_study_current(service):
     _client, worker, _engine = service
     store = worker.store
-    store.add_input("p", "weather", "golden.epw", GOLDEN_EPW.read_bytes())
+    store.add_input("p", "weather", "golden.epw", BUNDLED_EPW.read_bytes())
     study = add_study(store, "p", metric="sun_hours")
     simulate_and_wait(worker)
     assert state_of(store, "p", study) == ("current", None)
@@ -231,7 +232,7 @@ def test_the_rays_per_patch_are_those_of_the_first_criterion_that_is_on(service)
 def test_a_study_takes_its_time_basis_from_its_own_settings(service):
     _client, worker, _engine = service
     store = worker.store
-    store.add_input("p", "weather", "golden.epw", GOLDEN_EPW.read_bytes())
+    store.add_input("p", "weather", "golden.epw", BUNDLED_EPW.read_bytes())
     study = store.add_study("p", metric="sun_hours")
     assert simulation.study_settings(store, "p", study).time_basis == "standard"
     store.update_study("p", study.id, values={"time_basis": "solar"})
@@ -360,7 +361,7 @@ def test_a_study_is_out_of_date_after_its_settings_its_files_the_weather_the_con
     _client, worker, _engine = service
     store = worker.store
     project_folder = store.open("p")
-    store.add_input("p", "weather", "golden.epw", GOLDEN_EPW.read_bytes())
+    store.add_input("p", "weather", "golden.epw", BUNDLED_EPW.read_bytes())
     store.add_input("p", "test_surfaces", "roof.ply", plane_bytes(z=3.0, size=4.0))
     write_fake_chain_run(store, "p", ["1"])
     write_envelope_as_exported(project_folder)
@@ -387,7 +388,7 @@ def test_a_study_is_out_of_date_after_its_settings_its_files_the_weather_the_con
         store.use_study_test_surface("p", study, "roof.ply")
 
     def the_weather():
-        store.add_input("p", "weather", "golden.epw", GOLDEN_EPW.read_bytes())      # the same content written again
+        store.add_input("p", "weather", "golden.epw", BUNDLED_EPW.read_bytes())      # the same content written again
 
     def the_context():
         store.add_input("p", "context", "context.ply", box_bytes([30, 0, 5]))

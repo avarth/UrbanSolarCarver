@@ -7,31 +7,21 @@ places north matters: sun vectors (time-based), sky matrices
 """
 import os
 import types
-from pathlib import Path
 
 import numpy as np
 import pytest
 import torch
 
 
-from _epw import resolve_epw
-_EPW = resolve_epw()
-_SKIP_EPW = pytest.mark.skipif(
-    not _EPW,
-    reason="EPW file not available; set USC_EPW_PATH env var to enable",
-)
-
-
-@_SKIP_EPW
-def test_sun_vectors_rotate_clockwise_with_north_deg():
+def test_sun_vectors_rotate_clockwise_with_north_deg(example_epw_path):
     """north_deg=90 (model north = +X) rotates sun vectors 90° CW in plan."""
     from ladybug.analysisperiod import AnalysisPeriod
     from urbansolarcarver.sun import get_sun_vectors
 
     ap = AnalysisPeriod(st_month=6, st_day=21, st_hour=12,
                         end_month=6, end_day=21, end_hour=12, timestep=1)
-    v0 = get_sun_vectors(_EPW, ap.datetimes, min_altitude=5.0, north_deg=0.0).numpy()[0]
-    v90 = get_sun_vectors(_EPW, ap.datetimes, min_altitude=5.0, north_deg=90.0).numpy()[0]
+    v0 = get_sun_vectors(str(example_epw_path), ap.datetimes, min_altitude=5.0, north_deg=0.0).numpy()[0]
+    v90 = get_sun_vectors(str(example_epw_path), ap.datetimes, min_altitude=5.0, north_deg=90.0).numpy()[0]
 
     # 90° clockwise in the XY plane: (x, y) -> (y, -x); altitude unchanged.
     np.testing.assert_allclose(v90, [v0[1], -v0[0], v0[2]], atol=1e-5)

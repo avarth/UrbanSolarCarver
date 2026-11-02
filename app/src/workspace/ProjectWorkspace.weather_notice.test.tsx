@@ -2,9 +2,8 @@
 // buttons save, and the heating season preset that follows the file. Which files and modes bring no notice is weather_change_notice.test.
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { ModeInfo } from "../api_client/client";
 import {
-  FakeService, MODES, NOTHING_RUN, SCHEMA, buttonIn, container, endWorkspaceTest, openPanelSection, openStep, openWorkspace, pressRunAnalysis, project,
+  FakeService, NOTHING_RUN, buttonIn, container, endWorkspaceTest, openPanelSection, openStep, openWorkspace, pressRunAnalysis, project,
   settle, startWorkspaceTest, stepIsOpen, waitForTheSave,
 } from "./project_workspace_for_test";
 
@@ -16,12 +15,6 @@ let service: FakeService;
 beforeEach(startWorkspaceTest);
 afterEach(endWorkspaceTest);
 
-const BENEFIT_SCHEMA = {
-  properties: { ...SCHEMA.properties, balance_temperature: { default: 15, type: "number" }, balance_offset: { default: 2, minimum: 0, type: "number" } },
-};
-const COLD_SEASON = { start_month: 9, start_day: 30, start_hour: 0, end_month: 5, end_day: 15, end_hour: 23 };
-const MODES_WITH_BENEFIT: ModeInfo[] = [...MODES, { name: "benefit", description: "", needs_epw: true, needs_period: true, experimental: false,
-                                                     score_kind: "weighted_sum", weight_unit: "", score_unit: "", starting_values: COLD_SEASON }];
 const BRISBANE = { location: "Brisbane, AUS", latitude: -27.38 };
 const GOLDEN = { location: "Golden, CO, USA", latitude: 39.74 };
 
@@ -114,13 +107,13 @@ test("while a run is in progress the notice's buttons are disabled, as the setti
 test("Solar usefulness: the notice waits for the cold period of the new file and offers it, keeping the hours", async () => {
   service = new FakeService(NOTHING_RUN, null);
   service.uploadedWeather = BRISBANE;
-  await openWorkspace(service, project(NOTHING_RUN, { mode: "benefit" }), {}, { schema: BENEFIT_SCHEMA, modes: MODES_WITH_BENEFIT });
+  await openWorkspace(service, project(NOTHING_RUN, { mode: "benefit" }));
   await waitForTheColdPeriod();                     // of the file the project opened with: none
   service.coldPeriodReply = { status: "found", period: { start_month: 5, start_day: 3, end_month: 9, end_day: 20 } };
   await addWeatherFile();
   expect(weatherNotice()).toBeNull();               // waiting for the new file's answer
   await waitForTheColdPeriod();
-  expect(noticeText()).toBe("The new weather file (Brisbane, AUS) has its cold period from 3 May to 20 Sep; the analysis period is 30 Sep to 15 May.");
+  expect(noticeText()).toBe("The new weather file (Brisbane, AUS) has its cold period from 3 May to 20 Sep; the analysis period is 15 Oct to 15 Apr.");     // the starting period of benefit
   act(() => buttonIn(weatherNotice()!, "Use the cold period").click());
   expect(weatherNotice()).toBeNull();
   await waitForTheSave();
@@ -133,7 +126,7 @@ test("Solar usefulness, energy-weighted: a new file's cold period is not offered
   service.uploadedWeather = BRISBANE;
   const energyWeighted = project(NOTHING_RUN, { mode: "benefit" });
   energyWeighted.criteria = energyWeighted.criteria!.map((criterion) => ({ ...criterion, energy_weighted: true }));
-  await openWorkspace(service, energyWeighted, {}, { schema: BENEFIT_SCHEMA, modes: MODES_WITH_BENEFIT });
+  await openWorkspace(service, energyWeighted);
   await waitForTheColdPeriod();
   service.coldPeriodReply = { status: "found", period: { start_month: 5, start_day: 3, end_month: 9, end_day: 20 } };
   await addWeatherFile();

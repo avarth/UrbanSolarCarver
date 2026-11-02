@@ -112,16 +112,17 @@ test("saving the analysis period sends the criterion's settings", async () => {
 
 test("a rejected criterion setting marks its field", async () => {
   service = new FakeService(CARVED, CARVING);
-  service.configErrorsOf = (values) => (values.max_slope_deg === 100 ? [{ field: "max_slope_deg", message: "Input should be less than 90" }] : null);
+  // The form keeps a value outside the schema's bounds (at most 90) from being sent, so the fake refuses one inside them.
+  service.configErrorsOf = (values) => (values.max_slope_deg === 60 ? [{ field: "max_slope_deg", message: "The fake service refuses 60." }] : null);
   await openWorkspace(service, project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
   openStep("Criteria");
   act(() => stepRow("Criteria").querySelector<HTMLButtonElement>(".carving-settings .setting-fold")!.click());      // More carving settings
-  typeAndLeave(container().querySelector<HTMLInputElement>('[data-setting="max_slope_deg"] input[type="number"]')!, "100");
+  typeAndLeave(container().querySelector<HTMLInputElement>('[data-setting="max_slope_deg"] input[type="number"]')!, "60");
   await waitForTheSave();
   await settle();
   expect(settingsSaves()).toEqual(["PATCH /criteria/1"]);
   expect(service.savedValues).toEqual([]);
-  expect(container().querySelector('[data-setting="max_slope_deg"] .setting-error')!.textContent).toBe("Input should be less than 90");
+  expect(container().querySelector('[data-setting="max_slope_deg"] .setting-error')!.textContent).toBe("The fake service refuses 60.");
   expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("1 setting to fix");
   expect(service.count("POST /runs")).toBe(0);
 });

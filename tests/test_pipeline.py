@@ -2,31 +2,25 @@
 run_pipeline wrapper against the stages, stage-boundary validation, config override parsing, simulated weights, edge
 taper, default-threshold reporting and score smoothing."""
 import json
-import os
 import pytest
 import numpy as np
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
-# EPW path resolution: USC_EPW_PATH env var wins, else the bundled NREL file.
-# ---------------------------------------------------------------------------
-from _epw import resolve_epw
-_EPW = resolve_epw()
-_SKIP_EPW = pytest.mark.skipif(
-    not _EPW,
-    reason="EPW file not available; set USC_EPW_PATH env var to enable",
-)
+
+def _cube_config_2m(folder, **settings):
+    """The cube scene of _stage_scene.py with 2 m voxels and sample spacing, run into ``folder / "out"``."""
+    from _stage_scene import cube_config
+    return cube_config(folder, **{"out_dir": str(folder / "out"), "voxel_size": 2.0, "grid_step": 2.0, **settings})
 
 
-@_SKIP_EPW
-def test_full_pipeline_benefit(tmp_path):
+def test_full_pipeline_benefit(tmp_path, example_epw_path):
     """Preprocessing, thresholding and exporting called one by one, in benefit mode, on the plot scene: the
     carving takes the plot's side toward the neighbour, and each stage writes its manifest and diagnostics."""
     from _plot_scene import assert_carves_the_north_side, plot_scene
     from urbansolarcarver import preprocessing, thresholding, exporting
 
     scene = plot_scene(tmp_path)
-    cfg = scene.config(tmp_path / "out", "benefit", _EPW, threshold="carve_fraction", carve_fraction=0.7)
+    cfg = scene.config(tmp_path / "out", "benefit", str(example_epw_path), threshold="carve_fraction", carve_fraction=0.7)
     base = tmp_path / "out"
 
     pre = preprocessing(cfg, base / "preprocessing")
@@ -153,20 +147,19 @@ class TestOverrideParsing:
 # simulated_weights_path end-to-end (benefit mode + artifact)
 # ---------------------------------------------------------------------------
 
-@_SKIP_EPW
-def test_benefit_with_weights_artifact(tmp_path, tiny_cube_mesh,
-                                          tiny_surface_mesh):
+def _benefit_cube_config(tmp_path, out_dir, epw_path, artifact, **settings):
+    """The 2 m cube scene in benefit mode, 1 to 5 January from 8:00 to 16:00, weighted by the simulated weights in *artifact*."""
+    return _cube_config_2m(tmp_path, out_dir=str(out_dir), mode="benefit", epw_path=str(epw_path),
+                           start_month=1, start_day=1, start_hour=8, end_month=1, end_day=5, end_hour=16,
+                           simulated_weights_path=str(artifact), **settings)
+
+
+def test_benefit_with_weights_artifact(tmp_path, example_epw_path):
     """Full benefit preprocessing consuming a simulated-weights artifact: each hour's sun and sky are scaled by the
     artifact's benefit weight, and the artifact's provenance is recorded in the diagnostics."""
     import numpy as _np
     from urbansolarcarver import preprocessing
-    from urbansolarcarver.load_config import user_config
     from urbansolarcarver.simulated_weights import write_simulated_weights
-
-    vol_path = tmp_path / "vol.ply"
-    srf_path = tmp_path / "srf.ply"
-    tiny_cube_mesh.export(str(vol_path))
-    tiny_surface_mesh.export(str(srf_path))
 
     def run(name, benefit):
         artifact = write_simulated_weights(
@@ -175,15 +168,7 @@ def test_benefit_with_weights_artifact(tmp_path, tiny_cube_mesh,
             {"method": "test-schedule", "generated": "2026",
              "archetype": {"mass_class": "medium"}},
         )
-        cfg = user_config(
-            max_volume_path=str(vol_path), test_surface_path=str(srf_path),
-            out_dir=str(tmp_path / name), mode="benefit", epw_path=_EPW,
-            start_month=1, start_day=1, start_hour=8,
-            end_month=1, end_day=5, end_hour=16,
-            voxel_size=2.0, grid_step=2.0, ray_length=50.0,
-            min_voxels=1, min_face_count=1, device="cpu",
-            simulated_weights_path=str(artifact),
-        )
+        cfg = _benefit_cube_config(tmp_path, tmp_path / name, example_epw_path, artifact)
         return preprocessing(cfg, tmp_path / name)
 
     result = run("weighted", 0.8)
@@ -202,34 +187,19 @@ def test_benefit_with_weights_artifact(tmp_path, tiny_cube_mesh,
     assert diag["simulated_weights"]["archetype"]["mass_class"] == "medium"
 
 
-@_SKIP_EPW
 @pytest.mark.slow
-def test_benefit_with_weights_artifact_writes_the_comparison_plot(tmp_path, tiny_cube_mesh,
-                                                                  tiny_surface_mesh):
+def test_benefit_with_weights_artifact_writes_the_comparison_plot(tmp_path, example_epw_path):
     """With diagnostic_plots, a benefit run with simulated weights also plots
     them against the simple balance-point weights and records the result."""
     import numpy as _np
     from urbansolarcarver import preprocessing
-    from urbansolarcarver.load_config import user_config
     from urbansolarcarver.simulated_weights import write_simulated_weights
 
-    vol_path = tmp_path / "vol.ply"
-    srf_path = tmp_path / "srf.ply"
-    tiny_cube_mesh.export(str(vol_path))
-    tiny_surface_mesh.export(str(srf_path))
     artifact = write_simulated_weights(
         tmp_path / "u.json", _np.full(8760, 0.8), _np.zeros(8760),
         {"method": "test-schedule", "generated": "2026", "archetype": {"mass_class": "medium"}},
     )
-    cfg = user_config(
-        max_volume_path=str(vol_path), test_surface_path=str(srf_path),
-        out_dir=str(tmp_path / "out"), mode="benefit", epw_path=_EPW,
-        start_month=1, start_day=1, start_hour=8,
-        end_month=1, end_day=5, end_hour=16,
-        voxel_size=2.0, grid_step=2.0, ray_length=50.0,
-        min_voxels=1, min_face_count=1, device="cpu",
-        simulated_weights_path=str(artifact), diagnostic_plots=True,
-    )
+    cfg = _benefit_cube_config(tmp_path, tmp_path / "out", example_epw_path, artifact, diagnostic_plots=True)
     result = preprocessing(cfg, tmp_path / "out")
     diag_dir = result.out_dir / "diagnostics"
     diag = json.loads((diag_dir / "diagnostic.json").read_text())
@@ -247,62 +217,35 @@ def test_benefit_with_weights_artifact_writes_the_comparison_plot(tmp_path, tiny
 # ---------------------------------------------------------------------------
 
 class TestEdgeTaperPipeline:
-    def _run_preprocessing(self, tmp_path, sub, tiny_cube_mesh, tiny_surface_mesh,
-                           **cfg_extra):
+    def _run_preprocessing(self, tmp_path, sub, **cfg_extra):
         from urbansolarcarver import preprocessing
-        from urbansolarcarver.load_config import user_config
-        vol_path = tmp_path / sub / "vol.ply"
-        srf_path = tmp_path / sub / "srf.ply"
-        vol_path.parent.mkdir(parents=True, exist_ok=True)
-        tiny_cube_mesh.export(str(vol_path))
-        tiny_surface_mesh.export(str(srf_path))
-        cfg = user_config(
-            max_volume_path=str(vol_path), test_surface_path=str(srf_path),
-            out_dir=str(tmp_path / sub / "out"), mode="daylight",
-            voxel_size=2.0, grid_step=2.0, ray_length=50.0,
-            min_voxels=1, min_face_count=1, device="cpu",
-            **cfg_extra,
-        )
+        cfg = _cube_config_2m(tmp_path / sub, **cfg_extra)
         return preprocessing(cfg, tmp_path / sub / "out")
 
-    def test_taper_reduces_score_mass(self, tmp_path, tiny_cube_mesh, tiny_surface_mesh):
+    def test_taper_reduces_score_mass(self, tmp_path):
         """A taper wider than the surface strictly reduces every weight,
         so total blocked score mass must drop versus the untapered run."""
-        base = self._run_preprocessing(
-            tmp_path, "base", tiny_cube_mesh, tiny_surface_mesh)
+        base = self._run_preprocessing(tmp_path, "base")
         tapered = self._run_preprocessing(
-            tmp_path, "tapered", tiny_cube_mesh, tiny_surface_mesh,
+            tmp_path, "tapered",
             edge_taper=10.0)  # surface is 6x6 → max boundary distance 3
         s_base = np.load(base.volume_path).sum(dtype=np.float64)
         s_tap = np.load(tapered.volume_path).sum(dtype=np.float64)
         assert s_base > 0
         assert 0 < s_tap < 0.6 * s_base  # all weights <= 3/10
 
-    def test_taper_recorded_in_diagnostics(self, tmp_path, tiny_cube_mesh, tiny_surface_mesh):
+    def test_taper_recorded_in_diagnostics(self, tmp_path):
         import json as _json
-        result = self._run_preprocessing(
-            tmp_path, "diag", tiny_cube_mesh, tiny_surface_mesh, edge_taper=1.0)
+        result = self._run_preprocessing(tmp_path, "diag", edge_taper=1.0)
         diag = _json.loads(
             (result.out_dir / "diagnostics" / "diagnostic.json").read_text())
         assert diag["edge_taper"]["meters"] == 1.0
         assert diag["edge_taper"]["applied"] is True
         assert diag["edge_taper"]["components"]
 
-    def test_taper_ignored_for_violation_modes(self, tmp_path, tiny_cube_mesh, tiny_surface_mesh):
+    def test_taper_ignored_for_violation_modes(self, tmp_path):
         from urbansolarcarver import preprocessing
-        from urbansolarcarver.load_config import user_config
-        vol_path = tmp_path / "tp" / "vol.ply"
-        srf_path = tmp_path / "tp" / "srf.ply"
-        vol_path.parent.mkdir(parents=True, exist_ok=True)
-        tiny_cube_mesh.export(str(vol_path))
-        tiny_surface_mesh.export(str(srf_path))
-        cfg = user_config(
-            max_volume_path=str(vol_path), test_surface_path=str(srf_path),
-            out_dir=str(tmp_path / "tp" / "out"), mode="tilted_plane",
-            tilted_plane_angle_deg=45.0, voxel_size=2.0, grid_step=2.0,
-            ray_length=50.0, min_voxels=1, min_face_count=1, device="cpu",
-            edge_taper=1.0,
-        )
+        cfg = _cube_config_2m(tmp_path / "tp", mode="tilted_plane", tilted_plane_angle_deg=45.0, edge_taper=1.0)
         with pytest.warns(UserWarning, match="edge_taper.*ignored"):
             preprocessing(cfg, tmp_path / "tp" / "out")
 
@@ -541,19 +484,15 @@ class TestScoreSmoothing:
         assert diag["score_smoothing_sigma_voxels"] == 0.0
 
 
-def test_missing_occupancy_grid_is_an_error(tmp_path, tiny_cube_mesh, tiny_surface_mesh):
+def test_missing_occupancy_grid_is_an_error(tmp_path):
     """Without voxel_grid.npy the preprocessing run is incomplete: thresholding refuses it rather than rebuild the
     grid from a config that may describe other geometry."""
     from urbansolarcarver import thresholding
     from urbansolarcarver.errors import StageChainError
-    from urbansolarcarver.load_config import user_config
-    pre = TestEdgeTaperPipeline()._run_preprocessing(tmp_path, "fb", tiny_cube_mesh, tiny_surface_mesh)
+    pre = TestEdgeTaperPipeline()._run_preprocessing(tmp_path, "fb")
     manifest = json.loads(pre.manifest_path.read_text(encoding="utf-8"))
     (pre.out_dir / manifest["voxel_grid_path"]).unlink()
-    cfg = user_config(
-        max_volume_path=str(tmp_path / "fb" / "vol.ply"), test_surface_path=str(tmp_path / "fb" / "srf.ply"),
-        out_dir=str(tmp_path / "fb" / "out"), mode="daylight", voxel_size=2.0, grid_step=2.0, ray_length=50.0,
-        min_voxels=1, min_face_count=1, device="cpu")
+    cfg = _cube_config_2m(tmp_path / "fb")
     with pytest.raises(StageChainError, match="Re-run preprocessing"):
         thresholding(pre, cfg, tmp_path / "fb" / "thresholding")
     assert not (tmp_path / "fb" / "thresholding" / "mask.npy").exists()

@@ -1,33 +1,20 @@
 import { act, createElement } from "react";
 import { afterEach, expect, test, vi } from "vitest";
-import { ApiError, updateCriterion, type ConfigErrorReply, type ConfigReply, type ModeInfo } from "../api_client/client";
+import { ApiError, updateCriterion, type ConfigErrorReply, type ConfigReply } from "../api_client/client";
+import { SERVICE_MODES, SERVICE_SCHEMA } from "../api_client/service_data_for_test";
 import { renderForTest } from "../viewer_overlays/render_for_test";
 import {
   analysisDiffersFromStored, createConfigSaver, defaultValue, formReducer, initialFormState, shownValue, useSettingsForm, valuesToSend, type FormAction,
 } from "./form_state";
 
-const SCHEMA = {
-  properties: {
-    mode: { default: "time-based" }, voxel_size: { default: 1.0 }, north_deg: { default: 0.0 }, carve_fraction: { default: 0.7 },
-    start_month: { default: null }, start_day: { default: null }, start_hour: { default: null },
-    end_month: { default: null }, end_day: { default: null }, end_hour: { default: null },
-    sun_steps_per_hour: { default: 12 }, balance_temperature: { default: 15.0 }, threshold: { default: null },
-    score_smoothing: { default: null }, edge_taper: { default: 0.0 },
-  },
-};
-
-function modeInfo(name: string, startingValues: Record<string, unknown>): ModeInfo {
-  return { name, description: "", needs_epw: false, needs_period: false, experimental: false, score_kind: "weighted_sum",
-           weight_unit: "", score_unit: "", starting_values: startingValues };
-}
+// The service's schema and its six modes with their starting values (time-based 21 Dec 10 to 14 h, irradiance the whole year,
+// benefit 15 Oct to 15 Apr, radiative_cooling carve_fraction 0.35, tilted_plane 45 degrees).
+const SCHEMA = SERVICE_SCHEMA;
+const MODES = SERVICE_MODES;
 
 const period = (startMonth: number, startDay: number, startHour: number, endMonth: number, endDay: number, endHour: number) => ({
   start_month: startMonth, start_day: startDay, start_hour: startHour, end_month: endMonth, end_day: endDay, end_hour: endHour,
 });
-
-const MODES = [modeInfo("time-based", period(12, 21, 10, 12, 21, 14)), modeInfo("irradiance", period(1, 1, 0, 12, 31, 23)),
-               modeInfo("benefit", period(10, 15, 7, 4, 15, 19)), modeInfo("daylight", {}),
-               modeInfo("radiative_cooling", { carve_fraction: 0.35 }), modeInfo("tilted_plane", { tilted_plane_angle_deg: 45.0 })];
 
 const GRID_PLAN = { resolution: 62, voxel_size: 1, total_voxels: 238328, extent: 62, budget_voxels: 500000000 };
 

@@ -10,12 +10,12 @@ from unittest import mock
 
 import pytest
 
+from _epw import BUNDLED_EPW
 from urbansolarcarver import archetype_defaults
 from urbansolarcarver import simulated_weights as sw
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 COMPONENTS = REPO_ROOT / "grasshopper" / "components"
-GOLDEN_EPW = REPO_ROOT / "examples" / "weather" / "USA_CO_Golden-NREL.724666_TMY3.epw"
 FAMILIES = ("geometry", "fabric", "ventilation", "operation", "shading")
 
 
@@ -81,6 +81,6 @@ def test_windows_opening_below_the_comfort_band_are_refused(engine):
 @pytest.mark.slow
 def test_the_default_archetype_simulates_as_a_free_running_room(engine, tmp_path):
     data = _archetype()["archetype"].data
-    path = sw.generate_simulated_weights(str(GOLDEN_EPW), data, tmp_path / "w.json")
+    path = sw.generate_simulated_weights(str(BUNDLED_EPW), data, tmp_path / "w.json")
     _, _, meta = sw.read_simulated_weights(path)
     assert meta["operation"] == "free_running" and meta["archetype"]["vent_above"] == 25.0

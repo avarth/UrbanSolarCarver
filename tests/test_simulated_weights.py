@@ -234,16 +234,13 @@ OFFICE_LIKE_DAY = [2.0] * 8 + [10.0] * 12 + [2.0] * 4
 
 
 @pytest.fixture(scope="module")
-def example_archetype_run_with_daily_profile(tmp_path_factory):
+def example_archetype_run_with_daily_profile(tmp_path_factory, example_epw_path):
     """One generator run of the example archetype with a 24-value occupancy
     profile, shared by the end-to-end and the profile checks (each run is a
     full-year 5R1C simulation of several seconds)."""
-    from _epw import resolve_epw
     from urbansolarcarver.simulated_weights import generate_simulated_weights
 
-    epw = resolve_epw()
-    if not epw:
-        pytest.skip("No EPW available")
+    epw = str(example_epw_path)
     out = generate_simulated_weights(
         epw, _example_archetype_without_gains(),
         tmp_path_factory.mktemp("example_archetype") / "u.json",
@@ -400,16 +397,13 @@ class TestExpandShoebox:
 
 
 @pytest.fixture(scope="module")
-def shoebox_run_with_gains_key_inside_the_archetype(tmp_path_factory):
+def shoebox_run_with_gains_key_inside_the_archetype(tmp_path_factory, example_epw_path):
     """One unshaded generator run of the TestExpandShoebox archetype with
     internal_gains_w_m2 = 7.5 given inside it. It serves the gains-key check
     and is the unshaded side of the hot-season shading check."""
-    from _epw import resolve_epw
     from urbansolarcarver.simulated_weights import generate_simulated_weights
 
-    epw = resolve_epw()
-    if not epw:
-        pytest.skip("no EPW available")
+    epw = str(example_epw_path)
     arch = dict(TestExpandShoebox.BASE)
     arch["internal_gains_w_m2"] = 7.5
     out = generate_simulated_weights(
@@ -420,19 +414,13 @@ def shoebox_run_with_gains_key_inside_the_archetype(tmp_path_factory):
 class TestGainsFromArchetype:
     """generate_simulated_weights reads internal gains from the archetype."""
 
-    def _epw(self):
-        from tests._epw import resolve_epw
-        return resolve_epw() or None
-
     @pytest.mark.slow
     def test_gains_key_inside_archetype(self, shoebox_run_with_gains_key_inside_the_archetype):
         _epw, _arch, (_b, _h, meta) = shoebox_run_with_gains_key_inside_the_archetype
         assert meta["archetype"]["internal_gains_w_m2"] == pytest.approx(7.5)
 
-    def test_both_gains_keys_raise(self, tmp_path):
-        epw = self._epw()
-        if epw is None:
-            pytest.skip("no EPW available")
+    def test_both_gains_keys_raise(self, tmp_path, example_epw_path):
+        epw = str(example_epw_path)
         from urbansolarcarver.simulated_weights import generate_simulated_weights
         arch = dict(TestExpandShoebox.BASE)
         arch["internal_gains_w_m2"] = 5.0
@@ -662,16 +650,13 @@ class TestShadingPeriod:
             _shading_factors(windows, None, None, None, [152, 243])
 
 
-def test_the_sun_is_up_when_ladybug_gives_direct_sun():
+def test_the_sun_is_up_when_ladybug_gives_direct_sun(example_epw_path):
     """sun_up_hours places the sun where transmitted_solar_from_epw does: no
     direct sun reaches a surface in an hour marked 0."""
-    from _epw import resolve_epw
     from urbansolarcarver.simulated_weights import sun_up_hours
     from urbansolarcarver.weather_file import read_weather_file
 
-    epw = resolve_epw()
-    if not epw:
-        pytest.skip("no EPW available")
+    epw = str(example_epw_path)
     up = sun_up_hours(epw)
     assert up.shape == (HOURS,) and set(np.unique(up)) == {0, 1}
     assert 4300 < up.sum() < 4500                       # about half the year

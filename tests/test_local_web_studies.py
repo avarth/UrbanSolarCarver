@@ -5,7 +5,8 @@ import pytest
 import send2trash
 import trimesh
 
-from local_web_test_support import GOLDEN_EPW, FakeRecycleBin, box_bytes
+from _epw import BUNDLED_EPW
+from local_web_test_support import FakeRecycleBin, box_bytes
 from urbansolarcarver.local_web_service import test_surfaces
 from urbansolarcarver.local_web_service.criteria import CRITERION_COLOURS
 from urbansolarcarver.local_web_service.projects import ProjectError
@@ -18,7 +19,7 @@ PERIOD_21_DEC = {"start_month": 12, "start_day": 21, "start_hour": 10, "end_mont
 
 def _with_weather(project):
     store, name = project
-    store.add_input(name, "weather", "golden.epw", GOLDEN_EPW.read_bytes())
+    store.add_input(name, "weather", "golden.epw", BUNDLED_EPW.read_bytes())
     return store, name
 
 
@@ -300,7 +301,7 @@ def test_study_routes(client_with_inputs):
     assert metrics["sky_component"]["available"] is True
     assert metrics["sun_hours"]["default_settings"] == {**PERIOD_21_DEC, "time_basis": "standard"} and metrics["sky_view"]["default_settings"] == {}
     assert {"label", "unit"} <= set(metrics["sun_hours"])
-    upload = client.post("/api/projects/p/inputs/weather", files={"file": ("golden.epw", GOLDEN_EPW.read_bytes(), "application/octet-stream")})
+    upload = client.post("/api/projects/p/inputs/weather", files={"file": ("golden.epw", BUNDLED_EPW.read_bytes(), "application/octet-stream")})
     assert upload.status_code == 200
     assert {m["name"]: m["available"] for m in client.get("/api/projects/p/studies").json()["metrics"]}["sun_hours"] is True
 

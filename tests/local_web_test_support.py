@@ -43,7 +43,6 @@ from urbansolarcarver.pydantic_schemas import ExportingManifest, MassingManifest
 from urbansolarcarver.run_context import report_issue, report_progress, run_context, stage_context
 from urbansolarcarver.stage_settings import PIPELINE_STAGES, stages_needed_for
 
-GOLDEN_EPW = Path(__file__).resolve().parent.parent / "examples" / "weather" / "USA_CO_Golden-NREL.724666_TMY3.epw"
 ALL_CURRENT = {stage: "current" for stage in PIPELINE_STAGES}
 ALL_MISSING = {stage: "missing" for stage in PIPELINE_STAGES}
 
@@ -94,10 +93,12 @@ def make_link_to_folder(link: Path, target: Path, kind: str) -> None:
         pytest.skip(f"a symbolic link cannot be made here: {error}")
 
 
-def box_bytes(center, extents=(10, 10, 10)) -> bytes:
+def box_bytes(center, extents=(10, 10, 10), file_type="ply") -> bytes:
+    """A box centred at *center* as the bytes of a mesh file of *file_type*."""
     box = trimesh.creation.box(extents=extents)
     box.apply_translation(center)
-    return box.export(file_type="ply")
+    exported = box.export(file_type=file_type)
+    return exported.encode("utf-8") if isinstance(exported, str) else exported   # trimesh returns OBJ as text
 
 
 def add_project_with_inputs(tmp_path: Path) -> tuple[ProjectStore, str]:

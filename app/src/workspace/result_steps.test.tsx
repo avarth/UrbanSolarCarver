@@ -2,6 +2,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import * as THREE from "three";
 import type { RunSummary } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
+import { serviceModes, serviceSchemaWith } from "../api_client/service_data_for_test";
 import { initialFormState, type SaveOutcome } from "../settings_form/form_state";
 import { holdReply, renderForTest, settle, typeAndLeave, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import type { ScorePoints } from "../viewer/score_points_decoder";
@@ -13,6 +14,10 @@ import { inProjectSession } from "../api_client/project_session_for_test";
 
 const ALL_CURRENT: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" };
 const NO_RESULTS: RunResults = { summary: null, scorePoints: null, skyDome: null, envelope: null, massing: null, platesFile: null, carvedByCriterion: null };
+
+/** The form of a Solar time-based criterion that cuts at 1.5, with the service's mode and threshold setting. */
+const timeBasedFormCuttingAt1point5 = () => initialFormState({ schema: serviceSchemaWith("mode", "threshold"), modes: serviceModes("time-based"),
+                                                               settings: { mode: "time-based", threshold: { method: "cutoff", value: 1.5 } }, gridPlan: null });
 
 function record(state: RunState, serial = 1): RunRecord {
   return { serial, project: "p", origin: "build", runId: `r${serial}`, state, refusal: null };
@@ -144,8 +149,7 @@ test("a threshold run whose follow-up brings no run (a failed save, results up t
     (values.threshold as { value: number }).value === 4 ? "failed" : "saved");
   const refreshStageStatus = vi.fn();
   const stages: Record<PipelineStage, StageState> = { ...ALL_CURRENT, exporting: "missing", massing: "missing" };
-  const form = initialFormState({ schema: { properties: { mode: { default: "time-based" }, threshold: { default: null } } }, modes: [],
-                                  settings: { mode: "time-based", threshold: { method: "cutoff", value: 1.5 } }, gridPlan: null });
+  const form = timeBasedFormCuttingAt1point5();
   let latest: ResultSteps | null = null;
   function Workspace() {
     const runs = useRunLoop("token", vi.fn());
@@ -204,8 +208,7 @@ test("after a follow-up with nothing to run, the carving stays dimmed until the 
     return new Response(JSON.stringify({ detail: "none" }), { status: 404 });
   }));
   const stages: Record<PipelineStage, StageState> = { ...ALL_CURRENT, exporting: "missing", massing: "missing" };
-  const form = initialFormState({ schema: { properties: { mode: { default: "time-based" }, threshold: { default: null } } }, modes: [],
-                                  settings: { mode: "time-based", threshold: { method: "cutoff", value: 1.5 } }, gridPlan: null });
+  const form = timeBasedFormCuttingAt1point5();
   let latest: ResultSteps | null = null;
   function Workspace() {
     const runs = useRunLoop("token", vi.fn());
@@ -252,8 +255,7 @@ test("a threshold change whose save stores a mode or an analysis setting a refus
     return new Response(JSON.stringify({ detail: "none" }), { status: 404 });
   }));
   const stages: Record<PipelineStage, StageState> = { ...ALL_CURRENT, exporting: "missing", massing: "missing" };
-  const form = initialFormState({ schema: { properties: { mode: { default: "time-based" }, threshold: { default: null } } }, modes: [],
-                                  settings: { mode: "time-based", threshold: { method: "cutoff", value: 1.5 } }, gridPlan: null });
+  const form = timeBasedFormCuttingAt1point5();
   // The save stores what the analysis reads: the form after it counts one more stored analysis change.
   let formNow = form;
   const changeAndSave = vi.fn(async (): Promise<SaveOutcome> => {

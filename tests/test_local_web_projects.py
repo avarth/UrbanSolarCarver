@@ -10,6 +10,7 @@ import pytest
 import send2trash
 import trimesh
 import yaml
+from _epw import BUNDLED_EPW
 from local_web_test_support import (
     FakeRecycleBin, box_bytes, has_vertex_normals, make_link_to_folder, pretend_to_be_on_windows_volume, wait_until_finished,
     write_joined_test_surfaces_without_normals,
@@ -27,7 +28,6 @@ from urbansolarcarver.local_web_service.project_removal import ProjectRemovalRef
 from urbansolarcarver.local_web_service.projects import ProjectError, ProjectStore, sanitize_file_name
 from urbansolarcarver.local_web_service.server import _example_input_files
 
-GOLDEN_EPW = Path(__file__).resolve().parent.parent / "examples" / "weather" / "USA_CO_Golden-NREL.724666_TMY3.epw"
 
 
 @pytest.mark.parametrize("bad", ["", "   ", "../x", "a/b", "a\\b", ".hidden", "x" * 65, "naïve"])
@@ -120,12 +120,6 @@ def test_reading_project_json_waits_for_the_project_lock(tmp_path):
     assert read_finished.is_set()
 
 
-def _box_bytes(center, ext=".ply"):
-    m = trimesh.creation.box(extents=[10, 10, 10]); m.apply_translation(center)
-    exported = m.export(file_type=ext.lstrip("."))
-    return exported.encode("utf-8") if isinstance(exported, str) else exported   # trimesh returns OBJ as text
-
-
 def test_two_test_surface_files_join_and_removal_rebuilds(tmp_path):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
     a = trimesh.creation.box(extents=[4, 4, 4]); b = trimesh.creation.box(extents=[2, 2, 2])
@@ -141,8 +135,8 @@ def test_two_test_surface_files_join_and_removal_rebuilds(tmp_path):
 
 def test_two_closed_max_volume_files_stay_two_closed_bodies(tmp_path):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
-    store.add_input("p", "max_volume", "a.ply", _box_bytes([0, 0, 5]))
-    reply = store.add_input("p", "max_volume", "b.obj", _box_bytes([30, 0, 5], ".obj"))
+    store.add_input("p", "max_volume", "a.ply", box_bytes([0, 0, 5]))
+    reply = store.add_input("p", "max_volume", "b.obj", box_bytes([30, 0, 5], file_type="obj"))
     joined = trimesh.load(tmp_path / "p/inputs/joined/max_volume.ply", force="mesh")
     bodies = joined.split(only_watertight=False)
     assert len(bodies) == 2 and all(b.is_watertight for b in bodies)
@@ -152,7 +146,7 @@ def test_two_closed_max_volume_files_stay_two_closed_bodies(tmp_path):
 @pytest.mark.parametrize("file_name, data", [("bad.ply", b"not a mesh"), ("model.3dm", b"x")])
 def test_rejected_upload_keeps_earlier_files_and_joined_file(tmp_path, file_name, data):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
-    store.add_input("p", "max_volume", "a.ply", _box_bytes([0, 0, 5]))
+    store.add_input("p", "max_volume", "a.ply", box_bytes([0, 0, 5]))
     before = (tmp_path / "p/inputs/joined/max_volume.ply").read_bytes()
     with pytest.raises(ProjectError) as err:
         store.add_input("p", "max_volume", file_name, data)
@@ -198,7 +192,7 @@ def test_an_upload_named_like_a_windows_device_is_refused_without_writing(tmp_pa
 
 def test_upload_and_removal_raise_the_inputs_revision(tmp_path):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
-    store.add_input("p", "max_volume", "a.ply", _box_bytes([0, 0, 5]))
+    store.add_input("p", "max_volume", "a.ply", box_bytes([0, 0, 5]))
     assert store.read_project_json("p").inputs_revision == 2
     store.remove_input("p", "max_volume", "a.ply")
     assert store.read_project_json("p").inputs_revision == 3
@@ -206,7 +200,7 @@ def test_upload_and_removal_raise_the_inputs_revision(tmp_path):
 
 def test_removing_the_last_file_removes_the_joined_file_and_an_absent_file_is_not_found(tmp_path):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
-    store.add_input("p", "max_volume", "a.ply", _box_bytes([0, 0, 5]))
+    store.add_input("p", "max_volume", "a.ply", box_bytes([0, 0, 5]))
     reply = store.remove_input("p", "max_volume", "a.ply")
     assert reply.files == [] and reply.joined_bounds is None
     assert not (tmp_path / "p/inputs/joined/max_volume.ply").exists()
@@ -217,8 +211,8 @@ def test_removing_the_last_file_removes_the_joined_file_and_an_absent_file_is_no
 
 def test_uploading_the_same_name_again_replaces_the_file(tmp_path):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
-    store.add_input("p", "max_volume", "a.ply", _box_bytes([0, 0, 5]))
-    reply = store.add_input("p", "max_volume", "a.ply", _box_bytes([50, 0, 5]))
+    store.add_input("p", "max_volume", "a.ply", box_bytes([0, 0, 5]))
+    reply = store.add_input("p", "max_volume", "a.ply", box_bytes([50, 0, 5]))
     assert [f.name for f in reply.files] == ["a.ply"]
     assert reply.joined_bounds == [[45.0, -5.0, 0.0], [55.0, 5.0, 10.0]]
     assert store.input_file_path("p", "max_volume", "a.ply") == (tmp_path / "p/inputs/max_volume/a.ply").resolve()
@@ -227,14 +221,14 @@ def test_uploading_the_same_name_again_replaces_the_file(tmp_path):
 def test_unknown_role_is_rejected(tmp_path):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
     with pytest.raises(ProjectError) as err:
-        store.add_input("p", "sky", "a.ply", _box_bytes([0, 0, 5]))     # a mesh that reads, so only the role is refused
+        store.add_input("p", "sky", "a.ply", box_bytes([0, 0, 5]))     # a mesh that reads, so only the role is refused
     assert err.value.status_code == 422 and "'sky' is not an input role" in str(err.value)
 
 
 def test_weather_location_comes_from_the_epw_header(tmp_path):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
     assert store.weather_location("p") is None
-    reply = store.add_input("p", "weather", "golden.epw", GOLDEN_EPW.read_bytes())   # examples/weather/USA_CO_Golden-NREL.724666_TMY3.epw
+    reply = store.add_input("p", "weather", "golden.epw", BUNDLED_EPW.read_bytes())   # examples/weather/USA_CO_Golden-NREL.724666_TMY3.epw
     assert reply.weather_location == "Denver Centennial Golden Nr, USA"
     assert (tmp_path / "p/inputs/weather.epw").is_file()
     assert store.weather_location("p") == "Denver Centennial Golden Nr, USA"
@@ -246,7 +240,7 @@ def test_weather_location_comes_from_the_epw_header(tmp_path):
 def test_weather_latitude_comes_from_the_epw_location_line(tmp_path):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
     assert store.weather_latitude("p") is None
-    reply = store.add_input("p", "weather", "golden.epw", GOLDEN_EPW.read_bytes())   # LOCATION,...,39.74,-105.18,...
+    reply = store.add_input("p", "weather", "golden.epw", BUNDLED_EPW.read_bytes())   # LOCATION,...,39.74,-105.18,...
     assert reply.weather_latitude == 39.74
     assert store.weather_latitude("p") == 39.74
 
@@ -261,13 +255,13 @@ def test_weather_latitude_comes_from_the_epw_location_line(tmp_path):
 ])
 def test_weather_latitude_is_none_without_a_usable_latitude_field(tmp_path, location_line, expected_latitude):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
-    store.add_input("p", "weather", "golden.epw", GOLDEN_EPW.read_bytes())
+    store.add_input("p", "weather", "golden.epw", BUNDLED_EPW.read_bytes())
     (tmp_path / "p/inputs/weather.epw").write_bytes(location_line + b"\n" + b"".join(_golden_epw_lines()[1:]))
     assert store.weather_latitude("p") == expected_latitude
 
 
 def _golden_epw_lines():
-    return GOLDEN_EPW.read_bytes().splitlines(keepends=True)
+    return BUNDLED_EPW.read_bytes().splitlines(keepends=True)
 
 
 @pytest.mark.parametrize("broken_name, broken_content", [
@@ -279,7 +273,7 @@ def _golden_epw_lines():
 ])
 def test_a_weather_file_that_cannot_be_read_as_an_epw_is_refused_and_the_earlier_one_is_kept(tmp_path, broken_name, broken_content):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
-    store.add_input("p", "weather", "golden.epw", GOLDEN_EPW.read_bytes())
+    store.add_input("p", "weather", "golden.epw", BUNDLED_EPW.read_bytes())
     stored_weather = tmp_path / "p/inputs/weather.epw"
     stored_bytes = stored_weather.read_bytes()
     revision_before = store.read_project_json("p").inputs_revision
@@ -304,8 +298,8 @@ def test_a_truncated_weather_file_as_the_first_upload_leaves_the_project_without
 
 def test_names_differing_only_in_letter_case_are_one_file(tmp_path):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
-    store.add_input("p", "max_volume", "A.ply", _box_bytes([0, 0, 5]))
-    reply = store.add_input("p", "max_volume", "a.ply", _box_bytes([30, 0, 5]))
+    store.add_input("p", "max_volume", "A.ply", box_bytes([0, 0, 5]))
+    reply = store.add_input("p", "max_volume", "a.ply", box_bytes([30, 0, 5]))
     assert [f.name for f in reply.files] == ["A.ply"]
     assert reply.joined_bounds == [[25.0, -5.0, 0.0], [35.0, 5.0, 10.0]]
     joined = trimesh.load(tmp_path / "p/inputs/joined/max_volume.ply", force="mesh")
@@ -323,22 +317,22 @@ def _state_of(store, tmp_path):
 
 def test_failed_join_after_an_upload_leaves_files_and_project_json_as_they_were(tmp_path, monkeypatch):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
-    store.add_input("p", "max_volume", "a.ply", _box_bytes([0, 0, 5]))
+    store.add_input("p", "max_volume", "a.ply", box_bytes([0, 0, 5]))
     before = _state_of(store, tmp_path)
     def failing_save_mesh(mesh, path):
         raise OSError("disk full")
     monkeypatch.setattr(projects, "save_mesh", failing_save_mesh)
     for file_name in ("b.ply", "a.ply"):    # a new file, then a replacement of an existing one
         with pytest.raises(ProjectError) as err:
-            store.add_input("p", "max_volume", file_name, _box_bytes([30, 0, 5]))
+            store.add_input("p", "max_volume", file_name, box_bytes([30, 0, 5]))
         assert err.value.status_code == 500 and "disk full" in str(err.value)
         assert _state_of(store, tmp_path) == before
 
 
 def test_failed_join_after_a_removal_leaves_files_and_project_json_as_they_were(tmp_path, monkeypatch):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
-    store.add_input("p", "max_volume", "a.ply", _box_bytes([0, 0, 5]))
-    store.add_input("p", "max_volume", "b.ply", _box_bytes([30, 0, 5]))
+    store.add_input("p", "max_volume", "a.ply", box_bytes([0, 0, 5]))
+    store.add_input("p", "max_volume", "b.ply", box_bytes([30, 0, 5]))
     before = _state_of(store, tmp_path)
     monkeypatch.setattr(projects, "save_mesh", lambda mesh, path: (_ for _ in ()).throw(OSError("disk full")))
     with pytest.raises(ProjectError):
@@ -348,11 +342,11 @@ def test_failed_join_after_a_removal_leaves_files_and_project_json_as_they_were(
 
 def test_a_recorded_file_missing_on_disk_is_a_project_error_and_can_still_be_removed(tmp_path):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
-    store.add_input("p", "max_volume", "a.ply", _box_bytes([0, 0, 5]))
-    store.add_input("p", "max_volume", "b.ply", _box_bytes([30, 0, 5]))
+    store.add_input("p", "max_volume", "a.ply", box_bytes([0, 0, 5]))
+    store.add_input("p", "max_volume", "b.ply", box_bytes([30, 0, 5]))
     (tmp_path / "p/inputs/max_volume/a.ply").unlink()
     with pytest.raises(ProjectError):
-        store.add_input("p", "max_volume", "c.ply", _box_bytes([60, 0, 5]))
+        store.add_input("p", "max_volume", "c.ply", box_bytes([60, 0, 5]))
     reply = store.remove_input("p", "max_volume", "a.ply")
     assert [f.name for f in reply.files] == ["b.ply"]
 
@@ -372,7 +366,7 @@ def test_uploads_from_two_threads_to_one_role_are_both_recorded(tmp_path):
     def upload(file_name, center):
         try:
             barrier.wait()
-            store.add_input("p", "test_surfaces", file_name, _box_bytes(center))
+            store.add_input("p", "test_surfaces", file_name, box_bytes(center))
         except Exception as error:     # reported to the test thread below
             failures.append(error)
     threads = [threading.Thread(target=upload, args=(f"{letter}.ply", [index * 30, 0, 5])) for index, letter in enumerate("ab")]
@@ -397,13 +391,13 @@ def _block_centres_x(joined_path):
 def test_joined_file_follows_sorted_file_names_whatever_the_upload_order(tmp_path):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
     joined_path = tmp_path / "p/inputs/joined/test_surfaces_1.ply"
-    store.add_input("p", "test_surfaces", "b.ply", _box_bytes([100, 0, 5]))
-    store.add_input("p", "test_surfaces", "a.ply", _box_bytes([0, 0, 5]))
-    store.add_input("p", "test_surfaces", "c.ply", _box_bytes([200, 0, 5]))
+    store.add_input("p", "test_surfaces", "b.ply", box_bytes([100, 0, 5]))
+    store.add_input("p", "test_surfaces", "a.ply", box_bytes([0, 0, 5]))
+    store.add_input("p", "test_surfaces", "c.ply", box_bytes([200, 0, 5]))
     assert _block_centres_x(joined_path) == [0, 100, 200]
     store.remove_input("p", "test_surfaces", "a.ply")
     assert _block_centres_x(joined_path) == [100, 200]
-    store.add_input("p", "test_surfaces", "a.ply", _box_bytes([0, 0, 5]))
+    store.add_input("p", "test_surfaces", "a.ply", box_bytes([0, 0, 5]))
     assert _block_centres_x(joined_path) == [0, 100, 200]
 
 
@@ -612,7 +606,7 @@ def test_unknown_mode_at_create_leaves_no_project_folder(tmp_path):
 def test_joined_bounds_do_not_need_the_engine_loader(tmp_path, monkeypatch):
     """The bounds are read without load_mesh's fix_normals, which takes most of its time and does not move a vertex."""
     store = ProjectStore(tmp_path); store.create("p", "daylight")
-    store.add_input("p", "max_volume", "a.ply", _box_bytes([0, 0, 5]))
+    store.add_input("p", "max_volume", "a.ply", box_bytes([0, 0, 5]))
     expected_bounds = projects.load_mesh(str(tmp_path / "p" / "inputs" / "joined" / "max_volume.ply")).bounds.tolist()
 
     def refuse(path):
@@ -624,7 +618,7 @@ def test_joined_bounds_do_not_need_the_engine_loader(tmp_path, monkeypatch):
 def test_grid_plan_and_budget_use_the_joined_max_volume(tmp_path):
     store = ProjectStore(tmp_path); store.create("p", "daylight")
     assert store.write_config_from_values("p", {"mode": "daylight"}).grid_plan is None
-    store.add_input("p", "max_volume", "a.ply", _box_bytes([0, 0, 5]))
+    store.add_input("p", "max_volume", "a.ply", box_bytes([0, 0, 5]))
     reply = store.write_config_from_values("p", {"mode": "daylight", "voxel_size": 1.0})
     assert reply.grid_plan.resolution == 11            # 10 m side + 1% margin each side, rounded up
     with pytest.raises(ConfigError) as err:
@@ -666,7 +660,7 @@ def link_kind_of_this_platform():
 def test_rename_moves_the_folder_and_changes_the_name_in_project_json(tmp_path):
     store = ProjectStore(tmp_path)
     store.create("Old", "time-based")
-    store.add_input("Old", "max_volume", "volume.ply", _box_bytes([0, 0, 5]))
+    store.add_input("Old", "max_volume", "volume.ply", box_bytes([0, 0, 5]))
     new_folder = store.rename_project("Old", "New name")
     assert new_folder == (tmp_path / "New name").resolve() and not (tmp_path / "Old").exists()
     assert store.read_project_json("New name").name == "New name"

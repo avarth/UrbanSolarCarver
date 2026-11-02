@@ -6,6 +6,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
+from local_web_test_support import box_bytes
 from urbansolarcarver.chain_config import CRITERION_KEYS, is_chain_file, load_chain
 from urbansolarcarver.errors import ConfigError
 from urbansolarcarver.local_web_service.api_models import CriterionEntry
@@ -274,14 +275,9 @@ def test_the_config_yaml_says_it_is_written_by_the_app(tmp_path):
         change()
         assert config_path.read_text(encoding="utf-8").splitlines()[0] == COMMENT_LINE
         assert load_chain(str(config_path)).criteria        # what `usc validate` reads
-    store.add_input("p", "context", "ctx.ply", _box_bytes())      # an upload rewrites the file too
+    store.add_input("p", "context", "ctx.ply", box_bytes([30, 0, 5]))      # an upload rewrites the file too
     assert config_path.read_text(encoding="utf-8").splitlines()[0] == COMMENT_LINE
     assert _stored(store, "p")["context_path"] == "inputs/joined/context.ply"
-
-
-def _box_bytes() -> bytes:
-    from local_web_test_support import box_bytes
-    return box_bytes([30, 0, 5])
 
 
 def test_a_criterions_config_equals_the_one_the_engine_builds_from_config_yaml(tmp_path):
@@ -294,7 +290,7 @@ def test_a_criterions_config_equals_the_one_the_engine_builds_from_config_yaml(t
     store.update_criterion("p", "2", values={"mode": "time-based", "start_month": 6, "end_month": 7})
     store.add_criterion("p", "irradiance")
     store.update_criterion("p", "3", bypassed=True)
-    store.add_input("p", "context", "ctx.ply", _box_bytes())
+    store.add_input("p", "context", "ctx.ply", box_bytes([30, 0, 5]))
     chain = load_chain(str(_config_path(store, "p")))
     assert [criterion.id for criterion in chain.criteria] == ["1", "2"]
     for criterion in chain.criteria:
@@ -356,7 +352,7 @@ def test_chain_config_document_lists_the_criteria_that_are_on(tmp_path):
 def _chain_of_two_with_a_max_volume(tmp_path):
     store = ProjectStore(tmp_path, device="cpu")
     store.create("p", "daylight")
-    store.add_input("p", "max_volume", "volume.ply", _box_bytes())
+    store.add_input("p", "max_volume", "volume.ply", box_bytes([30, 0, 5]))
     store.add_criterion("p", "time-based")
     return store
 

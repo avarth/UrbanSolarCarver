@@ -1,22 +1,14 @@
 import { act, useReducer } from "react";
 import { afterEach, expect, test } from "vitest";
-import type { ModeInfo } from "../../api_client/client";
+import { serviceModes, serviceSchemaWith } from "../../api_client/service_data_for_test";
 import { press, renderForTest, type RenderedOverlay } from "../../viewer_overlays/render_for_test";
 import { formReducer, initialFormState, type FormState } from "../form_state";
 import { settingsForStep } from "../presentation";
 import { SettingField } from "../SettingField";
 
-// The engine's balance settings, as GET schema gives them (pydantic_schemas.py): any temperature, a dead band of 0 or more.
-const SCHEMA = {
-  properties: {
-    mode: { default: "benefit", type: "string" },
-    balance_temperature: { default: 15.0, type: "number" },
-    balance_offset: { default: 2.0, type: "number", minimum: 0 },
-    include_harm: { default: false, type: "boolean" },
-  },
-};
-const MODES: ModeInfo[] = [{ name: "benefit", description: "", needs_epw: true, needs_period: true, experimental: false,
-                             score_kind: "weighted_sum", weight_unit: "", score_unit: "", starting_values: {} }];
+// The engine's balance settings, as GET schema gives them: any temperature, a dead band of 0 or more.
+const SCHEMA = serviceSchemaWith("mode", "balance_temperature", "balance_offset", "include_harm");
+const MODES = serviceModes("benefit");
 const NBSP = " ";
 const degrees = (value: number) => `${value}${NBSP}°C`;
 

@@ -11,13 +11,11 @@ import pytest
 import torch
 import trimesh
 
-from _epw import resolve_epw
+from _geometry import box_between
 from urbansolarcarver.warp_kernels import dda_backend_available
 
 REQUIRES_WARP_CPU = pytest.mark.skipif(not dda_backend_available(torch.device("cpu")),
                                        reason="Warp CPU unavailable")
-EPW = resolve_epw()
-REQUIRES_EPW = pytest.mark.skipif(not EPW, reason="no EPW file")
 
 UP, EAST = [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]
 
@@ -32,13 +30,6 @@ def _evaluate(metric_or_settings, points, normals, mesh=None, clip_mesh=None, to
     s = metric_or_settings if not isinstance(metric_or_settings, str) else _settings(metric_or_settings, **settings)
     return evaluate_test_points(np.asarray(points, float), np.asarray(normals, float), check_directions(s),
                                 mesh, clip_mesh=clip_mesh, surface_tolerance=tolerance, device="cpu")
-
-
-def _box(lower, upper):
-    lower, upper = np.asarray(lower, float), np.asarray(upper, float)
-    box = trimesh.creation.box(extents=upper - lower)
-    box.apply_translation((lower + upper) / 2.0)
-    return box
 
 
 # --- sky directions and sub-rays -------------------------------------------------------------------------------
@@ -112,7 +103,7 @@ def test_sub_rays_see_a_thin_mast_that_patch_centres_miss():
     (0, 12, 15, 20, 30 and 60° apart in the rows it rises through), so no centre ray meets it."""
     azimuth = math.radians(4.0)
     centre = 40.0 * np.array([math.sin(azimuth), math.cos(azimuth)])
-    mast = _box([centre[0] - 0.15, centre[1] - 0.15, -1.0], [centre[0] + 0.15, centre[1] + 0.15, 100.0])
+    mast = box_between([centre[0] - 0.15, centre[1] - 0.15, -1.0], [centre[0] + 0.15, centre[1] + 0.15, 100.0])
     blocked = {}
     for rays in (1, 16):
         free = _evaluate("sky_view", [[0, 0, 0]], [UP], rays_per_patch=rays)[0]
@@ -126,7 +117,7 @@ def test_sub_rays_see_a_thin_mast_that_patch_centres_miss():
 def test_sky_view_factor_beside_an_infinite_wall(height):
     """A long wall 10 m away, of height h, rises to an elevation beta = atan(h / 10) from the point.
     Horizontal surface: (1 + cos beta) / 2.  Facade facing the wall: (1 - sin beta) / 2."""
-    wall = _box([10.0, -5000.0, 0.0], [12.0, 5000.0, height])
+    wall = box_between([10.0, -5000.0, 0.0], [12.0, 5000.0, height])
     beta = math.atan2(height, 10.0)
     values = _evaluate("sky_view", [[0, 0, 0], [0, 0, 0]], [UP, EAST], wall, rays_per_patch=9)
     assert values[0] == pytest.approx(100.0 * (1.0 + math.cos(beta)) / 2.0, abs=0.5)
@@ -135,7 +126,7 @@ def test_sky_view_factor_beside_an_infinite_wall(height):
 
 @REQUIRES_WARP_CPU
 def test_a_roof_over_a_point_blocks_its_whole_sky():
-    roof = _box([-1000.0, -1000.0, 3.0], [1000.0, 1000.0, 4.0])
+    roof = box_between([-1000.0, -1000.0, 3.0], [1000.0, 1000.0, 4.0])
     # Patch centres: jittered sub-rays reach down to the horizon and some pass under the roof's edge, 0.17° up.
     assert _evaluate("sky_view", [[0, 0, 0]], [UP], roof, rays_per_patch=1)[0] == 0.0
     assert _evaluate("sky_view", [[0, 0, 0]], [UP], roof, rays_per_patch=4)[0] < 0.01
@@ -152,15 +143,14 @@ def _ray_hits_box(origin, directions, lower, upper):
 
 
 @REQUIRES_WARP_CPU
-@REQUIRES_EPW
-def test_sun_hours_past_a_box_match_an_independent_ray_box_test():
+def test_sun_hours_past_a_box_match_an_independent_ray_box_test(example_epw_path):
     from urbansolarcarver.solar_check import check_directions
-    settings = _settings("sun_hours", epw_path=EPW, start_month=12, start_day=21, start_hour=8,
+    settings = _settings("sun_hours", epw_path=str(example_epw_path), start_month=12, start_day=21, start_hour=8,
                          end_month=12, end_day=21, end_hour=16, sun_steps_per_hour=12)
     lower, upper = [-6.0, -20.0, 0.0], [6.0, -8.0, 9.0]          # a block south of the points
     points = np.array([[0.0, 0.0, 0.0], [10.0, 0.0, 0.0], [0.0, -4.0, 2.0]])
     normals = np.array([UP, UP, [0.0, -1.0, 0.0]])
-    values = _evaluate(settings, points, normals, _box(lower, upper))
+    values = _evaluate(settings, points, normals, box_between(lower, upper))
     directions = check_directions(settings)
     suns = directions.directions.astype(float)
     expected = []
@@ -173,15 +163,14 @@ def test_sun_hours_past_a_box_match_an_independent_ray_box_test():
 
 
 @REQUIRES_WARP_CPU
-@REQUIRES_EPW
 @pytest.mark.slow     # a year of sky matrix
-def test_solar_energy_on_an_unobstructed_horizontal_surface_is_the_sky_matrix_cosine_sum():
+def test_solar_energy_on_an_unobstructed_horizontal_surface_is_the_sky_matrix_cosine_sum(example_epw_path):
     from urbansolarcarver.sky_patches import compute_EPW_based_weights
     from urbansolarcarver.sun import sample_period
-    settings = _settings("solar_energy", epw_path=EPW, start_month=1, start_day=1, start_hour=0,
+    settings = _settings("solar_energy", epw_path=str(example_epw_path), start_month=1, start_day=1, start_hour=0,
                          end_month=12, end_day=31, end_hour=23, rays_per_patch=1)
     _datetimes, hoys = sample_period(settings, steps_per_hour=1)
-    patch_values = compute_EPW_based_weights("irradiance", EPW, hoys, device=torch.device("cpu")).numpy()
+    patch_values = compute_EPW_based_weights("irradiance", str(example_epw_path), hoys, device=torch.device("cpu")).numpy()
     from ladybug.viewsphere import view_sphere
     z = np.array([v.z for v in view_sphere.tregenza_dome_vectors])
     value = _evaluate(settings, [[0, 0, 0]], [UP])[0]
@@ -194,7 +183,7 @@ def test_solar_energy_on_an_unobstructed_horizontal_surface_is_the_sky_matrix_co
 
 @REQUIRES_WARP_CPU
 def test_a_facade_of_the_mesh_itself_is_not_shaded_by_it():
-    box = _box([0, 0, 0], [10, 10, 10])
+    box = box_between([0, 0, 0], [10, 10, 10])
     points = [[10.0, 5.0, 5.0], [5.0, 5.0, 10.0]]       # on the east facade and on the roof
     values = _evaluate("sky_view", points, [EAST, UP], box)
     np.testing.assert_allclose(values, _evaluate("sky_view", points, [EAST, UP]), atol=1e-9)
@@ -203,14 +192,14 @@ def test_a_facade_of_the_mesh_itself_is_not_shaded_by_it():
 @REQUIRES_WARP_CPU
 def test_ground_under_a_mesh_is_shaded_although_it_lies_on_the_mesh():
     """The skin tolerance is for a test surface that faces the way the mesh's surface does, not into the solid."""
-    box = _box([0, 0, 0], [10, 10, 10])
+    box = box_between([0, 0, 0], [10, 10, 10])
     assert _evaluate("sky_view", [[5.0, 5.0, 0.0], [0.3, 5.0, 0.0]], [UP, UP], box, tolerance=1.0).max() == 0.0
 
 
 @REQUIRES_WARP_CPU
 def test_a_mesh_a_little_outside_its_facade_does_not_shade_it_but_a_buried_surface_stays_shaded():
     """A smoothed or voxel envelope lies up to about a voxel outside the facades it was carved around."""
-    bulging = _box([0, 0, 0], [10.3, 10, 10])
+    bulging = box_between([0, 0, 0], [10.3, 10, 10])
     facade, buried = [[10.0, 5.0, 5.0]], [[5.0, 5.0, 5.0]]
     open_sky = _evaluate("sky_view", facade, [EAST], rays_per_patch=9)[0]
     # Rays that run inside the 0.3 m skin for more than ten tolerances (cos < 0.3 / 5) stay blocked: at most
@@ -224,8 +213,8 @@ def test_a_mesh_a_little_outside_its_facade_does_not_shade_it_but_a_buried_surfa
 
 @REQUIRES_WARP_CPU
 def test_a_result_mesh_blocks_only_inside_the_maximum_volume():
-    max_volume = _box([0, 0, 0], [10, 10, 10])
-    beyond = _box([0, 0, 0], [10, 10, 30])      # a result mesh that reaches 20 m above the maximum volume
+    max_volume = box_between([0, 0, 0], [10, 10, 10])
+    beyond = box_between([0, 0, 0], [10, 10, 30])      # a result mesh that reaches 20 m above the maximum volume
     point, normal = [[20.0, 5.0, 0.0]], [UP]
     clipped = _evaluate("sky_view", point, normal, beyond, clip_mesh=max_volume)[0]
     assert clipped == pytest.approx(_evaluate("sky_view", point, normal, max_volume)[0], abs=1e-9)
@@ -235,8 +224,8 @@ def test_a_result_mesh_blocks_only_inside_the_maximum_volume():
 @REQUIRES_WARP_CPU
 def test_a_ground_point_under_a_voxel_overhang_is_shaded_only_by_the_maximum_volume():
     """A voxel envelope reaches up to a voxel past the maximum volume's facade, over the ground beside it."""
-    max_volume = _box([0, 0, 0], [10, 10, 20])
-    voxel_result = _box([-0.6, -0.6, -0.4], [10.6, 10.6, 20.6])
+    max_volume = box_between([0, 0, 0], [10, 10, 20])
+    voxel_result = box_between([-0.6, -0.6, -0.4], [10.6, 10.6, 20.6])
     point = [[10.3, 5.0, 0.0]]                    # beside the facade, under the overhang
     clipped = _evaluate("sky_view", point, [UP], voxel_result, clip_mesh=max_volume)[0]
     assert clipped == pytest.approx(_evaluate("sky_view", point, [UP], max_volume)[0], abs=0.05)
@@ -331,8 +320,8 @@ def test_context_and_terrain_shade_every_column():
     from urbansolarcarver.check_settings import CheckSettings
     from urbansolarcarver.solar_check import CheckGeometry, solar_check
     ground = trimesh.Trimesh(vertices=[[0, 0, 0], [4, 0, 0], [4, 4, 0], [0, 4, 0]], faces=[[0, 1, 2], [0, 2, 3]])
-    box = _box([10, -50, 0], [20, 50, 30])
-    building = _box([-20, -50, 0], [-10, 50, 10])
+    box = box_between([10, -50, 0], [20, 50, 30])
+    building = box_between([-20, -50, 0], [-10, 50, 10])
     settings = CheckSettings(metric="sky_view", sample_spacing=1.0)
     alone = solar_check(ground, [CheckGeometry("max_volume", "Building", building)], settings, device="cpu")
     among = solar_check(ground, [CheckGeometry("max_volume", "Building", building)], settings, blocking=[box],
@@ -349,11 +338,11 @@ def test_a_list_of_context_and_terrain_files_is_joined_and_both_block(tmp_path):
     from urbansolarcarver.io import save_mesh
     from urbansolarcarver.solar_check import CheckGeometry, solar_check
     point = trimesh.Trimesh(vertices=[[0, 0, 0], [2, 0, 0], [2, 2, 0], [0, 2, 0]], faces=[[0, 1, 2], [0, 2, 3]])
-    roof_over_it = _box([-1000, -1000, 30], [1000, 1000, 31])      # terrain-like cover, far above
-    wall_east = _box([10, -50, 0], [20, 50, 30])                   # a neighbour
+    roof_over_it = box_between([-1000, -1000, 30], [1000, 1000, 31])      # terrain-like cover, far above
+    wall_east = box_between([10, -50, 0], [20, 50, 30])                   # a neighbour
     save_mesh(roof_over_it, str(tmp_path / "terrain.obj"))
     save_mesh(wall_east, str(tmp_path / "context.obj"))
-    building = [CheckGeometry("max_volume", "Building", _box([-20, -50, -5], [-10, 50, -1]))]
+    building = [CheckGeometry("max_volume", "Building", box_between([-20, -50, -5], [-10, 50, -1]))]
     # Patch centres, which all meet the cover; jittered sub-rays within 1.7° of the horizon pass under its edge.
     settings = CheckSettings(metric="sky_view", sample_spacing=1.0, rays_per_patch=1)
     free = solar_check(point, building, settings, device="cpu").values["open"]
@@ -372,10 +361,10 @@ def _study_files(tmp_path):
     """A 10 m cube as the maximum volume, a wall panel 1 m east of it as the test surface (facing east), a block
     beside that as the context."""
     from urbansolarcarver.io import save_mesh
-    save_mesh(_box([0, 0, 0], [10, 10, 10]), str(tmp_path / "max_volume.ply"))
+    save_mesh(box_between([0, 0, 0], [10, 10, 10]), str(tmp_path / "max_volume.ply"))
     wall = trimesh.Trimesh(vertices=[[11, 0, 0], [11, 6, 0], [11, 6, 6], [11, 0, 6]], faces=[[0, 1, 2], [0, 2, 3]])
     save_mesh(wall, str(tmp_path / "test_surface.ply"))
-    save_mesh(_box([20, -5, 0], [25, 15, 30]), str(tmp_path / "context.ply"))
+    save_mesh(box_between([20, -5, 0], [25, 15, 30]), str(tmp_path / "context.ply"))
     return tmp_path / "test_surface.ply", tmp_path / "max_volume.ply", tmp_path / "context.ply"
 
 
@@ -390,10 +379,9 @@ def test_each_sky_patch_carries_the_sum_of_its_slots(rays):
 SUN_PERIOD = dict(start_month=12, start_day=21, start_hour=8, end_month=12, end_day=21, end_hour=16)
 
 
-@REQUIRES_EPW
-def test_sun_hours_have_no_sky_patches():
+def test_sun_hours_have_no_sky_patches(example_epw_path):
     from urbansolarcarver.solar_check import check_directions, sky_patch_values
-    assert sky_patch_values(check_directions(_settings("sun_hours", epw_path=EPW, **SUN_PERIOD))) is None
+    assert sky_patch_values(check_directions(_settings("sun_hours", epw_path=str(example_epw_path), **SUN_PERIOD))) is None
 
 
 @REQUIRES_WARP_CPU
@@ -413,13 +401,12 @@ def test_simulate_study_without_a_run_has_only_the_maximum_volume(tmp_path):
 
 
 @REQUIRES_WARP_CPU
-@REQUIRES_EPW
-def test_a_sun_hours_study_removes_an_earlier_sky_file(tmp_path):
+def test_a_sun_hours_study_removes_an_earlier_sky_file(tmp_path, example_epw_path):
     from urbansolarcarver.solar_check import simulate_study
     surface, max_volume, _context = _study_files(tmp_path)
     (tmp_path / "study").mkdir()
     (tmp_path / "study" / "check_sky.json").write_text('{"weights": []}', encoding="utf-8")
-    simulate_study(surface, max_volume, _settings("sun_hours", epw_path=EPW, sample_spacing=2.0, **SUN_PERIOD),
+    simulate_study(surface, max_volume, _settings("sun_hours", epw_path=str(example_epw_path), sample_spacing=2.0, **SUN_PERIOD),
                    out_dir=tmp_path / "study", device="cpu")
     assert not (tmp_path / "study" / "check_sky.json").exists()       # its directions are sun positions
 
@@ -531,7 +518,7 @@ def test_a_study_that_samples_the_ground_has_points_at_the_maximum_volumes_foot_
 
 def test_the_ground_margin_is_half_the_longer_side_of_a_large_maximum_volume():
     from urbansolarcarver.solar_check import ground_square
-    ground = ground_square(_box([0, 0, 2], [100, 40, 30]))
+    ground = ground_square(box_between([0, 0, 2], [100, 40, 30]))
     # Half of 100 m is 50 m, more than 20 m: the square is 200 m wide, centred on (50, 20).
     assert np.allclose(ground.bounds, [[-50, -80, 2], [150, 120, 2]])
     assert np.allclose(ground.face_normals, [0.0, 0.0, 1.0])
@@ -545,7 +532,7 @@ def test_a_terrain_stored_facing_down_is_sampled_facing_up_on_each_of_its_slopes
                            faces=[[0, 4, 1], [1, 4, 2], [2, 4, 3], [3, 4, 0]])
     assert hill.face_normals[:, 2].max() < 0.0
     save_mesh(hill, str(tmp_path / "terrain.ply"))
-    surfaces = study_surfaces(None, ["terrain"], _box([0, 0, 0], [5, 5, 5]), terrain_path=str(tmp_path / "terrain.ply"))
+    surfaces = study_surfaces(None, ["terrain"], box_between([0, 0, 0], [5, 5, 5]), terrain_path=str(tmp_path / "terrain.ply"))
     sampled = sample_test_surfaces(surfaces, 2.0)
     assert len(sampled.points) > 4 * 30 and sampled.normals[:, 2].min() > 0.0
 
@@ -574,26 +561,24 @@ def _radiance_available():
 
 
 @REQUIRES_WARP_CPU
-@REQUIRES_EPW
 @pytest.mark.slow
 @pytest.mark.skipif(not _radiance_available(), reason="Radiance is not installed")
-def test_solar_energy_matches_ladybugs_incident_radiation_with_one_ray_per_patch(tmp_path):
+def test_solar_energy_matches_ladybugs_incident_radiation_with_one_ray_per_patch(tmp_path, example_epw_path):
     """Ladybug's RadiationStudy on the same Tregenza sky matrix with ground reflectance 0: the cosine of
     each patch centre seen past a box, summed; the check with one ray per patch computes the same."""
-    from ladybug.wea import Wea
     from ladybug_geometry.geometry3d import Face3D, Mesh3D, Point3D
     from ladybug_radiance.skymatrix import SkyMatrix
     from ladybug_radiance.study.radiation import RadiationStudy
     from urbansolarcarver.weather_file import read_weather_file
 
-    box = _box([0, 0, 0], [12, 8, 15])
+    box = box_between([0, 0, 0], [12, 8, 15])
     # Sensors: a strip of ground east and south of the box, and the box's south facade.
     ground = [[x, y, 0.0] for x in np.arange(-4.5, 18, 3.0) for y in (-6.5, -2.5, 2.5)]
     facade = [[x, 0.0, z] for x in (2.0, 6.0, 10.0) for z in (2.0, 8.0, 14.0)]
     points = np.array(ground + facade)
     normals = np.array([UP] * len(ground) + [[0.0, -1.0, 0.0]] * len(facade))
 
-    wea = read_weather_file(EPW).solar_irradiance_wea()
+    wea = read_weather_file(str(example_epw_path)).solar_irradiance_wea()
     hoys = list(range(0, 2160))          # January to March
     sky = SkyMatrix.from_components(wea.location, wea.direct_normal_irradiance, wea.diffuse_horizontal_irradiance,
                                     hoys=hoys, high_density=False, ground_reflectance=0.0)
@@ -615,7 +600,7 @@ def test_solar_energy_matches_ladybugs_incident_radiation_with_one_ray_per_patch
     study = RadiationStudy(sky, study_mesh, context, offset_distance=0.01, sim_folder=str(tmp_path / "study"))
     ladybug = np.array(study.radiation_values)
 
-    settings = _settings("solar_energy", epw_path=EPW, start_month=1, start_day=1, start_hour=0, end_month=3,
+    settings = _settings("solar_energy", epw_path=str(example_epw_path), start_month=1, start_day=1, start_hour=0, end_month=3,
                          end_day=31, end_hour=23, rays_per_patch=1)
     sensors = np.array([[c.x, c.y, c.z] for c in study_mesh.face_centroids])
     sensor_normals = np.array([[n.x, n.y, n.z] for n in study_mesh.face_normals])

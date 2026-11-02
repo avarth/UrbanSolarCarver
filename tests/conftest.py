@@ -2,29 +2,21 @@
 import os
 import shutil
 import pytest
-import numpy as np
 from pathlib import Path
 
 
 @pytest.fixture
 def tiny_cube_mesh():
-    """A minimal watertight cube mesh (8 vertices, 12 faces), z -5 to 5, for smoke tests."""
-    import trimesh
-    return trimesh.creation.box(extents=(10.0, 10.0, 10.0))
+    """A minimal watertight cube mesh (8 vertices, 12 faces), z -5 to 5, for smoke tests (_stage_scene.py)."""
+    from _stage_scene import cube_volume
+    return cube_volume()
 
 
 @pytest.fixture
 def tiny_surface_mesh():
-    """A small horizontal quad as a test surface, 1 m under tiny_cube_mesh and facing up into it."""
-    import trimesh
-    verts = np.array([
-        [-3.0, -3.0, -6.0],
-        [ 3.0, -3.0, -6.0],
-        [ 3.0,  3.0, -6.0],
-        [-3.0,  3.0, -6.0],
-    ], dtype=np.float32)
-    faces = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.int32)
-    return trimesh.Trimesh(vertices=verts, faces=faces)
+    """A small horizontal quad as a test surface, 1 m under tiny_cube_mesh and facing up into it (_stage_scene.py)."""
+    from _stage_scene import surface_under_cube
+    return surface_under_cube()
 
 
 @pytest.fixture
@@ -37,12 +29,12 @@ def tmp_mesh_files(tmp_path, tiny_cube_mesh, tiny_surface_mesh):
     return vol_path, srf_path
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def example_epw_path():
-    """Return path to a real EPW file, else skip the test.
+    """Return path to a real EPW file, else skip the test: the one way a test that needs a weather file skips without one.
 
     Uses ``USC_EPW_PATH`` if set, otherwise the NREL TMY3 file bundled in
-    ``examples/weather/``.
+    ``examples/weather/`` (_epw.py). A test that reads the bundled file itself uses ``_epw.BUNDLED_EPW``.
     """
     from _epw import resolve_epw
     epw = resolve_epw()

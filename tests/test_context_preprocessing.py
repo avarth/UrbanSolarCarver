@@ -6,19 +6,13 @@ import numpy as np
 import pytest
 import trimesh
 
+from _geometry import box_between
 from urbansolarcarver import preprocessing, thresholding
 from urbansolarcarver.errors import InputError
 from urbansolarcarver.io import save_mesh
 from urbansolarcarver.load_config import build_config
 
 GEOREFERENCED = np.array([500_000.0, 4_500_000.0, 0.0])
-
-
-def _box(lo, hi, offset=(0.0, 0.0, 0.0)):
-    lo, hi = np.asarray(lo, float), np.asarray(hi, float)
-    box = trimesh.creation.box(extents=hi - lo)
-    box.apply_translation((lo + hi) / 2 + np.asarray(offset, float))
-    return box
 
 
 def _quad(corners, offset=(0.0, 0.0, 0.0)):
@@ -34,7 +28,7 @@ def _ground_north(offset=(0.0, 0.0, 0.0)):
 
 def _south_neighbour(offset=(0.0, 0.0, 0.0)):
     """A tall, wide neighbour 20 m south of the volume, outside the grid: it hides the low southern sun and sky."""
-    return _box((-60, -40, 0), (70, -20, 40), offset)
+    return box_between((-60, -40, 0), (70, -20, 40), offset)
 
 
 def _run(tmp_path, mode="daylight", surface=None, context=None, terrain=None, offset=(0.0, 0.0, 0.0),
@@ -42,7 +36,7 @@ def _run(tmp_path, mode="daylight", surface=None, context=None, terrain=None, of
     """Preprocess the 10 m cube scene (CPU) and return (result, diagnostics summary, config)."""
     tmp_path.mkdir(parents=True, exist_ok=True)
     paths = {}
-    for name, mesh in (("max_volume", _box((0, 0, 0), (10, 10, 10), offset)),
+    for name, mesh in (("max_volume", box_between((0, 0, 0), (10, 10, 10), offset)),
                        ("test_surface", surface if surface is not None else _ground_north(offset)),
                        ("context", context), ("terrain", terrain)):
         if mesh is not None:
@@ -104,7 +98,7 @@ def test_time_based_drops_sun_rays(tmp_path, example_epw_path):
 
 
 def test_tilted_plane_only_loses_context_columns(tmp_path):
-    chimney = _box((4, 4, 4), (6, 6, 6))
+    chimney = box_between((4, 4, 4), (6, 6, 6))
     _, _, plain_thr = _run(tmp_path / "plain", mode="tilted_plane", threshold=True)
     pre, summary, thr = _run(tmp_path / "chimney", mode="tilted_plane", context=chimney, threshold=True)
     plain_mask = np.load(plain_thr.out_dir / "mask.npy").astype(bool)
@@ -123,7 +117,7 @@ def _occupancy_of_plain(tmp_path):
 
 
 def test_reduced_occupancy_is_saved(tmp_path):
-    chimney = _box((4, 4, 4), (6, 6, 6))
+    chimney = box_between((4, 4, 4), (6, 6, 6))
     ground = _quad([(-100, -100, 2), (100, -100, 2), (100, 100, 2), (-100, 100, 2)])
     plain, _, _ = _run(tmp_path / "plain")
     pre, summary, _ = _run(tmp_path / "both", context=chimney, terrain=ground)
@@ -146,7 +140,7 @@ def test_reduced_occupancy_is_saved(tmp_path):
 
 def test_context_covering_everything_is_an_input_error(tmp_path):
     with pytest.raises(InputError, match="context"):
-        _run(tmp_path, context=_box((-5, -5, -5), (15, 15, 15)))
+        _run(tmp_path, context=box_between((-5, -5, -5), (15, 15, 15)))
 
 
 def test_terrain_covering_everything_is_an_input_error(tmp_path):
@@ -156,7 +150,7 @@ def test_terrain_covering_everything_is_an_input_error(tmp_path):
 
 def test_inward_facing_test_surface_is_counted_fully_blocked(tmp_path):
     """A test panel on the west face of a neighbour, its normal pointing into the neighbour."""
-    neighbour = _box((20, 0, 0), (30, 10, 10))
+    neighbour = box_between((20, 0, 0), (30, 10, 10))
     panel = _quad([(20, 2, 2), (20, 8, 2), (20, 8, 8), (20, 2, 8)])  # normal +x, into the neighbour
     assert panel.face_normals[0][0] > 0.99
     _, summary, _ = _run(tmp_path, surface=panel, context=neighbour)
@@ -167,7 +161,7 @@ def test_inward_facing_test_surface_is_counted_fully_blocked(tmp_path):
 
 def test_facade_on_its_own_context_building_is_not_blocked(tmp_path):
     """A test panel on the west face of a neighbour, facing out (west), toward the max volume."""
-    neighbour = _box((20, 0, 0), (30, 10, 10))
+    neighbour = box_between((20, 0, 0), (30, 10, 10))
     panel = _quad([(20, 8, 2), (20, 2, 2), (20, 2, 8), (20, 8, 8)])  # normal -x, out of the neighbour
     assert panel.face_normals[0][0] < -0.99
     _, summary, _ = _run(tmp_path, surface=panel, context=neighbour)
@@ -217,7 +211,7 @@ def test_run_report_without_context_has_no_context_block(tmp_path):
 def test_nothing_left_after_context_and_terrain_names_both(tmp_path):
     """The context takes the east half of the columns and the terrain buries the rest: the message names both."""
     with pytest.raises(InputError) as caught:
-        _run(tmp_path, context=_box((5, -5, 2), (15, 15, 4)),
+        _run(tmp_path, context=box_between((5, -5, 2), (15, 15, 4)),
              terrain=_quad([(-100, -100, 20), (100, -100, 20), (100, 100, 20), (-100, 100, 20)]))
     message = str(caught.value)
     assert "context" in message and "terrain" in message
@@ -268,7 +262,7 @@ def test_context_behind_a_facade_counts_as_solid_mass_for_its_own_skin(tmp_path,
     assert facade.face_normals[0][1] < -0.99
     # The default grid margin puts voxel centres on whole metres, so the facade plane y = 0 passes through the first layer
     # of voxels (the skin), as a facade usually does; the chimney takes the columns of the layer behind it.
-    chimney = _box((3.4, 0.6, 0), (6.6, 3.6, 15))
+    chimney = box_between((3.4, 0.6, 0), (6.6, 3.6, 15))
     plain, _, _ = _run(tmp_path / "plain", mode=mode, surface=facade, margin_frac=0.01)
     kept, summary, _ = _run(tmp_path / "chimney", mode=mode, surface=facade, context=chimney, margin_frac=0.01)
     assert summary["context"]["voxels_removed_by_context"] > 0
@@ -280,7 +274,7 @@ def test_context_behind_a_facade_counts_as_solid_mass_for_its_own_skin(tmp_path,
 def test_test_points_inside_context_or_below_terrain_are_a_warning(tmp_path):
     """A test panel drawn inside a neighbour's mass and one below the terrain: every ray of their points is blocked, and the
     run warns with the count; a panel in the open gives no warning."""
-    neighbour = _box((20, 0, 0), (30, 10, 10))
+    neighbour = box_between((20, 0, 0), (30, 10, 10))
     inside = _quad([(22, 2, 2), (22, 8, 2), (22, 8, 8), (22, 2, 8)])         # within the neighbour, facing +x
     buried = _quad([(0, 14, -3), (10, 14, -3), (10, 16, -3), (0, 16, -3)])    # facing up, 1 m below the terrain at z = -2
     ground = _quad([(-100, -100, -2), (100, -100, -2), (100, 100, -2), (-100, 100, -2)])
@@ -304,7 +298,7 @@ def test_context_blocking_off_keeps_the_voxel_removal_and_drops_no_ray(tmp_path)
     assert report["context_blocks_rays"] is False and report["rays_dropped"] == 0 and report["rays_total"] == 0
     on, on_summary, _ = _run(tmp_path / "on", context=_south_neighbour())
     assert on_summary["context"]["context_blocks_rays"] is True and on_summary["context"]["rays_dropped"] > 0
-    chimney_off, chimney_summary, _ = _run(tmp_path / "chimney", context=_box((4, 4, 4), (6, 6, 6)), context_blocks_rays=False)
+    chimney_off, chimney_summary, _ = _run(tmp_path / "chimney", context=box_between((4, 4, 4), (6, 6, 6)), context_blocks_rays=False)
     assert chimney_summary["context"]["voxels_removed_by_context"] == 40
 
 

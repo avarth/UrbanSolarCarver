@@ -1,0 +1,651 @@
+{
+  "schema": {
+    "$defs": {
+      "ThresholdSpec": {
+        "additionalProperties": false,
+        "description": "Canonical thresholding strategy: how per-voxel scores become a mask.\n\nEvery accepted config spelling of ``threshold`` (a bare number, a\nstrategy name, or a mapping) is normalized into this one shape at load\ntime, so downstream stages never re-interpret raw user input.\n\nMethods\n-------\n* ``carve_fraction``: carve the highest-scoring voxels that together\n    hold ``value`` (0-1) of the total score mass.\n* ``headtail``: head/tail breaks (Jiang 2013); takes no value.\n* ``cutoff``: carve voxels scoring strictly above ``value``; for\n    time-based this is the tolerated shading in m²·h.",
+        "properties": {
+          "method": {
+            "enum": [
+              "carve_fraction",
+              "headtail",
+              "cutoff"
+            ],
+            "title": "Method",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Value"
+          }
+        },
+        "required": [
+          "method"
+        ],
+        "title": "ThresholdSpec",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "max_volume_path": {
+        "description": "Path to the maximum volume mesh (PLY)",
+        "title": "Max Volume Path",
+        "type": "string"
+      },
+      "test_surface_path": {
+        "description": "Path to the insolation sampling surface mesh (PLY)",
+        "title": "Test Surface Path",
+        "type": "string"
+      },
+      "context_path": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Path to a mesh of the existing surroundings that stay (buildings, large trees): it blocks rays, and every voxel column of the maximum volume it overlaps is removed. Optional",
+        "title": "Context Path"
+      },
+      "terrain_path": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Path to a terrain mesh (an open sheet is fine): it blocks rays, and the voxels below the ground are removed. Optional",
+        "title": "Terrain Path"
+      },
+      "context_blocks_rays": {
+        "default": true,
+        "description": "Whether rays from the test surfaces that hit the context or the terrain are dropped before scoring (ray-based modes). Off: the context and terrain still remove their voxels and count as solid, but block no ray, to compare with the carving that ignores them",
+        "title": "Context Blocks Rays",
+        "type": "boolean"
+      },
+      "epw_path": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Path to EPW weather file (required for time-based, irradiance and benefit)",
+        "title": "Epw Path"
+      },
+      "out_dir": {
+        "description": "Output directory for carved meshes and diagnostics",
+        "title": "Out Dir",
+        "type": "string"
+      },
+      "final_mesh_format": {
+        "default": "ply",
+        "description": "Extension for the envelope mesh and the massing plates (massing writes plates.obj as well). One of {'ply','obj','stl','glb'}",
+        "pattern": "^(ply|obj|stl|glb)$",
+        "title": "Final Mesh Format",
+        "type": "string"
+      },
+      "start_month": {
+        "anyOf": [
+          {
+            "maximum": 12,
+            "minimum": 1,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Start month (1-12)",
+        "title": "Start Month"
+      },
+      "start_day": {
+        "anyOf": [
+          {
+            "maximum": 31,
+            "minimum": 1,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Start day of month (1-31)",
+        "title": "Start Day"
+      },
+      "start_hour": {
+        "anyOf": [
+          {
+            "maximum": 23,
+            "minimum": 0,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Start hour of day (0-23)",
+        "title": "Start Hour"
+      },
+      "end_month": {
+        "anyOf": [
+          {
+            "maximum": 12,
+            "minimum": 1,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "End month (1-12)",
+        "title": "End Month"
+      },
+      "end_day": {
+        "anyOf": [
+          {
+            "maximum": 31,
+            "minimum": 1,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "End day of month (1-31)",
+        "title": "End Day"
+      },
+      "end_hour": {
+        "anyOf": [
+          {
+            "maximum": 23,
+            "minimum": 0,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "End hour of day (0-23)",
+        "title": "End Hour"
+      },
+      "mode": {
+        "default": "time-based",
+        "description": "Carving mode: time-based, irradiance, benefit, daylight, tilted_plane, or radiative_cooling [experimental]",
+        "title": "Mode",
+        "type": "string"
+      },
+      "dew_point_celsius": {
+        "default": 14.0,
+        "description": "Dew-point temperature (°C) used to estimate sky emissivity in radiative_cooling mode",
+        "title": "Dew Point Celsius",
+        "type": "number"
+      },
+      "bliss_k": {
+        "default": 1.8,
+        "description": "Bliss (1961) angular-attenuation constant for radiative_cooling. A physical constant (atmospheric diffusivity factor, ~1.5-2.0); leave at 1.8 unless you have a reason not to.",
+        "exclusiveMinimum": 0,
+        "title": "Bliss K",
+        "type": "number"
+      },
+      "min_sky_elevation_deg": {
+        "default": 0.0,
+        "description": "radiative_cooling only: lower edge (degrees above the horizon) of the protected sky. Sky patches below this elevation are excluded from the cooling weights (the rest are renormalized), so only the dome above the cutoff is protected, similar to obstruction-angle rules in daylight codes. It shapes how steeply the envelope may rise around protected surfaces. 0 (default) = full hemisphere (pure physical model).",
+        "maximum": 85.0,
+        "minimum": 0.0,
+        "title": "Min Sky Elevation Deg",
+        "type": "number"
+      },
+      "north_deg": {
+        "default": 0.0,
+        "description": "North direction in degrees clockwise from the +Y axis (0 = +Y points north)",
+        "exclusiveMaximum": 360.0,
+        "minimum": 0.0,
+        "title": "North Deg",
+        "type": "number"
+      },
+      "voxel_size": {
+        "default": 1.0,
+        "description": "Voxel edge length (m), 0.01–100",
+        "maximum": 100.0,
+        "minimum": 0.01,
+        "title": "Voxel Size",
+        "type": "number"
+      },
+      "grid_step": {
+        "anyOf": [
+          {
+            "exclusiveMinimum": 0,
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Surface sampling spacing (m), at most voxel_size. None (default): half the voxel size.",
+        "title": "Grid Step"
+      },
+      "edge_taper": {
+        "default": 0.0,
+        "description": "Design-constraint taper (meters) on test-surface sample weights: a point closer than this to its component's boundary counts proportionally less (linear ramp from 0 at the edge to full weight at edge_taper). Declares the perimeter strip as outside the protected program, so edge/corner samples don't force carving of the directly adjacent volume. 0 (default) = off. Weighted sky-patch modes only; ignored with a warning by time-based and tilted_plane. Requires planar test surfaces (already enforced by sampling).",
+        "minimum": 0.0,
+        "title": "Edge Taper",
+        "type": "number"
+      },
+      "sun_steps_per_hour": {
+        "default": 12,
+        "description": "time-based only: sun positions sampled per hour of the analysis period (Ladybug timestep: 1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60). The sun moves ~15° of azimuth per hour, so sparse sampling leaves gaps between ray sheets where mass survives while still shading the protected surface between samples. 12 (5 min) closes the gaps for 1 m voxels at ~40 m; ray count grows linearly with this value. Scores are divided by this value, so the m²·h scale (and a numeric threshold) does not depend on it.",
+        "title": "Sun Steps Per Hour",
+        "type": "integer"
+      },
+      "time_basis": {
+        "default": "standard",
+        "description": "time-based only: the clock the analysis period's hours are read in. 'standard' (default): the EPW's local standard time. 'daylight_saving': standard time plus one hour on every date of the period (summer clock time; a period that crosses the switch date is one hour off outside summer time). 'solar': true solar time, in which the sun crosses the meridian (due south at northern mid-latitudes) at 12:00 every day, as solar-fence rules and the Japanese shadow regulation define their hours. 'daylight_saving' and 'solar' are refused in irradiance and benefit, whose hourly EPW records are in standard time.",
+        "enum": [
+          "standard",
+          "daylight_saving",
+          "solar"
+        ],
+        "title": "Time Basis",
+        "type": "string"
+      },
+      "ray_length": {
+        "default": 3000.0,
+        "description": "Max ray cast distance (m). A ray stops where it leaves the voxel grid, so a length beyond the grid costs nothing; the default reaches across any grid the voxel budget allows at 1 m voxels.",
+        "exclusiveMinimum": 0,
+        "title": "Ray Length",
+        "type": "number"
+      },
+      "rays_per_patch": {
+        "default": 4,
+        "description": "Sky-patch modes (irradiance, benefit, daylight, radiative_cooling): rays traced per Tregenza sky patch from each test point. 1 = one ray to the patch centre. 4 (default), 9 or 16 = that many rays spread over the patch, one at a random place in each of its 2 × 2, 3 × 3 or 4 × 4 cells, each carrying that share of the patch weight; the places are drawn from the test point and the patch, so a run repeats exactly. Patch centres are 12° apart, so far from the test surfaces one ray per patch leaves voxels between the rays unscored, which shows as bands; more rays close the gaps. Tracing time grows about in proportion.",
+        "enum": [
+          1,
+          4,
+          9,
+          16
+        ],
+        "title": "Rays Per Patch",
+        "type": "integer"
+      },
+      "min_altitude": {
+        "default": 5.0,
+        "description": "Minimum sun altitude (°)",
+        "maximum": 90,
+        "minimum": 0,
+        "title": "Min Altitude",
+        "type": "number"
+      },
+      "margin_frac": {
+        "default": 0.01,
+        "description": "Grid padding on each side, as a fraction of the max volume's largest bounding-box side",
+        "maximum": 1.0,
+        "minimum": 0,
+        "title": "Margin Frac",
+        "type": "number"
+      },
+      "ray_batch_size": {
+        "default": 0,
+        "description": "Rays per batch. 0 = auto: sized from free GPU memory, 300000 on CPU",
+        "minimum": 0,
+        "title": "Ray Batch Size",
+        "type": "integer"
+      },
+      "score_smoothing": {
+        "anyOf": [
+          {
+            "maximum": 20.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Radius (meters) of the Gaussian blur applied to the score volume before thresholding; it is used as the Gaussian sigma and averages over occupied voxels only. Smooths resolution-dependent noise so the carved mesh is cleaner at fine voxel sizes. None (default) = auto: 1.1 × voxel_size, recommended for most runs. 0 = disabled (no smoothing). Positive value = explicit radius in meters (rule of thumb: 1.0–1.2× voxel_size; above 2× voxel_size features get noticeably rounded). The radius is clipped to 0.5-8 voxels. Only affects weighted-score modes (irradiance, benefit, daylight, radiative_cooling). Violation-count modes (time-based, tilted_plane) are unaffected.",
+        "title": "Score Smoothing"
+      },
+      "apply_smoothing": {
+        "default": false,
+        "description": "If True, mesh with a smoothed signed-distance field and marching cubes instead of voxel cubes",
+        "title": "Apply Smoothing",
+        "type": "boolean"
+      },
+      "min_voxels": {
+        "default": 300,
+        "description": "Connected voxel clusters smaller than this are removed before meshing",
+        "exclusiveMinimum": 0,
+        "title": "Min Voxels",
+        "type": "integer"
+      },
+      "min_face_count": {
+        "default": 100,
+        "description": "Mesh fragments with fewer faces than this are removed",
+        "minimum": 0,
+        "title": "Min Face Count",
+        "type": "integer"
+      },
+      "smooth_iters": {
+        "default": 2,
+        "description": "Taubin polish passes, 0-6 (only with apply_smoothing)",
+        "maximum": 6,
+        "minimum": 0,
+        "title": "Smooth Iters",
+        "type": "integer"
+      },
+      "carve_above": {
+        "default": true,
+        "description": "Carve all occupied voxels above the lowest sufficiently-carved region in each (x, y) column, so the envelope is a buildable height field (the classical solar-envelope definition) instead of keeping mass that floats above carved zones. Set False to keep floating mass that casts no violating shadow. Use carve_above_min_consecutive to control sensitivity.",
+        "title": "Carve Above",
+        "type": "boolean"
+      },
+      "carve_above_min_consecutive": {
+        "default": 1,
+        "description": "Minimum number of consecutive carved voxels in a column before carve_above activates for that column. Higher values (2-3) prevent stray single-voxel carvings from triggering aggressive column removal; shorter runs stay carved but do not trigger.",
+        "minimum": 1,
+        "title": "Carve Above Min Consecutive",
+        "type": "integer"
+      },
+      "max_slope_deg": {
+        "anyOf": [
+          {
+            "exclusiveMinimum": 0.0,
+            "maximum": 90.0,
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Steepest rise (degrees above horizontal) allowed between neighbouring columns of the kept volume, applied after carve_above. Taller columns are cut down until they rise at most this steeply above a median-filtered height map, which turns one-voxel spires and tall cliffs into ramps. It only ever removes voxels. None (default): 75 for the weighted modes (irradiance, benefit, daylight, radiative_cooling), off for time-based and tilted_plane. 90: off. Lower values give gentler ramps and remove more volume.",
+        "title": "Max Slope Deg"
+      },
+      "ground_floor_height": {
+        "default": 5.0,
+        "description": "Massing: height of the ground floor (m)",
+        "exclusiveMinimum": 0.0,
+        "title": "Ground Floor Height",
+        "type": "number"
+      },
+      "floor_height": {
+        "default": 3.0,
+        "description": "Massing: height of every floor above the ground floor (m)",
+        "exclusiveMinimum": 0.0,
+        "title": "Floor Height",
+        "type": "number"
+      },
+      "min_plate_dimension": {
+        "default": 3.0,
+        "description": "Massing: side of the square module floors are built from, and the minimum width of any floor plate (m)",
+        "exclusiveMinimum": 0.0,
+        "title": "Min Plate Dimension",
+        "type": "number"
+      },
+      "plate_tolerance": {
+        "default": 0.2,
+        "description": "Massing: largest share (0-1) of a module's volume on a floor that may lie outside the carved envelope. Plates never leave the maximum volume.",
+        "maximum": 1.0,
+        "minimum": 0.0,
+        "title": "Plate Tolerance",
+        "type": "number"
+      },
+      "plate_stacking": {
+        "default": "supported",
+        "description": "Massing: 'supported' builds a module on a floor only where it is built on the floor below; 'free' decides each floor on its own.",
+        "enum": [
+          "supported",
+          "free"
+        ],
+        "title": "Plate Stacking",
+        "type": "string"
+      },
+      "threshold": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ThresholdSpec"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "How to decide which voxels to carve. Canonical form is a mapping {method: ..., value: ...}; shorthands are accepted and normalized: 'carve_fraction' (recommended): remove a fraction of the obstructing score mass (value from the carve_fraction parameter unless given). 'headtail': automatic split biased toward removing only the worst obstructors. Both are for weighted modes only. A bare number (≥ 0): score cutoff; carve voxels scoring above it (inspect the score histogram first). It is in the mode's score unit: for time-based the tolerated shading in m²·h (shaded test-surface area x duration), for irradiance and benefit the kWh a voxel may block, for daylight and radiative_cooling the m² of fully hidden sky. Unset: mode default (carve_fraction for weighted modes, 0 for violation-count modes). The field keeps what was written (None or a ThresholdSpec); UserConfig.resolved_threshold() gives the strategy applied, which thresholding records in its manifest."
+      },
+      "carve_fraction": {
+        "default": 0.7,
+        "description": "How aggressively to carve (0.0-1.0): the fraction of the building's total obstruction score to remove, not the fraction of voxels removed. Because a few highly-obstructing voxels dominate the score distribution, 0.7 typically removes far fewer than 70% of voxels. 0.7 = aggressive (removes the voxels holding 70% of the obstruction score; taller, slimmer volumes). 0.3 = conservative (removes 30%; bulkier volumes, more floor area). Used by the carve_fraction threshold method when the threshold gives no value of its own, which includes the default for weighted modes; set explicitly where it is not used (headtail, a numeric cutoff, time-based, tilted_plane), it gives a warning.",
+        "maximum": 1.0,
+        "minimum": 0.0,
+        "title": "Carve Fraction",
+        "type": "number"
+      },
+      "balance_temperature": {
+        "default": 15.0,
+        "description": "Free-running balance-point temperature (°C) for benefit mode: solar gains are credited only in hours with outdoor temperature below balance_temperature - balance_offset. Default 15 follows Ladybug (typical range: ~12 commercial to ~18 residential; older, poorly insulated stock can sit higher). Derive project-specific values with the Honeybee/E+ balance-point workflow.",
+        "title": "Balance Temperature",
+        "type": "number"
+      },
+      "balance_offset": {
+        "default": 2.0,
+        "description": "Half the width (°C) of the dead band for benefit mode, which lies on both sides of balance_temperature: hours colder than balance_temperature - balance_offset are credited, and with include_harm hours warmer than balance_temperature + balance_offset count against the sun; hours inside the band count neither way. Must be >= 0 (0 = no dead band).",
+        "minimum": 0.0,
+        "title": "Balance Offset",
+        "type": "number"
+      },
+      "simulated_weights_path": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "benefit mode only: path to a simulated_weights.json artifact (generate with `usc simulate-weights`). When set, the balance-point hour filter is replaced by the artifact's physics-derived hourly weights: each hour's radiation is scaled by benefit[t] before the sky matrix, and with include_harm the harm[t]-scaled matrix is subtracted (clipped at zero). balance_temperature and balance_offset are then unused. None (default) = the built-in balance-point filter.",
+        "title": "Simulated Weights Path"
+      },
+      "include_harm": {
+        "default": false,
+        "description": "benefit mode only, experimental. False (default): weights use the heating-benefit formula: radiation of cold hours only; warm hours in the analysis period contribute nothing, so the result does not depend on how much warm season the period includes (recommended). True: follow Ladybug's composite radiation-benefit concept: hot-hour (T > balance + offset) radiation is subtracted per sky patch and the result clipped at zero. Results then depend on how much of the warm season the analysis period includes, and patches whose summer harm exceeds winter benefit drop to zero weight. Weights never go negative, so the shading value of mass in summer never protects it from carving.",
+        "title": "Include Harm",
+        "type": "boolean"
+      },
+      "diagnostics": {
+        "default": false,
+        "description": "Include detailed score statistics (median, std, percentiles) in the per-stage diagnostics JSON. Basic statistics (count, min, max, mean) and timings are always written; the detailed set adds sorting passes over the full score volume, which is slow on large grids.",
+        "title": "Diagnostics",
+        "type": "boolean"
+      },
+      "diagnostic_plots": {
+        "default": false,
+        "description": "Generate diagnostic plot images (score histogram, sky patch weight/intensity plots, threshold histogram). When False (default), only JSON diagnostics are written and matplotlib is not used.",
+        "title": "Diagnostic Plots",
+        "type": "boolean"
+      },
+      "device": {
+        "default": "auto",
+        "description": "Compute device: 'auto', 'cpu', or 'cuda'",
+        "title": "Device",
+        "type": "string"
+      },
+      "tilted_plane_angle_deg": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "tilted_plane mode: tilt of the limiting plane above the horizontal, in degrees. Either a single number applied to all test surfaces, or a list of 8 numbers [N, NE, E, SE, S, SW, W, NW] chosen by the compass direction each test surface faces (taking north_deg into account).",
+        "title": "Tilted Plane Angle Deg"
+      }
+    },
+    "required": [
+      "max_volume_path",
+      "test_surface_path",
+      "out_dir"
+    ],
+    "title": "UserConfig",
+    "type": "object"
+  },
+  "modes": [
+    {
+      "name": "time-based",
+      "description": "Classical solar envelope: traces actual sun-position rays for the selected hours of year and carves any voxel that shades a test point during those hours. Requires EPW + analysis period.",
+      "needs_epw": true,
+      "needs_period": true,
+      "experimental": false,
+      "score_kind": "violation_count",
+      "weight_unit": "none (sun positions, no sky patches)",
+      "score_unit": "m²·h",
+      "starting_values": {
+        "start_month": 12,
+        "start_day": 21,
+        "start_hour": 10,
+        "end_month": 12,
+        "end_day": 21,
+        "end_hour": 14
+      }
+    },
+    {
+      "name": "irradiance",
+      "description": "Cumulative solar irradiation. Patches weighted by direct + diffuse radiation from EPW (kWh/m²); a voxel's score is the solar energy it blocks from the test surfaces over the period (kWh). Requires EPW + analysis period.",
+      "needs_epw": true,
+      "needs_period": true,
+      "experimental": false,
+      "score_kind": "weighted_sum",
+      "weight_unit": "kWh/m²",
+      "score_unit": "kWh",
+      "starting_values": {
+        "start_month": 1,
+        "start_day": 1,
+        "start_hour": 0,
+        "end_month": 12,
+        "end_day": 31,
+        "end_hour": 23
+      }
+    },
+    {
+      "name": "benefit",
+      "description": "Net heating benefit. Solar gain weighted by outdoor temperature relative to a balance point (simple weights), or by an ISO 13790 5R1C building simulation via USC_SimulateWeights (simulated weights); a voxel's score is the heating-useful solar energy it blocks (kWh). Requires EPW + analysis period; Benefit Params optional.",
+      "needs_epw": true,
+      "needs_period": true,
+      "experimental": false,
+      "score_kind": "weighted_sum",
+      "weight_unit": "kWh/m² (heating benefit)",
+      "score_unit": "kWh",
+      "starting_values": {
+        "start_month": 10,
+        "start_day": 15,
+        "start_hour": 7,
+        "end_month": 4,
+        "end_day": 15,
+        "end_hour": 19
+      }
+    },
+    {
+      "name": "daylight",
+      "description": "CIE overcast sky obstruction. A voxel's score is the overcast sky it hides from the test surfaces, in m² of fully hidden sky. Geometry-only model: no weather data needed. Good for daylight access studies.",
+      "needs_epw": false,
+      "needs_period": false,
+      "experimental": false,
+      "score_kind": "weighted_sum",
+      "weight_unit": "share of the CIE overcast sky (sums to 1)",
+      "score_unit": "m²",
+      "starting_values": {}
+    },
+    {
+      "name": "radiative_cooling",
+      "description": "Long-wave radiative cooling potential. Patches weighted by sky temperature depression from a dew point (no EPW needed); a voxel's score is the cooling sky it hides, in m² of fully hidden sky. [Experimental]",
+      "needs_epw": false,
+      "needs_period": false,
+      "experimental": true,
+      "score_kind": "weighted_sum",
+      "weight_unit": "share of the sky's cooling potential (sums to 1)",
+      "score_unit": "m²",
+      "starting_values": {
+        "carve_fraction": 0.35
+      }
+    },
+    {
+      "name": "tilted_plane",
+      "description": "Geometric daylight envelope sweep. Carves every voxel above a tilted plane at user-defined angles. Not a weighted evaluation: it produces a binary mask. Requires Tilted Plane params.",
+      "needs_epw": false,
+      "needs_period": false,
+      "experimental": false,
+      "score_kind": "violation_count",
+      "weight_unit": "none (plane rays, no sky patches)",
+      "score_unit": "rays",
+      "starting_values": {
+        "tilted_plane_angle_deg": 45.0
+      }
+    }
+  ],
+  "criterion_keys": [
+    "balance_offset",
+    "balance_temperature",
+    "bliss_k",
+    "carve_above",
+    "carve_above_min_consecutive",
+    "carve_fraction",
+    "dew_point_celsius",
+    "edge_taper",
+    "end_day",
+    "end_hour",
+    "end_month",
+    "id",
+    "include_harm",
+    "max_slope_deg",
+    "min_altitude",
+    "min_sky_elevation_deg",
+    "mode",
+    "name",
+    "rays_per_patch",
+    "score_smoothing",
+    "simulated_weights_path",
+    "start_day",
+    "start_hour",
+    "start_month",
+    "sun_steps_per_hour",
+    "test_surface_path",
+    "threshold",
+    "tilted_plane_angle_deg",
+    "time_basis"
+  ]
+}

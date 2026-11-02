@@ -1,11 +1,18 @@
-"""The committed front-end types (app/src/api_client/generated_types.ts) describe the service as it is now.
+"""The committed front-end types (app/src/api_client/generated_types.ts) and the service's replies the app tests read
+(app/src/api_client/service_data_for_test.json) describe the service as it is now.
 
-The app reads every reply through ``components["schemas"]`` of that file, which ``npm run api-types`` generates from
+The app reads every reply through ``components["schemas"]`` of generated_types.ts, which ``npm run api-types`` generates from
 ``openapi_document()``. A route, a model or a field added, renamed or removed in the service without regenerating the file
 leaves the app type-checking against a service that no longer exists. These tests read the paths with their methods, the
 schema names and each schema's field names from the file (as openapi-typescript 7 writes them) and compare them with the
 document.
+
+The app tests answer GET schema, modes and criterion-keys with service_data_for_test.json, which
+``tools/write_app_test_service_data.py`` writes from the service's routes; a bound, default, mode or criterion setting changed
+in Python without running it leaves the app tests checking the form against settings the user never gets.
 """
+import importlib.util
+import json
 import re
 from pathlib import Path
 
@@ -13,7 +20,9 @@ import pytest
 
 from urbansolarcarver.local_web_service.server import openapi_document
 
-GENERATED_TYPES = Path(__file__).resolve().parent.parent / "app" / "src" / "api_client" / "generated_types.ts"
+ROOT = Path(__file__).resolve().parent.parent
+GENERATED_TYPES = ROOT / "app" / "src" / "api_client" / "generated_types.ts"
+SERVICE_DATA_SCRIPT = ROOT / "tools" / "write_app_test_service_data.py"
 REGENERATE = "the service's OpenAPI document changed: run `npm run api-types` in app/ and commit generated_types.ts"
 HTTP_METHODS = ("get", "put", "post", "delete", "options", "head", "patch", "trace")
 
@@ -97,3 +106,22 @@ def test_the_generated_types_have_the_fields_of_each_schema(document, generated)
             differences[name] = {"only in the service": sorted(fields - found[name]),
                                  "only in generated_types.ts": sorted(found[name] - fields)}
     assert not differences, f"{REGENERATE}. Schemas whose fields differ: {differences}"
+
+
+def _service_data_script():
+    """tools/write_app_test_service_data.py as a module (tools/ is not a package)."""
+    spec = importlib.util.spec_from_file_location("write_app_test_service_data", SERVICE_DATA_SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_service_data_of_the_app_tests_is_what_the_service_gives_now():
+    script = _service_data_script()
+    committed = json.loads(script.SERVICE_DATA_FILE.read_text(encoding="utf-8"))
+    now = json.loads(script.service_data_text())
+    assert set(now) == {"schema", "modes", "criterion_keys"}
+    assert now["criterion_keys"], "GET criterion-keys gave no setting: the script no longer reads the route"
+    differences = sorted(key for key in now if committed.get(key) != now[key])
+    assert not differences, (f"the service's {', '.join(differences)} changed: run `python tools/write_app_test_service_data.py` and commit "
+                             f"app/src/api_client/service_data_for_test.json")
