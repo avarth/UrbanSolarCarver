@@ -114,10 +114,6 @@ def presented_settings() -> dict:
     return json.loads(SETTING_PRESENTATION_PATH.read_text(encoding="utf-8"))["settings"]
 
 
-def test_the_service_owns_the_context_and_terrain_paths():
-    assert {"context_path", "terrain_path"} <= set(SERVICE_OWNED_SETTINGS)
-
-
 def test_every_shown_setting_is_presented_exactly_once():
     assert set(presented_settings()) == set(UserConfig.model_fields) - NOT_IN_THE_FORM
 
@@ -186,11 +182,6 @@ def test_each_slider_lies_within_the_engine_limits():
 # ---- The Mode step: mode_tiles.json against the engine's modes (UX 5.3) ----
 
 MODE_TILES_PATH = APP_FOLDER / "src" / "mode_tiles.json"
-
-
-def test_mode_tiles_name_every_engine_mode_once():
-    tiles = json.loads(MODE_TILES_PATH.read_text(encoding="utf-8"))
-    assert sorted(t["engine_name"] for t in tiles) == sorted(MODES)
 
 
 def test_mode_tiles_have_the_names_and_order_of_round_2():

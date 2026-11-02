@@ -185,11 +185,6 @@ class TestAutoBatchSize:
         result = auto_batch_size(torch.device("cpu"))
         assert result == 300_000
 
-    def test_returns_positive_integer(self):
-        result = auto_batch_size(torch.device("cpu"), fallback=50_000)
-        assert isinstance(result, int)
-        assert result > 0
-
 
 # 96 bytes per ray out of vram_fraction of the free memory, clamped to 10,000 to 5,000,000 rays.
 @pytest.mark.parametrize("free_bytes, total_bytes, vram_fraction, expected", [

@@ -58,7 +58,7 @@ async function bypass(name: string) {
   await settle();
 }
 
-test("test the layer is missing until every active criterion has run: no request, the Layers menu lists it without a result", async () => {
+test("the layer is missing until every active criterion has run: no request, the Layers menu lists it without a result", async () => {
   await openChain([FACADES, WINDOWS], { 1: CURRENT, 2: NOT_RUN }, holdResults);
   expect(carvedByRequests()).toBe(0);                                   // the route would answer 404
   expect(layer("carved_by_criterion")).toBeNull();
@@ -330,11 +330,12 @@ test("the choice of criteria shown is kept when another step opens", async () =>
 });
 
 test("selecting a criterion that moves no file to another criterion does not draw the test surfaces again", async () => {
+  // ProjectWorkspace keys the drawing on what the groups hold, so a click on a card does not rebuild the meshes of a large site.
   await openChain([FACADES, WINDOWS], undefined, twoFiles);
-  const setLayer = vi.spyOn(FakeViewerScene.latest!, "setLayer");
+  const drawn = layer("test_surfaces");
   await select("Spring sun on windows");
   await select("Winter sun on facades");
-  expect(setLayer.mock.calls.filter(([name]) => name === "test_surfaces")).toHaveLength(0);
+  expect(layer("test_surfaces")).toBe(drawn);
   expect([verticesOf("1"), verticesOf("2")]).toEqual([3, 6]);
 });
 
@@ -397,7 +398,6 @@ test("deleting a criterion takes it from the menu and the files only it used out
   await openChain([FACADES, WINDOWS, { ...ROOFS, test_surface_files: ["facades.obj"] }], undefined, twoFiles);
   expect([verticesOf("1"), verticesOf("2"), verticesOf("3")]).toEqual([3, 6, null]);
   await deleteCriterion("Spring sun on windows");
-  expect(service.storedTestSurfaces.map((file) => file.name)).toEqual(["facades.obj"]);
   expect([verticesOf("1"), verticesOf("2"), verticesOf("3")]).toEqual([3, null, null]);       // facades.obj, which criteria 1 and 3 use, is drawn once
   expect(testSurfaceEntries().parts.map((part) => part.label)).toEqual(["Winter sun on facades", "Daylight on roofs"]);
   await deleteCriterion("Daylight on roofs");

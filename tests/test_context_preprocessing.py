@@ -77,16 +77,6 @@ def _occupancy(pre):
     return np.load(pre.out_dir / "voxel_grid.npy")
 
 
-def test_no_context_is_bit_for_bit_unchanged(tmp_path):
-    plain, plain_summary, _ = _run(tmp_path / "plain")
-    explicit, explicit_summary, _ = _run(tmp_path / "explicit", context_path=None, terrain_path=None)
-    for name in ("scores.npy", "voxel_grid.npy", "footprint.json"):
-        assert (plain.out_dir / name).read_bytes() == (explicit.out_dir / name).read_bytes(), name
-    assert "context" not in plain_summary and "context" not in explicit_summary
-    manifest = json.loads((plain.out_dir / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["context_path"] is None and manifest["terrain_path"] is None
-
-
 def test_context_neighbour_drops_rays_and_lowers_scores(tmp_path):
     plain, _, _ = _run(tmp_path / "plain")
     shaded, summary, _ = _run(tmp_path / "shaded", context=_south_neighbour())
@@ -235,7 +225,10 @@ def test_nothing_left_after_context_and_terrain_names_both(tmp_path):
 
 # Recorded with main's sources (b30e518) on the scene below, CPU: the outputs a run without context must keep. The voxel
 # grid, the footprint and the count scores (time-based, tilted_plane) are compared byte for byte; the daylight scores are
-# float sums, so their sum, maximum and non-zero count are compared within 1e-6.
+# float sums, so their sum, maximum and non-zero count are compared within 1e-6. To re-record after a deliberate change
+# of the default path, run the test once with a breakpoint (or a print) after `_scores(pre)` for each mode and take
+# hashlib.sha1(_occupancy(pre).tobytes()), hashlib.sha1(footprint.json bytes), hashlib.sha1(scores.tobytes()) and
+# int((scores != 0).sum()); for daylight, float(scores.astype(np.float64).sum()) and float(scores.max()).
 PINNED_WITHOUT_CONTEXT = {
     "daylight": {"scores_sum": 178.97823151759803, "scores_max": 0.4078991115093231, "scores_nonzero": 2209},
     "tilted_plane": {"scores_sha1": "069bc994c75362ecf5d081fe23d6142b7c99ad39", "scores_nonzero": 231},
@@ -254,6 +247,8 @@ def test_no_context_matches_the_outputs_recorded_before_context_existed(tmp_path
         over["rays_per_patch"] = 1   # the recording traced one ray per patch centre
     pre, summary, _ = _run(tmp_path, mode=mode, surface=facade, **over)
     assert "context" not in summary
+    manifest = json.loads((pre.out_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["context_path"] is None and manifest["terrain_path"] is None
     assert hashlib.sha1(_occupancy(pre).tobytes()).hexdigest() == PINNED_VOXEL_GRID_SHA1
     assert hashlib.sha1((pre.out_dir / "footprint.json").read_bytes()).hexdigest() == PINNED_FOOTPRINT_SHA1
     scores, pinned = _scores(pre), PINNED_WITHOUT_CONTEXT[mode]

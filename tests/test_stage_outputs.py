@@ -3,6 +3,7 @@ its previous run before it starts, writes its manifest last, and the run
 report keeps the sections of every stage built on the same thresholding run."""
 import importlib
 import json
+import math
 import warnings
 
 import numpy as np
@@ -200,16 +201,17 @@ def test_preprocessing_reports_an_empty_footprint_projection(tmp_path, monkeypat
     assert "footprint_unreadable" in [issue.code for issue in result.issues]
 
 
-def test_ray_batch_size_reaches_the_carvers(tmp_path, monkeypatch):
-    from urbansolarcarver import carving, preprocessing
-    received = []
-    resolve_batch_size = carving._resolve_batch_size
-
-    def recording_resolve_batch_size(device, *, ray_batch_size):
-        received.append(ray_batch_size)
-        return resolve_batch_size(device, ray_batch_size=ray_batch_size)
-
-    monkeypatch.setattr(carving, "_resolve_batch_size", recording_resolve_batch_size)
-    _quietly(preprocessing, daylight_cube_config(tmp_path, ray_batch_size=7),
-             tmp_path / "run" / "preprocessing")
-    assert received and set(received) == {7}
+@pytest.mark.parametrize("rays_per_patch, rays_per_batch", [(1, 1000), (4, 250)])
+def test_ray_batch_size_sets_how_many_batches_preprocessing_traces(tmp_path, rays_per_patch, rays_per_batch):
+    """ray_batch_size counts traced rays: 1000 of them are 1000 patch rays, or 250 with 4 sub-rays each. The cube's test
+    surface faces up, so every point traces all 145 Tregenza patches, and the batch progress counts up to
+    ceil(points x 145 / rays per batch)."""
+    from urbansolarcarver import preprocessing
+    from urbansolarcarver.pydantic_schemas import PreprocessingManifest
+    from urbansolarcarver.run_context import RunContext, run_context
+    totals = set()
+    config = daylight_cube_config(tmp_path, ray_batch_size=1000, rays_per_patch=rays_per_patch)
+    with run_context(RunContext(on_progress=lambda stage, done, total: totals.add(total))):
+        result = _quietly(preprocessing, config, tmp_path / "run" / "preprocessing")
+    points = PreprocessingManifest.model_validate_json(result.manifest_path.read_text()).sample_point_count
+    assert totals - {1} == {math.ceil(points * 145 / rays_per_batch)}      # 1: the stage's own start and end

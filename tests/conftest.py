@@ -85,6 +85,14 @@ def no_real_home_folder(tmp_path_factory, monkeypatch):
     home = tmp_path_factory.mktemp("home")
     monkeypatch.setenv("USERPROFILE", str(home))
     monkeypatch.setenv("HOME", str(home))
+    return home
+
+
+@pytest.fixture
+def home_folder(no_real_home_folder):
+    """The home folder of this test (no_real_home_folder), for a test that reads or writes in it."""
+    assert Path.home() == no_real_home_folder
+    return no_real_home_folder
 
 
 def pytest_configure(config):
@@ -106,6 +114,41 @@ def project_with_inputs(tmp_path):
     """For the local web service tests: a daylight project with a max volume and a test surface; the store and its name."""
     from local_web_test_support import add_project_with_inputs
     return add_project_with_inputs(tmp_path)
+
+
+@pytest.fixture
+def projects_folder(tmp_path):
+    """For the local web service tests: the projects folder of the service that ``client`` and the fixtures below serve."""
+    return tmp_path / "projects"
+
+
+@pytest.fixture
+def client(projects_folder):
+    """For the local web service tests: a TestClient of a service whose engine is the fake (local_web_test_support.build_client)."""
+    from local_web_test_support import build_client
+    return build_client(projects_folder)[0]
+
+
+@pytest.fixture
+def client_with_inputs(client):
+    """``client`` with a daylight project 'p' that has a max volume and a test surface."""
+    from local_web_test_support import create_project_with_inputs
+    create_project_with_inputs(client)
+    return client
+
+
+@pytest.fixture
+def client_with_blocking_run(projects_folder):
+    """A project 'p' whose run has started and waits until it is cancelled; yields the client and the run id."""
+    from local_web_test_support import WaitsForCancel, build_client, create_project_with_inputs, start_run
+    handler = WaitsForCancel()
+    client, worker = build_client(projects_folder, handle_request=handler)
+    create_project_with_inputs(client)
+    run_id = start_run(client)["run_id"]
+    assert handler.started.wait(10)
+    yield client, run_id
+    worker.cancel(run_id)
+    worker.run_state(run_id).wait_for_events(10 ** 9, 10)     # returns when the run has ended
 
 
 NOT_SLOW_LIMIT_SECONDS = 1.0

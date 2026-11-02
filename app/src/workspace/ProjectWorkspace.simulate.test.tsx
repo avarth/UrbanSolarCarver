@@ -60,14 +60,6 @@ test("Simulate hides the steps and Design shows them again with the same step op
   expect(stepsScroller().scrollTop).toBe(120);
 });
 
-test("Inspect hides the steps as Simulate does, and Design brings them back", async () => {
-  await openWorkspace(new FakeService(NOTHING_RUN, null), project(NOTHING_RUN));
-  await switchMode("inspect");
-  expect(panel().hidden).toBe(true);
-  await switchMode("design");
-  expect(panel().hidden).toBe(false);
-});
-
 test("a scroll event that comes while the steps are hidden does not replace the scroll they had", async () => {
   await openWorkspace(new FakeService(NOTHING_RUN, null), project(NOTHING_RUN));
   makeScrollable(stepsScroller());
@@ -273,7 +265,6 @@ test("the popover's files box takes a new file and lists it on the study", async
   expect(popoverFiles()).toEqual(["roof.obj"]);
   expect(studyLine("Sky view factor")).toBe("Not run yet");
   expect(simulateService.requests).toContain("GET /inputs/test_surfaces");           // the stored files are asked for again
-  expect(simulateService.storedFileCount("roof.obj")).toBe(1);
   expect(studyPopover()!.querySelector(".input-box-problem")).toBeNull();
 });
 

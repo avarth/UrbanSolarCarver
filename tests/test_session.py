@@ -1,4 +1,6 @@
 """Tests for CarverSession: caching, the cache size limit, bump(), device key, session_cache decorator."""
+import weakref
+
 import numpy as np
 import pytest
 import torch
@@ -6,7 +8,6 @@ from unittest.mock import MagicMock
 
 from urbansolarcarver.session import (
     CarverSession,
-    _device_key,
     get_active_session,
     session_cache,
 )
@@ -17,14 +18,12 @@ from urbansolarcarver.session import (
 # ---------------------------------------------------------------------------
 
 class TestDeviceKey:
-    def test_cuda_no_index(self):
-        assert _device_key(torch.device("cuda")) == 0
-
-    def test_cuda_explicit_zero(self):
-        assert _device_key(torch.device("cuda:0")) == 0
-
-    def test_cpu(self):
-        assert _device_key(torch.device("cpu")) == -1
+    @pytest.mark.gpu
+    @pytest.mark.parametrize("opened_on, asked_for", [("cuda", "cuda:0"), ("cuda:0", "cuda")])
+    def test_a_session_opened_on_cuda_serves_cuda_0(self, opened_on, asked_for):
+        """"cuda" means "cuda:0": the daemon's session must serve a run that names the device either way."""
+        with CarverSession(device=opened_on) as sess:
+            assert get_active_session(asked_for) is sess
 
 
 # ---------------------------------------------------------------------------
@@ -32,19 +31,9 @@ class TestDeviceKey:
 # ---------------------------------------------------------------------------
 
 class TestCarverSessionLifecycle:
-    def test_cpu_session_creation(self):
-        sess = CarverSession(device="cpu")
-        assert sess.device == torch.device("cpu")
-        assert sess._gen == 0
-        sess.close()
-
-    def test_auto_device_resolves(self):
-        sess = CarverSession(device="auto")
-        assert sess.device.type == ("cuda" if torch.cuda.is_available() else "cpu")
-        sess.close()
-
-    def test_none_device_resolves(self):
-        sess = CarverSession(device=None)
+    @pytest.mark.parametrize("device", ["auto", None])
+    def test_auto_device_resolves(self, device):
+        sess = CarverSession(device=device)
         assert sess.device.type == ("cuda" if torch.cuda.is_available() else "cpu")
         sess.close()
 
@@ -90,19 +79,6 @@ class TestTensorCache:
         assert factory.call_count == 2, "Factory should be called again after bump()"
         sess.close()
 
-    def test_bump_increments_generation(self):
-        sess = CarverSession(device="cpu")
-        g0 = sess._gen
-        sess.bump()
-        assert sess._gen == g0 + 1
-        sess.close()
-
-    def test_tensor_moved_to_device(self):
-        sess = CarverSession(device="cpu")
-        t = sess.get_tensor("dev_test", lambda: torch.tensor([3.14]))
-        assert t.device == torch.device("cpu")
-        sess.close()
-
 
 # ---------------------------------------------------------------------------
 # close()
@@ -138,9 +114,9 @@ class TestSessionCacheDecorator:
         assert torch.equal(result1, result2)
         sess.close()
 
-    def test_runs_uncached_without_session(self):
-        # Ensure no active session
-        CarverSession._sessions.clear()
+    def test_runs_uncached_without_session(self, monkeypatch):
+        # An empty registry for this test only: clearing the class-level one would drop a session another test opened.
+        monkeypatch.setattr(CarverSession, "_sessions", weakref.WeakValueDictionary())
 
         call_count = 0
 

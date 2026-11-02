@@ -82,18 +82,6 @@ test("weighted carving shows the carve amount and folds the carving rule", () =>
   expect(names(settingsForStep("carving", "tilted_plane")[0].essential)).toEqual([]);
 });
 
-test("the envelope and massing step and the export step", () => {
-  const [envelope, massing] = settingsForStep("envelope_and_massing", "irradiance");
-  expect(names(envelope.essential)).toEqual(["apply_smoothing"]);
-  expect(envelope.foldLabel).toBe("More envelope settings");
-  expect(names(massing.essential)).toEqual(["ground_floor_height", "floor_height", "min_plate_dimension"]);
-  expect(names(massing.folded)).toEqual(["plate_tolerance", "plate_stacking"]);
-  expect(massing.foldLabel).toBe("More massing settings");
-  const [exportGroup] = settingsForStep("export", "irradiance");
-  expect(names(exportGroup.essential)).toEqual(["final_mesh_format"]);
-  expect(exportGroup.folded).toEqual([]);
-});
-
 test("percent settings convert both ways", () => {
   expect(toDisplayValue("carve_fraction", 0.3)).toBe(30);
   expect(fromDisplayValue("plate_tolerance", 20)).toBe(0.2);

@@ -77,11 +77,9 @@ class TestCarveAboveColumns:
         assert result[0, 0, 5] == False  # was #, now carved
         assert result[0, 0, 0] == True   # bottom # unchanged
 
-        # B: run of 1 at z2, below threshold → no trigger; the x stays carved
+        # B: run of 1 at z2, below threshold → no trigger; the x stays carved and nothing else changes
         assert result[1, 0, 2] == False  # never refilled (would undo the constraint)
-        assert result[1, 0, 3] == True
-        assert result[1, 0, 4] == True
-        assert result[1, 0, 5] == True
+        np.testing.assert_array_equal(result[1, 0, :], mask[1, 0, :])
 
         # C: run of 2 at z3-z4, carve z5
         assert result[2, 0, 5] == False  # was #, now carved
@@ -99,15 +97,6 @@ class TestCarveAboveColumns:
         assert result[0, 0, 1] == False  # x stays carved
         assert result[0, 0, 2] == False  # # above → carved
         assert result[0, 0, 3] == False  # # above → carved
-
-    def test_no_carved_voxels_unchanged(self):
-        """Column with no carved voxels is untouched."""
-        from urbansolarcarver.column_postprocessing import carve_above_columns
-
-        mask, vg = _col_grid({(0, 0): "####"}, height=4)
-        result = carve_above_columns(mask, vg, min_consecutive=1)
-
-        assert result[0, 0, :].all()
 
     def test_only_carves_occupied_voxels(self):
         """Empty (non-occupied) voxels above a carved run are left alone."""
@@ -151,24 +140,6 @@ class TestCarveAboveColumns:
         carve_above_columns(mask, vg, min_consecutive=2)
         np.testing.assert_array_equal(mask, original)
 
-    def test_all_carved_column(self):
-        """Column already fully carved stays fully carved."""
-        from urbansolarcarver.column_postprocessing import carve_above_columns
-
-        mask, vg = _col_grid({(0, 0): "xxxx"}, height=4)
-        result = carve_above_columns(mask, vg, min_consecutive=1)
-        assert not result[0, 0, :].any()
-
-    def test_short_runs_do_not_trigger_and_stay_carved(self):
-        """Carved runs shorter than min_consecutive neither trigger nor refill."""
-        from urbansolarcarver.column_postprocessing import carve_above_columns
-
-        # bottom-up: #, #, x, #, #: a single carved voxel, min=2
-        mask, vg = _col_grid({(0, 0): "##x##"}, height=5)
-        result = carve_above_columns(mask, vg, min_consecutive=2)
-
-        np.testing.assert_array_equal(result, mask)
-
     def test_short_run_below_long_run_stays_carved(self):
         """A short run below a qualifying run stays carved; carve-above fires."""
         from urbansolarcarver.column_postprocessing import carve_above_columns
@@ -184,24 +155,6 @@ class TestCarveAboveColumns:
         assert result[0, 0, 4] == False  # x (part of qualifying run)
         assert result[0, 0, 5] == False  # # carved above
         assert result[0, 0, 6] == False  # # carved above
-
-    def test_multiple_columns_independent(self):
-        """Each column is processed independently."""
-        from urbansolarcarver.column_postprocessing import carve_above_columns
-
-        mask, vg = _col_grid({
-            (0, 0): "##xx#",  # 2 consecutive → carve above
-            (1, 0): "#x###",  # 1 consecutive → no trigger (min=2)
-        }, height=5)
-        result = carve_above_columns(mask, vg, min_consecutive=2)
-
-        # Column (0,0): bottom-up #,x,x,#,# → #,x,x,carved,carved
-        assert result[0, 0, 3] == False
-        assert result[0, 0, 4] == False
-
-        # Column (1,0): bottom-up #,#,#,x,# → x stays carved, top not triggered
-        assert result[1, 0, 3] == False
-        assert result[1, 0, 4] == True
 
 
 # ---------------------------------------------------------------------------

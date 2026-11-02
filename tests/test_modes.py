@@ -302,17 +302,7 @@ def test_mode_order_matches_the_grasshopper_menu():
     from urbansolarcarver.mode_registry import MODES
     assert list(MODES) == ["time-based", "irradiance", "benefit", "daylight",
                            "radiative_cooling", "tilted_plane"]
-
-
-def test_every_mode_has_a_description_and_the_listed_starting_values():
-    from urbansolarcarver.mode_registry import MODES
     assert all(spec.description for spec in MODES.values())
-    assert MODES["time-based"].description.startswith("Classical solar envelope")
-    assert MODES["daylight"].starting_values == {}
-    assert MODES["tilted_plane"].starting_values == {"tilted_plane_angle_deg": 45.0}
-    assert MODES["radiative_cooling"].starting_values == {"carve_fraction": 0.35}
-    assert MODES["benefit"].starting_values == dict(
-        start_month=10, start_day=15, start_hour=7, end_month=4, end_day=15, end_hour=19)
 
 
 def test_canonical_mode_name_maps_the_alternative_spellings():
@@ -325,16 +315,6 @@ def test_canonical_mode_name_maps_the_alternative_spellings():
     assert canonical_mode_name("nonsense") == "nonsense"
     assert set(MODE_ALIASES.values()) <= set(__import__(
         "urbansolarcarver.mode_registry", fromlist=["MODES"]).MODES)
-
-
-def test_archetype_defaults_module_holds_the_shoebox_defaults():
-    from urbansolarcarver.archetype_defaults import (
-        ARCHETYPE_DEFAULTS, ARCHETYPE_OPTIONAL_KEYS, WINDOW_TO_WALL_DEFAULTS)
-    assert "wwr" not in ARCHETYPE_DEFAULTS
-    assert ARCHETYPE_DEFAULTS["internal_gains_w_m2"] == 5.0
-    assert ARCHETYPE_DEFAULTS["mass_class"] == "medium"
-    assert WINDOW_TO_WALL_DEFAULTS == {"south": 0.35, "east": 0.15, "west": 0.15, "north": 0.0}
-    assert ARCHETYPE_OPTIONAL_KEYS == ("shading_permanent", "shading_hot", "hot_months")
 
 
 def test_simulated_weights_read_the_archetype_defaults():

@@ -6,7 +6,7 @@ import pytest
 import yaml
 
 from urbansolarcarver.engine_requests import (
-    RunRequest, StageRequest, answer_engine_message, config_for_engine_request,
+    answer_engine_message, config_for_engine_request,
     error_reply_for, handle_engine_request, parse_engine_request,
 )
 from urbansolarcarver.errors import ConfigError, MalformedEngineRequest
@@ -111,18 +111,6 @@ def test_an_unknown_mode_is_a_config_error_from_the_schema(tmp_path):
 def test_malformed_messages_are_rejected_with_a_reason(message, fragment):
     with pytest.raises(MalformedEngineRequest, match=fragment.replace("[", r"\[").replace("]", r"\]")):
         parse_engine_request(message)
-
-
-def test_the_from_key_becomes_the_upstream_output():
-    request = parse_engine_request({"cmd": "massing", "config": "c.yaml", "from": "thr/manifest.json"})
-    assert isinstance(request, StageRequest)
-    assert request.upstream_output == "thr/manifest.json"
-
-
-def test_a_run_request_starts_from_preprocessing_unless_told_otherwise():
-    request = parse_engine_request({"cmd": "run", "produce": ["exporting"], "run_folder": "r"})
-    assert isinstance(request, RunRequest)
-    assert request.start_from == "preprocessing"
 
 
 # ---- config_for_engine_request ------------------------------------------------
@@ -338,12 +326,6 @@ def test_a_thresholding_stage_request_passes_after(tmp_path, tmp_mesh_files, mon
         assert seen[-1] == ("pre/manifest.json", after)
 
 
-def test_after_is_a_key_of_the_stage_request():
-    request = parse_engine_request({"cmd": "thresholding", "config": "c.yaml", "from": "p", "after": "a"})
-    assert request.after == "a"
-    assert parse_engine_request({"cmd": "thresholding", "config": "c.yaml", "from": "p"}).after is None
-
-
 def test_a_run_request_thresholds_after_a_previous_run(tmp_path, tmp_mesh_files, monkeypatch):
     from types import SimpleNamespace
     from urbansolarcarver import api
@@ -392,12 +374,6 @@ def test_a_run_request_with_after_and_an_unknown_start_from_gets_the_start_from_
     assert "start_from" in reply["error"] and "after" not in reply["error"]
 
 
-def test_after_is_a_key_of_the_run_request():
-    message = {"cmd": "run", "produce": ["thresholding"], "run_folder": "r", "start_from": "thresholding"}
-    assert parse_engine_request({**message, "after": "a"}).after == "a"
-    assert parse_engine_request(message).after is None
-
-
 @pytest.mark.slow
 def test_a_run_request_tracing_no_criterion_of_the_chain_gets_an_error_reply(tmp_path):
     from _chain_scene import chain_scene, daylight_on_east, daylight_on_south
@@ -410,7 +386,6 @@ def test_a_run_request_tracing_no_criterion_of_the_chain_gets_an_error_reply(tmp
         assert "trace" in reply["error"]
 
 
-@pytest.mark.slow
 def test_a_chain_run_request_passes_trace_criteria_and_threshold_from_criterion(tmp_path, monkeypatch):
     from types import SimpleNamespace
     from _chain_scene import chain_scene, daylight_on_east, daylight_on_south

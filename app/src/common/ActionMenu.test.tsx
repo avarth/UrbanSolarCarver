@@ -1,5 +1,6 @@
 // The menu of actions behind a small button (a project's, a criterion card's): its items, an item that waits with its reason, the
-// choice it reports and the keyboard. ProjectMenu.test.tsx covers its placement in the window and the project's dialogs.
+// choice it reports and how its button opens and closes it. The keyboard inside the menu and what closes it are useMenuPopup's
+// (menu_popup.test.tsx); ProjectMenu.test.tsx covers its placement in the window and the project's dialogs.
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
@@ -50,28 +51,15 @@ test("an item with a reason waits: it is marked, says why and reports nothing", 
   expect(onChoose).not.toHaveBeenCalled();
 });
 
-test("the keyboard opens the menu on its first item, the arrows, Home and End move, Escape closes it and gives the focus back", () => {
+test("ArrowDown on the button opens the menu on its first item; a press of the button opens it and a second press closes it", () => {
   rendered = renderForTest(<ActionMenu label="Actions for Daylight" symbol="⋯" items={ITEMS} onChoose={() => {}} />);
   menuButton().focus();
   press(menuButton(), "ArrowDown");
   expect(document.activeElement).toBe(menuItem("Rename"));
-  press(document.activeElement!, "ArrowUp");
-  expect(document.activeElement).toBe(menuItem("Delete"));
-  press(document.activeElement!, "Home");
-  expect(document.activeElement).toBe(menuItem("Rename"));
-  press(document.activeElement!, "End");
-  expect(document.activeElement).toBe(menuItem("Delete"));
-  press(document.activeElement!, "Escape");
-  expect(menuItems()).toEqual([]);
-  expect(document.activeElement).toBe(menuButton());
-});
-
-test("the menu closes when the page scrolls or the window is resized", () => {
-  rendered = renderForTest(<ActionMenu label="Actions for Daylight" symbol="⋯" items={ITEMS} onChoose={() => {}} />);
+  expect(menuButton().getAttribute("aria-expanded")).toBe("true");
   click(menuButton());
-  act(() => window.dispatchEvent(new Event("scroll")));
   expect(menuItems()).toEqual([]);
+  expect(menuButton().getAttribute("aria-expanded")).toBe("false");
   click(menuButton());
-  act(() => window.dispatchEvent(new Event("resize")));
-  expect(menuItems()).toEqual([]);
+  expect(menuItems()).toHaveLength(3);
 });

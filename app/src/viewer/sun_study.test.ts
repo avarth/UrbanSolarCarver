@@ -1,7 +1,5 @@
 import { expect, test } from "vitest";
-import { minuteAfterKey, minuteAt } from "../simulate/SunPanel";
 import { shadeHoursOf, shadeRequest } from "../simulate/use_sun_study";
-import { singleBubbleShift } from "../settings_form/widgets/ScaleStrip";
 import { shadeColour, sunAt, sunStudyObjects } from "./sun_study";
 import { studyPaletteColour } from "./study_palettes";
 
@@ -45,12 +43,4 @@ test("the shade colours run from light (no shade) to dark (the whole range), in 
   expect(shadeColour("viridis", 0)).toBe(studyPaletteColour("viridis", 1));
   expect(shadeColour("viridis", 1)).toBe(studyPaletteColour("viridis", 0));
   expect([shadeColour("grey", 0), shadeColour("grey", 1)]).toEqual(["#f2f2f2", "#262626"]);
-});
-
-test("the time strip moves in 5 minute steps, an hour a page, and the single bubble stays over the strip", () => {
-  expect(minuteAt(0.5)).toBe(720);
-  expect(minuteAt(1)).toBe(1435);
-  expect([minuteAfterKey(720, "ArrowRight"), minuteAfterKey(720, "PageDown"), minuteAfterKey(10, "Home"), minuteAfterKey(720, "x")]).toEqual([725, 660, 0, null]);
-  expect(singleBubbleShift(5, 40, 300)).toEqual([15, 0]);
-  expect(singleBubbleShift(150, 40, 300)).toEqual([0, 0]);
 });

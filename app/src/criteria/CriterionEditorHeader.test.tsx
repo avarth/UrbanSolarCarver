@@ -1,7 +1,6 @@
-import { readFileSync } from "node:fs";
 import { afterEach, expect, test, vi } from "vitest";
 import type { CriterionEntry } from "../api_client/client";
-import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { addStyleSheetForTest, click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { CriterionEditorHeader, type CriterionEditorHeaderProps } from "./CriterionEditorHeader";
 import { ModeTileSymbol } from "./ModeTileSymbols";
 
@@ -72,19 +71,27 @@ test("the first criterion's previous and the last one's next wait without leavin
   expect(onNext).not.toHaveBeenCalled();
 });
 
-test("the name is whole, on a row of its own under the colour, symbol, switch and menu, with the whole name as its title", () => {
+test("the name is whole, on a row of its own after the colour, symbol, switch and menu, with the whole name as its title", () => {
   const name = "Solar usefulness on alatini_testSrfs_solargains_with_a_long_tail_of_eighty_chars";
   renderHeader({ entry: { ...DAYLIGHT, name } });
-  const nameElement = header().querySelector(".criterion-editor-name")!;
+  const nameElement = header().querySelector<HTMLElement>(".criterion-editor-name")!;
   expect(nameElement.textContent).toBe(name);
   expect(nameElement.getAttribute("title")).toBe(name);
-  const identity = header().querySelector(".criterion-editor-identity")!;
-  expect([...identity.children].map((child) => child.classList[0])).toEqual(["criterion-card-swatch", "mode-tile-symbol", "setting-switch", "action-menu", "criterion-editor-name"]);
-  const css = readFileSync("src/theme/panels.css", "utf8");
-  const nameRule = css.match(/\n\.criterion-editor-name\s*{([^}]*)}/)![1];
-  expect(nameRule).toMatch(/-webkit-line-clamp:\s*2/);
-  expect(nameRule).toMatch(/overflow-wrap:\s*anywhere/);
-  expect(nameRule).toMatch(/grid-column:\s*1\s*\/\s*-1;\s*grid-row:\s*2/);
+  const inOrder = [header().querySelector(".criterion-card-swatch")!, header().querySelector(".mode-tile-symbol")!,
+                   header().querySelector('[role="switch"]')!, button("Actions for " + name)!, nameElement];
+  for (let index = 1; index < inOrder.length; index++) {
+    expect(inOrder[index - 1].compareDocumentPosition(inOrder[index]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  }
+  const removeStyles = addStyleSheetForTest("src/theme/panels.css");
+  try {
+    const style = getComputedStyle(nameElement);
+    expect(style.getPropertyValue("-webkit-line-clamp")).toBe("2");          // two lines at most, not cut on one
+    expect(style.overflowWrap).toBe("anywhere");                              // a long file name breaks inside its words
+    expect(style.whiteSpace).not.toBe("nowrap");
+    expect([style.gridColumn, style.gridRow]).toEqual(["1 / -1", "2"]);     // the second row, across the header
+  } finally {
+    removeStyles();
+  }
 });
 
 test("a polite live region in the header says the criterion's name and position once previous or next has changed it", () => {
@@ -116,21 +123,14 @@ test("the switch is named for the criterion and turning it off reports the crite
   expect(onSetBypassed).toHaveBeenCalledExactlyOnceWith(true);
 });
 
-test("the menu offers Rename, Duplicate and Delete, Delete waiting with its own reason", () => {
-  const onChoose = vi.fn();
-  renderHeader({ onChoose, deleteDisabledReason: "A project needs at least one criterion." });
-  const menuButton = header().querySelector<HTMLButtonElement>(".action-menu-button")!;
-  expect(menuButton.getAttribute("aria-label")).toBe("Actions for Daylight on windows");
-  click(menuButton);
-  const items = [...header().querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
-  expect(items.map((item) => item.textContent)).toEqual(["Rename", "Duplicate", "Delete"]);
-  expect(items[2].getAttribute("aria-disabled")).toBe("true");
-  expect(document.getElementById(items[2].getAttribute("aria-describedby")!)!.textContent).toBe("A project needs at least one criterion.");
-  click(items[0]);
-  expect(onChoose).toHaveBeenCalledExactlyOnceWith("rename");
-});
-
-test("during a run the switch and the menu items wait", () => {
+// The items, a waiting item's reason and the choice are ActionMenu's; here, which reason reaches which item.
+test("the only criterion's Delete waits with its own reason; during a run the switch and every menu item wait", () => {
+  renderHeader({ deleteDisabledReason: "A project needs at least one criterion." });
+  click(header().querySelector(".action-menu-button")!);
+  const waiting = [...header().querySelectorAll('[role="menuitem"]')].filter((item) => item.getAttribute("aria-disabled") === "true");
+  expect(waiting.map((item) => item.textContent)).toEqual(["Delete"]);
+  expect(document.getElementById(waiting[0].getAttribute("aria-describedby")!)!.textContent).toBe("A project needs at least one criterion.");
+  rendered!.unmount();
   renderHeader({ disabledReason: "A run is in progress" });
   expect(header().querySelector<HTMLInputElement>('[role="switch"]')!.disabled).toBe(true);
   click(header().querySelector(".action-menu-button")!);
@@ -138,11 +138,15 @@ test("during a run the switch and the menu items wait", () => {
 });
 
 test("the sticky header stays over the controls that scroll under it, the period control's bubbles included", () => {
-  const zIndexOf = (css: string, selector: string) => {
-    const start = css.indexOf(`${selector} {`);
-    return Number(/z-index:\s*(\d+)/.exec(css.slice(start, css.indexOf("}", start)))![1]);
-  };
-  const header = zIndexOf(readFileSync("src/theme/panels.css", "utf8"), ".criterion-editor-header");
-  const bubble = zIndexOf(readFileSync("src/settings_form/settings_form.css", "utf8"), ".scale-strip-bubble");
-  expect(header).toBeGreaterThan(bubble);
+  const removeStyles = [addStyleSheetForTest("src/theme/panels.css"), addStyleSheetForTest("src/settings_form/settings_form.css")];
+  try {
+    renderHeader();
+    const bubble = document.body.appendChild(document.createElement("span"));
+    bubble.className = "scale-strip-bubble";
+    expect(getComputedStyle(header()).position).toBe("sticky");
+    expect(Number(getComputedStyle(header()).zIndex)).toBeGreaterThan(Number(getComputedStyle(bubble).zIndex));
+    bubble.remove();
+  } finally {
+    removeStyles.forEach((remove) => remove());
+  }
 });

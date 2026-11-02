@@ -6,7 +6,6 @@ exercised inside Rhino; see docs/grasshopper.md.
 import ast
 import importlib.util
 import json
-import re
 import socket
 import subprocess
 import sys
@@ -169,12 +168,6 @@ def test_engine_module_loads_the_mode_registry_by_path(gh):
                                     "radiative_cooling", "tilted_plane"]
     assert registry.canonical_mode_name(" Tilted-Plane ") == "tilted_plane"
     assert gh.engine_module(REPO_ROOT, "mode_registry") is registry
-
-
-def test_engine_module_loads_the_archetype_defaults_by_path(gh):
-    defaults = gh.engine_module(REPO_ROOT, "archetype_defaults")
-    assert defaults.WINDOW_TO_WALL_DEFAULTS["south"] == 0.35
-    assert defaults.ARCHETYPE_DEFAULTS["mass_class"] == "medium"
 
 
 def _engine_source(root, name, text):
@@ -375,18 +368,80 @@ def test_ray_settings_pass_the_rays_per_patch_as_a_whole_number():
     assert out["overrides"] == "rays_per_patch=16"
 
 
+def _stub_session(tmp_path, monkeypatch, stub_source):
+    """A carver root in *tmp_path* whose grasshopper/usc_gh.py is *stub_source*; a component given this session loads it."""
+    (tmp_path / "grasshopper").mkdir()
+    (tmp_path / "grasshopper" / "usc_gh.py").write_text(stub_source, encoding="utf-8")
+    monkeypatch.setitem(sys.modules, "usc_gh", types.ModuleType("usc_gh"))     # restored afterwards; the component loads the stub
+    return types.SimpleNamespace(root=str(tmp_path))
+
+
+_STUB_GH_FOR_GEOMETRY = """
+from pathlib import Path
+sent = []
+def write_input_geometry(max_volume, test_surfaces, folder):
+    return str(Path(folder) / "max_volume.ply"), str(Path(folder) / "test_surface.ply")
+def write_optional_geometry(items, folder, name):
+    return str(Path(folder) / (name + ".ply")) if items else None
+def run_stages(session, config, produce, start_from, extra_overrides=None, after=None):
+    sent.append(dict(extra_overrides))
+    out = Path(config.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "manifest.json").write_text("{}")
+    (out / "carved.obj").write_text("")
+    return {"stage_folders": {stage: str(out) for stage in ("preprocessing", "thresholding", "exporting")},
+            "manifest": str(out / "manifest.json"), "export_path": str(out / "carved.obj")}
+def show_issues(component, reply):
+    return []
+def read_diagnostics(folder):
+    return {}
+def existing_files(*values):
+    return []
+def report(component, message, level):
+    pass
+"""
+
+
 @pytest.mark.parametrize("name", ["USC_Preprocess.py", "USC_RunPipeline.py"])
-def test_preprocessing_components_write_and_pass_the_context_and_terrain(name):
-    text = (GH_DIR / "components" / name).read_text(encoding="utf-8")
-    assert "gh.write_optional_geometry(" in text
-    for key in ('"context_path"', '"terrain_path"'):
-        assert key in text, f"{name} does not pass {key}"
+@pytest.mark.parametrize("with_surroundings", [True, False], ids=["context and terrain", "neither"])
+def test_preprocessing_components_write_and_pass_the_context_and_terrain(tmp_path, monkeypatch, name, with_surroundings):
+    """The context and terrain inputs are written beside the other geometry and sent as context_path and terrain_path; left
+    unconnected, neither key is sent."""
+    session = _stub_session(tmp_path, monkeypatch, _STUB_GH_FOR_GEOMETRY)
+    out_dir = tmp_path / "run"
+    context, terrain = (["a building"], ["the ground"]) if with_surroundings else (None, None)
+    _run_component(name, config=types.SimpleNamespace(session=session, out_dir=str(out_dir)), max_volume=["box"],
+                   test_surfaces=["facade"], context=context, terrain=terrain, run=True,
+                   ghenv=types.SimpleNamespace(Component=None))
+    incoming = out_dir / "incoming"
+    expected = {"max_volume_path": str(incoming / "max_volume.ply"), "test_surface_path": str(incoming / "test_surface.ply")}
+    if with_surroundings:
+        expected.update(context_path=str(incoming / "context.ply"), terrain_path=str(incoming / "terrain.ply"))
+    assert sys.modules["usc_gh"].sent == [expected]
 
 
-def test_config_resolves_context_and_terrain_paths_against_the_gh_file():
-    text = (GH_DIR / "components" / "USC_Config.py").read_text(encoding="utf-8")
-    resolved = re.search(r"for key in \(([^)]*)\):\s*\n\s*if overrides_dict.get\(key\)", text).group(1)
-    assert '"context_path"' in resolved and '"terrain_path"' in resolved
+_STUB_GH_FOR_CONFIG = """
+import types
+def engine_module(root, name):
+    return types.SimpleNamespace(canonical_mode_name=lambda mode: mode, MODES={"daylight": None})
+def resolve_path(component, value):
+    return "D:/project/" + value
+def parse_overrides(value):
+    return dict(item.split("=", 1) for item in value)
+"""
+
+
+def test_config_resolves_the_path_overrides_against_the_gh_file(tmp_path, monkeypatch):
+    """Paths from the feeder components arrive relative and are resolved as the component's own inputs are, the context and
+    terrain among them; other values pass unchanged."""
+    path_keys = ("epw_path", "simulated_weights_path", "max_volume_path", "test_surface_path", "context_path", "terrain_path")
+    session = _stub_session(tmp_path, monkeypatch, _STUB_GH_FOR_CONFIG)
+    overrides = [f"{key}=inputs/{key}.file" for key in path_keys] + ["voxel_size=2"]
+    out = _run_component("USC_Config.py", session=session, mode="daylight", epw_path=None, out_dir="run", config_yaml=None,
+                         overrides=overrides, ghenv=types.SimpleNamespace(Component=None))
+    sent = out["config"].overrides
+    assert {key: sent[key] for key in path_keys} == {key: f"D:/project/inputs/{key}.file" for key in path_keys}
+    assert sent["voxel_size"] == "2" and sent["out_dir"] == "D:/project/run"
 
 
 def test_write_optional_geometry_without_input_writes_nothing(gh, tmp_path):
@@ -463,10 +518,7 @@ def existing_files(value):
 @pytest.mark.parametrize("after, expected", [("D:/first/thresholding/manifest.json", "D:/first/thresholding/manifest.json"),
                                               (None, None), ("", None)])
 def test_threshold_stage_passes_after(tmp_path, monkeypatch, after, expected):
-    (tmp_path / "grasshopper").mkdir()
-    (tmp_path / "grasshopper" / "usc_gh.py").write_text(_STUB_GH, encoding="utf-8")
-    monkeypatch.setitem(sys.modules, "usc_gh", types.ModuleType("usc_gh"))     # restored afterwards; the component loads the stub
-    config = types.SimpleNamespace(session=types.SimpleNamespace(root=str(tmp_path)), out_dir=str(tmp_path / "run"))
+    config = types.SimpleNamespace(session=_stub_session(tmp_path, monkeypatch, _STUB_GH), out_dir=str(tmp_path / "run"))
     out = _run_component("USC_ThresholdStage.py", config=config, pre_result=str(tmp_path / "run" / "preprocessing" / "manifest.json"),
                          threshold_overrides=None, run=True, after=after,
                          ghenv=types.SimpleNamespace(Component=None))

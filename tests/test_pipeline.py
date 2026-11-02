@@ -604,17 +604,21 @@ class TestScoreSmoothing:
 
 
 def test_missing_occupancy_grid_is_an_error(tmp_path, tiny_cube_mesh, tiny_surface_mesh):
-    """Without voxel_grid.npy the preprocessing run is incomplete: the grid
-    is not rebuilt from a config that may describe other geometry."""
-    from urbansolarcarver.api_core._stage_io import load_upstream
-    from urbansolarcarver.api_core._util import load_occupancy
+    """Without voxel_grid.npy the preprocessing run is incomplete: thresholding refuses it rather than rebuild the
+    grid from a config that may describe other geometry."""
+    from urbansolarcarver import thresholding
     from urbansolarcarver.errors import StageChainError
-    run = TestEdgeTaperPipeline()._run_preprocessing(
-        tmp_path, "fb", tiny_cube_mesh, tiny_surface_mesh)
-    pre = load_upstream(run, "preprocessing")
-    pre.resolve(pre.manifest.voxel_grid_path).unlink()
+    from urbansolarcarver.load_config import user_config
+    pre = TestEdgeTaperPipeline()._run_preprocessing(tmp_path, "fb", tiny_cube_mesh, tiny_surface_mesh)
+    manifest = json.loads(pre.manifest_path.read_text(encoding="utf-8"))
+    (pre.out_dir / manifest["voxel_grid_path"]).unlink()
+    cfg = user_config(
+        max_volume_path=str(tmp_path / "fb" / "vol.ply"), test_surface_path=str(tmp_path / "fb" / "srf.ply"),
+        out_dir=str(tmp_path / "fb" / "out"), mode="daylight", voxel_size=2.0, grid_step=2.0, ray_length=50.0,
+        min_voxels=1, min_face_count=1, device="cpu")
     with pytest.raises(StageChainError, match="Re-run preprocessing"):
-        load_occupancy(pre)
+        thresholding(pre, cfg, tmp_path / "fb" / "thresholding")
+    assert not (tmp_path / "fb" / "thresholding" / "mask.npy").exists()
 
 
 def test_curved_own_facade_is_not_shaded_by_its_own_skin(tmp_path):

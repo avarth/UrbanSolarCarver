@@ -1,14 +1,8 @@
-"""Tests for the preprocessing stage's helpers: NaN/Inf score warnings and score
-statistics (api_core/_diagnostics.py), the refusal of a test surface that gives
-no sample points, and the manifest a real run writes."""
-import json
+"""Tests for the preprocessing stage: NaN/Inf score warnings (api_core/_diagnostics.py; score_statistics is tested in
+test_util.py), the refusal of a test surface that gives no sample points, and the manifest a real run writes."""
 import warnings
 import pytest
 import numpy as np
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-
-from urbansolarcarver.api_core._diagnostics import score_statistics
 
 
 class TestScoreAnomalyDetection:
@@ -41,21 +35,6 @@ class TestScoreAnomalyDetection:
             counts = warn_score_anomalies(scores)
         assert counts == {"nan_count": 0, "inf_count": 0}
         assert len(w) == 0
-
-
-class TestScoreStatisticsIntegration:
-    """Verify score_statistics produces all required keys."""
-
-    def test_all_keys_present(self):
-        scores = np.random.rand(100)
-        stats = score_statistics(scores)
-        required_keys = {"count", "min", "max", "mean", "median", "std",
-                         "p5", "p25", "p75", "p95", "nonzero_count", "nonzero_fraction"}
-        assert required_keys <= set(stats.keys())
-
-    def test_empty_scores(self):
-        stats = score_statistics(np.array([]))
-        assert stats == {"count": 0}
 
 
 def _cube_and_test_surface_config(tmp_path, test_surface):

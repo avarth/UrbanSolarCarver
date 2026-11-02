@@ -6,29 +6,23 @@ a config.yaml of one criterion and the single-criterion run layout (run/preproce
 import json
 import logging
 import os
-import warnings
 from pathlib import Path
 
 import pytest
 import yaml
 
-with warnings.catch_warnings():     # newer Starlette versions announce that TestClient will need httpx2; the project pins httpx
-    warnings.filterwarnings("ignore", message=".*httpx.*testclient|.*testclient.*httpx", category=Warning)
-    from starlette.testclient import TestClient
-
 from local_web_test_support import (
-    ALL_CURRENT, EARLIER_JOINED_TEST_SURFACES, add_project_with_inputs, make_worker, run_and_wait, write_earlier_version_project,
+    ALL_CURRENT, EARLIER_JOINED_TEST_SURFACES, add_project_with_inputs, build_client, make_worker, run_and_wait,
+    write_earlier_version_project,
 )
 from urbansolarcarver.api_core._stage_io import load_upstream
 from urbansolarcarver.chain_config import CRITERION_KEYS, load_chain
-from urbansolarcarver.local_web_service import create_app, migration, test_surfaces
+from urbansolarcarver.local_web_service import migration, test_surfaces
 from urbansolarcarver.local_web_service.criteria import CRITERION_COLOURS
 from urbansolarcarver.local_web_service.projects import ProjectError, ProjectStore
 from urbansolarcarver.local_web_service.stage_records import criterion_status, stage_status
 from urbansolarcarver.stage_settings import PIPELINE_STAGES
 
-TOKEN = "a" * 64
-PORT = 8770
 UPSTREAM_STAGE = {"thresholding": "preprocessing", "exporting": "thresholding", "massing": "thresholding"}
 
 
@@ -73,11 +67,6 @@ def _earlier_version_stage_status(store: ProjectStore, name: str) -> dict[str, s
                    and (stage == "preprocessing" or (upstream is not None and manifest["upstream_run_id"] == upstream.manifest_run_id)))
         states[stage] = "current" if current else "out_of_date"
     return states
-
-
-def _client(projects_folder: Path) -> TestClient:
-    app = create_app(projects_folder, TOKEN, PORT, worker=make_worker(ProjectStore(projects_folder)))
-    return TestClient(app, base_url=f"http://127.0.0.1:{PORT}", headers={"X-USC-Token": TOKEN})
 
 
 def test_an_earlier_project_keeps_its_results_current(store):
@@ -146,7 +135,7 @@ def test_a_project_in_the_chain_layout_is_left_as_it_is(tmp_path):
 
 def test_opening_a_project_migrates_it(store):
     write_earlier_version_project(store, "p")
-    reply = _client(store.projects_folder).get("/api/projects/p")
+    reply = build_client(store.projects_folder)[0].get("/api/projects/p")
     assert reply.status_code == 200, reply.text
     assert reply.json()["stage_status"]["stages"] == ALL_CURRENT
     assert [criterion.id for criterion in store.criteria("p")] == ["1"]
@@ -214,7 +203,7 @@ def test_a_project_that_fails_to_migrate_still_opens_as_it_was(store, monkeypatc
     before = _snapshot(store.open("p"))
     _make_the_first_write_of_a_file_fail(monkeypatch, "manifest.json")
     with caplog.at_level(logging.ERROR):
-        reply = _client(store.projects_folder).get("/api/projects/p")
+        reply = build_client(store.projects_folder)[0].get("/api/projects/p")
     assert reply.status_code == 200, reply.text
     assert _snapshot(store.open("p")) == before
     assert "the disk is full" in caplog.text
@@ -228,7 +217,7 @@ def test_a_project_whose_new_layout_is_in_the_way_is_left_as_it_is(store, caplog
         store.migrate_to_criteria("p")
     assert refusal.value.status_code == 409 and "run/criteria exists already" in str(refusal.value)
     with caplog.at_level(logging.WARNING):
-        reply = _client(store.projects_folder).get("/api/projects/p")
+        reply = build_client(store.projects_folder)[0].get("/api/projects/p")
     assert reply.status_code == 200, reply.text
     assert _snapshot(store.open("p")) == before
     [logged] = [record for record in caplog.records if "run/criteria exists already" in record.getMessage()]

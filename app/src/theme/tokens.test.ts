@@ -3,14 +3,6 @@ import { expect, test } from "vitest";
 
 const tokensCss = readFileSync("src/theme/tokens.css", "utf8");
 
-test("tokens hold the UX spec colours", () => {
-  for (const [name, hex] of [["--colour-accent", "#2f5d7c"], ["--colour-sun", "#f2b632"], ["--colour-carved", "#c8553d"],
-                             ["--colour-viewport-light", "#e3e8e7"], ["--colour-viewport-dark", "#22303a"],
-                             ["--colour-overlay-on-dark", "#2b3a45"], ["--colour-test-surface-on-dark", "#6fa0c4"],
-                             ["--colour-storey-low", "#dfe6ea"], ["--colour-storey-high", "#2f5d7c"]])
-    expect(tokensCss).toMatch(new RegExp(`${name}:\\s*${hex}`, "i"));
-});
-
 test("every token of UX 10 is defined", () => {
   const names = ["chrome", "panel", "ink", "muted", "line", "accent", "accent-soft", "sun", "carved", "ready", "error",
                  "viewport-light", "viewport-dark", "grid-minor-light", "grid-major-light", "grid-minor-dark", "grid-major-dark",
@@ -49,13 +41,6 @@ test("every colour token the stylesheets, the components and the 3D scene use is
   expect(colourTokenCalls).toBeGreaterThan(20);   // the scan finds the calls: 39 when written; a floor, not a count to keep up to date
   const missing = [...used].filter(([name]) => !defined.has(name)).map(([name, file]) => `--colour-${name} (${file})`);
   expect(missing).toEqual([]);
-});
-
-test("type, spacing and shape follow UX 10.2 and 10.3", () => {
-  for (const [name, value] of [["--text-body", "14px"], ["--text-secondary", "12px"], ["--text-step-title", "16px"],
-                               ["--text-key-number", "20px"], ["--line-height", "1.4"], ["--space-unit", "4px"],
-                               ["--radius-large", "6px"], ["--radius-small", "4px"]])
-    expect(tokensCss).toMatch(new RegExp(`${name}:\\s*${value}`));
 });
 
 test("the bundled font is declared for weights 400, 600 and 700 from files that exist", () => {

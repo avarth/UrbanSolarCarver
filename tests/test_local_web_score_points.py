@@ -6,28 +6,15 @@ import struct
 import numpy as np
 import pytest
 
-from local_web_test_support import write_fake_run
+from local_web_test_support import decode_carved_by_criterion, decode_score_points, write_fake_run
 from urbansolarcarver.local_web_service.project_names import ProjectError
 from urbansolarcarver.local_web_service.score_points import build_carved_by_criterion, build_score_points
-
-
-def decode(blob):
-    header_length = struct.unpack("<I", blob[:4])[0]
-    header = json.loads(blob[4:4 + header_length])
-    body = blob[4 + header_length:]
-    count = header["point_count"]
-    indices = np.frombuffer(body[:4 * count], "<u4")
-    scores = np.frombuffer(body[4 * count:8 * count], "<f4")
-    kept = np.frombuffer(body[8 * count:9 * count], "u1") if header["has_mask"] else None
-    compared_start = 9 * count if header["has_mask"] else 8 * count
-    compared = np.frombuffer(body[compared_start:compared_start + 4 * count], "<f4") if header["has_compared_scores"] else None
-    return header, indices, scores, kept, compared
 
 
 def test_arrays_match_the_header_and_the_occupied_voxels(project_with_inputs):
     store, name = project_with_inputs
     write_fake_run(store.open(name))
-    header, indices, scores, kept, _ = decode(build_score_points(store, name))
+    header, indices, scores, kept, _ = decode_score_points(build_score_points(store, name))
     assert header["occupied_count"] == header["point_count"] == 18 and header["thinning_step"] == 1
     assert len(indices) == len(scores) == len(kept) == 18 and (np.diff(indices) > 0).all()
     assert header["shape"] == [4, 3, 2] and header["origin"] == [10.0, 20.0, 30.0] and header["voxel_size"] == 2.0
@@ -49,7 +36,7 @@ def test_the_header_is_padded_so_the_arrays_start_on_a_four_byte_boundary(projec
 def test_above_the_cap_every_kth_voxel_is_kept(project_with_inputs):
     store, name = project_with_inputs
     run = write_fake_run(store.open(name))
-    header, indices, _, _, _ = decode(build_score_points(store, name, cap=5))
+    header, indices, _, _, _ = decode_score_points(build_score_points(store, name, cap=5))
     assert header["thinning_step"] == 4 and header["point_count"] == 5      # ceil(18 / 5) = 4, ceil(18 / 4) = 5
     assert header["occupied_count"] == 18
     occupied = np.flatnonzero(np.load(run / "criteria" / "1" / "preprocessing" / "voxel_grid.npy").ravel())
@@ -59,7 +46,7 @@ def test_above_the_cap_every_kth_voxel_is_kept(project_with_inputs):
 def test_without_thresholding_the_kept_array_is_absent(project_with_inputs):
     store, name = project_with_inputs
     write_fake_run(store.open(name), with_mask=False)
-    header, _, _, kept, compared = decode(build_score_points(store, name))
+    header, _, _, kept, compared = decode_score_points(build_score_points(store, name))
     assert header["has_mask"] is False and kept is None
     assert header["has_compared_scores"] is False and compared is None
 
@@ -74,14 +61,14 @@ def test_without_preprocessing_there_is_no_data(project_with_inputs):
 def test_compared_scores_follow_the_same_indices(project_with_inputs):
     store, name = project_with_inputs
     write_fake_run(store.open(name), with_compared_scores=True)   # compared = raw scores + 100
-    header, _, scores, _, compared = decode(build_score_points(store, name, cap=5))
+    header, _, scores, _, compared = decode_score_points(build_score_points(store, name, cap=5))
     assert header["has_compared_scores"] is True and np.allclose(compared, scores + 100)
 
 
 def test_the_highest_compared_score_is_that_of_all_occupied_voxels_not_only_the_points(project_with_inputs):
     store, name = project_with_inputs
     write_fake_run(store.open(name), with_compared_scores=True)   # compared = raw scores + 100
-    header, _, _, _, compared = decode(build_score_points(store, name, cap=5))
+    header, _, _, _, compared = decode_score_points(build_score_points(store, name, cap=5))
     assert header["compared_score_max"] == header["score_max"] + 100 == 117.0
     assert compared.max() < 117.0                               # the thinned points miss the highest voxel
 
@@ -89,14 +76,14 @@ def test_the_highest_compared_score_is_that_of_all_occupied_voxels_not_only_the_
 def test_without_compared_scores_there_is_no_highest_compared_score(project_with_inputs):
     store, name = project_with_inputs
     write_fake_run(store.open(name))
-    header = decode(build_score_points(store, name))[0]
+    header = decode_score_points(build_score_points(store, name))[0]
     assert header["has_compared_scores"] is False and header["compared_score_max"] is None
 
 
 def test_a_thresholding_run_that_was_built_on_an_earlier_preprocessing_run_is_left_out(project_with_inputs):
     store, name = project_with_inputs
     write_fake_run(store.open(name), with_compared_scores=True, thresholding_upstream_run_id="an-earlier-run")
-    header, _, _, kept, compared = decode(build_score_points(store, name))
+    header, _, _, kept, compared = decode_score_points(build_score_points(store, name))
     assert header["has_mask"] is False and header["has_compared_scores"] is False and kept is None and compared is None
     assert header["compared_score_max"] is None
 
@@ -105,7 +92,7 @@ def test_a_grid_without_occupied_voxels_gives_no_points(project_with_inputs):
     store, name = project_with_inputs
     run = write_fake_run(store.open(name), with_mask=False)
     np.save(run / "criteria" / "1" / "preprocessing" / "voxel_grid.npy", np.zeros((4, 3, 2), dtype=bool))
-    header, indices, _, _, _ = decode(build_score_points(store, name))
+    header, indices, _, _, _ = decode_score_points(build_score_points(store, name))
     assert header["point_count"] == 0 and header["thinning_step"] == 1 and len(indices) == 0
     assert header["score_min"] is None and header["score_max"] is None
 
@@ -127,7 +114,7 @@ def test_scores_that_are_all_nan_give_no_range(project_with_inputs):
     store, name = project_with_inputs
     run = write_fake_run(store.open(name), with_mask=False)
     np.save(run / "criteria" / "1" / "preprocessing" / "scores.npy", np.full((4, 3, 2), np.nan, dtype=np.float32))
-    header = decode(build_score_points(store, name))[0]
+    header = decode_score_points(build_score_points(store, name))[0]
     assert header["score_min"] is None and header["score_max"] is None
 
 
@@ -148,26 +135,20 @@ def chain_of_two(project_with_inputs):
 
 def test_score_points_default_to_the_last_active_criterion(chain_of_two):
     store, name = chain_of_two
-    _, indices, _, kept, _ = decode(build_score_points(store, name))
+    _, indices, _, kept, _ = decode_score_points(build_score_points(store, name))
     assert (kept == (indices % 4 == 0)).all()
     store.update_criterion(name, "2", bypassed=True)
-    _, indices, _, kept, _ = decode(build_score_points(store, name))
+    _, indices, _, kept, _ = decode_score_points(build_score_points(store, name))
     assert (kept == (indices % 2 == 0)).all()
 
 
 def test_score_points_of_a_chosen_criterion(chain_of_two):
     store, name = chain_of_two
-    _, indices, _, kept, _ = decode(build_score_points(store, name, "1"))
+    _, indices, _, kept, _ = decode_score_points(build_score_points(store, name, "1"))
     assert (kept == (indices % 2 == 0)).all()
     with pytest.raises(ProjectError) as error:
         build_score_points(store, name, "7")
     assert error.value.status_code == 404 and "'7'" in str(error.value)
-
-
-def decode_carved_by_criterion(blob):
-    header_length = struct.unpack("<I", blob[:4])[0]
-    header = json.loads(blob[4:4 + header_length])
-    return header, np.frombuffer(blob[4 + header_length:], "u1").reshape(header["shape"])
 
 
 def test_carved_by_criterion_names_who_removed_each_voxel(chain_of_two):

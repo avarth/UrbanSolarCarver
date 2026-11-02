@@ -2,7 +2,7 @@ import { expect, test, vi } from "vitest";
 import * as THREE from "three";
 import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import {
-  applyLayerAppearance, buildingMassingLayer, dimmedAppearance, carvedByCriterionLayer, carvedOutlineSegments, contextLayer, inspectSurfacesLayer, LAYER_NAMES, maxVolumeLayer, terrainLayer,
+  applyLayerAppearance, buildingMassingLayer, dimmedAppearance, carvedByCriterionLayer, carvedOutlineSegments, contextLayer, inspectSurfacesLayer, LAYER_NAMES, maxVolumeLayer,
   keptColumnTops, pointSizeForVoxel, splitScorePoints, type InspectLayerFile,
   storeyOfPart, studyValuesLayer, sunStudyLayer, testSurfacesLayer, volumeOutline,
 } from "./layers";
@@ -111,17 +111,6 @@ test("a building massing without storeys has none", () => {
   const empty = new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute([], 3));
   empty.userData.partNames = [];
   expect(buildingMassingLayer(empty).userData.storeyCount).toBe(0);
-});
-
-test("the existing surroundings and the terrain are layers of their own, listed after the test surfaces", () => {
-  expect(LAYER_NAMES.slice(0, 4)).toEqual(["max_volume", "test_surfaces", "context", "terrain"]);
-  const geometry = new THREE.BoxGeometry(1, 1, 1);
-  expect(contextLayer(geometry.clone())).toBeInstanceOf(THREE.Object3D);
-  expect(terrainLayer(geometry.clone())).toBeInstanceOf(THREE.Object3D);
-});
-
-test("the carved-by-criterion layer comes right after the carved voxels", () => {
-  expect(LAYER_NAMES[LAYER_NAMES.indexOf("carved_voxels") + 1]).toBe("carved_by_criterion");
 });
 
 test("the carved-by-criterion layer draws each voxel in the colour of the criterion that removed it", () => {

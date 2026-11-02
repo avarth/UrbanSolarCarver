@@ -1,23 +1,18 @@
-// The open project as a whole, against a fake service: settings saves, the run loop, the stage status and the locks and
-// build buttons that follow from them, as the unit tests of each cannot show them together.
+// The open project of one criterion as a whole, against a fake service: settings saves, the run loop, the stage status and the
+// locks and build buttons that follow from them, as the unit tests of each cannot show them together. The notice of a new weather
+// file is in ProjectWorkspace.weather_notice, the runs and saves of several criteria in ProjectWorkspace.chain_runs.
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
-import { addStyleSheetForTest } from "../viewer_overlays/render_for_test";
-import type { ModeInfo, ProjectDetail } from "../api_client/client";
-import { LAYERS_SHOWN_IN_STEP, type OpenProjectSettingsSaver } from "./ProjectWorkspace";
+import { packScorePoints } from "../viewer/packed_results_for_test";
+import type { OpenProjectSettingsSaver } from "./ProjectWorkspace";
 import type { PipelineStage, StageState } from "../stages";
+import { FACADES, ROOFS, WINDOWS, card, openChain, periodFieldText, select } from "./chain_service_for_test";
 import {
-  CURRENT, FACADES, OUT_OF_DATE, ROOFS, WINDOWS, card, cardLine, carvingSummaryOf, openChain, panel, panelFrame, select, selectedCardName,
-  service as chainService,
-  type CriterionStages,
-} from "./chain_service_for_test";
-import {
-  CARVED, CARVING, ENVELOPE, FakeService, MASSING, MODES, NOTHING_RUN, SCHEMA, TRIANGLE_OBJ, buildPart, buttonIn, container,
+  CARVED, CARVING, ENVELOPE, FakeService, MASSING, NOTHING_RUN, TRIANGLE_OBJ, buildPart, buttonIn, container,
   dimmedCarvingLayers, endWorkspaceTest, openPanelSection, openStep, openWorkspace, panelSectionOpen, pinnedBar, pressRunAnalysis, project, reasonOf, settle,
-  showCriterionEditor, startWorkspaceTest, stepRow, thresholdField, thresholdOf, togglePanelSection, type, typeAndLeave, unmountWorkspace, voxelSizeField,
-  waitForTheSave,
+  startWorkspaceTest, stepRow, thresholdField, thresholdOf, togglePanelSection, type, typeAndLeave, voxelSizeField, waitForTheSave,
 } from "./project_workspace_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
@@ -88,11 +83,6 @@ test("a save the service refuses keeps Run analysis from starting a run, and say
 const settingsSaves = () => service.requests.filter((request) => request.startsWith("PUT") || request.startsWith("PATCH"));
 const modeTiles = () => [...container().querySelectorAll<HTMLElement>('[role="radio"]')];
 const siteAndGridSummaryText = () => stepRow("Site and grid").querySelector(".step-summary")!.textContent;
-/** The text of the criterion's period field, its Settings section opened first. */
-function periodFieldText() {
-  openPanelSection("Settings");
-  return container().querySelector('[data-setting="start_month"]')!.textContent;
-}
 
 test("saving the voxel size sends only shared settings", async () => {
   service = new FakeService(NOTHING_RUN, null);
@@ -182,16 +172,23 @@ test("a shared change refused for the criterion's mode is saved again once a mod
 });
 
 test("a page opened during a run it does not follow: Run analysis answered with up to date brings the carving the service holds", async () => {
-  service = new FakeService(CARVED, CARVING);                  // the run has ended since
+  const built: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" };
+  service = new FakeService(built, CARVING);                   // the run has ended since
+  service.summary = { carving: CARVING, envelope: ENVELOPE, massing: MASSING };
   service.everythingUpToDate = true;
-  await openWorkspace(service, project(NOTHING_RUN));                   // opened while the run had removed the stage records
+  // Opened while the run had removed the records of the stages it rewrote: the envelope and the massing were still current.
+  await openWorkspace(service, project({ ...built, preprocessing: "missing", thresholding: "missing" }));
   openStep("Site and grid");
   expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Solar time-based, Not run yet");
 
+  const requestsBefore = service.requests.length;
   await pressRunAnalysis();
   expect(container().querySelector(".step-pinned-action")!.textContent).toContain("Results are up to date");
   expect(FakeWebSocket.opened).toHaveLength(0);
-  expect(service.count("GET /run/summary")).toBe(1);
+  // The carving and the analysis before it, which the page did not hold as current, are asked for; not the envelope or the massing.
+  expect(service.requests.slice(requestsBefore).filter((request) => request.startsWith("GET /run/"))
+    .map((request) => request.split("?")[0]).sort())
+    .toEqual(["GET /run/score-points", "GET /run/sky-patches", "GET /run/summary"]);
   expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Solar time-based, 61\u00a0% kept");
   openStep("Criteria");
   expect(stepRow("Criteria").textContent).not.toContain("Run the analysis to see the carving");
@@ -378,6 +375,7 @@ test("Build massing sends only massing and Build envelope only exporting; each l
   const envelopeOutOfDate = () => buildPart("Envelope").querySelector(".envelope-results-out-of-date") !== null;
   const massingOutOfDate = () => buildPart("Building massing").querySelector(".envelope-results-out-of-date") !== null;
   expect([envelopeOutOfDate(), massingOutOfDate()]).toEqual([true, true]);
+  expect(buildPart("Building massing").querySelector(".envelope-results-out-of-date")!.textContent).toContain("Out of date for the current settings");
   expect(container().querySelector(".step-pinned-action")).toBeNull();          // each part has its own button
 
   await act(async () => buttonIn(buildPart("Building massing"), "Build massing").click());
@@ -512,9 +510,11 @@ test("a workspace made again for a renamed project opens with the steps it had o
   expect(FakeViewerScene.latest!.visibleLayers.has("max_volume")).toBe(false);
 });
 
-test("the Criteria step shows the kept voxels and starts with the carved ones hidden", () => {
-  expect(LAYERS_SHOWN_IN_STEP.criteria).toContain("kept_voxels");
-  expect(LAYERS_SHOWN_IN_STEP.criteria).not.toContain("carved_voxels");
+test("the Criteria step shows the kept voxels and starts with the carved ones hidden", async () => {
+  await openChain([FACADES], undefined, (chain) => { chain.scorePointsOf = { "1": packScorePoints([0, 1, 2, 3], [1, 0, 1, 1]) }; });
+  expect(FakeViewerScene.latest!.layers.get("carved_voxels")).toBeTruthy();         // drawn, so hidden by the step and not for want of data
+  expect(FakeViewerScene.latest!.visibleLayers.has("kept_voxels")).toBe(true);
+  expect(FakeViewerScene.latest!.visibleLayers.has("carved_voxels")).toBe(false);
 });
 
 test("the saver of the open project waits for an upload in flight, so a rename, reset or delete comes after it", async () => {
@@ -564,556 +564,4 @@ test("the saver of the open project waits for criterion requests in flight: a by
   await act(async () => answerSettings());
   await settle();
   expect(ended).toBe(true);
-});
-
-// The notice of a new weather file (weather_change_notice.ts), over the criterion's settings in Criteria.
-const BENEFIT_SCHEMA = {
-  properties: { ...SCHEMA.properties, balance_temperature: { default: 15, type: "number" }, balance_offset: { default: 2, minimum: 0, type: "number" } },
-};
-const COLD_SEASON = { start_month: 9, start_day: 30, start_hour: 0, end_month: 5, end_day: 15, end_hour: 23 };
-const MODES_WITH_BENEFIT: ModeInfo[] = [...MODES, { name: "benefit", description: "", needs_epw: true, needs_period: true, experimental: false,
-                                                     score_kind: "weighted_sum", weight_unit: "", score_unit: "", starting_values: COLD_SEASON }];
-const BRISBANE = { location: "Brisbane, AUS", latitude: -27.38 };
-const GOLDEN = { location: "Golden, CO, USA", latitude: 39.74 };
-
-async function addWeatherFile() {
-  if (!stepRow("Inputs").classList.contains("step-open")) openStep("Inputs");
-  const weatherPicker = container().querySelector<HTMLInputElement>('input[type="file"][accept=".epw"]')!;
-  Object.defineProperty(weatherPicker, "files", { value: [new File(["LOCATION"], "weather.epw")], configurable: true });
-  act(() => weatherPicker.dispatchEvent(new Event("change", { bubbles: true })));
-  await settle();
-  openStep("Criteria");
-  openPanelSection("Settings");
-}
-
-/** Past the wait before the cold period is asked for, and its reply. */
-const waitForTheColdPeriod = async () => {
-  await act(async () => { await vi.advanceTimersByTimeAsync(450); });
-  await settle();
-};
-
-const weatherNotice = () => container().querySelector<HTMLElement>(".weather-change-notice");
-const noticeText = () => weatherNotice()!.querySelector("p")!.textContent;
-const noticeRegion = () => container().querySelector<HTMLElement>(".weather-change-region");
-const startDateHandle = () => container().querySelector<HTMLElement>('.period-control [role="slider"][aria-label="Start date"]');
-const BRISBANE_SHIFT = "The new weather file (Brisbane, AUS) is in the southern hemisphere: winter there is June to August. " +
-  "Shift the analysis period by six months, to 21 Jun, 10 to 14 h?";
-
-test("a project opened with a weather file in the other hemisphere shows no notice: only a weather file added in this session does", async () => {
-  service = new FakeService(NOTHING_RUN, null);
-  await openWorkspace(service, { ...project(NOTHING_RUN), weather_location: BRISBANE.location, weather_latitude: BRISBANE.latitude });
-  openStep("Criteria");
-  expect(weatherNotice()).toBeNull();
-});
-
-test("a weather file in the other hemisphere: the notice offers the period six months on, which goes through the saver", async () => {
-  service = new FakeService(NOTHING_RUN, null);
-  service.uploadedWeather = BRISBANE;
-  await openWorkspace(service, project(NOTHING_RUN));
-  await addWeatherFile();
-  expect(noticeText()).toBe(BRISBANE_SHIFT);
-  expect(buttonIn(weatherNotice()!, "Keep").getAttribute("aria-label")).toBe("Keep the analysis period");
-  act(() => buttonIn(weatherNotice()!, "Shift by six months").click());
-  expect(weatherNotice()).toBeNull();
-  expect(document.activeElement).toBe(startDateHandle());           // the focus goes to the period the button changed
-  await waitForTheSave();
-  await settle();
-  expect(service.savedValues).toEqual([{ mode: "time-based", start_month: 6, end_month: 6 }]);      // the settings changed, as the period control sends
-});
-
-test("a first weather file counts as after a northern one; the heating season preset follows the hemisphere of the file", async () => {
-  service = new FakeService(NOTHING_RUN, null);
-  service.uploadedWeather = BRISBANE;
-  await openWorkspace(service, { ...project(NOTHING_RUN), inputs: { ...project(NOTHING_RUN).inputs, weather: [] }, weather_location: null, weather_latitude: null });
-  openStep("Criteria");
-  openPanelSection("Settings");
-  expect(buttonIn(container(), "Heating season, October to April")).toBeDefined();
-  await addWeatherFile();
-  expect(noticeText()).toContain("(Brisbane, AUS) is in the southern hemisphere");
-  expect(buttonIn(container(), "Heating season, October to April")).toBeUndefined();
-  expect(buttonIn(container(), "Heating season, April to October")).toBeDefined();
-});
-
-test("Keep dismisses the notice and saves nothing; a later weather file brings a notice again", async () => {
-  service = new FakeService(NOTHING_RUN, null);
-  service.uploadedWeather = BRISBANE;
-  await openWorkspace(service, project(NOTHING_RUN));
-  await addWeatherFile();
-  act(() => buttonIn(weatherNotice()!, "Keep").click());
-  expect(weatherNotice()).toBeNull();
-  expect(document.activeElement).toBe(startDateHandle());
-  await waitForTheSave();
-  expect(service.savedValues).toEqual([]);
-  service.uploadedWeather = GOLDEN;                 // back north, the period still northern: the notice asks about the change again
-  await addWeatherFile();
-  expect(noticeText()).toBe("The new weather file (Golden, CO, USA) is in the northern hemisphere: winter there is December to February. " +
-    "Shift the analysis period by six months, to 21 Jun, 10 to 14 h?");
-});
-
-test("a weather file in the same hemisphere, or in a mode that reads no period, brings no notice", async () => {
-  service = new FakeService(NOTHING_RUN, null);
-  await openWorkspace(service, project(NOTHING_RUN));
-  await addWeatherFile();                           // Golden after Golden
-  expect(weatherNotice()).toBeNull();
-  unmountWorkspace();
-  service = new FakeService(NOTHING_RUN, null);
-  service.uploadedWeather = BRISBANE;
-  await openWorkspace(service, project(NOTHING_RUN, { mode: "daylight" }));
-  await addWeatherFile();
-  expect(weatherNotice()).toBeNull();
-});
-
-test("while a run is in progress the notice's buttons are disabled, as the settings are", async () => {
-  service = new FakeService(NOTHING_RUN, null);
-  service.uploadedWeather = BRISBANE;
-  await openWorkspace(service, project(NOTHING_RUN));
-  await addWeatherFile();
-  await pressRunAnalysis();
-  for (const name of ["Shift by six months", "Keep"]) expect(buttonIn(weatherNotice()!, name).disabled).toBe(true);
-});
-
-test("Solar usefulness: the notice waits for the cold period of the new file and offers it, keeping the hours", async () => {
-  service = new FakeService(NOTHING_RUN, null);
-  service.uploadedWeather = BRISBANE;
-  await openWorkspace(service, project(NOTHING_RUN, { mode: "benefit" }), {}, { schema: BENEFIT_SCHEMA, modes: MODES_WITH_BENEFIT });
-  await waitForTheColdPeriod();                     // of the file the project opened with: none
-  service.coldPeriodReply = { status: "found", period: { start_month: 5, start_day: 3, end_month: 9, end_day: 20 } };
-  await addWeatherFile();
-  expect(weatherNotice()).toBeNull();               // waiting for the new file's answer
-  await waitForTheColdPeriod();
-  expect(noticeText()).toBe("The new weather file (Brisbane, AUS) has its cold period from 3 May to 20 Sep; the analysis period is 30 Sep to 15 May.");
-  act(() => buttonIn(weatherNotice()!, "Use the cold period").click());
-  expect(weatherNotice()).toBeNull();
-  await waitForTheSave();
-  await settle();
-  expect(service.savedValues).toEqual([{ mode: "benefit", start_month: 5, start_day: 3, end_month: 9, end_day: 20 }]);           // the hours kept
-});
-
-test("Solar usefulness, energy-weighted: a new file's cold period is not offered, as it belongs to the cold hours rule", async () => {
-  service = new FakeService(NOTHING_RUN, null);
-  service.uploadedWeather = BRISBANE;
-  const energyWeighted = project(NOTHING_RUN, { mode: "benefit" });
-  energyWeighted.criteria = energyWeighted.criteria!.map((criterion) => ({ ...criterion, energy_weighted: true }));
-  await openWorkspace(service, energyWeighted, {}, { schema: BENEFIT_SCHEMA, modes: MODES_WITH_BENEFIT });
-  await waitForTheColdPeriod();
-  service.coldPeriodReply = { status: "found", period: { start_month: 5, start_day: 3, end_month: 9, end_day: 20 } };
-  await addWeatherFile();
-  await waitForTheColdPeriod();
-  expect(weatherNotice()).toBeNull();
-});
-
-test("Solar usefulness: no cold period in the new file, or the one the period already has, brings no notice", async () => {
-  service = new FakeService(NOTHING_RUN, null);
-  service.uploadedWeather = BRISBANE;
-  await openWorkspace(service, project(NOTHING_RUN, { mode: "benefit" }), {}, { schema: BENEFIT_SCHEMA, modes: MODES_WITH_BENEFIT });
-  await addWeatherFile();                           // the service finds no cold period
-  await waitForTheColdPeriod();
-  expect(weatherNotice()).toBeNull();
-  service.coldPeriodReply = { status: "found", period: { start_month: 9, start_day: 30, end_month: 5, end_day: 15 } };
-  await addWeatherFile();
-  await waitForTheColdPeriod();
-  expect(weatherNotice()).toBeNull();
-});
-
-test("the notice is a live region kept on the page, empty until a notice fills it, so screen readers announce what comes", async () => {
-  service = new FakeService(NOTHING_RUN, null);
-  service.uploadedWeather = BRISBANE;
-  await openWorkspace(service, project(NOTHING_RUN));
-  openStep("Criteria");
-  expect(noticeRegion()!.getAttribute("role")).toBe("status");
-  expect(noticeRegion()!.textContent).toBe("");
-  await addWeatherFile();                                           // through the Inputs step, back to Criteria
-  const region = noticeRegion()!;
-  expect(region.textContent).toContain(BRISBANE_SHIFT);
-  act(() => buttonIn(weatherNotice()!, "Keep").click());
-  expect(noticeRegion()).toBe(region);
-  expect(region.textContent).toBe("");
-});
-
-test("a new weather file without a latitude keeps the hemisphere of the one before it", async () => {
-  service = new FakeService(NOTHING_RUN, null);
-  service.uploadedWeather = BRISBANE;
-  await openWorkspace(service, project(NOTHING_RUN));
-  await addWeatherFile();
-  act(() => buttonIn(weatherNotice()!, "Keep").click());          // the period stays northern, the file southern
-  service.uploadedWeather = { location: null, latitude: null } as unknown as typeof BRISBANE;
-  await addWeatherFile();
-  expect(weatherNotice()).toBeNull();                               // nothing to say about a file without a latitude
-  service.uploadedWeather = GOLDEN;
-  await addWeatherFile();                                           // north after the southern file: the notice asks
-  expect(noticeText()).toContain("(Golden, CO, USA) is in the northern hemisphere");
-});
-
-test("a weather file in the tropics brings no notice and keeps the northern heating season preset", async () => {
-  service = new FakeService(NOTHING_RUN, null);
-  service.uploadedWeather = { location: "Darwin, AUS", latitude: -12.46 };
-  await openWorkspace(service, project(NOTHING_RUN));
-  await addWeatherFile();
-  expect(weatherNotice()).toBeNull();
-  expect(buttonIn(container(), "Heating season, October to April")).toBeDefined();
-});
-
-test("once the period is changed by hand the notice is gone, also when the period is set back", async () => {
-  service = new FakeService(NOTHING_RUN, null);
-  service.uploadedWeather = BRISBANE;
-  await openWorkspace(service, project(NOTHING_RUN));
-  await addWeatherFile();
-  expect(noticeText()).toBe(BRISBANE_SHIFT);
-  act(() => buttonIn(container(), "21 June").click());
-  expect(weatherNotice()).toBeNull();
-  act(() => buttonIn(container(), "21 December").click());          // the period the file came with, again
-  await waitForTheSave();
-  await settle();
-  expect(weatherNotice()).toBeNull();
-});
-
-// ---- Several criteria (spec 7.3): progress per criterion and on the cards, refusals at their card, the carving lock per
-// criterion and the live rethreshold from an earlier criterion ----
-
-const THRESHOLD_OUT_OF_DATE: CriterionStages = { preprocessing: "current", thresholding: "out_of_date" };
-const NOT_RUN: CriterionStages = { preprocessing: "missing", thresholding: "missing" };
-/** The stages of the run shown in the criterion's panel: each one's name and state. */
-const stageRows = () => [...pinnedBar().querySelectorAll(".run-stage")]
-  .map((row) => `${row.querySelector(".run-stage-name")!.textContent} | ${row.querySelector(".run-stage-state")!.textContent}`);
-/** A card's result line of a mode that is not weighted, as formatNumber writes it (no-break spaces before the units). */
-const volumeLine = (percent: number) => `Removes ${percent} % of what reached it`;
-/** How often *text* is on the page in *root*. */
-const timesShown = (root: Element, text: string) => (root.textContent ?? "").split(text).length - 1;
-
-async function bypass(name: string) {
-  await act(async () => card(name).querySelector<HTMLInputElement>('[role="switch"]')!.click());
-  await settle();
-}
-
-test("a run of two criteria shows each one's stages by name; its card says Running, and a later one updates from it until its thresholding finishes", async () => {
-  await openChain([FACADES, WINDOWS], { 1: OUT_OF_DATE, 2: THRESHOLD_OUT_OF_DATE });
-  expect(cardLine("Winter sun on facades")).toBe("Out of date");
-  expect(cardLine("Spring sun on windows")).toBe("Updates from Winter sun on facades");
-  chainService.runCriterionStages = { 1: ["preprocessing", "thresholding"], 2: ["thresholding"] };
-  await pressRunAnalysis();
-  expect(chainService.runsStarted).toEqual([["thresholding"]]);
-  expect(stageRows()).toEqual([
-    "Winter sun on facades: Sun analysis | running", "Winter sun on facades: Carving | waiting", "Spring sun on windows: Carving | waiting",
-  ]);
-  expect(cardLine("Winter sun on facades")).toBe("Running");
-  expect(card("Winter sun on facades").getAttribute("aria-busy")).toBe("true");
-  expect(cardLine("Spring sun on windows")).toBe("Updates from Winter sun on facades");
-
-  const run = FakeWebSocket.opened[0];
-  run.send({ type: "stage_progress", stage: "preprocessing", criterion: "1", done: 2, total: 4 });
-  expect(stageRows()[0]).toBe("Winter sun on facades: Sun analysis | 2 of 4 batches");
-  run.send({ type: "stage_progress", stage: "thresholding", criterion: "1", done: 0, total: 1 });
-  expect(cardLine("Winter sun on facades")).toBe("Running");
-  expect(cardLine("Spring sun on windows")).toBe("Updates from Winter sun on facades");
-  chainService.summaryCriteria = [carvingSummaryOf(FACADES, 70), carvingSummaryOf(WINDOWS, 80)];      // criterion 1's new numbers
-  run.send({ type: "stage_progress", stage: "thresholding", criterion: "2", done: 0, total: 1 });
-  expect(stageRows()).toEqual([
-    "Winter sun on facades: Sun analysis | done", "Winter sun on facades: Carving | done", "Spring sun on windows: Carving | running",
-  ]);
-  expect(cardLine("Winter sun on facades")).toBe("Running");          // its new numbers are on their way, not the ones from before
-  expect(card("Winter sun on facades").getAttribute("aria-busy")).toBeNull();
-  await settle();
-  expect(cardLine("Winter sun on facades")).toBe(volumeLine(30));
-  expect(cardLine("Spring sun on windows")).toBe("Running");
-
-  chainService.criterionStages = { 1: CURRENT, 2: CURRENT };
-  chainService.summaryCriteria = [carvingSummaryOf(FACADES, 70), carvingSummaryOf(WINDOWS, 75)];
-  run.send({ type: "run_finished", stages: ["preprocessing", "thresholding"], files: [] });
-  await settle();
-  expect(cardLine("Spring sun on windows")).toBe(volumeLine(25));
-});
-
-test("the pinned bar scrolls when the run progress is long, and the step stays on the page", async () => {
-  const removeStyleSheet = addStyleSheetForTest("src/theme/panels.css");
-  try {
-    await openChain([FACADES, WINDOWS], { 1: OUT_OF_DATE, 2: THRESHOLD_OUT_OF_DATE });
-    chainService.runCriterionStages = { 1: ["preprocessing", "thresholding"], 2: ["preprocessing", "thresholding"] };
-    await pressRunAnalysis();
-    expect(stageRows()).toHaveLength(4);
-    const bar = pinnedBar();
-    expect(bar.classList.contains("step-pinned-action")).toBe(true);
-    expect(bar.querySelectorAll(".run-stage")).toHaveLength(4);
-    const style = getComputedStyle(bar);                          // jsdom has no layout: the class says it scrolls inside half the panel
-    expect(style.maxHeight).toBe("50%");
-    expect(style.overflowY).toBe("auto");
-    expect(panel()).not.toBeNull();                               // the step above is still there to reach
-    expect(card("Winter sun on facades")).toBeDefined();
-  } finally {
-    removeStyleSheet();
-  }
-});
-
-test("a carving update's failure is said in the pinned bar, whether the Carving rule section is open or closed", async () => {
-  await openChain([FACADES], { 1: CURRENT });
-  chainService.runRefusal = { status: 503, body: { detail: "The analysis service is busy." } };
-  typeAndLeave(thresholdField(), "1");
-  await waitForTheSave();
-  await settle();
-  expect(timesShown(pinnedBar(), "The analysis service is busy.")).toBe(1);
-  expect(panel().querySelector(".run-outcome")).toBeNull();                       // not in the section
-  togglePanelSection("Carving rule");
-  expect(panelSectionOpen("Carving rule")).toBe(false);
-  expect(timesShown(pinnedBar(), "The analysis service is busy.")).toBe(1);
-});
-
-test("with one criterion a run's stages keep their names, with no criterion's", async () => {
-  await openChain([FACADES], { 1: OUT_OF_DATE });
-  chainService.runCriterionStages = { 1: ["preprocessing", "thresholding"] };
-  await pressRunAnalysis();
-  expect(stageRows()).toEqual(["Sun analysis | running", "Carving | waiting"]);
-});
-
-test("a run refused for criterion 2's settings selects its card, says so in its panel and marks the field", async () => {
-  await openChain([FACADES, WINDOWS]);
-  chainService.runRefusal = {
-    status: 422, body: { field_errors: [{ field: "max_slope_deg", message: "Input should be less than 90" }], grid_plan: null, criterion: "2" },
-  };
-  await pressRunAnalysis();
-  expect(chainService.requests).toContain("GET /criteria/2/settings");
-  expect(pinnedBar().textContent).toContain("The run stopped on an error.");
-  expect(container().querySelector('[data-setting="max_slope_deg"] .setting-error')!.textContent).toBe("Input should be less than 90");
-  expect(selectedCardName()).toBe("Spring sun on windows");
-  showCriterionEditor();
-  await select("Winter sun on facades");
-  expect(container().querySelector('[data-setting="max_slope_deg"] .setting-error')).toBeNull();      // criterion 1's settings are fine
-});
-
-test("the pinned run says what a criterion without test surfaces needs", async () => {
-  await openChain([FACADES, WINDOWS]);
-  // The service found criterion 2's test surfaces gone (removed in another tab, say).
-  const refusal = "Add test surfaces to Spring sun on windows.";
-  chainService.runRefusal = { status: 422, body: { detail: refusal, missing_inputs: ["test_surfaces:2"] } };
-  await pressRunAnalysis();
-  expect(timesShown(pinnedBar(), refusal)).toBe(1);
-  expect(pinnedBar().querySelector(".run-outcome-error")!.textContent).toBe(refusal);
-  expect(timesShown(panelFrame(), refusal)).toBe(0);              // the panel does not say it a second time
-  // Known beforehand, the button waits and names the criterion.
-  await openChain([FACADES, { ...WINDOWS, test_surface_files: [] }], { 1: CURRENT, 2: NOT_RUN });
-  expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Add test surfaces to Spring sun on windows to run the analysis");
-});
-
-test("a run refused for missing test surfaces selects that criterion and asks for them once, in the pinned bar", async () => {
-  await openChain([FACADES, WINDOWS]);
-  // The service found criterion 2's test surfaces gone (removed in another tab, say).
-  const refusal = "Add test surfaces to Spring sun on windows.";
-  chainService.runRefusal = { status: 422, body: { detail: refusal, missing_inputs: ["test_surfaces:2"] } };
-  await pressRunAnalysis();                                       // the pinned Run analysis, which says the refusal itself
-  expect(selectedCardName()).toBe("Spring sun on windows");
-  expect(timesShown(pinnedBar(), refusal)).toBe(1);
-  expect(timesShown(panelFrame(), refusal)).toBe(0);
-  // From Site and grid the refusal is said there; the panel of the criterion says it once too.
-  await select("Winter sun on facades");
-  openStep("Site and grid");
-  await pressRunAnalysis();
-  openStep("Criteria");
-  expect(selectedCardName()).toBe("Spring sun on windows");
-  expect(panelFrame().querySelector(".criterion-panel-problem")!.textContent).toBe(refusal);
-  expect(timesShown(panelFrame(), refusal)).toBe(1);
-  await select("Winter sun on facades");
-  expect(panelFrame().querySelector(".criterion-panel-problem")).toBeNull();
-});
-
-test("Run analysis waits for the test surfaces of every criterion that is on, and names the one without", async () => {
-  await openChain([FACADES, { ...WINDOWS, test_surface_files: [] }], { 1: CURRENT, 2: NOT_RUN });
-  const runButton = () => buttonIn(pinnedBar(), "Run analysis");
-  expect(runButton().disabled).toBe(true);
-  expect(reasonOf(runButton())).toBe("Add test surfaces to Spring sun on windows to run the analysis");
-  // A carving change of criterion 1 waits for criterion 2, which needs test surfaces before any analysis.
-  expect(panel().textContent).toContain("Add test surfaces to Spring sun on windows first");
-  expect(panel().textContent).not.toContain("Run the analysis for Spring sun on windows first");
-  // Shown, it is named too: with several criteria the bar says which one the reason is about.
-  await select("Spring sun on windows");
-  expect(reasonOf(runButton())).toBe("Add test surfaces to Spring sun on windows to run the analysis");
-  await bypass("Spring sun on windows");
-  expect(runButton().disabled).toBe(false);
-});
-
-test("with every criterion bypassed Run analysis says to turn one on", async () => {
-  await openChain([FACADES, WINDOWS]);
-  await bypass("Winter sun on facades");
-  await bypass("Spring sun on windows");
-  const runButton = buttonIn(pinnedBar(), "Run analysis");
-  expect(runButton.disabled).toBe(true);
-  expect(reasonOf(runButton)).toBe("Turn on a criterion to run");
-});
-
-test("moving an earlier cutoff with auto update runs once, rethresholds the later criterion, and keeps that criterion's histogram", async () => {
-  await openChain([FACADES, WINDOWS]);
-  chainService.runCriterionStages = { 1: ["thresholding"], 2: ["thresholding"] };
-  typeAndLeave(thresholdField(), "1");
-  await settle();
-  expect(chainService.patches.map((patch) => patch.id)).toEqual(["1"]);
-  expect(chainService.runsStarted).toEqual([["thresholding"]]);
-  expect(cardLine("Winter sun on facades")).toBe("Running");
-  expect(cardLine("Spring sun on windows")).toBe("Updates from Winter sun on facades");
-  const run = FakeWebSocket.opened[0];
-  run.send({ type: "stage_progress", stage: "thresholding", criterion: "1", done: 0, total: 1 });
-  run.send({ type: "stage_progress", stage: "thresholding", criterion: "2", done: 0, total: 1 });
-  expect(cardLine("Spring sun on windows")).toBe("Running");
-  chainService.summaryCriteria = [carvingSummaryOf(FACADES, 50), carvingSummaryOf(WINDOWS, 75)];
-  run.send({ type: "run_finished", stages: ["thresholding"], files: [] });
-  await settle();
-  expect(chainService.runsStarted).toHaveLength(1);
-  const scorePointRequests = chainService.requests.filter((request) => request.startsWith("GET /run/score-points"));
-  expect(scorePointRequests).toEqual(["GET /run/score-points?criterion=1", "GET /run/score-points?criterion=1"]);     // at open, after the run
-  expect(selectedCardName()).toBe("Winter sun on facades");
-  expect(thresholdField().value).toBe("1");
-  expect(cardLine("Spring sun on windows")).toBe(volumeLine(25));
-});
-
-test("cutoffs moved quickly on two criteria: each value is saved to its own criterion, and neither replaces the other's", async () => {
-  await openChain([FACADES, WINDOWS]);
-  chainService.runCriterionStages = { 1: ["thresholding"], 2: ["thresholding"] };
-  typeAndLeave(thresholdField(), "1");                           // run A, for criterion 1
-  await settle();
-  typeAndLeave(thresholdField(), "2");                           // waits
-  await select("Spring sun on windows");
-  typeAndLeave(thresholdField(), "4");                           // waits, beside criterion 1's
-  await settle();
-  expect(chainService.patches.every((patch) => patch.id === "1")).toBe(true);     // the selection saved criterion 1's typing
-  FakeWebSocket.opened[0].send({ type: "run_finished", stages: ["thresholding"], files: [] });
-  await settle();
-  FakeWebSocket.opened[1].send({ type: "run_finished", stages: ["thresholding"], files: [] });
-  await settle();
-  const thresholdsOf = (id: string) => chainService.patches.filter((patch) => patch.id === id)
-    .map((patch) => thresholdOf(patch.body.values as Record<string, unknown>));
-  expect(thresholdsOf("1")[0]).toBe(1);
-  expect(thresholdsOf("1").at(-1)).toBe(2);
-  expect(thresholdsOf("2")).toEqual([4]);
-  expect(chainService.runsStarted).toHaveLength(3);
-  expect(chainService.entries.map((entry) => thresholdOf(entry.settings!))).toEqual([2, 4]);
-  expect(chainService.entries[0].settings!.start_month).toBe(12);       // criterion 1 kept its own period
-});
-
-test("a cutoff waiting for criterion 1's run is saved to criterion 1 after another card is selected", async () => {
-  await openChain([FACADES, WINDOWS]);
-  chainService.runCriterionStages = { 1: ["thresholding"], 2: ["thresholding"] };
-  typeAndLeave(thresholdField(), "1");
-  await settle();
-  typeAndLeave(thresholdField(), "2");                           // waits for run A
-  await select("Spring sun on windows");
-  FakeWebSocket.opened[0].send({ type: "run_finished", stages: ["thresholding"], files: [] });
-  await settle();
-  expect(chainService.patches.filter((patch) => patch.id === "2")).toEqual([]);
-  expect(thresholdOf(chainService.entries[0].settings!)).toBe(2);
-  expect(thresholdOf(chainService.entries[1].settings!)).toBe(3);
-  expect(chainService.runsStarted).toHaveLength(2);              // criterion 1's value runs
-  expect(thresholdField().value).toBe("3");                      // criterion 2's panel keeps its own cutoff
-});
-
-test("after a reorder a carving run's progress and the cards follow the new chain order", async () => {
-  await openChain([FACADES, WINDOWS]);
-  const handle = card("Spring sun on windows").querySelector<HTMLElement>(".criterion-card-handle")!;
-  await act(async () => handle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true })));
-  await settle();
-  await select("Spring sun on windows");
-  chainService.runCriterionStages = { 1: ["thresholding"], 2: ["thresholding"] };
-  typeAndLeave(thresholdField(), "4");
-  await settle();
-  expect(stageRows()).toEqual(["Spring sun on windows: Carving | running", "Winter sun on facades: Carving | waiting"]);
-  expect(cardLine("Spring sun on windows")).toBe("Running");
-  expect(cardLine("Winter sun on facades")).toBe("Updates from Spring sun on windows");
-});
-
-test("the selected criterion's carving locks only while its own analysis is out of date; another's keeps a carving change from running", async () => {
-  await openChain([FACADES, WINDOWS], { 1: CURRENT, 2: OUT_OF_DATE });
-  expect(thresholdField().disabled).toBe(false);
-  expect(panel().textContent).not.toContain("Settings changed since the analysis.");
-  typeAndLeave(thresholdField(), "1");
-  await waitForTheSave();
-  await settle();
-  expect(chainService.patches.map((patch) => patch.id)).toEqual(["1"]);
-  expect(chainService.count("POST /runs")).toBe(0);          // tracing criterion 2 is for Run analysis to start (M10)
-  expect(panel().textContent).toContain("Run the analysis for Spring sun on windows first");
-  await select("Spring sun on windows");
-  expect(thresholdField().disabled).toBe(true);
-  expect(panel().textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
-});
-
-test("a run refused for criterion 2's settings, seen from criterion 1, names criterion 2; its link selects it and focuses the field", async () => {
-  await openChain([FACADES, WINDOWS]);
-  chainService.runRefusal = {
-    status: 422, body: { field_errors: [{ field: "max_slope_deg", message: "Input should be less than 90" }], grid_plan: null, criterion: "2" },
-  };
-  await pressRunAnalysis();
-  expect(pinnedBar().textContent).toContain("The run stopped on an error.");          // said in the pinned bar; criterion 2 is selected
-  await select("Winter sun on facades");
-  expect(pinnedBar().textContent).toContain("The run stopped on an error in the settings of Spring sun on windows.");
-  const link = buttonIn(pinnedBar(), "Go to steepest step between columns of Spring sun on windows");
-  await act(async () => link.click());
-  await settle();
-  expect(container().querySelector('[data-setting="max_slope_deg"]')!.contains(document.activeElement)).toBe(true);
-  expect(selectedCardName()).toBe("Spring sun on windows");
-});
-
-test("go to a setting of another criterion, its section closed: that criterion is selected, the section opens and the field has the focus", async () => {
-  await openChain([FACADES, WINDOWS]);
-  chainService.runRefusal = {
-    status: 422, body: { field_errors: [{ field: "start_month", message: "Input should be 12 or less" }], grid_plan: null, criterion: "2" },
-  };
-  await pressRunAnalysis();                                       // selects criterion 2, whose marked field opens Settings
-  await select("Winter sun on facades");
-  expect(panelSectionOpen("Settings")).toBe(true);
-  togglePanelSection("Settings");
-  await act(async () => buttonIn(pinnedBar(), "Go to analysis period of Spring sun on windows").click());
-  await settle();
-  expect(panelSectionOpen("Settings")).toBe(true);
-  expect(container().querySelector('[data-setting="start_month"]')!.contains(document.activeElement)).toBe(true);
-  expect(selectedCardName()).toBe("Spring sun on windows");
-});
-
-test("with several criteria the build buttons name the criterion whose analysis they wait for", async () => {
-  await openChain([FACADES, WINDOWS], { 1: CURRENT, 2: OUT_OF_DATE });
-  // The build pinned in Criteria says the same.
-  const pinnedBuild = buttonIn(pinnedBar(), "Build envelope and massing");
-  expect(pinnedBuild.disabled).toBe(true);
-  expect(reasonOf(pinnedBuild)).toBe("Run the analysis for Spring sun on windows first");
-  expect(buttonIn(pinnedBar(), "Run analysis").disabled).toBe(false);
-  openStep("Envelope and massing");
-  for (const [part, label] of [["Envelope", "Build envelope"], ["Building massing", "Build massing"]]) {
-    expect(reasonOf(buttonIn(buildPart(part), label))).toBe("Run the analysis for Spring sun on windows first");
-  }
-});
-
-test("Site and grid's Run analysis names the criterion without test surfaces, whichever criterion is shown", async () => {
-  await openChain([FACADES, { ...WINDOWS, test_surface_files: [] }], { 1: CURRENT, 2: NOT_RUN });
-  await select("Spring sun on windows");
-  openStep("Site and grid");
-  const runButton = buttonIn(pinnedBar(), "Run analysis");
-  expect(reasonOf(runButton)).toBe("Add test surfaces to Spring sun on windows to run the analysis");
-});
-
-test("Run analysis asks for the weather file a criterion that is on needs, naming it, also when the shown one needs none", async () => {
-  const withoutWeatherFile = (opened: ProjectDetail): ProjectDetail => ({ ...opened, inputs: { ...opened.inputs, weather: [] } });
-  await openChain([{ ...ROOFS, id: "1" }, { ...FACADES, id: "2" }], undefined, undefined, [], withoutWeatherFile);
-  expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Add a weather file to run Winter sun on facades");
-  openStep("Site and grid");
-  expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Add a weather file to run Winter sun on facades");
-  openStep("Criteria");
-  await select("Winter sun on facades");
-  expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Add a weather file to run Winter sun on facades");
-});
-
-test("a criterion that is off is not flagged for a missing weather file", async () => {
-  const withoutWeatherFile = (opened: ProjectDetail): ProjectDetail => ({ ...opened, inputs: { ...opened.inputs, weather: [] } });
-  await openChain([{ ...ROOFS, id: "1" }, { ...FACADES, id: "2", bypassed: true }], undefined, undefined, [], withoutWeatherFile);
-  await select("Winter sun on facades");
-  expect(panelSectionOpen("Mode")).toBe(false);
-  expect(panel().querySelector('.panel-section[data-section="mode"] .panel-section-summary')!.textContent).toBe("Solar time-based");
-  expect(panel().querySelector(".panel-section-summary-problem")).toBeNull();
-  expect(pinnedBar().textContent).not.toContain("weather file");
-});
-
-test("a shared setting refused by another criterion's settings is said in Site and grid with that criterion's name, on no criterion field", async () => {
-  await openChain([FACADES, WINDOWS], undefined, (chain) => {
-    chain.configErrorsOf = (values) => (values.voxel_size === 3 ? [{ field: "max_slope_deg", message: "Input should be less than 90" }] : null);
-    chain.sharedRefusalCriterion = "2";
-  });
-  openStep("Site and grid");
-  typeAndLeave(voxelSizeField(), "3");
-  await waitForTheSave();
-  await settle();
-  expect(stepRow("Site and grid").textContent).toContain("Spring sun on windows: Steepest step between columns: Input should be less than 90");
-  openStep("Criteria");
-  expect(container().querySelector('[data-setting="max_slope_deg"] .setting-error')).toBeNull();     // criterion 1's own field is fine
 });

@@ -45,20 +45,12 @@ def test_the_report_lists_each_criterion_with_the_voxels_it_started_with_and_kep
     assert len(rows) == 2
     assert f"{first.voxels_kept + first.voxels_removed:,}" in rows[0] and f"{first.voxels_kept:,}" in rows[0]
     assert f"{first.voxels_kept:,}" in rows[1] and f"{second.voxels_kept:,}" in rows[1]
-
-
-def test_the_report_of_a_chain_run_gives_the_volumes_and_the_total_time(tmp_path):
-    result = run_chain(_two_criteria(tmp_path), tmp_path / "run")
-    first, second = (r.thresholding for r in result.criteria)
+    # The chain summary's volumes come from the voxel size each criterion's preprocessing recorded (the table itself is
+    # tested in test_run_report_chain.py, from folders written by hand).
     voxel_size = json.loads((tmp_path / "run/criteria/1/preprocessing/manifest.json").read_text())["voxel_size"]
-    report = (tmp_path / "run/run_report.md").read_text(encoding="utf-8")
     chain = report[report.index("## Chain"):report.index("## Preprocessing")]
-    for result_thr in (first, second):
-        assert f"{result_thr.voxels_kept * voxel_size ** 3:,.1f}" in chain
     share = 100 * second.voxels_kept / (first.voxels_kept + first.voxels_removed)
     assert chain.rstrip().endswith(f"| {second.voxels_kept * voxel_size ** 3:,.1f} | {share:.1f} |")
-    assert "| # | Name | Mode | Rule | Cutoff |" in report
-    assert "**Total time:**" in report.split("## Total")[1]
 
 
 def test_massing_of_a_chain_follows_the_drawn_footprint(tmp_path):

@@ -64,11 +64,6 @@ class TestScoreStatistics:
                 "nonzero_count", "nonzero_fraction"} <= set(result)
         assert not {"median", "std", "p5", "p25", "p75", "p95"} & set(result)
 
-    def test_3d_array(self):
-        scores = np.ones((5, 5, 5))
-        result = score_statistics(scores)
-        assert result["count"] == 125
-
 
 # ---------------------------------------------------------------------------
 # save_histogram
@@ -90,26 +85,12 @@ class TestSaveHistogram:
         result = save_histogram(np.array([np.nan, np.nan, np.nan]), tmp_path)
         assert result is None
 
-    def test_with_threshold_line(self, tmp_path):
-        scores = np.random.rand(100)
-        path = save_histogram(scores, tmp_path, threshold_line=0.5)
-        assert path is not None
-        assert path.exists()
-
-    def test_zero_dominant_scores_creates_histogram(self, tmp_path):
-        """When most voxels score zero, the histogram should still be created.
-
-        The histogram plots only scores > 0 and annotates the zero count
-        (e.g. '900 zero-score voxels (90%)'); this test checks only that the
-        file is written.
-        """
-        scores = np.concatenate([np.zeros(900), np.random.rand(100) * 10])
-        path = save_histogram(scores, tmp_path, "zero_test.png")
-        assert path is not None
-        assert path.exists()
-
-    def test_constant_scores(self, tmp_path):
-        """All-identical scores should not crash."""
-        scores = np.full(50, 3.14)
-        path = save_histogram(scores, tmp_path, "const.png")
-        assert path is not None and path.is_file()       # one bar at the constant value
+    @pytest.mark.parametrize("scores, threshold_line", [
+        (np.random.rand(100), 0.5),                                          # with the threshold drawn
+        (np.concatenate([np.zeros(900), np.random.rand(100) * 10]), None),   # 90 % zeros: only the rest is binned
+        (np.full(50, 3.14), None),                                           # one value: a single bar
+    ], ids=["threshold line", "mostly zeros", "constant"])
+    def test_unusual_scores_still_give_a_png(self, tmp_path, scores, threshold_line):
+        """A smoke test: none of these inputs stops the histogram from being written."""
+        path = save_histogram(scores, tmp_path, threshold_line=threshold_line)
+        assert path is not None and path.is_file()

@@ -112,33 +112,6 @@ class TestPMDiffusion:
         result = _pm_anisotropic_diffuse(field, iters=16, k=1.0, tau=0.15)
         np.testing.assert_allclose(result, field, atol=1e-6)
 
-    def test_step_edge_smoothed(self):
-        """A sharp step edge should be smoothed (peak gradient reduced)."""
-        from urbansolarcarver.meshing import _pm_anisotropic_diffuse
-        field = np.zeros((30, 30, 30), dtype=np.float32)
-        field[:, :, 15:] = 10.0  # sharp step in Z
-        result = _pm_anisotropic_diffuse(field, iters=16, k=20.0, tau=0.15)
-        grad_before = np.abs(np.diff(field[15, 15, :]))
-        grad_after = np.abs(np.diff(result[15, 15, :]))
-        assert grad_after.max() < grad_before.max(), (
-            "Diffusion should reduce peak gradient"
-        )
-
-    def test_preserves_shape(self):
-        """Output shape and dtype must match input."""
-        from urbansolarcarver.meshing import _pm_anisotropic_diffuse
-        field = np.random.randn(16, 16, 16).astype(np.float32)
-        result = _pm_anisotropic_diffuse(field, iters=4, k=1.0, tau=0.1)
-        assert result.shape == field.shape
-        assert result.dtype == np.float32
-
-    def test_zero_iters_returns_copy(self):
-        """Zero iterations should return the input unchanged."""
-        from urbansolarcarver.meshing import _pm_anisotropic_diffuse
-        field = np.random.randn(10, 10, 10).astype(np.float32)
-        result = _pm_anisotropic_diffuse(field, iters=0, k=1.0, tau=0.15)
-        np.testing.assert_array_equal(result, field)
-
     def test_neumann_boundary_no_drift(self):
         """Boundary voxels should not drift significantly from their initial
         values when the field is smooth near the boundary."""

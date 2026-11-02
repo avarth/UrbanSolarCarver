@@ -9,10 +9,6 @@ _PERIOD = {"start_month", "start_day", "start_hour", "end_month", "end_day", "en
 
 
 class TestModeRegistry:
-    def test_all_six_modes(self):
-        assert set(MODES) == {"tilted_plane", "time-based", "irradiance", "benefit",
-                              "daylight", "radiative_cooling"}
-
     def test_mode_params_are_config_fields(self):
         fields = set(UserConfig.model_fields)
         for name, spec in MODES.items():
@@ -438,17 +434,17 @@ class TestUiCommand:
         assert sys.executable in result.output
         assert missing_module in result.output
 
-    def test_the_install_command_quotes_a_python_path_with_spaces(self, monkeypatch, built_front_end, service_never_starts):
-        monkeypatch.setattr("sys.executable", "C:\\Program Files\\Python 3\\python.exe")
+    @pytest.mark.parametrize("python_path, shown", [
+        ("C:\\Program Files\\Python 3\\python.exe", '"C:\\Program Files\\Python 3\\python.exe" -m pip install'),
+        ("C:\\Python3\\python.exe", ': C:\\Python3\\python.exe -m pip install'),
+    ], ids=["with spaces quoted", "without spaces bare"])
+    def test_the_install_command_quotes_a_python_path_only_when_it_has_spaces(
+            self, monkeypatch, built_front_end, service_never_starts, python_path, shown):
+        monkeypatch.setattr("sys.executable", python_path)
         self._without_module(monkeypatch, "websockets")
         result = _invoke(["ui", "--no-browser"])
         assert result.exit_code == 1
-        assert '"C:\\Program Files\\Python 3\\python.exe" -m pip install' in result.output
-
-    def test_the_install_command_leaves_a_python_path_without_spaces_bare(self, monkeypatch):
-        from urbansolarcarver import carver_cli
-        monkeypatch.setattr("sys.executable", "C:\\Python3\\python.exe")
-        assert carver_cli._ui_install_command().startswith("C:\\Python3\\python.exe -m pip install")
+        assert shown in result.output
 
     def test_without_the_front_end_names_the_build_command(self, monkeypatch, tmp_path):
         from urbansolarcarver import carver_cli

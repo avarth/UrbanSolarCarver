@@ -47,6 +47,7 @@ test("one criterion shows its row in the list, with the switch on and no drag ha
   expect(rows[0].querySelector(".criterion-card-swatch")).not.toBeNull();
   expect(rows[0].querySelector(".criterion-card-name")!.textContent).not.toBe("");
   expect(rows[0].querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(true);
+  expect(rows[0].querySelector(".criterion-card-line")!.textContent).not.toBe("Off");
   expect(rows[0].querySelector('[role="switch"]')!.getAttribute("aria-label")).toMatch(/^Use /);
   expect(step.querySelector("[draggable='true'], .criterion-card-handle")).toBeNull();
   // Delete waits on the only criterion.
@@ -72,40 +73,15 @@ test("one criterion shows its row in the list, with the switch on and no drag ha
   expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Solar time-based, 61 % kept");
 });
 
-test("a new project opens with one criterion in the list, its switch on", async () => {
-  service = new FakeService(NOTHING_RUN, null);
-  await openWorkspace(service, project(NOTHING_RUN));
-  openStep("Criteria");
-  showCriterionCards();
-  const rows = [...stepRow("Criteria").querySelectorAll(".criterion-list .criterion-card")];
-  expect(rows).toHaveLength(1);
-  expect(rows[0].querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(true);
-  expect(rows[0].querySelector(".criterion-card-line")!.textContent).not.toBe("Off");
-});
-
-test("the criteria step pins run analysis and build side by side under the steps", async () => {
+test("the criteria step pins run analysis and build, both enabled once carved; Inputs has neither", async () => {
   service = new FakeService(CARVED, CARVING);
   await openWorkspace(service, project(CARVED));
   openStep("Criteria");
-  const bar = pinnedBar();
-  const run = buttonIn(bar, "Run analysis"), build = buttonIn(bar, "Build envelope and massing");
-  expect(run.disabled).toBe(false);
-  expect(build.disabled).toBe(false);
-  expect(run.closest(".run-button-area")!.parentElement).toBe(build.closest(".run-button-area")!.parentElement);      // one row
-  expect(stepRow("Criteria").contains(bar)).toBe(false);                                                             // under the step list
-  expect(bar.compareDocumentPosition(panel()!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  expect(buttonIn(pinnedBar(), "Run analysis").disabled).toBe(false);
+  expect(buttonIn(pinnedBar(), "Build envelope and massing").disabled).toBe(false);
   openStep("Inputs");
-  expect(container().querySelector(".step-pinned-action")).toBeNull();                                               // only for Criteria
-});
-
-test("the panel has no run analysis of its own", async () => {
-  service = new FakeService(CARVED, CARVING);
-  await openWorkspace(service, project(CARVED));
-  openStep("Criteria");
-  for (const section of ["Test surfaces", "Mode", "Settings", "Carving rule"]) openPanelSection(section);
-  expect([...panel()!.querySelectorAll("button")].map((button) => button.textContent)).not.toContain("Run analysis");
-  expect(panel()!.querySelector(".criterion-run")).toBeNull();
-  expect(panel()!.querySelector(".run-button-area")).toBeNull();
+  expect(buttonIn(container(), "Run analysis")).toBeUndefined();                                                   // only for Criteria
+  expect(buttonIn(container(), "Build envelope and massing")).toBeUndefined();
 });
 
 test("build waits in the pinned bar until every criterion is carved", async () => {
@@ -242,7 +218,6 @@ test("test surfaces added to and removed from the criterion go to its routes; th
 
 const editorName = () => container().querySelector(".criterion-editor-name")?.textContent ?? null;
 const listShown = () => container().querySelector(".criterion-list") !== null;
-const REFUSED_FOR_TEST_SURFACES = "Add test surfaces to Spring sun on windows.";
 
 test("a project with one criterion opens the Criteria step on its editor; with two, on the list", async () => {
   service = new FakeService(CARVED, CARVING);
@@ -297,23 +272,6 @@ test("a run that ends and opens the Criteria step keeps the list or the editor a
   await runFromSiteAndGrid();
   expect(listShown()).toBe(false);
   expect(editorName()).not.toBeNull();
-});
-
-test("a run refused because a criterion has no test surfaces opens that criterion's editor, from Site and grid and from the Criteria bar", async () => {
-  await openChain([FACADES, WINDOWS]);
-  chainService.runRefusal = { status: 422, body: { detail: REFUSED_FOR_TEST_SURFACES, missing_inputs: ["test_surfaces:2"] } };
-  expect(listShown()).toBe(true);
-  await pressRunAnalysis();                              // the Criteria bar's: it says the reason under its button
-  expect(editorName()).toBe("Spring sun on windows");
-  expect(pinnedBar().querySelector(".run-outcome-error")!.textContent).toBe(REFUSED_FOR_TEST_SURFACES);
-  expect(container().querySelector(".criterion-panel-problem")).toBeNull();
-  await select("Winter sun on facades");
-  showCriterionCards();
-  openStep("Site and grid");
-  await pressRunAnalysis();                              // Site and grid's own button
-  openStep("Criteria");
-  expect(editorName()).toBe("Spring sun on windows");
-  expect(container().querySelector(".criterion-panel-problem")!.textContent).toBe(REFUSED_FOR_TEST_SURFACES);
 });
 
 test("a run failure's link to a criterion setting opens the editor of that criterion with the field focused", async () => {

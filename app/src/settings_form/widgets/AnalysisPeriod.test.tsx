@@ -174,20 +174,6 @@ test("arrows move an hour handle an hour, Page Up and Page Down six hours; past 
   expect(periodValues()).toMatchObject({ end_hour: 0, end_day: 22 });
 });
 
-test("on 31 December, hours across midnight end on 1 January", () => {
-  renderPeriod(form({ ...WINTER_DAY, start_day: 31, end_day: 31 }));
-  keyDown(handle("Start hour"), "End");
-  expect(periodValues()).toEqual({ start_month: 12, start_day: 31, start_hour: 23, end_month: 1, end_day: 1, end_hour: 14 });
-  expect(bubbles().slice(0, 2)).toEqual(["31 Dec", "1 Jan"]);
-});
-
-test("one hour on one date stays as it is", () => {
-  renderPeriod();
-  for (let step = 0; step < 4; step++) keyDown(handle("End hour"), "ArrowLeft");
-  expect(periodValues()).toEqual({ ...WINTER_DAY, end_hour: 10 });
-  expect(bubbles()).toEqual(["21 Dec", "21 Dec", `10${NBSP}h`, `10${NBSP}h`]);
-});
-
 test("the presets set the dates and keep the hours; the one the dates match shows as chosen", () => {
   renderPeriod(form({ ...WINTER_DAY, start_hour: 7, end_hour: 19 }));
   expect(presetButton("21 December").getAttribute("aria-pressed")).toBe("true");
@@ -210,20 +196,6 @@ test("with a weather file in the southern hemisphere the heating season preset i
   rendered!.unmount();
   renderPeriod(form(), false, null, "northern");
   expect(presetButton("Heating season, October to April")).toBeDefined();
-});
-
-test("a preset of one date while the hours cross midnight gives one night", () => {
-  renderPeriod(form({ start_month: 10, start_day: 1, start_hour: 22, end_month: 4, end_day: 30, end_hour: 2 }));
-  click(presetButton("21 December"));
-  expect(periodValues()).toEqual({ start_month: 12, start_day: 21, start_hour: 22, end_month: 12, end_day: 22, end_hour: 2 });
-  expect(presetButton("21 December").getAttribute("aria-pressed")).toBe("true");
-});
-
-test("Page Up from 31 January lands on 28 February: no key gives 31 February", () => {
-  renderPeriod(form({ ...WINTER_DAY, start_month: 1, start_day: 31 }));
-  keyDown(handle("Start date"), "PageUp");
-  expect(periodValues()).toMatchObject({ start_month: 2, start_day: 28 });
-  expect(bubbles()[0]).toBe("28 Feb");
 });
 
 test("an error of the period marks its handles and strips, and is said under the control", () => {

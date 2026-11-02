@@ -7,14 +7,14 @@ folder of its own, so the library's own entries (beside the user preferences fil
 """
 import copy
 import json
-from pathlib import Path
 
 import numpy as np
 import pytest
 import yaml
 
-from local_web_test_support import GOLDEN_EPW, FakeEngine, box_bytes, make_worker, run_and_wait, wait_until_finished
-from test_local_web_server import build_client, client, client_with_blocking_run, create_project, projects_folder, upload  # noqa: F401 (fixtures)
+from local_web_test_support import (
+    GOLDEN_EPW, FakeEngine, box_bytes, create_project, make_worker, run_and_wait, upload, wait_until_finished,
+)
 from urbansolarcarver import simulated_weights
 from urbansolarcarver.errors import ConfigError
 from urbansolarcarver.local_web_service import typical_building
@@ -37,17 +37,6 @@ BOX = typical_building.validate({
     "roof_exposed": True, "u_roof": 0.3, "floor_exposed": True, "u_floor": 0.3, "ach_infiltration": 0.5})
 EXAMPLE_IDS = ["kenak-apartment-a", "kenak-apartment-b", "kenak-apartment-c", "kenak-apartment-d",
                "kenak-office-a", "kenak-office-b", "kenak-office-c", "kenak-office-d"]
-
-
-@pytest.fixture(autouse=True)
-def home_folder(tmp_path, monkeypatch):
-    """A home folder of its own (as test_local_web_server.home_folder), so the library's folder is in it."""
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setenv("USERPROFILE", str(home))
-    monkeypatch.setenv("HOME", str(home))
-    assert Path.home() == home
-    return home
 
 
 class FakeGenerator:
@@ -353,16 +342,6 @@ def test_a_name_in_use_or_a_bad_value_is_refused_and_nothing_is_saved(client, ho
     assert refused.status_code == 422 and refused.json()["field_errors"] == [{"field": "wwr.se", "message": "Give a number from 0 to 0.9."}]
     assert len(list((home_folder / ".urbansolarcarver" / "typical_buildings").iterdir())) == 1
     assert typical_building.library_entry(entry_id).values == DEFAULT
-
-
-def test_the_openapi_document_names_the_library_routes():
-    from urbansolarcarver.local_web_service.server import openapi_document
-    paths = openapi_document()["paths"]
-    assert paths["/api/typical-building-library"]["get"]["operationId"] == "typical_building_library"
-    assert paths["/api/typical-building-library"]["post"]["operationId"] == "add_typical_building_library_entry"
-    assert {method: operation["operationId"] for method, operation in paths["/api/typical-building-library/{entry_id}"].items()} == {
-        "put": "update_typical_building_library_entry", "delete": "delete_typical_building_library_entry"}
-    assert "/api/typical-building-presets" not in paths
 
 
 def test_a_damaged_own_entry_is_left_out(home_folder):

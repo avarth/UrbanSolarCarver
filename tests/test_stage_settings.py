@@ -4,7 +4,7 @@ import pytest
 from _stage_scene import daylight_cube_config
 from urbansolarcarver.pydantic_schemas import UserConfig
 from urbansolarcarver.stage_settings import (
-    PIPELINE_STAGES, ExportingSettings, MassingSettings, PreprocessingSettings,
+    ExportingSettings, MassingSettings, PreprocessingSettings,
     RunOptions, ThresholdingSettings, applied_smoothing_radius_m, stages_to_rerun,
 )
 
@@ -19,14 +19,6 @@ def test_every_config_field_belongs_to_exactly_one_settings_model_but_the_mesh_f
     # Exporting and massing both write a mesh in the chosen format.
     assert owners.pop("final_mesh_format") == ["ExportingSettings", "MassingSettings"]
     assert all(len(v) == 1 for v in owners.values())
-
-
-def test_from_config_copies_the_values_and_the_models_are_frozen(tmp_path):
-    config = daylight_cube_config(tmp_path, plate_tolerance=0.3)
-    massing = MassingSettings.from_config(config)
-    assert massing.plate_tolerance == 0.3
-    with pytest.raises(Exception):
-        massing.plate_tolerance = 0.5
 
 
 def test_unset_and_explicit_defaults_compare_equal(tmp_path):
@@ -101,10 +93,6 @@ def test_an_unknown_produce_stage_is_a_value_error(tmp_path):
         stages_to_rerun(None, daylight_cube_config(tmp_path), {"nonsense"})
 
 
-def test_pipeline_stages_are_in_pipeline_order():
-    assert PIPELINE_STAGES == ("preprocessing", "thresholding", "exporting", "massing")
-
-
 def test_thresholding_effective_values_are_resolved(tmp_path):
     config = daylight_cube_config(tmp_path)
     values = ThresholdingSettings.from_config(config).effective_values("daylight", 1.0)
@@ -140,17 +128,11 @@ def test_applied_smoothing_radius(kind, voxel_size, smoothing, expected):
     assert applied_smoothing_radius_m(kind, voxel_size, smoothing) == pytest.approx(expected)
 
 
-def test_stage_folder_is_the_run_folder_plus_the_stage_name():
-    from pathlib import Path
-    from urbansolarcarver.stage_settings import stage_folder
-    assert stage_folder("run", "massing") == Path("run") / "massing"
-
-
 def test_stages_needed_for_lists_the_path_in_pipeline_order():
     from urbansolarcarver.stage_settings import stages_needed_for
     assert stages_needed_for(["preprocessing"]) == ["preprocessing"]
     assert stages_needed_for(("massing",)) == ["preprocessing", "thresholding", "massing"]
-    assert stages_needed_for({"massing", "exporting"}) == list(PIPELINE_STAGES)
+    assert stages_needed_for({"massing", "exporting"}) == ["preprocessing", "thresholding", "exporting", "massing"]
     assert stages_needed_for(stage for stage in ["exporting"]) == [
         "preprocessing", "thresholding", "exporting"]
 

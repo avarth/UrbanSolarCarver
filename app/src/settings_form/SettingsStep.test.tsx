@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { act, useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { ApiError, type ModeInfo } from "../api_client/client";
@@ -72,15 +71,6 @@ test("Run analysis says what blocks it, in order: a run, the inputs, the weather
     .toBe("Fix the settings above to run the analysis");
   expect(runAnalysisBlocker(conditions({ warmUpState: "running" }))).toBe("Waiting for the GPU to be ready");
   expect(runAnalysisBlocker(conditions({ warmUpState: null }))).toBe("Waiting for the GPU to be ready");
-});
-
-test("the settings to fix count field errors and step errors", () => {
-  expect(settingsToFixCount(rejected([{ field: "voxel_size", message: "a" }, { field: null, message: "b" }]))).toBe(2);
-});
-
-test("the grid it gives sits under Voxel size", () => {
-  rendered = renderForTest(<SettingsStep form={form()} onChange={() => {}} disabledReason={null} />);
-  expect(rendered.container.querySelector(".setting-note")!.textContent).toBe("62 voxels per side, 238\u202f328 in total");
 });
 
 test("a grid over the budget: the voxel count, the budget and the size to use, in bold, under an outlined Voxel size", () => {
@@ -168,6 +158,8 @@ test("the settings to fix are counted by the step whose field holds them; messag
   expect(settingsToFixByStep(shared, criterion, CRITERION_KEYS)).toEqual({ criteria: 3, site_and_grid: 1, envelope_and_massing: 1 });
   expect(settingsToFixByStep(criterion, form(), CRITERION_KEYS)).toEqual({ criteria: 2, site_and_grid: 1 });
   expect(settingsToFixCount(criterion)).toBe(3);
+  // A field error and a message for no field are one setting to fix each.
+  expect(settingsToFixCount(rejected([{ field: "voxel_size", message: "a" }, { field: null, message: "b" }]))).toBe(2);
 });
 
 test("a step that cannot be used yet still shows its settings to fix, so they can be fixed", () => {
@@ -251,12 +243,6 @@ test("the line keeps its place under an over-budget voxel size, and before the g
   rendered.rerender(<SettingsStep form={initialFormState({ schema: SCHEMA, modes: MODES, settings: { mode: "time-based" }, gridPlan: null })}
                                   onChange={() => {}} disabledReason={null} />);
   expect(notesUnder("voxel_size")).toEqual(["Test surfaces sampled every 0.5\u00a0m"]);
-});
-
-test("the sample spacing the line gives is the engine's rule for an unset grid_step", () => {
-  const schemas = readFileSync("../src/urbansolarcarver/pydantic_schemas.py", "utf8");
-  expect(schemas).toContain("GRID_STEP_PER_VOXEL_SIZE_WHEN_UNSET = 0.5");
-  expect(schemas).toContain("None (default): half the voxel size.");
 });
 
 test("a project with surroundings shows Account for context blocking, on by default, and changing it reaches onChange", () => {

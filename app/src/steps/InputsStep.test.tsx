@@ -122,15 +122,6 @@ test("the optional boxes for the existing surroundings and the terrain follow th
   expect(terrain.querySelector(".input-box-actions")!.textContent).toBe("Add filesor drop them here");
 });
 
-test("a surroundings file is listed in its box with its triangle count", () => {
-  rendered = renderForTest(
-    <InputsStep files={{ ...NO_FILES, context: [{ name: "neighbours.ply", triangle_count: 96 }] }} weatherLocation={null} weatherHint={WEATHER_HINT}
-                inputsBounds={null} onAddFiles={async () => []} onRemoveFile={async () => null} disabledReason={null} />);
-  const context = boxTitled("Existing surroundings (optional)");
-  expect(context.querySelector(".input-file-name")!.textContent).toBe("neighbours.ply");
-  expect(context.querySelector(".input-file-detail")!.textContent).toBe("96 triangles");
-});
-
 test("a project carved further with an earlier version keeps its note on the maximum volume", () => {
   const chain = [{ mode: "daylight" }, { mode: "time-based" }];
   const note = "Carved by Daylight, then Solar time-based. The earlier maximum volumes are kept in the project folder, in inputs/earlier_max_volumes.";

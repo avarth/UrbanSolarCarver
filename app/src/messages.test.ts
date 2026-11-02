@@ -35,11 +35,8 @@ test("the grid over budget message groups digits and gives the voxel size to use
   });
 });
 
-test("the device lines of UX 5.1 and 6.1", () => {
-  expect(messages.gpuPreparing).toBe("Preparing the GPU");
-  expect(messages.gpuWarmUpHint).toBe("You can open a project and add files now. The run buttons wait until the GPU is ready.");
+test("the GPU line of UX 5.1 names the device", () => {
   expect(messages.gpuReadyWithDevice("RTX 4070")).toBe("GPU ready: RTX 4070");
-  expect(messages.runButtonWaitsForGpu).toBe("Waiting for the GPU to be ready");
 });
 
 test("the count of settings to fix agrees with the number", () => {

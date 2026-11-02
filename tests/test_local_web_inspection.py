@@ -8,8 +8,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from local_web_test_support import GOLDEN_EPW, box_bytes, write_fake_chain_run
-from test_local_web_server import build_client, client_with_blocking_run, create_project, projects_folder, upload  # noqa: F401 (fixtures)
+from local_web_test_support import GOLDEN_EPW, box_bytes, build_client, create_project, upload, write_fake_chain_run
 from urbansolarcarver.io import load_mesh
 from urbansolarcarver.local_web_service import inspection, test_surfaces
 from urbansolarcarver.local_web_service.projects import ProjectError, ProjectStore
@@ -692,29 +691,40 @@ def test_the_routes_answer_409_with_the_reason_when_the_file_changed(tmp_path):
 
 
 def test_a_context_file_keeps_only_its_summary(store_with_files):
-    import trimesh
+    """The other roles keep no triangles, so they count nothing against KEPT_TRIANGLE_COUNT; a test surface file keeps its own,
+    read only, since every reader shares them."""
     project_inspection(store_with_files, "p")
     for role, file_name in (("max_volume", "volume.ply"), ("context", "town.ply")):
         kept = inspection.inspect_file(store_with_files.input_file_path("p", role, file_name), role)
-        assert kept.vertices is None and kept.faces is None and kept.surface_of_face is None and kept.kept_triangle_count == 0
+        assert kept.kept_triangle_count == 0 and kept.summary.triangle_count > 0
+        with pytest.raises(ValueError, match="keeps no triangles"):
+            kept.mesh()
     facades = inspection.inspect_file(store_with_files.input_file_path("p", "test_surfaces", "facades.obj"), "test_surfaces")
-    assert facades.faces.shape == (4, 3) and facades.kept_triangle_count == 4
-    assert not facades.vertices.flags.writeable and not facades.surface_of_face.flags.writeable
-    assert not any(isinstance(value, trimesh.Trimesh) for value in vars(facades).values())     # no mesh with its derived arrays is kept
+    assert facades.kept_triangle_count == 4 and len(facades.mesh().faces) == 4
+    for shared in (facades.vertices, facades.faces, facades.surface_of_face):
+        with pytest.raises(ValueError, match="read-only"):
+            shared[0] = 0
 
 
 def test_the_kept_inspections_are_bounded_by_their_triangles(tmp_path, monkeypatch):
-    monkeypatch.setattr(inspection, "_kept", type(inspection._kept)())
-    monkeypatch.setattr(inspection, "_kept_triangles", 0)
+    """A file is read again (load_mesh) only when its inspection was not kept: the least recently used leave first."""
+    read = []
+    real_load_mesh = inspection.load_mesh
+    monkeypatch.setattr(inspection, "load_mesh", lambda path, **options: read.append(Path(path).name) or real_load_mesh(path, **options))
     monkeypatch.setattr(inspection, "KEPT_TRIANGLE_COUNT", 10)
     paths = [tmp_path / f"f{index}.obj" for index in range(3)]
     for path in paths:
         path.write_bytes(obj_panels([0, 20]))        # 4 triangles each
-    for path in paths[:2]:
-        inspection.inspect_file(path, "test_surfaces")
-    assert len(inspection._kept) == 2 and inspection._kept_triangles == 8
-    inspection.inspect_file(paths[2], "test_surfaces")        # 12 > 10: the least recently used leaves
-    assert [key[0] for key in inspection._kept] == [str(paths[1]), str(paths[2])] and inspection._kept_triangles == 8
+
+    def inspect(*indices):
+        read.clear()
+        for index in indices:
+            inspection.inspect_file(paths[index], "test_surfaces")
+        return read[:]
+
+    assert inspect(0, 1, 0) == ["f0.obj", "f1.obj"]       # 8 triangles: both kept; f0 is now the most recently used
+    assert inspect(2) == ["f2.obj"]                         # 12 > 10: f1, the least recently used, leaves
+    assert inspect(0, 2) == [] and inspect(1) == ["f1.obj"]
     monkeypatch.setattr(inspection, "KEPT_TRIANGLE_COUNT", 3)
-    inspection.inspect_file(paths[0], "test_surfaces")        # larger than the bound alone: it stays, as the newest
-    assert [key[0] for key in inspection._kept] == [str(paths[0])] and inspection._kept_triangles == 4
+    assert inspect(0) == ["f0.obj"]                         # larger than the bound alone, so the others leave ...
+    assert inspect(0) == [] and inspect(2) == ["f2.obj"]    # ... and it stays, as the newest

@@ -8,8 +8,6 @@ import pytest
 import cases
 from typologies import SceneSpec, build, neighbour_masses
 
-pytestmark = pytest.mark.slow
-
 TYPOLOGIES = ("courtyard", "rows", "lshape")
 
 
@@ -27,6 +25,7 @@ def _runs(tmp_path, typology, example_epw_path):
 
 
 def test_neighbour_masses_are_closed_boxes_behind_the_facades():
+    """A check of the scene builder, not the engine: the end-to-end tests below rely on closed context masses."""
     spec = SceneSpec(typology="courtyard", seed=0)
     masses = neighbour_masses(spec)
     assert len(masses) == 4
@@ -38,17 +37,15 @@ def test_neighbour_masses_are_closed_boxes_behind_the_facades():
     assert build(SceneSpec(typology="courtyard", neighbours=False)).context is None
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("typology", TYPOLOGIES)
 def test_context_carving_keeps_at_least_as_much(tmp_path, typology, example_epw_path):
-    """At the same numeric cutoff, every voxel kept without context (and not removed by it) is kept with context."""
+    """At the same numeric cutoff, every voxel kept without context (and not removed by it) is kept with context.
+    The neighbour facades are faces of their own context masses, and those masses must not block them."""
     _scene, plain, with_context = _runs(tmp_path, typology, example_epw_path)
     assert with_context.diag("pre")["context"]["rays_dropped"] > 0
+    assert with_context.diag("pre")["context"]["test_points_fully_blocked"] == 0
     still_buildable = plain.mask.astype(bool) & with_context.occ
     assert not (still_buildable & ~with_context.mask.astype(bool)).any()
     assert with_context.mask.sum() >= plain.mask.sum()
 
-
-@pytest.mark.parametrize("typology", TYPOLOGIES)
-def test_neighbour_facades_are_not_blocked_by_their_own_mass(tmp_path, typology, example_epw_path):
-    _scene, _plain, with_context = _runs(tmp_path, typology, example_epw_path)
-    assert with_context.diag("pre")["context"]["test_points_fully_blocked"] == 0

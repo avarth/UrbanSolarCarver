@@ -41,13 +41,11 @@ test("the 3D view and Export use the envelope file that was built, not a format 
   expect(envelopeDownload.textContent).toBe("Carved envelope (PLY)Out of dateBuilt as PLY; the next envelope build writes OBJ.");
 });
 
-test("a project carved further with an earlier version keeps its note on the maximum volume, and the Export step offers no carve further", async () => {
+test("a project carved further with an earlier version keeps its note on the maximum volume", async () => {
   service = new FakeService(CARVED, CARVING);
   await openWorkspace(service, { ...project(CARVED), carving_chain: [{ mode: "daylight" }, { mode: "time-based" }] } as ProjectDetail);
   expect(container().querySelector(".inputs-step .input-box-hint")!.textContent).toContain(
     "Carved by Daylight, then Solar time-based. The earlier maximum volumes are kept in the project folder, in inputs/earlier_max_volumes.");
-  openStep("Export");
-  expect(container().textContent).not.toMatch(/carve further/i);
 });
 
 test("the 3D view draws no envelope while its stage is not recorded: a run that wrote it and then failed", async () => {
@@ -116,7 +114,7 @@ test("on a first build of both parts the 3D view draws the envelope once its sta
   expect(buildPart("Envelope").querySelector(".envelope-results")).not.toBeNull();
 });
 
-test("a finished envelope stage asks for the run summary once: the envelope's file name comes from the same reply", async () => {
+test("a finished envelope stage draws the envelope file the run summary names and shows the volume of the same reply", async () => {
   service = new FakeService(CARVED, CARVING);
   await openWorkspace(service, project(CARVED));
   openStep("Envelope and massing");
@@ -125,13 +123,14 @@ test("a finished envelope stage asks for the run summary once: the envelope's fi
   const run = FakeWebSocket.opened[0];
   run.send({ type: "stage_progress", stage: "exporting", done: 0, total: 1 });
   await settle();
-  const summariesBefore = service.count("GET /run/summary");
-  service.summary = { carving: CARVING, envelope: { ...ENVELOPE, mesh_file: "export.obj" }, massing: null };
+  expect(FakeViewerScene.latest!.layersWithObjects()).not.toContain("envelope");
+  service.summary = { carving: CARVING, envelope: { mesh_file: "export.obj", envelope_volume_m3: 3900 }, massing: null };
   service.stages = { ...CARVED, exporting: "current" };
   run.send({ type: "run_finished", stages: ["exporting"], files: [] });
   await settle();
-  expect(service.count("GET /run/summary")).toBe(summariesBefore + 1);
   expect(service.requests).toContain("GET /run/files/exporting/export.obj");
+  expect(FakeViewerScene.latest!.layersWithObjects()).toContain("envelope");
+  expect(buildPart("Envelope").querySelector(".number-tile-value")!.textContent).toBe("3 900 m³");
 });
 
 const chooseMeshFormat = async (format: string) => {

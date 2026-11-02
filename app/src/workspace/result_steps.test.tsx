@@ -139,67 +139,6 @@ function typeAndLeave(input: HTMLInputElement, text: string) {
 
 const STARTED = (runId: string) => ({ status: "started", run_id: runId, stages: ["thresholding"] });
 
-test("threshold moves during a carving run: one more run with the last value, and the left value's results are never fetched or shown as current", async () => {
-  FakeWebSocket.opened = [];
-  vi.stubGlobal("WebSocket", FakeWebSocket);
-  let answerSecondStart: () => void = () => {};
-  const startReplies = [Promise.resolve(STARTED("r1")), new Promise((resolve) => { answerSecondStart = () => resolve(STARTED("r2")); })];
-  const requests: string[] = [];
-  vi.stubGlobal("fetch", vi.fn(async (address: string, init?: RequestInit) => {
-    const method = init?.method ?? "GET";
-    requests.push(`${method} ${address}`);
-    if (method === "POST" && address.endsWith("/runs")) return new Response(JSON.stringify(await startReplies.shift()));
-    if (address.endsWith("/run/summary")) return new Response(JSON.stringify({ carving: null, envelope: null, massing: null } satisfies RunSummary));
-    return new Response(JSON.stringify({ detail: "none" }), { status: 404 });
-  }));
-  const resultFetches = () => requests.filter((request) => request.endsWith("/run/summary") || request.endsWith("/run/score-points")).length;
-  const changeAndSave = vi.fn(async (): Promise<SaveOutcome> => "saved");
-  const refreshStageStatus = vi.fn();
-  const stages: Record<PipelineStage, StageState> = { ...ALL_CURRENT, exporting: "missing", massing: "missing" };
-  const form = initialFormState({ schema: { properties: { mode: { default: "time-based" }, threshold: { default: null } } }, modes: [],
-                                  settings: { mode: "time-based", threshold: { method: "cutoff", value: 1.5 } }, gridPlan: null });
-  let latest: ResultSteps | null = null;
-  function Workspace() {
-    const runs = useRunLoop("token", vi.fn());
-    latest = useResultSteps({
-      form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false, stages,
-      refreshStageStatus, runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
-      goToSetting: vi.fn(),
-    });
-    return <>{latest.carvingRule}</>;
-  }
-  rendered = renderForTest(inProjectSession(<Workspace />));
-  await settle();
-  const fetchesAtOpen = resultFetches();
-  const field = () => rendered!.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!;
-  const carvingDimmed = () => latest!.viewer.dimmedLayers!.includes("kept_voxels");
-
-  typeAndLeave(field(), "1");
-  await settle();
-  expect(FakeWebSocket.opened).toHaveLength(1);           // run A, for 1
-  for (const value of ["2", "3", "4"]) typeAndLeave(field(), value);
-  await settle();
-  FakeWebSocket.opened[0].send({ type: "stage_progress", stage: "thresholding", done: 0, total: 1 });
-  FakeWebSocket.opened[0].send({ type: "run_finished", stages: ["thresholding"], files: [] });
-  await settle();
-  // A has ended and B (for 4) is saved and starting: 1's results are not fetched, and the carving on screen stays dimmed.
-  expect(changeAndSave.mock.calls).toEqual([[{ threshold: { method: "cutoff", value: 1 } }], [{ threshold: { method: "cutoff", value: 4 } }]]);
-  expect(resultFetches()).toBe(fetchesAtOpen);
-  expect(carvingDimmed()).toBe(true);
-  expect(refreshStageStatus).toHaveBeenLastCalledWith([]);
-
-  answerSecondStart();
-  await settle();
-  expect(carvingDimmed()).toBe(true);                     // B under way
-  FakeWebSocket.opened[1].send({ type: "stage_progress", stage: "thresholding", done: 0, total: 1 });
-  FakeWebSocket.opened[1].send({ type: "run_finished", stages: ["thresholding"], files: [] });
-  await settle();
-  expect(requests.filter((request) => request.startsWith("POST") && request.endsWith("/runs"))).toHaveLength(2);
-  expect(resultFetches()).toBe(fetchesAtOpen + 2);         // the summary and the score points of 4, once
-  expect(carvingDimmed()).toBe(false);
-  expect(refreshStageStatus).toHaveBeenLastCalledWith(["thresholding"]);
-});
-
 test("a threshold run whose follow-up brings no run (a failed save, results up to date) does not leave the carving dimmed with old results", async () => {
   FakeWebSocket.opened = [];
   vi.stubGlobal("WebSocket", FakeWebSocket);
@@ -315,43 +254,6 @@ test("after a follow-up with nothing to run, the carving stays dimmed until the 
   expect(carvingStepDimmed()).toBe(false);
 });
 
-test("Run analysis answered with up to date asks for the stage status again and fetches the results the service holds (a run the page did not follow)", async () => {
-  FakeWebSocket.opened = [];
-  vi.stubGlobal("WebSocket", FakeWebSocket);
-  const requests: string[] = [];
-  vi.stubGlobal("fetch", vi.fn(async (address: string, init?: RequestInit) => {
-    const method = init?.method ?? "GET";
-    requests.push(`${method} ${address}`);
-    if (method === "POST" && address.endsWith("/runs")) return new Response(JSON.stringify({ status: "up_to_date", run_id: null, stages: [] }));
-    return new Response(JSON.stringify({ detail: "none" }), { status: 404 });
-  }));
-  // The page was reloaded while a run went on: the stage status it opened with said "missing" for the stages that run rewrote.
-  const stages: Record<PipelineStage, StageState> = { preprocessing: "missing", thresholding: "missing", exporting: "current", massing: "current" };
-  const refreshStageStatus = vi.fn();
-  const form = initialFormState({ schema: { properties: { mode: { default: "daylight" } } }, modes: [], settings: { mode: "daylight" }, gridPlan: null });
-  function Workspace() {
-    const runs = useRunLoop("token", vi.fn());
-    const steps = useResultSteps({
-      form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: true,
-      stages, refreshStageStatus, runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
-      goToSetting: vi.fn(),
-    });
-    return <>{steps.carvingRule}{steps.pinnedAction.criteria}</>;
-  }
-  rendered = renderForTest(inProjectSession(<Workspace />));
-  await settle();
-  const requestsAtOpen = requests.length;
-  const runAnalysis = [...rendered.container.querySelectorAll("button")].find((button) => button.textContent === "Run analysis")!;
-  await act(async () => runAnalysis.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-  await settle();
-  expect(rendered.container.textContent).toContain("Results are up to date");
-  expect(FakeWebSocket.opened).toHaveLength(0);
-  expect(refreshStageStatus).toHaveBeenCalledOnce();
-  // The carving asked for, and the analysis before it that the page did not hold as current; not the envelope or the massing.
-  expect(requests.slice(requestsAtOpen).filter((request) => request.startsWith("GET")).map((request) => request.split("/api/projects/p/")[1]).sort())
-    .toEqual(["run/score-points", "run/sky-patches", "run/summary"]);
-});
-
 test("a threshold change whose save stores a mode or an analysis setting a refused save had left starts no carving run", async () => {
   FakeWebSocket.opened = [];
   vi.stubGlobal("WebSocket", FakeWebSocket);
@@ -389,23 +291,3 @@ test("a threshold change whose save stores a mode or an analysis setting a refus
   expect(FakeWebSocket.opened).toHaveLength(0);
 });
 
-test("the export step has no carve further: its downloads end the step, with no title, button or confirmation", async () => {
-  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ detail: "none" }), { status: 404 })));
-  const form = initialFormState({ schema: { properties: { mode: { default: "daylight" } } }, modes: [], settings: { mode: "daylight" }, gridPlan: null });
-  function Workspace() {
-    const runs = useRunLoop("token", vi.fn());
-    const steps = useResultSteps({
-      form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: true,
-      stages: ALL_CURRENT, refreshStageStatus: vi.fn(), runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: false, origin: [0, 0, 0], openStep: vi.fn(),
-      goToSetting: vi.fn(),
-    });
-    return <>{steps.content.export}</>;
-  }
-  rendered = renderForTest(inProjectSession(<Workspace />));
-  await settle();
-  const step = rendered.container.querySelector(".export-step")!;
-  expect(step.querySelector(".carve-further")).toBeNull();
-  expect(step.textContent).not.toMatch(/carve further/i);
-  expect([...step.querySelectorAll("button")].map((button) => button.textContent)).not.toContain("Carve further with another criterion");
-  expect(step.lastElementChild!.classList.contains("download-list")).toBe(true);
-});

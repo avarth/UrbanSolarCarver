@@ -64,6 +64,14 @@ test("the sun path and the building massing swatches", () => {
   expect(rendered.container.querySelector("[data-viewport-theme='dark']")).not.toBeNull();
 });
 
+test("the legend of the carved-by-criterion layer says when the voxels drawn are thinned, and only then", () => {
+  const criteria = [{ name: "Winter sun on facades", colour: "#4477aa" }];
+  rendered = renderForTest(<Legend content={{ carvedByCriterion: { criteria, thinningStep: 3 } }} theme="light" />);
+  expect(rendered.container.querySelector(".viewer-legend")!.textContent).toContain("Showing 1 of every 3 voxels");
+  rendered.rerender(<Legend content={{ carvedByCriterion: { criteria, thinningStep: 1 } }} theme="light" />);
+  expect(rendered.container.querySelector(".viewer-legend")!.textContent).not.toContain("Showing 1 of every");
+});
+
 test("the scale bar reads 0 to its length", () => {
   rendered = renderForTest(<ScaleBar theme="light" metresPerPixel={0.13} />);
   expect(rendered.container.textContent).toBe("0 to 20\u00a0m");

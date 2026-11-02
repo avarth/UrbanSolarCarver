@@ -137,16 +137,10 @@ test("All criteria asks for the list; previous and next select the neighbours in
   expect(onShowsChange).toHaveBeenLastCalledWith("list");
 });
 
-test("with one criterion the header has no position and no previous or next", () => {
-  rendered = renderForTest(<CriteriaStep panel={PANEL} shows="editor" onShowsChange={() => {}} list={listProps([entry("1", "A")])} />);
-  expect(step().querySelector(".criterion-editor-position")).toBeNull();
-  expect(buttonNamed("Previous criterion")).toBeUndefined();
-  expect(buttonNamed("Next criterion")).toBeUndefined();
-});
-
-test("Add criterion and Duplicate open the new criterion's editor; Delete returns to the list with the focus on the card selected", async () => {
+// Delete from the editor's menu is the test above that ends on the list.
+test("Add criterion and Duplicate open the new criterion's editor", async () => {
   const onAdd = vi.fn(async (_mode: string) => null as string | null), onDuplicate = vi.fn(async (_id: string) => null as string | null);
-  const onDelete = vi.fn(async (_id: string) => null as string | null), onShowsChange = vi.fn();
+  const onShowsChange = vi.fn();
   const criteria = [entry("1", "A"), entry("2", "B")];
   rendered = renderForTest(<CriteriaStep panel={PANEL} shows="list" onShowsChange={onShowsChange} list={listProps(criteria, { onAdd })} />);
   click(buttonNamed("Add criterion")!);
@@ -154,24 +148,12 @@ test("Add criterion and Duplicate open the new criterion's editor; Delete return
   expect(onAdd).toHaveBeenCalledExactlyOnceWith("benefit");
   expect(onShowsChange).toHaveBeenLastCalledWith("editor");
 
-  rendered.rerender(<CriteriaStep panel={PANEL} shows="editor" onShowsChange={onShowsChange} list={listProps(criteria, { onDuplicate, onDelete, selectedId: "2" })} />);
+  rendered.rerender(<CriteriaStep panel={PANEL} shows="editor" onShowsChange={onShowsChange} list={listProps(criteria, { onDuplicate, selectedId: "2" })} />);
   onShowsChange.mockClear();
-  const choose = async (label: string) => {
-    click(step().querySelector(".criterion-editor-header .action-menu-button")!);
-    await act(async () => click([...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === label)!));
-  };
-  await choose("Duplicate");
+  click(step().querySelector(".criterion-editor-header .action-menu-button")!);
+  await act(async () => click([...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "Duplicate")!));
   expect(onDuplicate).toHaveBeenCalledExactlyOnceWith("2");
   expect(onShowsChange).toHaveBeenLastCalledWith("editor");
-
-  onShowsChange.mockClear();
-  await choose("Delete");
-  const confirm = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((button) => button.textContent === "Delete")!;
-  await act(async () => click(confirm));
-  expect(onDelete).toHaveBeenCalledExactlyOnceWith("2");
-  expect(onShowsChange).toHaveBeenLastCalledWith("list");
-  rendered.rerender(<CriteriaStep panel={PANEL} shows="list" onShowsChange={onShowsChange} list={listProps([criteria[0]], { selectedId: "1" })} />);
-  expect(document.activeElement).toBe(step().querySelector('.criterion-card[aria-current="true"] .criterion-card-select'));
 });
 
 test("All criteria gives the focus to the selected card once the list shows; a later change of the selection on the list does not move it", () => {
@@ -209,27 +191,6 @@ test("a refusal of the header's switch is said under the header", async () => {
                                          list={listProps([entry("1", "A")], { onSetBypassed: async () => "A run is in progress." })} />);
   await act(async () => click(step().querySelector('.criterion-editor-header [role="switch"]')!));
   expect(step().querySelector(".criterion-editor-problem")!.textContent).toBe("A run is in progress.");
-});
-
-test("Add criterion opens the menu of the modes; an item adds a criterion of that mode and asks for its editor", async () => {
-  const onAdd = vi.fn(async (_mode: string) => null as string | null), onShowsChange = vi.fn();
-  rendered = renderForTest(<CriteriaStep panel={PANEL} shows="list" onShowsChange={onShowsChange} list={listProps([entry("1", "Daylight on windows")], { onAdd })} />);
-  click(buttonNamed("Add criterion")!);
-  await act(async () => menuItem("Solar usefulness").click());
-  expect(onAdd).toHaveBeenCalledExactlyOnceWith("benefit");
-  expect(step().querySelector('.add-criterion [role="menu"]')).toBeNull();
-  expect(onShowsChange).toHaveBeenLastCalledWith("editor");
-});
-
-test("the menu of a new criterion's mode takes the focus, is named for it, and closes with Escape, which gives the focus back to Add criterion", () => {
-  rendered = renderForTest(<CriteriaStep panel={PANEL} shows="list" onShowsChange={() => {}} list={listProps([entry("1", "Daylight on windows")])} />);
-  click(buttonNamed("Add criterion")!);
-  const menu = step().querySelector<HTMLElement>('.add-criterion [role="menu"]')!;
-  expect(menu.getAttribute("aria-label")).toBe("Mode of the new criterion");
-  expect(document.activeElement).toBe(menu.querySelector('[role="menuitem"]'));
-  act(() => { document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
-  expect(step().querySelector('.add-criterion [role="menu"]')).toBeNull();
-  expect(document.activeElement).toBe(buttonNamed("Add criterion"));
 });
 
 test("while the selected criterion's settings are on their way the panel waits and the header names the criterion; a refusal is said there", () => {

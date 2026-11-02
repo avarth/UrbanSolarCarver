@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { valueBubbleShifts } from "./ScaleStrip";
+import { singleBubbleShift, valueBubbleShifts } from "./ScaleStrip";
 
 // Two bubbles 40 px wide on a strip 300 px wide, 4 px apart at the least.
 const bubbles = (startCentre: number, endCentre: number, stripWidth = 300) =>
@@ -30,4 +30,9 @@ test("bubbles are kept over the strip, pushed apart from its end", () => {
 
 test("a strip not measured yet (no layout) leaves the bubbles centred", () => {
   expect(bubbles(0, 0, 0)).toEqual([0, 0]);
+});
+
+test("the bubble of a single handle near an end moves in to stay over the strip, and stays centred elsewhere", () => {
+  expect(singleBubbleShift(5, 40, 300)).toEqual([15, 0]);
+  expect(singleBubbleShift(150, 40, 300)).toEqual([0, 0]);
 });

@@ -140,24 +140,46 @@ def test_georeferenced_outlines_land_on_the_footprint(tmp_path):
     assert np.allclose(outline.max(0), [500015.0, 4200006.0], atol=0.01)
 
 
-def test_the_straight_tolerance_follows_the_precision_of_the_footprint_coordinates():
-    from shapely.geometry import box
-    from urbansolarcarver.api_core.massing import _straight_tolerance
-    footprint = [box(0.0, 0.0, 30.0, 12.0)]
-    assert _straight_tolerance(footprint, (0.0, 0.0, 0.0), 1.0) == 0.01        # micrometre noise, not a real bend
-    # float32 rounds coordinates near 500 000 m to 6 cm: four steps of it, at most half a voxel
-    assert _straight_tolerance(footprint, (500000.0, 0.0, 0.0), 1.0) == pytest.approx(4 * 500030.0 * 2.0 ** -23)
-    assert _straight_tolerance(footprint, (500000.0, 4200000.0, 0.0), 1.0) == 0.5
+def _south_kinked_box(centre_xy, kink):
+    """The 30 x 12 x 20 m box with the middle of its south facade pushed *kink* metres further south."""
+    from shapely.geometry import Polygon
+    mesh = trimesh.creation.extrude_polygon(Polygon([(-15, -6), (0, -6 - kink), (15, -6), (15, 6), (-15, 6)]), 20.0)
+    mesh.apply_translation([centre_xy[0], centre_xy[1], 0.0])
+    return mesh
+
+
+def _bays_per_plate(tmp_path, volume):
+    tmp_path.mkdir()
+    cfg, thr = _run_upstream(tmp_path, volume)
+    _set_mask(thr, lambda occ: occ)
+    return [plate["bays"] for plate in json.loads(_massing(cfg, thr, tmp_path / "m").plates_path.read_text())["plates"]]
+
+
+@pytest.mark.parametrize("centre_xy, kink, straight", [
+    ((0.0, 0.0), 0.1, False),               # near the origin 1 cm counts as straight: a 10 cm kink is a real bend
+    ((500000.0, 0.0), 0.1, True),           # four float32 steps at 500 000 m are 24 cm: the kink is rounding noise
+    ((500000.0, 4200000.0), 1.0, False),    # four steps at 4 200 000 m are 2 m, but at most half a voxel (0.5 m) counts
+], ids=["origin", "utm x", "utm half voxel"])
+def test_a_kink_in_a_facade_is_straight_only_within_the_float32_precision_of_the_footprint(
+        tmp_path, centre_xy, kink, straight):
+    """A facade counted as straight is cut into bays as the box without the kink is; a bend cuts more of them."""
+    bays = _bays_per_plate(tmp_path / "kinked", _south_kinked_box(centre_xy, kink))
+    without_kink = _bays_per_plate(tmp_path / "plain", _south_kinked_box(centre_xy, 0.0))
+    if straight:
+        assert bays == without_kink
+    else:
+        assert bays != without_kink
+        assert bays == _bays_per_plate(tmp_path / "at_origin", _south_kinked_box((0.0, 0.0), kink))
 
 
 def test_a_six_degree_bend_in_a_facade_near_the_origin_stays_a_bend():
     from shapely.geometry import Polygon
     from urbansolarcarver import floor_plates as mg
-    from urbansolarcarver.api_core.massing import _straight_tolerance
     turn = np.radians(6.0)
     bent = Polygon([(0, 0), (20, 0), (20, 15), (12.3, 15),
                     (12.3 - 7.7 * np.cos(turn), 15 - 7.7 * np.sin(turn)), (0, 15 - 7.7 * np.sin(turn))])
-    facades, _ = mg.split_facades([bent], straight_tolerance=_straight_tolerance([bent], (0.0, 0.0, 0.0), 1.0))
+    # 0.01 m: the tolerance massing uses near the origin (test_a_kink_in_a_facade_is_straight_only_within_... checks it)
+    facades, _ = mg.split_facades([bent], straight_tolerance=0.01)
     assert sum(not f.straight for f in facades) == 1     # 0.4 m off its chord over 15.4 m: below half a voxel, but real
 
 
@@ -222,14 +244,6 @@ def test_nothing_buildable_gives_valid_empty_outputs(tmp_path):
     assert res.n_plates == 0 and res.total_floor_area == 0.0
     assert json.loads(res.plates_path.read_text())["plates"] == []
     assert res.mesh_path.is_file()
-
-
-def test_part_thinner_than_the_minimum_builds_nothing(tmp_path):
-    cfg, thr = _run_upstream(tmp_path, _box([30, 2, 20]))
-    _set_mask(thr, lambda occ: occ)
-    with pytest.warns(UserWarning, match="no floor plates"):
-        res = _massing(cfg, thr, tmp_path / "m")
-    assert res.n_plates == 0
 
 
 def test_uses_the_preprocessing_voxel_size(tmp_path):

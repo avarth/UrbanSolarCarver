@@ -28,12 +28,6 @@ class TestCoplanarityCheck:
 
         return trimesh.Trimesh(vertices=verts, faces=faces, process=False)
 
-    def test_perfectly_planar_accepted(self):
-        from urbansolarcarver.surface_sampling import discretize_surface_with_normals
-        mesh = self._make_planar_mesh(normal_spread_deg=0.0)
-        pts, norms, _mesh, _w, _ts = discretize_surface_with_normals(mesh, sample_step=0.2)
-        assert pts.shape[0] > 0, "Perfectly planar mesh should produce samples"
-
     def test_within_tolerance_accepted(self):
         from urbansolarcarver.surface_sampling import discretize_surface_with_normals
         mesh = self._make_planar_mesh(normal_spread_deg=3.0)
@@ -56,23 +50,6 @@ class TestCoplanarityCheck:
         pts, norms, _mesh, _w, _ts = discretize_surface_with_normals(mesh, sample_step=0.3)
         assert pts.shape[0] > 0
 
-    def test_all_rejected_returns_empty(self):
-        """When all components fail planarity, return empty arrays."""
-        from urbansolarcarver.surface_sampling import discretize_surface_with_normals
-        mesh = self._make_planar_mesh(normal_spread_deg=20.0)
-        pts, norms, _mesh, _w, _ts = discretize_surface_with_normals(mesh, sample_step=0.2, coplanarity_tol_deg=5.0)
-        assert pts.shape == (0, 3)
-        assert norms.shape == (0, 3)
-
-    def test_normals_unit_length(self):
-        """Output normals should be approximately unit length."""
-        from urbansolarcarver.surface_sampling import discretize_surface_with_normals
-        mesh = self._make_planar_mesh(normal_spread_deg=0.0)
-        pts, norms, _mesh, _w, _ts = discretize_surface_with_normals(mesh, sample_step=0.2)
-        if norms.shape[0] > 0:
-            lengths = np.linalg.norm(norms, axis=1)
-            np.testing.assert_allclose(lengths, 1.0, atol=0.01)
-
     def test_analysis_mesh_returned(self):
         """Planar mesh should return an AnalysisMesh with 1:1 face mapping."""
         from urbansolarcarver.surface_sampling import discretize_surface_with_normals, AnalysisMesh
@@ -83,12 +60,13 @@ class TestCoplanarityCheck:
         # Face count == sample point count (1:1 mapping)
         assert len(analysis_mesh.faces) == pts.shape[0]
 
-    def test_analysis_mesh_none_when_rejected(self):
-        """When all components fail planarity, analysis_mesh should be None."""
+    def test_all_rejected_returns_empty_arrays_and_no_analysis_mesh(self):
+        """When all components fail planarity, the points and normals are empty (n, 3) arrays and analysis_mesh is None."""
         from urbansolarcarver.surface_sampling import discretize_surface_with_normals
         mesh = self._make_planar_mesh(normal_spread_deg=20.0)
         pts, norms, analysis_mesh, _w, _ts = discretize_surface_with_normals(mesh, sample_step=0.2, coplanarity_tol_deg=5.0)
         assert pts.shape == (0, 3)
+        assert norms.shape == (0, 3)
         assert analysis_mesh is None
 
     @pytest.mark.parametrize("offset", [0.0, 0.3], ids=["corner on the lattice", "off the lattice"])

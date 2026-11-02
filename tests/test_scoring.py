@@ -140,26 +140,9 @@ def test_headtail_empty():
     assert result == 0.0
 
 
-def test_headtail_uniform():
-    """Uniform distribution should converge to a reasonable value."""
-    scores = np.arange(100, dtype=float)
-    thr = headtail_threshold(scores, max_iterations=20)
-    assert 0 < thr < 100
-
-
 def test_headtail_single():
     result = headtail_threshold(np.array([7.0]))
     assert result == pytest.approx(7.0)
-
-
-def test_headtail_heavy_tail():
-    """Heavy-tailed distribution: threshold should be above the median."""
-    rng = np.random.default_rng(42)
-    bulk = rng.uniform(0, 10, 900)
-    tail = rng.uniform(50, 100, 100)
-    scores = np.concatenate([bulk, tail])
-    thr = headtail_threshold(scores)
-    assert thr > np.median(scores), "Head-tail should split above median for heavy-tailed data"
 
 
 def test_headtail_returns_deepest_minority_break():

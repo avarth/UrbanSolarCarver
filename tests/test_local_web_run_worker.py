@@ -1,6 +1,7 @@
 """The run worker of the local web service: one run at a time, events for late readers, cancel and failures."""
 import json
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -142,12 +143,19 @@ def test_a_finished_run_lists_the_result_files_that_exist(project_with_inputs):
         "exporting/export.ply", "massing/plates.json", "massing/plates.obj", "run_report.md"]}
 
 
-def test_the_result_files_include_the_plates_in_the_chosen_format(tmp_path):
-    massing_folder = tmp_path / "massing"
-    massing_folder.mkdir()
-    for file_name in ("plates.json", "plates.obj", "plates.glb"):
-        (massing_folder / file_name).write_text("", encoding="utf-8")
-    assert run_worker_module._result_files(tmp_path) == ["massing/plates.glb", "massing/plates.json", "massing/plates.obj"]
+def test_the_result_files_include_the_plates_in_the_chosen_format(project_with_inputs):
+    store, name = project_with_inputs
+    fake_engine = FakeEngine()
+
+    def engine_writing_glb_plates(request, session, context):
+        fake_engine(request, session, context)
+        (Path(request.run_folder) / "massing" / "plates.glb").write_bytes(b"glTF")     # as massing does with final_mesh_format glb
+
+    worker = make_worker(store, handle_request=engine_writing_glb_plates)
+    reply = run_and_wait(worker, name, ["exporting", "massing"])
+    final_event = worker.run_state(reply.run_id).events[-1]
+    assert final_event["type"] == "run_finished" and final_event["files"] == [
+        "exporting/export.ply", "massing/plates.glb", "massing/plates.json", "massing/plates.obj", "run_report.md"]
 
 
 # ---- Runs of a chain ----
@@ -518,7 +526,6 @@ def test_an_engine_that_returns_without_manifests_is_not_recorded_as_current(pro
 
 @pytest.mark.slow
 def test_real_two_phase_run_on_the_basic_perimeter_block(tmp_path):
-    from pathlib import Path
     example_folder = Path(__file__).resolve().parent.parent / "examples" / "test_inputs" / "basic_perimeter_block"
     store = ProjectStore(tmp_path / "projects", device="cpu")
     store.create("block", "tilted_plane")
@@ -553,7 +560,6 @@ def test_real_two_phase_run_on_the_basic_perimeter_block(tmp_path):
 
 @pytest.mark.slow
 def test_real_run_of_two_criteria_and_one_run_after_a_change_in_each(tmp_path):
-    from pathlib import Path
     example_folder = Path(__file__).resolve().parent.parent / "examples" / "test_inputs" / "basic_perimeter_block"
     store = ProjectStore(tmp_path / "projects", device="cpu")
     store.create("block", "tilted_plane")

@@ -136,20 +136,6 @@ def test_a_manifest_without_run_id_asks_for_a_rerun(tmp_path):
         thresholding(pre, conf, tmp_path / "run" / "thresholding")
 
 
-def test_stored_path_is_relative_with_forward_slashes(tmp_path):
-    from urbansolarcarver.api_core._stage_io import stored_path
-    folder = tmp_path / "run" / "thresholding"
-    assert stored_path(folder / "mask.npy", folder) == "mask.npy"
-    assert stored_path(tmp_path / "run" / "preprocessing" / "manifest.json", folder) \
-        == "../preprocessing/manifest.json"
-
-
-def test_run_ids_are_new_every_time():
-    from urbansolarcarver.api_core._stage_io import new_run_id
-    first, second = new_run_id(), new_run_id()
-    assert first != second and len(first) == 32
-
-
 # A missing or damaged output of an upstream stage is a StageChainError that
 # names the stage to re-run, not a FileNotFoundError, ValueError or KeyError.
 

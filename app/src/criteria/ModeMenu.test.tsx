@@ -1,5 +1,6 @@
 // The short menu of the modes under Add criterion: one item per mode (symbol, name, one line), an item that waits with its reason, the
-// choice it reports and the keyboard. The tooltip text stays on the tiles of the panel's Mode section.
+// choice it reports and what it tells onClose. The keyboard and what closes a menu are useMenuPopup's (menu_popup.test.tsx). The
+// tooltip text stays on the tiles of the panel's Mode section.
 import { act, useRef, useState } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { MODE_TILES } from "../modes";
@@ -13,14 +14,21 @@ afterEach(() => {
   rendered = null;
 });
 
-function Harness({ disabledReason = null, onChoose = () => {} }: { disabledReason?: string | null; onChoose?: (mode: string) => void }) {
+interface HarnessProps {
+  disabledReason?: string | null;
+  onChoose?: (mode: string) => void;
+  onClose?: (focusedAnchor: boolean) => void;
+}
+
+function Harness({ disabledReason = null, onChoose = () => {}, onClose = () => {} }: HarnessProps) {
   const anchor = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   return (
     <>
       <button ref={anchor} type="button" onClick={() => setOpen(true)}>Add criterion</button>
       <button type="button">Next control</button>
-      {open && <ModeMenu id="mode-menu" anchor={anchor} onChoose={onChoose} onClose={() => setOpen(false)} disabledReason={disabledReason} />}
+      {open && <ModeMenu id="mode-menu" anchor={anchor} onChoose={onChoose} disabledReason={disabledReason}
+                         onClose={(focusedAnchor) => { onClose(focusedAnchor); setOpen(false); }} />}
     </>
   );
 }
@@ -68,33 +76,20 @@ test("with a reason the items wait: marked, the reason written under them, and c
   expect(onChoose).not.toHaveBeenCalled();
 });
 
-test("the menu opens on its first item; the arrows, Home and End move, and Escape closes it and gives the focus back", () => {
-  rendered = renderForTest(<Harness />);
+test("the menu opens on its first item; onClose hears that Escape focused the anchor, and that Tab, a press elsewhere and a scroll did not", () => {
+  const onClose = vi.fn();
+  rendered = renderForTest(<Harness onClose={onClose} />);
   click(openButton());
   expect(document.activeElement).toBe(items()[0]);
-  press(document.activeElement!, "ArrowDown");
-  expect(document.activeElement).toBe(items()[1]);
-  press(document.activeElement!, "ArrowUp");
-  press(document.activeElement!, "ArrowUp");
-  expect(document.activeElement).toBe(items()[5]);
-  press(document.activeElement!, "Home");
-  expect(document.activeElement).toBe(items()[0]);
-  press(document.activeElement!, "End");
-  expect(document.activeElement).toBe(items()[5]);
   press(document.activeElement!, "Escape");
   expect(items()).toEqual([]);
   expect(document.activeElement).toBe(openButton());
-});
-
-test("Tab closes the menu and the focus goes on; a press elsewhere or a scroll closes it too", () => {
-  rendered = renderForTest(<Harness />);
   click(openButton());
   press(document.activeElement!, "Tab");
-  expect(items()).toEqual([]);
   click(openButton());
   act(() => { document.body.dispatchEvent(new Event("pointerdown", { bubbles: true })); });
-  expect(items()).toEqual([]);
   click(openButton());
   act(() => { window.dispatchEvent(new Event("scroll")); });
+  expect(onClose.mock.calls).toEqual([[true], [false], [false], [false]]);
   expect(items()).toEqual([]);
 });

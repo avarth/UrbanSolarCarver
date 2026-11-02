@@ -49,13 +49,6 @@ test("a project that lists no criteria has none and nothing selected", () => {
   unmount();
 });
 
-test("select changes the selected card", () => {
-  const { hook, unmount } = renderedHook(projectWith([entry("1"), entry("2")]), () => json({}));
-  act(() => hook().select("2"));
-  expect(hook().selectedId).toBe("2");
-  unmount();
-});
-
 test("add puts the new criterion last and selects it", async () => {
   const { hook, requests, unmount } = renderedHook(projectWith([entry("1")]), (_method, _address, body) => json(entry("2", { name: String((body as { mode: string }).mode) })));
   await act(async () => { await hook().add("daylight"); });
@@ -94,11 +87,14 @@ test("reorder takes the list the service returns", async () => {
   unmount();
 });
 
-test("removing the selected criterion selects the next card, else the previous one", async () => {
-  const { hook, requests, unmount } = renderedHook(projectWith([entry("1"), entry("2"), entry("3")]), () => new Response(null, { status: 204 }));
+test("removing the selected criterion selects the next card, else the previous one; removing another keeps the selection", async () => {
+  const criteria = [entry("1"), entry("2"), entry("3"), entry("4")];
+  const { hook, requests, unmount } = renderedHook(projectWith(criteria), () => new Response(null, { status: 204 }));
   act(() => hook().select("2"));
+  await act(async () => { await hook().remove("4"); });
+  expect(hook().selectedId).toBe("2");
   await act(async () => { await hook().remove("2"); });
-  expect(requests).toEqual(["DELETE /api/projects/p/criteria/2"]);
+  expect(requests).toEqual(["DELETE /api/projects/p/criteria/4", "DELETE /api/projects/p/criteria/2"]);
   expect(hook().criteria.map((criterion) => criterion.id)).toEqual(["1", "3"]);
   expect(hook().selectedId).toBe("3");
   await act(async () => { await hook().remove("3"); });
@@ -110,13 +106,6 @@ test("the criterion left after a remove keeps its switch: one that is off stays 
   const { hook, unmount } = renderedHook(projectWith([entry("1", { bypassed: true }), entry("2")]), () => new Response(null, { status: 204 }));
   await act(async () => { await hook().remove("2"); });
   expect(hook().criteria.map((criterion) => [criterion.id, criterion.bypassed])).toEqual([["1", true]]);
-  unmount();
-});
-
-test("removing another criterion keeps the selection", async () => {
-  const { hook, unmount } = renderedHook(projectWith([entry("1"), entry("2")]), () => new Response(null, { status: 204 }));
-  await act(async () => { await hook().remove("2"); });
-  expect(hook().selectedId).toBe("1");
   unmount();
 });
 

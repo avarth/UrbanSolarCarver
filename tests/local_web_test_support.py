@@ -3,17 +3,21 @@
 The engine is replaced by a fake that writes a manifest with a new run_id (and the current upstream run_id) for each stage it
 runs, as the real stages do, in the chain layout of run_chain (run/criteria/<id>/<stage>, then run/exporting and run/massing).
 The run folders of finished runs are written without computing anything. The fixture
-``project_with_inputs`` is in conftest.py and builds its project with ``add_project_with_inputs``.
+``project_with_inputs`` is in conftest.py and builds its project with ``add_project_with_inputs``; so are the fixtures of the
+HTTP service (``projects_folder``, ``client``, ``client_with_inputs``, ``client_with_blocking_run``), built with
+``build_client`` below.
 """
 import dataclasses
 import json
 import os
 import shutil
+import struct
 import subprocess
 import sys
 import threading
 import time
 import uuid
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Collection
@@ -22,9 +26,14 @@ import numpy as np
 import pytest
 import trimesh
 import yaml
+from starlette.websockets import WebSocketDisconnect
+
+with warnings.catch_warnings():     # newer Starlette versions announce that TestClient will need httpx2; the project pins httpx
+    warnings.filterwarnings("ignore", message=".*httpx.*testclient|.*testclient.*httpx", category=Warning)
+    from starlette.testclient import TestClient
 
 from urbansolarcarver.io import load_mesh, save_mesh
-from urbansolarcarver.local_web_service import project_removal, test_surfaces
+from urbansolarcarver.local_web_service import create_app, project_removal, test_surfaces
 from urbansolarcarver.local_web_service.api_models import StageRecord
 from urbansolarcarver.local_web_service.example_catalog import read_examples
 from urbansolarcarver.local_web_service.projects import INPUTS_FOLDER, JOINED_FOLDER, ProjectStore
@@ -373,6 +382,95 @@ def run_and_wait(worker: RunWorker, name: str, produce: list[str]):
     if reply.run_id is not None:
         wait_until_finished(worker, reply.run_id)
     return reply
+
+
+# ---- The HTTP service ----
+
+TOKEN = "a" * 64
+PORT = 8770
+AUTH = {"X-USC-Token": TOKEN}
+LAST_EVENT_TYPES = ("run_finished", "run_failed", "run_cancelled")
+VOLUME = ("volume.ply", box_bytes([0, 0, 5]))
+SURFACE = ("surface.ply", box_bytes([0, 0, 0], extents=(6, 6, 0.1)))
+
+
+def build_client(projects_folder, handle_request=None, authorized=True, warm_up=None, static_folder=None,
+                 projects_folder_source="default", choose_folder_function=None, open_folder_function=None):
+    """A client for a service whose worker uses *handle_request* (the fake engine by default); the client and the worker."""
+    worker = make_worker(ProjectStore(projects_folder), handle_request=handle_request)
+    extra_arguments = {}
+    if choose_folder_function is not None:
+        extra_arguments["choose_folder_function"] = choose_folder_function
+    if open_folder_function is not None:
+        extra_arguments["open_folder_function"] = open_folder_function
+    app = create_app(projects_folder, TOKEN, PORT, worker=worker, warm_up=warm_up, static_folder=static_folder,
+                     projects_folder_source=projects_folder_source, **extra_arguments)
+    client = TestClient(app, base_url=f"http://127.0.0.1:{PORT}", headers=AUTH if authorized else None)
+    return client, worker
+
+
+def upload(client, name, role, file):
+    file_name, data = file
+    return client.post(f"/api/projects/{name}/inputs/{role}", files={"file": (file_name, data, "application/octet-stream")})
+
+
+def create_project(client, name="p", mode="daylight"):
+    reply = client.post("/api/projects", json={"name": name, "mode": mode})
+    assert reply.status_code == 200, reply.text
+    return reply.json()
+
+
+def create_project_with_inputs(client, name="p", mode="daylight"):
+    create_project(client, name, mode)
+    assert upload(client, name, "max_volume", VOLUME).status_code == 200
+    assert upload(client, name, "test_surfaces", SURFACE).status_code == 200
+
+
+def events_url(run_id, query=f"?token={TOKEN}"):
+    """The WebSocket address of a run (TestClient takes the Host from an absolute URL)."""
+    return f"ws://127.0.0.1:{PORT}/api/runs/{run_id}/events{query}"
+
+
+def read_events(client, run_id):
+    """Every event the WebSocket sends for a run, up to the server closing it."""
+    events = []
+    with client.websocket_connect(events_url(run_id)) as websocket:
+        while True:
+            events.append(websocket.receive_json())
+            if events[-1]["type"] in LAST_EVENT_TYPES:
+                break
+        with pytest.raises(WebSocketDisconnect):
+            websocket.receive_json()        # the server closes after the last event
+    return events
+
+
+def start_run(client, name="p", produce=("exporting", "massing")):
+    reply = client.post(f"/api/projects/{name}/runs", json={"produce": list(produce)})
+    assert reply.status_code == 200, reply.text
+    return reply.json()
+
+
+# ---- The blobs of the result routes ----
+
+def decode_score_points(blob):
+    """The header, voxel indices, scores, kept flags (None without a mask) and compared scores (None without) of a score layer."""
+    header_length = struct.unpack("<I", blob[:4])[0]
+    header = json.loads(blob[4:4 + header_length])
+    body = blob[4 + header_length:]
+    count = header["point_count"]
+    indices = np.frombuffer(body[:4 * count], "<u4")
+    scores = np.frombuffer(body[4 * count:8 * count], "<f4")
+    kept = np.frombuffer(body[8 * count:9 * count], "u1") if header["has_mask"] else None
+    compared_start = 9 * count if header["has_mask"] else 8 * count
+    compared = np.frombuffer(body[compared_start:compared_start + 4 * count], "<f4") if header["has_compared_scores"] else None
+    return header, indices, scores, kept, compared
+
+
+def decode_carved_by_criterion(blob):
+    """The header and, for each voxel of the grid, which criterion carved it (a byte that indexes header["criterion_ids"])."""
+    header_length = struct.unpack("<I", blob[:4])[0]
+    header = json.loads(blob[4:4 + header_length])
+    return header, np.frombuffer(blob[4 + header_length:], "u1").reshape(header["shape"])
 
 
 # ---- Run folders of finished runs ----

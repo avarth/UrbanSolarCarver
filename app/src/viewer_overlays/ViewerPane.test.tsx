@@ -5,7 +5,6 @@ import { decodeCarvedByCriterion } from "../viewer/carved_by_criterion_decoder";
 import { packCarvedByCriterion } from "../viewer/packed_results_for_test";
 import type { ScorePoints } from "../viewer/score_points_decoder";
 import { FakeViewerScene, pretendTheBrowserHasWebGl } from "../viewer/fake_scene_for_test";
-import { Legend } from "./Legend";
 import { click, renderForTest, type RenderedOverlay } from "./render_for_test";
 import type { InspectLayerFile } from "../viewer/layers";
 import { leftInsetOf, NO_VIEWER_RESULTS, ViewerPane, type InspectView, type TestSurfaceGroup, type ViewerPaneProps } from "./ViewerPane";
@@ -185,14 +184,6 @@ test("test the carved-by-criterion layer colours each voxel by its criterion", (
   expect([colourOf(0), colourOf(1)]).toEqual([hexOf("#4477aa"), hexOf("#228833")]);      // the criteria 1 and 3, in their own colours
   click(entry.querySelector("input")!);                                                    // hidden again: the cubes are dropped
   expect(FakeViewerScene.latest!.layers.get("carved_by_criterion") ?? null).toBeNull();
-});
-
-test("the legend of the carved-by-criterion layer says when the voxels drawn are thinned, and only then", () => {
-  const criteria = [{ name: "Winter sun on facades", colour: "#4477aa" }];
-  rendered = renderForTest(<Legend content={{ carvedByCriterion: { criteria, thinningStep: 3 } }} theme="light" />);
-  expect(rendered.container.querySelector(".viewer-legend")!.textContent).toContain("Showing 1 of every 3 voxels");
-  rendered.rerender(<Legend content={{ carvedByCriterion: { criteria, thinningStep: 1 } }} theme="light" />);
-  expect(rendered.container.querySelector(".viewer-legend")!.textContent).not.toContain("Showing 1 of every");
 });
 
 test("test the legend names each criterion", () => {

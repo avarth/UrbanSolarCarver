@@ -47,6 +47,8 @@ def test_default_voxelization_is_unchanged():
     sphere = trimesh.creation.icosphere(subdivisions=3, radius=4.3)
     sphere.apply_translation([0.3, 0.1, -0.2])
     grid = voxelize_solid_warp(sphere.vertices, sphere.faces, plan.origin, VOXEL, plan.resolution, DEVICE)
+    # Re-record after a deliberate change of the default voxelization: print int(grid.sum()) and
+    # hashlib.sha1(np.packbits(grid).tobytes()).hexdigest() here and paste them below.
     assert grid.sum() == 435
     assert hashlib.sha1(np.packbits(grid).tobytes()).hexdigest() == "fc7c26461226bf35fa00da3f4cfb6450479f06ee"
 

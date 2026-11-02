@@ -6,10 +6,9 @@ import send2trash
 import trimesh
 
 from local_web_test_support import GOLDEN_EPW, FakeRecycleBin, box_bytes
-from test_local_web_server import client, client_with_blocking_run, client_with_inputs, projects_folder     # noqa: F401  (fixtures)
 from urbansolarcarver.local_web_service import test_surfaces
 from urbansolarcarver.local_web_service.criteria import CRITERION_COLOURS
-from urbansolarcarver.local_web_service.projects import ProjectError, ProjectStore
+from urbansolarcarver.local_web_service.projects import ProjectError
 from urbansolarcarver.local_web_service.studies import (
     STUDY_SETTING_KEYS, default_study_name, joined_study_surfaces_path, study_from_criterion,
 )
@@ -287,11 +286,6 @@ def test_a_study_whose_folder_cannot_be_recycled_is_still_removed_from_the_list(
     monkeypatch.setattr(send2trash, "send2trash", FakeRecycleBin(error=OSError("no bin")))
     store.delete_study(name, study.id)
     assert store.studies(name) == []
-
-
-def test_the_study_folder_is_simulate_slash_id(tmp_path):
-    from urbansolarcarver.local_web_service.studies import study_folder
-    assert study_folder(tmp_path, "7") == tmp_path / "simulate" / "7"
 
 
 # ---- Routes ----

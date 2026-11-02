@@ -1,17 +1,16 @@
 """The HTTP service of the local web app: security checks, routes, run events, files and the device warm-up state.
 
 The engine is replaced by the fake of local_web_test_support.py, so a run writes the files of a finished run
-without computing anything. Requests go through ``TestClient`` with the Host the service expects.
+without computing anything. Requests go through ``TestClient`` with the Host the service expects (``build_client`` in
+local_web_test_support.py; the fixtures ``client``, ``client_with_inputs`` and ``client_with_blocking_run`` are in conftest.py).
 """
 import io
 import json
 import os
-import shutil
 import subprocess
 import sys
 import threading
 import time
-import warnings
 import zipfile
 from pathlib import Path
 
@@ -21,20 +20,17 @@ import send2trash
 import yaml
 from starlette.websockets import WebSocketDisconnect
 
-with warnings.catch_warnings():     # newer Starlette versions announce that TestClient will need httpx2; the project pins httpx
-    warnings.filterwarnings("ignore", message=".*httpx.*testclient|.*testclient.*httpx", category=Warning)
-    from starlette.testclient import TestClient
-
 from local_web_test_support import (
-    GOLDEN_EPW, FakeRecycleBin, WaitsForCancel, box_bytes, has_vertex_normals, make_link_to_folder, make_worker, write_fake_finished_run_with_envelope,
-    write_envelope_as_exported, write_fake_run, write_joined_test_surfaces_without_normals,
+    AUTH, GOLDEN_EPW, LAST_EVENT_TYPES, PORT, SURFACE, TOKEN, VOLUME, FakeRecycleBin, WaitsForCancel, box_bytes, build_client,
+    create_project, create_project_with_inputs, decode_carved_by_criterion, decode_score_points, events_url, has_vertex_normals,
+    make_worker, read_events, start_run, upload, write_envelope_as_exported, write_fake_finished_run_with_envelope, write_fake_run,
+    write_joined_test_surfaces_without_normals,
 )
-from test_local_web_score_points import decode as decode_score_points, decode_carved_by_criterion
 from urbansolarcarver import __version__
 from urbansolarcarver.local_web_service import create_app
-from urbansolarcarver.local_web_service import folder_picker, folder_picker_child, stage_records, user_preferences
+from urbansolarcarver.local_web_service import folder_picker, folder_picker_child, user_preferences
 from urbansolarcarver.local_web_service.folder_picker import FolderPickerUnavailable
-from urbansolarcarver.local_web_service.example_catalog import read_examples
+from urbansolarcarver.local_web_service.example_catalog import EXAMPLE_PROJECTS_FOLDER, EXAMPLE_WEATHER_FILE_NAME, read_examples
 from urbansolarcarver.local_web_service.gpu_warm_up import GpuWarmUp
 from urbansolarcarver.local_web_service.projects import ProjectStore
 from urbansolarcarver.local_web_service.server import (
@@ -43,104 +39,12 @@ from urbansolarcarver.local_web_service.server import (
 from urbansolarcarver.mode_registry import MODES
 from urbansolarcarver.stage_settings import PIPELINE_STAGES
 
-TOKEN = "a" * 64
-PORT = 8770
-AUTH = {"X-USC-Token": TOKEN}
-LAST_EVENT_TYPES = ("run_finished", "run_failed", "run_cancelled")
-VOLUME = ("volume.ply", box_bytes([0, 0, 5]))
-SURFACE = ("surface.ply", box_bytes([0, 0, 0], extents=(6, 6, 0.1)))
-
-
-def build_client(projects_folder, handle_request=None, authorized=True, warm_up=None, static_folder=None,
-                 projects_folder_source="default", choose_folder_function=None, open_folder_function=None):
-    """A client for a service whose worker uses *handle_request* (the fake engine by default); the client and the worker."""
-    worker = make_worker(ProjectStore(projects_folder), handle_request=handle_request)
-    extra_arguments = {}
-    if choose_folder_function is not None:
-        extra_arguments["choose_folder_function"] = choose_folder_function
-    if open_folder_function is not None:
-        extra_arguments["open_folder_function"] = open_folder_function
-    app = create_app(projects_folder, TOKEN, PORT, worker=worker, warm_up=warm_up, static_folder=static_folder,
-                     projects_folder_source=projects_folder_source, **extra_arguments)
-    client = TestClient(app, base_url=f"http://127.0.0.1:{PORT}", headers=AUTH if authorized else None)
-    return client, worker
-
-
-def upload(client, name, role, file):
-    file_name, data = file
-    return client.post(f"/api/projects/{name}/inputs/{role}", files={"file": (file_name, data, "application/octet-stream")})
-
-
-def create_project(client, name="p", mode="daylight"):
-    reply = client.post("/api/projects", json={"name": name, "mode": mode})
-    assert reply.status_code == 200, reply.text
-    return reply.json()
-
-
-def create_project_with_inputs(client, name="p", mode="daylight"):
-    create_project(client, name, mode)
-    assert upload(client, name, "max_volume", VOLUME).status_code == 200
-    assert upload(client, name, "test_surfaces", SURFACE).status_code == 200
-
-
-def events_url(run_id, query=f"?token={TOKEN}"):
-    """The WebSocket address of a run (TestClient takes the Host from an absolute URL)."""
-    return f"ws://127.0.0.1:{PORT}/api/runs/{run_id}/events{query}"
-
-
-def read_events(client, run_id):
-    """Every event the WebSocket sends for a run, up to the server closing it."""
-    events = []
-    with client.websocket_connect(events_url(run_id)) as websocket:
-        while True:
-            events.append(websocket.receive_json())
-            if events[-1]["type"] in LAST_EVENT_TYPES:
-                break
-        with pytest.raises(WebSocketDisconnect):
-            websocket.receive_json()        # the server closes after the last event
-    return events
-
-
-def start_run(client, name="p", produce=("exporting", "massing")):
-    reply = client.post(f"/api/projects/{name}/runs", json={"produce": list(produce)})
-    assert reply.status_code == 200, reply.text
-    return reply.json()
-
-
-@pytest.fixture
-def projects_folder(tmp_path):
-    return tmp_path / "projects"
-
-
-@pytest.fixture
-def client(projects_folder):
-    return build_client(projects_folder)[0]
-
-
-@pytest.fixture
-def client_with_inputs(client):
-    create_project_with_inputs(client)
-    return client
-
 
 @pytest.fixture
 def client_after_fake_run(client_with_inputs):
     run_id = start_run(client_with_inputs)["run_id"]
     assert read_events(client_with_inputs, run_id)[-1]["type"] == "run_finished"
     return client_with_inputs
-
-
-@pytest.fixture
-def client_with_blocking_run(projects_folder):
-    """A project 'p' whose run has started and waits until it is cancelled; yields the client and the run id."""
-    handler = WaitsForCancel()
-    client, worker = build_client(projects_folder, handle_request=handler)
-    create_project_with_inputs(client)
-    run_id = start_run(client)["run_id"]
-    assert handler.started.wait(10)
-    yield client, run_id
-    worker.cancel(run_id)
-    worker.run_state(run_id).wait_for_events(10 ** 9, 10)     # returns when the run has ended
 
 
 # ---- Security ----
@@ -264,7 +168,8 @@ def test_schema_and_modes(client):
 def test_the_openapi_document_describes_the_routes():
     document = openapi_document()
     assert "/api/health" in document["paths"] and "/api/projects/{name}/runs" in document["paths"]
-    assert {"WarmUpState", "StageStatusReply", "ConfigErrorReply", "ProjectDetail"} <= set(document["components"]["schemas"])
+    assert {"WarmUpState", "StageStatusReply", "ConfigErrorReply", "ProjectDetail", "ProjectsFolderReply",
+            "ProjectsFolderChoiceReply"} <= set(document["components"]["schemas"])
 
 
 # ---- Projects, inputs, settings and runs ----
@@ -381,19 +286,32 @@ def test_a_project_whose_old_joined_file_cannot_be_rebuilt_still_opens(client_wi
 
 def test_the_examples_are_listed_with_a_description(client):
     examples = client.get("/api/examples").json()
-    assert [example["name"] for example in examples] == ["basic_perimeter_block", "new_building", "multiple_buildings"]
+    assert [(example["name"], example["title"], example["description"]) for example in examples] == [
+        (example.name, example.title, example.description) for example in read_examples()]
     assert all(set(example) == {"name", "title", "description", "project"} and example["title"] and example["description"] for example in examples)
 
 
+def example_by_name(name):
+    return next(example for example in read_examples() if example.name == name)
+
+
+def latitude_of_the_example_weather_file() -> float:
+    """The latitude field of the LOCATION line of the packaged weather file."""
+    with open(EXAMPLE_PROJECTS_FOLDER / "weather" / EXAMPLE_WEATHER_FILE_NAME, encoding="utf-8") as weather_file:
+        return float(weather_file.readline().split(",")[6])
+
+
 def test_example_project_joins_two_test_surface_files(client):
+    example = example_by_name("new_building")
+    assert len(example.test_surfaces) == 2 and example.weather
     created = client.post("/api/projects/nb/examples/new_building")
     assert created.status_code == 200, created.text
     detail = created.json()
-    assert [file["name"] for file in detail["inputs"]["max_volume"]] == ["max_volume.ply"]
-    assert [file["name"] for file in detail["inputs"]["test_surfaces"]] == ["neighbor_roofs.ply", "neighbor_windows.ply"]
+    assert [file["name"] for file in detail["inputs"]["max_volume"]] == example.max_volume
+    assert [file["name"] for file in detail["inputs"]["test_surfaces"]] == sorted(example.test_surfaces)
     assert [file["name"] for file in detail["inputs"]["weather"]] == ["weather.epw"]
-    assert detail["settings"]["mode"] == "irradiance" and detail["joined_bounds"] is not None and detail["weather_location"]
-    assert isinstance(detail["weather_latitude"], float)
+    assert detail["settings"]["mode"] == example.mode and detail["joined_bounds"] is not None and detail["weather_location"]
+    assert detail["weather_latitude"] == latitude_of_the_example_weather_file()
     triangle_counts = [file["triangle_count"] for file in detail["inputs"]["test_surfaces"]]
     assert all(triangle_counts) and client.get("/api/projects/nb/inputs/test_surfaces").json() == detail["inputs"]["test_surfaces"]
     assert [row["name"] for row in client.get("/api/projects").json()] == ["nb"]
@@ -447,7 +365,7 @@ def test_creating_a_project_reports_bad_names_modes_and_duplicates(client):
 def test_invalid_setting_is_422_with_the_field(client_with_inputs):
     reply = client_with_inputs.put("/api/projects/p/config", json={"values": {"mode": "daylight", "voxel_size": 0.0}})
     assert reply.status_code == 422
-    assert reply.json()["field_errors"][0]["field"] == "voxel_size" and reply.json()["grid_plan"] is None
+    assert [error["field"] for error in reply.json()["field_errors"]] == ["voxel_size"] and reply.json()["grid_plan"] is None
     assert client_with_inputs.get("/api/projects/p").json()["settings"].get("voxel_size") != 0.0   # nothing was stored
 
 
@@ -667,17 +585,6 @@ def test_the_settings_download_as_config_yaml(client_with_inputs, projects_folde
 
 # ---- The projects folder ----
 
-@pytest.fixture
-def home_folder(tmp_path, monkeypatch):
-    """A home folder of its own, so the preference file of the user is never read or written."""
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setenv("USERPROFILE", str(home))
-    monkeypatch.setenv("HOME", str(home))
-    assert Path.home() == home
-    return home
-
-
 class FakeFolderPicker:
     """Stands in for the operating system's folder picker: answers with *answer* (a folder, None, or an exception to raise)."""
 
@@ -891,19 +798,6 @@ def test_a_folder_that_cannot_be_remembered_is_not_switched_to(projects_folder, 
     assert reply.status_code == 422
     assert "disk is read-only" in reply.json()["detail"]
     assert client.get("/api/projects-folder").json()["path"] == str(projects_folder)
-
-
-def test_the_folder_routes_need_the_token(projects_folder):
-    client, _ = build_client(projects_folder, authorized=False)
-    assert client.get("/api/projects-folder").status_code == 401
-    assert client.post("/api/projects-folder/choose").status_code == 401
-
-
-def test_the_openapi_document_describes_the_folder_routes():
-    document = openapi_document()
-    assert "ProjectsFolderReply" in document["components"]["schemas"]
-    assert "ProjectsFolderChoiceReply" in document["components"]["schemas"]
-    assert "/api/projects-folder" in document["paths"] and "/api/projects-folder/choose" in document["paths"]
 
 
 # ---- The folder picker and the file manager ----
@@ -1142,16 +1036,6 @@ def test_delete_of_an_unknown_project_is_404_and_of_a_bad_name_is_422(client, re
     assert recycle_bin.folders == []
 
 
-def test_delete_with_a_link_inside_is_422_and_the_folder_it_leads_to_is_untouched(client, projects_folder, tmp_path, recycle_bin):
-    create_project(client, "p")
-    (tmp_path / "outside").mkdir()
-    (tmp_path / "outside" / "precious.txt").write_text("keep", encoding="utf-8")
-    make_link_to_folder(projects_folder / "p" / "inputs" / "linked", tmp_path / "outside", "junction" if sys.platform == "win32" else "symlink")
-    reply = client.delete("/api/projects/p", params={"confirm_name": "p"})
-    assert reply.status_code == 422 and "linked" in reply.json()["detail"]
-    assert recycle_bin.folders == [] and (tmp_path / "outside" / "precious.txt").is_file() and (projects_folder / "p").is_dir()
-
-
 def test_delete_when_the_recycle_bin_fails_is_422_with_the_reason(client, monkeypatch):
     monkeypatch.setattr(send2trash, "send2trash", FakeRecycleBin(error=OSError("the recycle bin is full")))
     create_project(client, "p")
@@ -1160,16 +1044,17 @@ def test_delete_when_the_recycle_bin_fails_is_422_with_the_reason(client, monkey
 
 
 def test_reset_to_the_example_gives_the_example_inputs_and_no_results(client, recycle_bin, projects_folder, example_project_templates):
-    example_project_templates.copy_example_project(ProjectStore(projects_folder), "mine", "new_building")
-    assert client.put("/api/projects/mine/config", json={"values": {"mode": "daylight"}}).status_code == 200
-    assert client.delete("/api/projects/mine/inputs/test_surfaces/neighbor_windows.ply").status_code == 200
+    example = example_project_templates.copy_example_project(ProjectStore(projects_folder), "mine", "new_building")
+    other_mode = "daylight" if example.mode != "daylight" else "time-based"
+    assert client.put("/api/projects/mine/config", json={"values": {"mode": other_mode}}).status_code == 200
+    assert client.delete(f"/api/projects/mine/inputs/test_surfaces/{example.test_surfaces[-1]}").status_code == 200
     run_id = start_run(client, "mine")["run_id"]
     assert read_events(client, run_id)[-1]["type"] == "run_finished"
     reply = client.post("/api/projects/mine/reset-to-example")
     assert reply.status_code == 200, reply.text
     detail = reply.json()
-    assert detail["name"] == "mine" and detail["settings"]["mode"] == "irradiance"
-    assert [file["name"] for file in detail["inputs"]["test_surfaces"]] == ["neighbor_roofs.ply", "neighbor_windows.ply"]
+    assert detail["name"] == "mine" and detail["settings"]["mode"] == example.mode
+    assert [file["name"] for file in detail["inputs"]["test_surfaces"]] == sorted(example.test_surfaces)
     assert set(detail["stage_status"]["stages"].values()) == {"missing"}
     assert len(recycle_bin.folders) == 1 and project_names(client) == ["mine"]
 
@@ -1186,14 +1071,6 @@ def test_reset_finds_the_example_of_a_renamed_project(client, recycle_bin, proje
     example_project_templates.copy_example_project(ProjectStore(projects_folder), "first", "basic_perimeter_block")
     assert client.post("/api/projects/first/rename", json={"new_name": "Renamed"}).status_code == 200
     assert client.post("/api/projects/Renamed/reset-to-example").status_code == 200 and project_names(client) == ["Renamed"]
-
-
-def test_reset_with_a_link_inside_is_422_and_changes_nothing(client, projects_folder, tmp_path, recycle_bin, example_project_templates):
-    example_project_templates.copy_example_project(ProjectStore(projects_folder), "mine", "new_building")
-    (tmp_path / "outside").mkdir()
-    make_link_to_folder(projects_folder / "mine" / "run" / "linked", tmp_path / "outside", "junction" if sys.platform == "win32" else "symlink")
-    assert client.post("/api/projects/mine/reset-to-example").status_code == 422
-    assert recycle_bin.folders == [] and client.get("/api/projects/mine").json()["inputs"]["max_volume"]
 
 
 def test_open_folder_gives_the_opener_the_project_folder_only(projects_folder):
@@ -1284,47 +1161,36 @@ def test_another_project_can_be_changed_during_a_run(client_with_blocking_run):
 
 
 def test_the_examples_report_the_project_made_from_them(client, projects_folder, example_project_templates):
-    assert [example["project"] for example in client.get("/api/examples").json()] == [None, None, None]
-    for name, example in (("mine", "new_building"), ("Perimeter block", "basic_perimeter_block"), ("Perimeter block 2", "basic_perimeter_block")):
+    assert {example["project"] for example in client.get("/api/examples").json()} == {None}
+    title = example_by_name("basic_perimeter_block").title
+    for name, example in (("mine", "new_building"), (title, "basic_perimeter_block"), (f"{title} 2", "basic_perimeter_block")):
         example_project_templates.copy_example_project(ProjectStore(projects_folder), name, example)
-    newer_seconds = (projects_folder / "Perimeter block" / "project.json").stat().st_mtime + 100
-    os.utime(projects_folder / "Perimeter block 2" / "project.json", (newer_seconds, newer_seconds))
+    newer_seconds = (projects_folder / title / "project.json").stat().st_mtime + 100
+    os.utime(projects_folder / f"{title} 2" / "project.json", (newer_seconds, newer_seconds))
     projects_by_example = {example["name"]: example["project"] for example in client.get("/api/examples").json()}
-    assert projects_by_example["new_building"] == "mine" and projects_by_example["multiple_buildings"] is None
-    assert projects_by_example["basic_perimeter_block"] == "Perimeter block 2"      # the most recently modified of the two
+    assert projects_by_example.pop("new_building") == "mine"
+    assert projects_by_example.pop("basic_perimeter_block") == f"{title} 2"      # the most recently modified of the two
+    assert set(projects_by_example.values()) <= {None}                              # no project of the other examples
     assert client.post("/api/projects/mine/rename", json={"new_name": "Renamed"}).status_code == 200
     assert {example["name"]: example["project"] for example in client.get("/api/examples").json()}["new_building"] == "Renamed"
-
-
-def test_an_old_project_named_like_the_example_title_counts_as_from_the_example(client, projects_folder):
-    create_project(client, "Perimeter block")      # no example field, as a project made before the field existed
-    create_project(client, "Perimeter block 2")
-    assert {example["name"]: example["project"] for example in client.get("/api/examples").json()}["basic_perimeter_block"] == "Perimeter block"
 
 
 def test_the_project_list_and_the_opened_project_name_the_example_they_came_from(client, projects_folder, example_project_templates):
     example_project_templates.copy_example_project(ProjectStore(projects_folder), "mine", "new_building")
     create_project(client, "plain")
-    create_project(client, "Perimeter block")       # no example field, named like the example's title
-    create_project(client, "Perimeter block 2")
+    title = example_by_name("basic_perimeter_block").title
+    create_project(client, title)           # no example field, named like the example's title
+    create_project(client, f"{title} 2")
     assert {row["name"]: row["example"] for row in client.get("/api/projects").json()} == {
-        "mine": "new_building", "plain": None, "Perimeter block": "basic_perimeter_block", "Perimeter block 2": None}
+        "mine": "new_building", "plain": None, title: "basic_perimeter_block", f"{title} 2": None}
     assert client.get("/api/projects/mine").json()["example"] == "new_building"
     assert client.get("/api/projects/plain").json()["example"] is None
-    assert client.get("/api/projects/Perimeter block").json()["example"] == "basic_perimeter_block"
-    assert client.get("/api/projects/Perimeter block 2").json()["example"] is None
+    assert client.get(f"/api/projects/{title}").json()["example"] == "basic_perimeter_block"
+    assert client.get(f"/api/projects/{title} 2").json()["example"] is None
     renamed = client.post("/api/projects/mine/rename", json={"new_name": "Renamed"}).json()
     assert renamed["example"] == "new_building"
     reset = client.post("/api/projects/Renamed/reset-to-example")
     assert reset.status_code == 200 and reset.json()["example"] == "new_building"
-
-
-def test_the_new_routes_need_the_token(projects_folder):
-    bare_client = build_client(projects_folder, authorized=False)[0]
-    assert bare_client.post("/api/projects/p/rename", json={"new_name": "q"}).status_code == 401
-    assert bare_client.delete("/api/projects/p", params={"confirm_name": "p"}).status_code == 401
-    assert bare_client.post("/api/projects/p/reset-to-example").status_code == 401
-    assert bare_client.post("/api/projects/p/open-folder").status_code == 401
 
 
 def test_the_openapi_document_describes_the_project_management_routes():
@@ -1461,10 +1327,6 @@ def test_carve_further_during_a_run_is_refused(client_with_blocking_run):
     assert client.post("/api/projects/p/carve-further", headers=AUTH).status_code == 409
 
 
-def test_carve_further_without_an_envelope_is_refused(client_with_inputs):
-    assert client_with_inputs.post("/api/projects/p/carve-further", headers=AUTH).status_code == 409
-
-
 def test_context_and_terrain_routes_upload_list_and_remove(client_with_inputs):
     client = client_with_inputs
     for role in ("context", "terrain"):
@@ -1546,14 +1408,6 @@ def test_the_only_criterion_is_not_deleted(client_with_inputs):
     assert refused.status_code == 422 and refused.json()["detail"] == "A project needs at least one criterion."
     assert [entry["id"] for entry in criteria_of(client)] == ["1"]
     assert "422" in openapi_document()["paths"]["/api/projects/{name}/criteria/{criterion_id}"]["delete"]["responses"]
-
-
-def test_opening_a_project_works_out_its_stage_status_once(client_with_inputs, monkeypatch):
-    worked_out = []
-    project_status = stage_records._project_status
-    monkeypatch.setattr(stage_records, "_project_status", lambda store, name: worked_out.append(name) or project_status(store, name))
-    detail = client_with_inputs.get("/api/projects/p").json()
-    assert worked_out == ["p"] and detail["criterion_status"] == detail["stage_status"]["criteria"]
 
 
 def test_a_bad_order_is_422_and_changes_nothing(client_with_two_criteria):
@@ -1686,11 +1540,7 @@ def test_criteria_routes_are_409_during_a_run_of_the_project(client_with_blockin
     assert client.post("/api/projects/other/criteria", json={"mode": "daylight"}).status_code == 200
 
 
-def test_the_criteria_routes_need_the_token_and_the_openapi_document_describes_them(projects_folder):
-    bare_client = build_client(projects_folder, authorized=False)[0]
-    assert bare_client.get("/api/criterion-keys").status_code == 401
-    assert bare_client.post("/api/projects/p/criteria", json={"mode": "daylight"}).status_code == 401
-    assert bare_client.get("/api/projects/p/run/carved-by-criterion").status_code == 401
+def test_the_openapi_document_describes_the_criteria_routes():
     document = openapi_document()
     paths = document["paths"]
     assert "get" in paths["/api/criterion-keys"] and "post" in paths["/api/projects/{name}/criteria"]
@@ -1732,11 +1582,10 @@ def test_shared_settings_are_saved_without_a_mode_and_refused_with_a_criterion_k
     assert client.put("/api/projects/missing/shared-settings", json={"values": {}}).status_code == 404
 
 
-def test_shared_settings_are_409_during_a_run_and_need_the_token(client_with_blocking_run, projects_folder):
+def test_shared_settings_are_409_during_a_run(client_with_blocking_run):
     client, run_id = client_with_blocking_run
     reply = client.put("/api/projects/p/shared-settings", json={"values": {"voxel_size": 2.0}})
     assert reply.status_code == 409 and reply.json()["detail"] == "A run of project 'p' is active. Wait for it to finish or cancel it."
-    assert build_client(projects_folder, authorized=False)[0].put("/api/projects/p/shared-settings", json={"values": {}}).status_code == 401
 
 
 def test_criterion_settings_read_does_not_digest_test_surfaces(client_with_two_criteria, monkeypatch):

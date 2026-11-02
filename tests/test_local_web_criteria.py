@@ -243,16 +243,20 @@ def test_an_invalid_criterion_setting_changes_nothing(tmp_path):
     store.add_criterion("p", "time-based")
     project_json_path, config_path = store.open("p") / "project.json", _config_path(store, "p")
     json_before, config_before = project_json_path.read_bytes(), config_path.read_bytes()
-    attempts = [
+    changes_of_criterion_2 = [
         lambda: store.update_criterion("p", "2", values={"mode": "time-based", "start_month": 13}),
         lambda: store.update_criterion("p", "2", values={"mode": "no-such-mode"}),
+    ]
+    other_attempts = [
         lambda: store.add_criterion("p", "no-such-mode"),
         lambda: store.write_config_from_values("p", {"mode": "time-based", "carve_fraction": -1}, criterion_id="2"),
     ]
-    for attempt in attempts:
-        with pytest.raises(ConfigError):
+    for attempt in changes_of_criterion_2 + other_attempts:
+        with pytest.raises(ConfigError) as refused:
             attempt()
         assert project_json_path.read_bytes() == json_before and config_path.read_bytes() == config_before
+        if attempt in changes_of_criterion_2:       # the app marks the criterion whose settings were refused
+            assert isinstance(refused.value, CriterionConfigError) and refused.value.criterion == "2" and refused.value.errors
     with pytest.raises(ProjectError):
         store.update_criterion("p", "2", colour="red")
     with pytest.raises(ProjectError):
@@ -447,16 +451,3 @@ def test_a_shared_setting_over_the_grid_budget_is_refused_with_the_plan(tmp_path
         store.write_shared_settings("p", {"voxel_size": 0.0125})
     assert refused.value.grid_plan.total_voxels > refused.value.grid_plan.budget_voxels
     assert _config_path(store, "p").read_bytes() == config_before
-
-
-def test_a_rejected_criterion_change_names_the_criterion(tmp_path):
-    from urbansolarcarver.local_web_service.projects import CriterionConfigError
-    store = ProjectStore(tmp_path)
-    store.create("p", "daylight")
-    store.add_criterion("p", "time-based")
-    for attempt in (lambda: store.update_criterion("p", "2", values={"mode": "time-based", "start_month": 13}),
-                    lambda: store.update_criterion("p", "2", values={"mode": "no-such-mode"})):
-        with pytest.raises(CriterionConfigError) as refused:
-            attempt()
-        assert refused.value.criterion == "2" and refused.value.errors
-        assert isinstance(refused.value, ConfigError)

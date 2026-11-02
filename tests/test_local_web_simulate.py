@@ -13,10 +13,9 @@ import pytest
 import trimesh
 
 from local_web_test_support import (
-    GOLDEN_EPW, WaitsForCancel, box_bytes, change_settings, wait_until_finished, write_envelope_as_exported, write_fake_chain_run,
-    write_earlier_version_project, write_fake_stage_output,
+    GOLDEN_EPW, WaitsForCancel, box_bytes, build_client, change_settings, create_project_with_inputs, read_events, start_run, upload,
+    wait_until_finished, write_envelope_as_exported, write_fake_chain_run, write_earlier_version_project, write_fake_stage_output,
 )
-from test_local_web_server import build_client, create_project_with_inputs, read_events, start_run, upload
 from urbansolarcarver import solar_check
 from urbansolarcarver.engine_requests import handle_engine_request
 from urbansolarcarver.local_web_service import simulation

@@ -41,8 +41,8 @@ test("the six tiles form one radio group, in the order of R2 3, with the chosen 
 test("a tile shows its symbol and its name only", () => {
   rendered = renderForTest(<ModeStep mode="time-based" onChoose={() => {}} disabledReason={null} weatherDropZone={null} />);
   for (const tile of tiles()) {
-    expect([...tile.children].map((part) => part.tagName.toLowerCase())).toEqual(["svg", "span"]);
-    expect(tile.textContent).toBe(tile.querySelector(".mode-tile-name")!.textContent);
+    expect(tile.querySelectorAll("svg")).toHaveLength(1);                                   // one symbol
+    expect(tile.textContent).toBe(tile.querySelector(".mode-tile-name")!.textContent);    // and no text but the name
   }
 });
 

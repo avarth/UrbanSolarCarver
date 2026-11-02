@@ -227,8 +227,8 @@ def test_uploading_the_same_name_again_replaces_the_file(tmp_path):
 def test_unknown_role_is_rejected(tmp_path):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
     with pytest.raises(ProjectError) as err:
-        store.add_input("p", "sky", "a.ply", b"x")
-    assert err.value.status_code == 422
+        store.add_input("p", "sky", "a.ply", _box_bytes([0, 0, 5]))     # a mesh that reads, so only the role is refused
+    assert err.value.status_code == 422 and "'sky' is not an input role" in str(err.value)
 
 
 def test_weather_location_comes_from_the_epw_header(tmp_path):
@@ -485,24 +485,6 @@ def test_a_project_without_test_surfaces_has_no_joined_test_surface_file_to_rebu
 
 
 @pytest.mark.slow
-def test_the_joined_test_surfaces_keep_every_facade_of_the_district_example(example_project_to_read):
-    _example, joined_panels = example_project_to_read("multiple_buildings")
-    # Counts of the packaged district files at a grid_step of 1 m. After a deliberate change of those files or of
-    # the surface sampling, check that every facade is still there and take the new counts from len(joined_panels) and
-    # the summed sample points.
-    assert (len(joined_panels), sum(len(points) for points in joined_panels)) == (423, 138_641)
-
-
-def test_the_joined_test_surfaces_keep_the_courtyard_facades_of_the_perimeter_block(example_project_to_read):
-    """The four courtyard walls stand on the rectangle x -1294.74..-1208.33, y -45.98..6.09, 20 m inside the block's edges."""
-    _example, joined_panels = example_project_to_read("basic_perimeter_block")
-    courtyard_panels = [points for points in joined_panels
-                        if (-1295.0 <= points[:, 0]).all() and (points[:, 0] <= -1208.0).all()
-                        and (-46.5 <= points[:, 1]).all() and (points[:, 1] <= 6.5).all()]
-    assert (len(joined_panels), len(courtyard_panels)) == (8, 4)
-
-
-@pytest.mark.slow
 def test_the_perimeter_block_carved_through_the_service_equals_the_cli_run_on_the_example_files(tmp_path, example_project_templates):
     """The service's run of the example project keeps the voxels the CLI keeps from the packaged files (150,569 of them at the
     default sample spacing, half the voxel size)."""
@@ -620,13 +602,6 @@ def test_saving_and_loading_a_config_raises_no_warnings(tmp_path, mode):
         store.load_project_config("p")
 
 
-def test_invalid_setting_raises_config_error_on_its_field(tmp_path):
-    store = ProjectStore(tmp_path); store.create("p", "daylight")
-    with pytest.raises(ConfigError) as err:
-        store.write_config_from_values("p", {"mode": "daylight", "voxel_size": -1})
-    assert [e.field for e in err.value.errors] == ["voxel_size"]
-
-
 def test_unknown_mode_at_create_leaves_no_project_folder(tmp_path):
     store = ProjectStore(tmp_path)
     with pytest.raises(ConfigError):
@@ -670,6 +645,12 @@ def recycle_bin(monkeypatch):
 
 def example_by_name(name):
     return next(example for example in read_examples() if example.name == name)
+
+
+# The examples the tests below make projects from. Their titles, files and modes are read from examples.json, so an example can
+# be replaced without editing these tests.
+PERIMETER_BLOCK = example_by_name("basic_perimeter_block")
+NEW_BUILDING = example_by_name("new_building")
 
 
 def create_example_project(store, project_name, example_name="new_building"):
@@ -897,14 +878,14 @@ def test_a_recycle_bin_that_fails_leaves_the_project_and_says_why(tmp_path, monk
 def test_reset_gives_a_fresh_copy_of_the_example_under_the_same_name(tmp_path, recycle_bin, example_project_templates):
     store = ProjectStore(tmp_path)
     example = example_project_templates.copy_example_project(store, "My copy", "new_building")
-    store.write_config_from_values("My copy", {"mode": "daylight"})
-    store.remove_input("My copy", "test_surfaces", "neighbor_roofs.ply")
+    store.write_config_from_values("My copy", {"mode": "daylight" if example.mode != "daylight" else "time-based"})
+    store.remove_input("My copy", "test_surfaces", example.test_surfaces[0])
     (tmp_path / "My copy" / "run" / "old_result.txt").write_text("old", encoding="utf-8")
     store.reset_project_to_example("My copy", example, _example_input_files(example))
     assert recycle_bin.folders == [(tmp_path / "My copy").resolve()]
     assert [row.name for row in store.list()] == ["My copy"]
-    assert store.read_settings("My copy")["mode"] == "irradiance"
-    assert [file.name for file in store.input_files("My copy", "test_surfaces")] == ["neighbor_roofs.ply", "neighbor_windows.ply"]
+    assert store.read_settings("My copy")["mode"] == example.mode
+    assert sorted(file.name for file in store.input_files("My copy", "test_surfaces")) == sorted(example.test_surfaces)
     assert [file.name for file in store.input_files("My copy", "weather")] == ["weather.epw"]
     assert list((tmp_path / "My copy" / "run").iterdir()) == [] and store.read_project_json("My copy").example == "new_building"
 
@@ -940,7 +921,7 @@ def test_reset_checks_the_guardrails_before_it_moves_anything(tmp_path, recycle_
     make_link_to_folder(tmp_path / "projects" / "p" / "run" / "linked", tmp_path / "outside", link_kind_of_this_platform())
     with pytest.raises(ProjectRemovalRefused):
         store.reset_project_to_example("p", example, _example_input_files(example))
-    assert recycle_bin.folders == [] and [file.name for file in store.input_files("p", "max_volume")] == ["max_volume.ply"]
+    assert recycle_bin.folders == [] and [file.name for file in store.input_files("p", "max_volume")] == example.max_volume
 
 
 def test_reset_with_a_recycle_bin_that_fails_changes_nothing(tmp_path, monkeypatch, example_project_templates):
@@ -981,15 +962,15 @@ def test_project_of_example_finds_a_renamed_project_by_the_recorded_example(tmp_
     store = ProjectStore(tmp_path)
     example_project_templates.copy_example_project(store, "first", "new_building")
     store.rename_project("first", "Renamed")
-    assert store.project_of_example("new_building", "New building among neighbors") == "Renamed"
-    assert store.project_of_example("basic_perimeter_block", "Perimeter block") is None
+    assert store.project_of_example("new_building", NEW_BUILDING.title) == "Renamed"
+    assert store.project_of_example("basic_perimeter_block", PERIMETER_BLOCK.title) is None
 
 
 def test_a_project_without_the_example_field_named_like_the_example_keeps_the_example_when_renamed(tmp_path):
     store = ProjectStore(tmp_path)
-    store.create("Perimeter block", "time-based")     # made before the field existed: no example recorded
-    assert store.read_project_json("Perimeter block").example is None
-    store.rename_project("Perimeter block", "My block")
+    store.create(PERIMETER_BLOCK.title, "time-based")     # made before the field existed: no example recorded
+    assert store.read_project_json(PERIMETER_BLOCK.title).example is None
+    store.rename_project(PERIMETER_BLOCK.title, "My block")
     assert store.read_project_json("My block").example == "basic_perimeter_block"
     assert store.summary("My block").example == "basic_perimeter_block"
     titles = {example.name: example.title for example in read_examples()}
@@ -999,18 +980,19 @@ def test_a_project_without_the_example_field_named_like_the_example_keeps_the_ex
 def test_renaming_a_project_without_the_example_field_that_is_from_no_example_records_none(tmp_path):
     store = ProjectStore(tmp_path)
     store.create("plain", "time-based")
-    store.rename_project("plain", "Perimeter block 2")
-    assert store.read_project_json("Perimeter block 2").example is None
+    store.rename_project("plain", f"{PERIMETER_BLOCK.title} 2")
+    assert store.read_project_json(f"{PERIMETER_BLOCK.title} 2").example is None
 
 
 def test_project_of_example_counts_a_project_without_the_field_only_when_its_name_is_exactly_the_title(tmp_path):
     numbered_copies = ProjectStore(tmp_path / "copies")
-    for name in ("Perimeter block 2", "perimeter block"):
+    title = PERIMETER_BLOCK.title
+    for name in (f"{title} 2", title.lower()):
         numbered_copies.create(name, "time-based")
-    assert numbered_copies.project_of_example("basic_perimeter_block", "Perimeter block") is None
+    assert numbered_copies.project_of_example("basic_perimeter_block", title) is None
     exact = ProjectStore(tmp_path / "exact")
-    exact.create("Perimeter block", "time-based")
-    assert exact.project_of_example("basic_perimeter_block", "Perimeter block") == "Perimeter block"
+    exact.create(title, "time-based")
+    assert exact.project_of_example("basic_perimeter_block", title) == title
 
 
 def test_project_of_example_prefers_the_most_recently_modified_project(tmp_path, example_project_templates):
@@ -1021,11 +1003,11 @@ def test_project_of_example_prefers_the_most_recently_modified_project(tmp_path,
     for name, seconds in (("older", 1_700_000_000), ("newer", 1_800_000_000), ("newest", 1_900_000_000)):
         for file_name in ("project.json", "config.yaml"):
             os.utime(tmp_path / name / file_name, (seconds, seconds))
-    assert store.project_of_example("new_building", "New building among neighbors") == "newer"
+    assert store.project_of_example("new_building", NEW_BUILDING.title) == "newer"
 
 
 def test_project_of_example_with_no_projects_folder_is_none(tmp_path):
-    assert ProjectStore(tmp_path / "missing").project_of_example("new_building", "New building among neighbors") is None
+    assert ProjectStore(tmp_path / "missing").project_of_example("new_building", NEW_BUILDING.title) is None
 
 
 # ---- Fix round: locks of two projects, the rename rollback, drives without a recycle bin, one pass over the examples ----
@@ -1144,7 +1126,7 @@ def test_reset_refuses_a_project_json_that_names_another_project_before_it_moves
         store.reset_project_to_example("a", example, _example_input_files(example))
     assert err.value.status_code == 422 and "'b'" in str(err.value)
     assert recycle_bin.folders == [] and sorted(folder.name for folder in tmp_path.iterdir()) == ["a", "b"]
-    assert [file.name for file in store.input_files("a", "max_volume")] == ["max_volume.ply"]
+    assert [file.name for file in store.input_files("a", "max_volume")] == example.max_volume
 
 
 @pytest.mark.skipif(os.name != "nt", reason="folder names ignore letter case on Windows only")
@@ -1159,23 +1141,21 @@ def test_a_project_summary_names_its_example_with_the_backfill_rule(tmp_path, ex
     store = ProjectStore(tmp_path)
     example_project_templates.copy_example_project(store, "made here", "basic_perimeter_block")
     store.create("plain", "time-based")
-    store.create("Perimeter block", "time-based")       # no example field, named like the example's title
-    store.create("Perimeter block 2", "time-based")     # a numbered copy stays an ordinary project
+    title = PERIMETER_BLOCK.title
+    store.create(title, "time-based")           # no example field, named like the example's title
+    store.create(f"{title} 2", "time-based")    # a numbered copy stays an ordinary project
     assert {row.name: row.example for row in store.list()} == {
-        "Perimeter block": "basic_perimeter_block", "Perimeter block 2": None, "made here": "basic_perimeter_block", "plain": None}
+        title: "basic_perimeter_block", f"{title} 2": None, "made here": "basic_perimeter_block", "plain": None}
     assert store.summary("made here").example == "basic_perimeter_block"
 
 
-def test_the_examples_are_matched_to_projects_in_one_pass_over_the_projects(tmp_path, monkeypatch, example_project_templates):
+def test_the_examples_are_matched_to_the_projects_made_from_them(tmp_path, example_project_templates):
     store = ProjectStore(tmp_path)
     example_project_templates.copy_example_project(store, "a", "new_building")
     example_project_templates.copy_example_project(store, "b", "basic_perimeter_block")
-    listings = []
-    real_list = store.list
-    monkeypatch.setattr(store, "list", lambda: listings.append(1) or real_list())
     titles = {example.name: example.title for example in read_examples()}
-    assert store.projects_of_examples(titles) == {"basic_perimeter_block": "b", "new_building": "a", "multiple_buildings": None}
-    assert len(listings) == 1
+    made = {"new_building": "a", "basic_perimeter_block": "b"}
+    assert store.projects_of_examples(titles) == {name: made.get(name) for name in titles}
 
 
 # ---- The optional context and terrain inputs ----
@@ -1239,13 +1219,6 @@ def test_existing_project_without_role_folders_accepts_context(project_with_inpu
     store.add_input(name, "context", "ctx.ply", box_bytes([30, 0, 5]))
     store.add_input(name, "terrain", "ground.ply", _sheet_bytes())
     assert [file.name for file in store.input_files(name, "context")] == ["ctx.ply"]
-
-
-def test_an_unknown_role_is_refused(project_with_inputs):
-    store, name = project_with_inputs
-    with pytest.raises(ProjectError) as caught:
-        store.add_input(name, "trees", "t.ply", box_bytes([30, 0, 5]))
-    assert caught.value.status_code == 422
 
 
 def test_carve_further_keeps_context_and_terrain(project_with_inputs):

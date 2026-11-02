@@ -5,7 +5,6 @@ import { renderForTest, type RenderedOverlay } from "../../viewer_overlays/rende
 import { formReducer, initialFormState, type FormState } from "../form_state";
 import { settingsForStep } from "../presentation";
 import { SettingField } from "../SettingField";
-import { SettingGroup } from "../SettingGroup";
 
 // The engine's bounds of the settings these tests use, as GET schema gives them (pydantic_schemas.py).
 const SCHEMA = {
@@ -141,11 +140,3 @@ test("counts and switches keep their controls: no slider", () => {
   expect(sliders("settings", "diagnostics")).toBe(0);
 });
 
-test("the computer's settings sit at the end of More detail settings, and the statistics say they change only the report", () => {
-  const detail = settingsForStep("settings", "daylight").find((group) => group.title === "Detail")!;
-  rendered = renderForTest(<SettingGroup group={detail} form={form()} onChange={() => {}} />);
-  act(() => rendered!.container.querySelector<HTMLButtonElement>("button.setting-fold")!.click());
-  const labels = [...rendered.container.querySelectorAll(".setting-group-folded .setting-label")].map((label) => label.textContent);
-  expect(labels.slice(-2)).toEqual(["Rays per batch", "Detailed statistics"]);
-  expect(viewOf("settings", "diagnostics").help).toContain("only the run report");
-});

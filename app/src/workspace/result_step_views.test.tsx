@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { act, useMemo, useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ModeInfo, RunSummary } from "../api_client/client";
@@ -255,17 +254,6 @@ test("Envelope and massing: two parts, each with its settings, its button and it
     "Counted on the kept voxels the envelope mesh was built from, after small pieces were dropped, not on the smoothed surface.");
   const lastChild = rendered.container.querySelector(".envelope-step")!.lastElementChild!;
   expect(lastChild.textContent).toBe("Open the run report");
-});
-
-test("each part is greyed and labelled out of date on its own; a part not built shows no results", () => {
-  rendered = renderForTest(<EnvelopeAndMassingStep {...envelopeAndMassingProps({ massingOutOfDate: true })} />);
-  expect(partOf(rendered.container, "Envelope").querySelector(".envelope-results-out-of-date")).toBeNull();
-  expect(partOf(rendered.container, "Building massing").querySelector(".envelope-results-out-of-date")!.textContent).toContain("Out of date for the current settings");
-  rendered.unmount();
-  rendered = renderForTest(<EnvelopeAndMassingStep {...envelopeAndMassingProps({ envelopeOutOfDate: true, massing: null, platesFile: null })} />);
-  expect(partOf(rendered.container, "Envelope").querySelector(".envelope-results-out-of-date")).not.toBeNull();
-  expect(partOf(rendered.container, "Building massing").querySelector(".envelope-results")).toBeNull();
-  expect(partOf(rendered.container, "Building massing").textContent).toContain("Build massing");
 });
 
 /** The elements that hold text of their own (HTML or SVG) inside *root*. */
@@ -761,10 +749,16 @@ test("while the analysis is out of date, only a carving setting with an error st
 });
 
 test("the carving rule's info sits beside Manual | Automatic on one row, not on a line of its own", () => {
-  const css = readFileSync("src/theme/panels.css", "utf8");
-  expect(css).toMatch(/\.setting-field\.carving-rule-choice\s*{[^}]*flex-direction: row;/);
-  rendered = renderForTest(<CarvingStep {...weightedCarvingProps({})} />);
-  const choice = rendered.container.querySelector(".carving-rule-choice")!;
-  // The "i" comes after the radios in the page, so the reading and tab order are the order on the screen
-  expect([...choice.children].map((child) => child.getAttribute("role") ?? child.className)).toEqual(["setting-label visually-hidden", "radiogroup", "setting-info-anchor"]);
+  // A setting field is a column (settings_form.css); the carving rule's is a row (panels.css).
+  const removeStyleSheets = [addStyleSheetForTest("src/settings_form/settings_form.css"), addStyleSheetForTest("src/theme/panels.css")];
+  try {
+    rendered = renderForTest(<CarvingStep {...weightedCarvingProps({})} />);
+    const choice = rendered.container.querySelector('[data-setting="threshold"]')!;
+    expect(getComputedStyle(choice).flexDirection).toBe("row");
+    // The "i" comes after the radios in the page, so the reading and tab order are the order on the screen
+    const radios = choice.querySelector('[role="radiogroup"]')!, info = choice.querySelector('button[aria-label^="About "]')!;
+    expect(radios.compareDocumentPosition(info) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  } finally {
+    for (const remove of removeStyleSheets) remove();
+  }
 });

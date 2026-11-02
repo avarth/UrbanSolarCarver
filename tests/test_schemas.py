@@ -1,8 +1,6 @@
-"""Validation tests for the Pydantic config schema, the voxel grid resolution cap,
-and load_config overrides and relative paths."""
-import os
+"""Validation tests for the Pydantic config schema and load_config overrides and relative paths. The voxel grid
+resolution cap is tested in test_voxelization.py."""
 import pytest
-import numpy as np
 from pydantic import ValidationError
 
 
@@ -81,17 +79,6 @@ class TestGridStepValidation:
         assert "None (default): half the voxel size" in UserConfig.model_fields["grid_step"].description
 
 
-class TestResolutionCap:
-    def test_resolution_exceeds_cap(self):
-        """voxelize_mesh should reject a grid above the voxel budget."""
-        import trimesh
-        from urbansolarcarver.voxelization import voxelize_mesh
-        # 100m cube / 0.01m voxel = 10000^3 voxels → should fail
-        big_cube = trimesh.creation.box(extents=(100, 100, 100))
-        with pytest.raises(ValueError, match="Increase voxel_size"):
-            voxelize_mesh(big_cube, voxel_size=0.01)
-
-
 class TestDateValidation:
     """Date field bounds and cross-field validation."""
 
@@ -138,13 +125,6 @@ class TestDateValidation:
                          start_month=2, start_day=31, start_hour=8,
                          end_month=3, end_day=1, end_hour=16)
 
-    def test_valid_date_accepted(self):
-        cfg = _make_config(mode="time-based", epw_path="dummy.epw",
-                           start_month=6, start_day=21, start_hour=10,
-                           end_month=6, end_day=21, end_hour=14)
-        assert cfg.start_month == 6
-        assert cfg.start_day == 21
-
 
 class TestCarveFractionBounds:
     def test_zero_valid(self):
@@ -180,9 +160,10 @@ class TestThresholdValidation:
         assert cfg.threshold.method == "headtail"
         assert cfg.threshold.value is None
 
-    def test_invalid_string_rejected(self):
+    @pytest.mark.parametrize("method", ["bogus", "otsu"])     # otsu: a known method name the carver does not offer
+    def test_invalid_string_rejected(self, method):
         with pytest.raises(ValidationError):
-            self._benefit_base(threshold="bogus")
+            self._benefit_base(threshold=method)
 
     def test_numeric_shorthand_becomes_cutoff(self):
         cfg = self._benefit_base(threshold=0.5)
@@ -255,11 +236,6 @@ class TestThresholdValidation:
         cfg = _make_config(threshold=0)
         assert cfg.threshold.method == "cutoff"
         assert cfg.threshold.value == 0.0
-
-    def test_otsu_rejected(self):
-        """'otsu' is not a valid threshold method and must be rejected."""
-        with pytest.raises(ValidationError):
-            self._benefit_base(threshold="otsu")
 
 
 class TestThresholdRoundTrip:
@@ -459,21 +435,14 @@ class TestTimeBasis:
 
 
 class TestDaylightMode:
-    def test_daylight_no_epw_required(self):
-        """Daylight mode uses the CIE overcast sky, so it should not require an EPW."""
+    def test_daylight_needs_no_epw_and_no_period(self):
+        """Daylight mode uses the CIE overcast sky, so it requires neither an EPW nor analysis period fields."""
         cfg = _make_config(
             mode="daylight",
             tilted_plane_angle_deg=None,
         )
         assert cfg.mode == "daylight"
-
-    def test_daylight_no_period_required(self):
-        """Daylight mode should not require analysis period fields."""
-        cfg = _make_config(
-            mode="daylight",
-            tilted_plane_angle_deg=None,
-        )
-        assert cfg.start_month is None
+        assert cfg.epw_path is None and cfg.start_month is None
 
     def test_daylight_with_period_accepted(self):
         """Daylight with explicit period should also work."""
@@ -491,10 +460,6 @@ class TestNorthDegAndGroundReflectance:
         cfg = _make_config()
         assert cfg.north_deg == 0.0
 
-    def test_north_deg_valid(self):
-        cfg = _make_config(north_deg=180.0)
-        assert cfg.north_deg == 180.0
-
     def test_north_deg_negative_rejected(self):
         with pytest.raises(ValidationError):
             _make_config(north_deg=-1.0)
@@ -502,12 +467,6 @@ class TestNorthDegAndGroundReflectance:
     def test_north_deg_360_rejected(self):
         with pytest.raises(ValidationError):
             _make_config(north_deg=360.0)
-
-    def test_ground_reflectance_removed(self):
-        """ground_reflectance is not a config field; the strict schema
-        (extra='forbid') must reject configs that carry it."""
-        with pytest.raises(ValidationError, match="ground_reflectance"):
-            _make_config(ground_reflectance=0.2)
 
 
 class TestBenefitParams:
@@ -561,14 +520,15 @@ class TestEnvVarFallback:
 
 
 class TestExtraFieldsRejected:
-    def test_unknown_key_rejected(self):
-        """Unknown YAML keys must raise, not be silently swallowed."""
-        with pytest.raises(ValidationError, match="extra"):
-            _make_config(score_scale="linear")
-
-    def test_typo_key_rejected(self):
-        with pytest.raises(ValidationError, match="extra"):
-            _make_config(vocel_size=0.5)
+    @pytest.mark.parametrize("key, value", [
+        ("score_scale", "linear"),
+        ("vocel_size", 0.5),                # a typo of voxel_size
+        ("ground_reflectance", 0.2),        # a field the schema used to have
+    ])
+    def test_unknown_key_rejected(self, key, value):
+        """Unknown YAML keys must raise, naming the key, not be silently swallowed."""
+        with pytest.raises(ValidationError, match=rf"(?s){key}.*extra"):
+            _make_config(**{key: value})
 
 
 class TestCarveAboveConfig:
@@ -577,18 +537,14 @@ class TestCarveAboveConfig:
         assert cfg.carve_above is True   # height-field envelope by default
         assert cfg.carve_above_min_consecutive == 1
 
-    def test_carve_above_enabled(self):
-        cfg = _make_config(carve_above=True, carve_above_min_consecutive=3)
-        assert cfg.carve_above is True
-        assert cfg.carve_above_min_consecutive == 3
-
     def test_min_consecutive_must_be_positive(self):
         with pytest.raises(ValidationError):
             _make_config(carve_above_min_consecutive=0)
 
     def test_min_consecutive_must_be_int(self):
-        cfg = _make_config(carve_above_min_consecutive=2)
-        assert cfg.carve_above_min_consecutive == 2
+        """A count of voxels: a fractional value is refused, not rounded."""
+        with pytest.raises(ValidationError, match="carve_above_min_consecutive"):
+            _make_config(carve_above_min_consecutive=2.5)
 
 
 class TestLoadConfigOverridesAndPaths:

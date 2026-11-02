@@ -1,8 +1,7 @@
-import { readFileSync } from "node:fs";
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { TypicalBuildingLibraryEntry, TypicalBuildingReply } from "../api_client/client";
-import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { addStyleSheetForTest, click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { buildingGroupSummary, effectColour, libraryGroupsOf, libraryLineOf, SUN_DOWN_COLOUR, SUN_DOWN_COLOUR_DARK, TypicalBuildingSheet, withRoom } from "./TypicalBuildingSheet";
 import { PROGRESS_MILLISECONDS, useTypicalBuilding, type TypicalBuildingValues } from "./use_typical_building";
 import { inProjectSession } from "../api_client/project_session_for_test";
@@ -537,8 +536,11 @@ test("the colours run from white to red and to blue; a project from no entry, or
   expect(libraryGroupsOf([own, ...EXAMPLES]).map(({ name, entries }) => [name, entries.length])).toEqual([[KENAK_GROUP, 3], ["Your buildings", 1]]);
 });
 
-test("the typical building opens as a modal window: aria-modal, its title takes the focus, × and Done close it", async () => {
+test("the typical building opens as a modal window in document.body: aria-modal, its title takes the focus, × and Done close it", async () => {
   await openSheet();
+  const backdrop = find(".project-dialog-backdrop")!;
+  expect(backdrop.parentElement).toBe(document.body);                    // over the whole app, not inside the panel that opened it
+  expect(rendered!.container.contains(backdrop)).toBe(false);
   const window = find('[role="dialog"][aria-modal="true"]')!;
   expect(window.classList.contains("project-dialog-wide")).toBe(true);
   expect(window.contains(find("#sheet"))).toBe(true);
@@ -627,14 +629,6 @@ test("the values are in the left column and Calculate, the chart and the numbers
   expect(find(".project-dialog-buttons")!.previousElementSibling).toBe(find(".typical-building-window-columns"));
 });
 
-test("the window is drawn into document.body, over the whole app, not inside the render's container", async () => {
-  await openSheet();
-  const backdrop = find(".project-dialog-backdrop")!;
-  expect(backdrop.parentElement).toBe(document.body);
-  expect(rendered!.container.contains(backdrop)).toBe(false);
-  expect(document.getElementById("sheet")).not.toBeNull();
-});
-
 test("choosing the first building changes the window's shape without losing the focus: it stays inside, and Escape closes the window", async () => {
   service.values = null;
   service.libraryId = null;
@@ -653,17 +647,15 @@ test("choosing the first building changes the window's shape without losing the 
   expect(closed).toBe(1);
 });
 
-test("the window is a modal frame in two columns from 900 px: no fixed sheet beside the panel, no stamp moved aside for it", () => {
-  const css = readFileSync("src/theme/panels.css", "utf8").replace(/\r\n/g, "\n");
-  const wide = css.match(/@media \(min-width: 900px\) \{[\s\S]*?\n\}/)![0];
-  // At every width the window is as wide as 880 px allows; under 900 px it is one column, not a narrow dialog.
-  expect(css.replace(wide, "")).toMatch(/\.project-dialog-wide \{[^}]*width: min\(880px, 100%\)/);
-  expect(wide).toMatch(/\.typical-building-window-columns \{[^}]*display: grid;[^}]*grid-template-columns: minmax\(0, 440px\) minmax\(0, 1fr\)/);
-  // From 900 px only the values column scrolls beside the results; the short windows and the results column scroll when they do not fit.
-  expect(wide).toMatch(/\.project-dialog-wide > \.typical-building-sheet \{[^}]*overflow-y: auto/);
-  expect(wide).toMatch(/\.typical-building-window-results \{[^}]*min-height: 0;[^}]*overflow-y: auto/);
-  expect(wide).toMatch(/\.typical-building-window-values \{[^}]*overflow-y: auto/);
-  expect(css).toMatch(/\.project-dialog-wide \{[^}]*max-height: calc\(100vh - 64px\)/);
-  expect(css).not.toMatch(/\.typical-building-sheet \{[^}]*position: fixed/);
-  expect(css).not.toContain("viewer-out-of-date");
+// The two columns from 900 px and the width of the window are for a check in a browser: jsdom applies no @media rule and computes
+// no min().
+test("the window is a modal frame no taller than the window less 64 px, not a sheet fixed beside the panel", async () => {
+  const removeStyles = addStyleSheetForTest("src/theme/panels.css");
+  try {
+    await openSheet();
+    expect(getComputedStyle(find('[role="dialog"]')!).maxHeight).toBe("calc(100vh - 64px)");
+    expect(getComputedStyle(find(".typical-building-sheet")!).position).not.toBe("fixed");
+  } finally {
+    removeStyles();
+  }
 });

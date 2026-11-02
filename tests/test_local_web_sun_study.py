@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from _epw import resolve_epw
-from test_local_web_server import GOLDEN_EPW, client, create_project, projects_folder, upload  # noqa: F401 (fixtures)
+from local_web_test_support import GOLDEN_EPW, create_project, upload
 from urbansolarcarver.local_web_service import sun_study
 from urbansolarcarver.local_web_service.project_names import ProjectError
 

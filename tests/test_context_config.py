@@ -16,11 +16,12 @@ def _minimal_values(tmp_mesh_files, tmp_path):
             "mode": "tilted_plane", "tilted_plane_angle_deg": 45.0}
 
 
-def test_context_and_terrain_default_to_none(tmp_mesh_files, tmp_path):
-    cfg = build_config(_minimal_values(tmp_mesh_files, tmp_path))
-    assert cfg.context_path is None and cfg.terrain_path is None
-    settings = PreprocessingSettings.from_config(cfg)
-    assert settings.context_path is None and settings.terrain_path is None
+def test_preprocessing_settings_carry_the_context_and_terrain_paths(tmp_mesh_files, tmp_path):
+    values = _minimal_values(tmp_mesh_files, tmp_path)
+    values.update(context_path=str(tmp_path / "ctx.ply"), terrain_path=str(tmp_path / "ground.ply"))
+    settings = PreprocessingSettings.from_config(build_config(values))
+    assert settings.context_path == str(tmp_path / "ctx.ply")
+    assert settings.terrain_path == str(tmp_path / "ground.ply")
 
 
 def test_relative_context_paths_resolve_against_the_yaml_folder(tmp_mesh_files, tmp_path):
@@ -52,13 +53,6 @@ def test_empty_context_file_counts_as_absent(tmp_path):
     assert load_optional_mesh(None, "context") is None
 
 
-def test_context_mesh_loads(tmp_path):
-    path = tmp_path / "ctx.ply"
-    trimesh.creation.box(extents=(2, 2, 2)).export(str(path))
-    mesh = load_optional_mesh(str(path), "context")
-    assert len(mesh.faces) == 12
-
-
 def test_context_mesh_is_loaded_without_fixing_its_normals(tmp_path):
     """Neither the column rule nor the ray test reads the faces' orientation, so loading skips the slow fix_normals
     (4 s for 270k triangles): an inside-out box stays as stored, where load_mesh would turn it outward."""
@@ -68,4 +62,6 @@ def test_context_mesh_is_loaded_without_fixing_its_normals(tmp_path):
     path = tmp_path / "inside_out.ply"
     box.export(str(path))
     assert load_mesh(str(path)).volume > 0
-    assert load_optional_mesh(str(path), "context").volume < 0
+    context = load_optional_mesh(str(path), "context")
+    assert len(context.faces) == 12
+    assert context.volume < 0

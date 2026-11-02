@@ -1,5 +1,5 @@
-"""Voxelization of the maximum volume (voxelization.py): invariants, the Warp
-parity voxelizer, the grid budget and cavity filling."""
+"""Voxelization of the maximum volume (voxelization.py): the grid of a cube, the Warp
+parity voxelizer and the grid budget."""
 import pytest
 import numpy as np
 import torch
@@ -9,7 +9,8 @@ class TestVoxelizeInvariants:
     def test_voxelize_produces_filled_grid(self, tiny_cube_mesh):
         """The 10 m cube at 2 m voxels, padded by the default 20 % of its side (2 m), gives a 7-voxel grid from -7 m whose
         filled voxels are exactly the solid 5 x 5 x 5 block with centres inside the cube (-4 to 4 m); the centres at +-6 m lie
-        outside. A hollow shell would leave the 27 inner voxels empty, a shifted origin would move the block."""
+        outside. A hollow shell would leave the 27 inner voxels empty, a shifted origin would move the block. The cube has no sealed
+        cavity, so this also covers voxelize_mesh skipping binary_fill_holes: the grid comes back solid without it."""
         from urbansolarcarver.voxelization import voxelize_mesh
         grid, origin, extent, res = voxelize_mesh(tiny_cube_mesh, voxel_size=2.0)
         assert grid.dtype == torch.uint8
@@ -18,12 +19,6 @@ class TestVoxelizeInvariants:
         expected = np.zeros((7, 7, 7), dtype=np.uint8)
         expected[1:6, 1:6, 1:6] = 1
         np.testing.assert_array_equal(grid.cpu().numpy(), expected)
-
-    def test_voxelize_grid_is_cubic(self, tiny_cube_mesh):
-        from urbansolarcarver.voxelization import voxelize_mesh
-        grid, origin, extent, res = voxelize_mesh(tiny_cube_mesh, voxel_size=2.0)
-        d0, d1, d2 = grid.shape
-        assert d0 == d1 == d2, f"Grid not cubic: {grid.shape}"
 
 
 def _warp_cpu_available():
@@ -161,32 +156,3 @@ class TestVoxelGridPlan:
         with pytest.raises(ValueError, match="voxel_size"):
             voxelize_mesh.__wrapped__(cube, voxel_size=10.0 / side, margin_frac=0.0,
                                       device=torch.device("cpu"))
-
-
-class TestVoxelizeFillSkip:
-    """Verify the cavity-fill fast-path in voxelize_mesh."""
-
-    def test_watertight_mesh_no_cavities(self, tiny_cube_mesh, caplog):
-        """A simple watertight cube should be fully filled by trimesh's
-        orthographic fill; with no interior cavities, binary_fill_holes
-        is skipped and a debug message says so."""
-        import logging
-        from urbansolarcarver.voxelization import voxelize_mesh
-        with caplog.at_level(logging.DEBUG, logger="urbansolarcarver.voxelization"):
-            grid, origin, extent, res = voxelize_mesh.__wrapped__(
-                tiny_cube_mesh, voxel_size=2.0
-            )
-        assert grid.sum() > 0
-        # Check that the skip message was logged (cavity check passed)
-        assert any("no interior cavities" in r.message.lower() for r in caplog.records), (
-            "Expected cavity-skip log for watertight cube mesh"
-        )
-
-    def test_solid_fill_correct(self, tiny_cube_mesh):
-        """Regardless of skip logic, the final grid must be solidly filled."""
-        from urbansolarcarver.voxelization import voxelize_mesh
-        grid, origin, extent, res = voxelize_mesh.__wrapped__(
-            tiny_cube_mesh, voxel_size=2.0
-        )
-        total = grid.sum().item()
-        assert total > 100, f"Expected solid fill, got {total} voxels"

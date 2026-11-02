@@ -87,7 +87,7 @@ test("a card dragged by its handle and dropped on another takes its place", asyn
   expect(onReorder).toHaveBeenCalledExactlyOnceWith(["4", "2", "1"]);
 });
 
-test("one criterion shows its row with the switch on and no drag handle; Add criterion sits under it", () => {
+test("one criterion shows its row with the switch on and no drag handle; Add criterion sits under it; three criteria have three handles", () => {
   rendered = renderForTest(<CriterionList {...listProps({ criteria: [THREE_CRITERIA[0]] })} />);
   expect(cards()).toHaveLength(1);
   const only = card("Daylight on windows");
@@ -96,11 +96,8 @@ test("one criterion shows its row with the switch on and no drag handle; Add cri
   expect(only.querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(true);
   expect(only.querySelector(".criterion-card-handle, [draggable='true']")).toBeNull();
   expect(only.compareDocumentPosition(buttonNamed(rendered.container, "Add criterion")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-});
-
-test("two or more criteria each have a drag handle", () => {
-  rendered = renderForTest(<CriterionList {...listProps()} />);
-  expect(rendered.container.querySelectorAll(".criterion-card-handle")).toHaveLength(3);
+  rendered.rerender(<CriterionList {...listProps()} />);
+  expect(cards().map((each) => each.querySelectorAll(".criterion-card-handle").length)).toEqual([1, 1, 1]);
 });
 
 test("the only criterion cannot be deleted", () => {
@@ -146,7 +143,8 @@ test("a refused change is said under the cards", async () => {
 const menuItems = () => [...rendered!.container.querySelectorAll<HTMLElement>('.add-criterion [role="menuitem"]')];
 const itemNamed = (name: string) => menuItems().find((item) => item.querySelector(".mode-menu-name")!.textContent === name)!;
 
-test("Add criterion under the last card opens a menu of the modes: six items in the order of the tiles, each with its one line", () => {
+// The items of the menu (one per mode, in the order of the tiles) are ModeMenu's; here, where it opens and how Add criterion names it.
+test("Add criterion under the last card opens the menu of the modes, which it names while open, on its first item", () => {
   rendered = renderForTest(<CriterionList {...listProps()} />);
   const addButton = buttonNamed(rendered.container, "Add criterion");
   expect(addButton.compareDocumentPosition(cards()[2]) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
@@ -156,14 +154,7 @@ test("Add criterion under the last card opens a menu of the modes: six items in 
   expect(addButton.getAttribute("aria-expanded")).toBe("true");
   expect(document.getElementById(addButton.getAttribute("aria-controls")!)!.getAttribute("role")).toBe("menu");
   expect(rendered.container.querySelector('.add-criterion [role="radio"]')).toBeNull();     // no tile grid
-  expect(menuItems().map((item) => [item.querySelector(".mode-menu-name")!.textContent, item.querySelector(".mode-menu-line")!.textContent])).toEqual([
-    ["Angle rule", "A fixed plane from each facade"],
-    ["Solar time-based", "Direct sun in a chosen period"],
-    ["Solar energy", "Sun and sky energy over a season"],
-    ["Solar usefulness", "Sun in hours that need heating"],
-    ["Daylight", "Light from an overcast sky"],
-    ["Night cooling", "View of the cold night sky"],
-  ]);
+  expect(menuItems()).toHaveLength(6);
   expect(document.activeElement).toBe(menuItems()[0]);
 });
 
