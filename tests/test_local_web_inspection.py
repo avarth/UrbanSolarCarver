@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from _epw import BUNDLED_EPW
-from local_web_test_support import box_bytes, build_client, create_project, upload, write_fake_chain_run
+from local_web_test_support import box_bytes, build_client, create_project, upload, upload_test_surfaces, write_fake_chain_run
 from urbansolarcarver.io import load_mesh
 from urbansolarcarver.local_web_service import inspection, test_surfaces
 from urbansolarcarver.local_web_service.projects import ProjectError, ProjectStore
@@ -74,7 +74,7 @@ def restore_original(store, name, file_name, version=None):
 @pytest.fixture
 def store_with_files(store):
     store.add_input("p", "max_volume", "volume.ply", box_bytes([0, 0, 5]))
-    store.add_input("p", "test_surfaces", "facades.obj", obj_panels([0, 20]))
+    store.add_criterion_test_surface("p", "1", "facades.obj", obj_panels([0, 20]))
     store.add_input("p", "context", "town.ply", ply_of_a_box_and_a_panel())
     store.add_input("p", "weather", "golden.epw", BUNDLED_EPW.read_bytes())
     return store
@@ -111,7 +111,7 @@ def test_the_summary_lists_every_mesh_file_by_role(store_with_files):
 
 
 def test_a_test_surface_file_closed_as_a_whole_is_not_flippable(store):
-    store.add_input("p", "test_surfaces", "block.obj", obj_box())
+    store.add_criterion_test_surface("p", "1", "block.obj", obj_box())
     (entry,) = project_inspection(store, "p").files
     assert entry.flippable is False
     assert entry.closed_body_count == entry.body_count == 1
@@ -133,7 +133,7 @@ def test_the_geometry_numbers_each_triangle_by_its_surface(store_with_files):
 
 
 def test_georeferenced_geometry_keeps_its_place(store):
-    store.add_input("p", "test_surfaces", "site.obj", obj_panels([0], x_origin=4_500_000.25, z=12.5))
+    store.add_criterion_test_surface("p", "1", "site.obj", obj_panels([0], x_origin=4_500_000.25, z=12.5))
     header, corners, surfaces = decoded_geometry(inspection_geometry(store, "p", "site.obj"))
     assert header["frame"][0] == 4_500_000.0
     absolute = corners.astype(float) + np.array(header["frame"])
@@ -143,7 +143,7 @@ def test_georeferenced_geometry_keeps_its_place(store):
 
 
 def test_the_inspection_follows_a_changed_file(store):
-    store.add_input("p", "test_surfaces", "facades.obj", obj_panels([0, 20]))
+    store.add_criterion_test_surface("p", "1", "facades.obj", obj_panels([0, 20]))
     assert project_inspection(store, "p").files[0].surface_count == 2
     path = store.input_file_path("p", "test_surfaces", "facades.obj")
     old_time = path.stat().st_mtime_ns
@@ -216,7 +216,7 @@ def test_the_routes_answer_and_an_unknown_file_is_404(tmp_path):
     client, _ = build_client(tmp_path / "projects")
     create_project(client)
     assert upload(client, "p", "max_volume", ("volume.ply", box_bytes([0, 0, 5]))).status_code == 200
-    assert upload(client, "p", "test_surfaces", ("facades.obj", obj_panels([0, 20]))).status_code == 200
+    assert upload_test_surfaces(client, "p", ("facades.obj", obj_panels([0, 20]))).status_code == 200
     reply = client.get("/api/projects/p/inspect")
     assert reply.status_code == 200
     files = reply.json()["files"]
@@ -257,7 +257,7 @@ UNDONE_MESSAGE = "The turned file did not load as turned, so nothing was saved."
 @pytest.fixture
 def store_after_a_run(store):
     store.add_input("p", "max_volume", "volume.ply", box_bytes([0, 0, 5]))
-    store.add_input("p", "test_surfaces", "facades.obj", obj_panels([0, 20]))
+    store.add_criterion_test_surface("p", "1", "facades.obj", obj_panels([0, 20]))
     write_fake_chain_run(store, "p", ["1"])
     return store
 
@@ -299,7 +299,7 @@ def test_turned_surfaces_are_saved_and_hold_through_the_loader(store_after_a_run
 def test_panels_with_coinciding_edges_stay_two_surfaces(store):
     obj = "\n".join(["v 0 0 0", "v 6 0 0", "v 6 6 0", "v 0 6 0", "v 0 0 0", "v 6 0 0", "v 6 0 6", "v 0 0 6", "vn 0 0 1", "vn 0 -1 0",
                      "f 1//1 2//1 3//1", "f 1//1 3//1 4//1", "f 5//2 6//2 7//2", "f 5//2 7//2 8//2"]) + "\n"
-    store.add_input("p", "test_surfaces", "corner.obj", obj.encode())
+    store.add_criterion_test_surface("p", "1", "corner.obj", obj.encode())
     assert project_inspection(store, "p").files[0].surface_count == 2
     reply = save_turned_surfaces(store, "p", "corner.obj", [1])
     assert reply.surface_count == 2
@@ -312,7 +312,7 @@ def test_quads_keep_their_triangle_count(store):
     lines = ["v 0 0 0", "v 4 0 0", "v 4 4 0", "v 0 4 0",
              "v 10 0 0", "v 13 0 0", "v 14 3 0", "v 11.5 5 0", "v 9 3 0",
              "f 1 2 3 4", "f 5 6 7 8 9"]
-    store.add_input("p", "test_surfaces", "mixed.obj", ("\n".join(lines) + "\n").encode())
+    store.add_criterion_test_surface("p", "1", "mixed.obj", ("\n".join(lines) + "\n").encode())
     before = len(load_mesh(str(_stored(store, "mixed.obj"))).faces)
     assert before == 5
     reply = save_turned_surfaces(store, "p", "mixed.obj", [1])
@@ -322,7 +322,7 @@ def test_quads_keep_their_triangle_count(store):
 
 
 def test_a_save_keeps_georeferenced_coordinates(store):
-    store.add_input("p", "test_surfaces", "site.obj", obj_panels([0], x_origin=4_500_000.123456, z=12.345678))
+    store.add_criterion_test_surface("p", "1", "site.obj", obj_panels([0], x_origin=4_500_000.123456, z=12.345678))
     before = load_mesh(str(_stored(store, "site.obj")))
     save_turned_surfaces(store, "p", "site.obj", [0])
     after = load_mesh(str(_stored(store, "site.obj")))
@@ -337,7 +337,7 @@ def test_the_other_formats_are_saved_in_their_own_format(store, extension):
     import trimesh
     vertices = [[0, 0, 0], [6, 0, 0], [6, 6, 0], [0, 6, 0], [20, 0, 0], [26, 0, 0], [26, 6, 0], [20, 6, 0]]
     mesh = trimesh.Trimesh(vertices=vertices, faces=[[0, 1, 2], [0, 2, 3], [4, 5, 6], [4, 6, 7]], process=False)
-    store.add_input("p", "test_surfaces", f"panels{extension}", mesh.export(file_type=extension.lstrip(".")))
+    store.add_criterion_test_surface("p", "1", f"panels{extension}", mesh.export(file_type=extension.lstrip(".")))
     reply = save_turned_surfaces(store, "p", f"panels{extension}", [0])
     assert reply.surface_count == 2 and reply.triangle_count == 4
     normals, surfaces = _normals_by_surface(_stored(store, f"panels{extension}"))
@@ -346,7 +346,7 @@ def test_the_other_formats_are_saved_in_their_own_format(store, extension):
 
 
 def test_a_file_closed_as_a_whole_cannot_be_turned(store):
-    store.add_input("p", "test_surfaces", "block.obj", obj_box())
+    store.add_criterion_test_surface("p", "1", "block.obj", obj_box())
     before = _stored(store, "block.obj").read_bytes()
     with pytest.raises(ProjectError) as refused:
         save_turned_surfaces(store, "p", "block.obj", [0])
@@ -431,7 +431,7 @@ def test_a_file_that_is_not_stored_is_404(store_after_a_run):
 def test_the_routes_turn_and_restore(tmp_path):
     client, _ = build_client(tmp_path / "projects")
     create_project(client)
-    assert upload(client, "p", "test_surfaces", ("facades.obj", obj_panels([0, 20]))).status_code == 200
+    assert upload_test_surfaces(client, "p", ("facades.obj", obj_panels([0, 20]))).status_code == 200
     version = client.get("/api/projects/p/inspect").json()["files"][0]["version"]
     turned = client.post("/api/projects/p/inspect/test_surfaces/facades.obj/turn", json={"surfaces": [1], "version": version})
     assert turned.status_code == 200 and turned.json()["original_kept"] is True
@@ -518,7 +518,7 @@ def test_a_panel_inverted_next_to_its_neighbour_joins_it_when_turned(store):
     obj = "\n".join(["v 0 0 0", "v 6 0 0", "v 6 6 0", "v 0 6 0", "v 6 0 0", "v 12 0 0", "v 12 6 0", "v 6 6 0",
                      "vn 0 0 1", "vn 0 0 -1",
                      "f 1//1 2//1 3//1", "f 1//1 3//1 4//1", "f 5//2 7//2 6//2", "f 5//2 8//2 7//2"]) + "\n"
-    store.add_input("p", "test_surfaces", "row.obj", obj.encode())
+    store.add_criterion_test_surface("p", "1", "row.obj", obj.encode())
     assert project_inspection(store, "p").files[0].surface_count == 2
     normals, surfaces = _normals_by_surface(_stored(store, "row.obj"))
     assert normals[surfaces == 1][:, 2].tolist() == pytest.approx([-1, -1])
@@ -530,7 +530,7 @@ def test_a_panel_inverted_next_to_its_neighbour_joins_it_when_turned(store):
 
 def test_a_save_that_rounds_the_coordinates_writes_nothing(store, monkeypatch):
     import trimesh
-    store.add_input("p", "test_surfaces", "site.obj", obj_panels([0], x_origin=4_500_000.4))
+    store.add_criterion_test_surface("p", "1", "site.obj", obj_panels([0], x_origin=4_500_000.4))
     before = _stored(store, "site.obj").read_bytes()
     real_writer = inspection._write_mesh_in_its_format
 
@@ -575,7 +575,7 @@ def _grid_mesh(x_range, y_range, columns=7, rows=5):
 
 
 def test_a_glb_from_another_tool_with_odd_coordinates_is_saved(store):
-    store.add_input("p", "test_surfaces", "site.glb", _grid_mesh((-37.3, 62.7), (-12.1, 41.9)).export(file_type="glb"))
+    store.add_criterion_test_surface("p", "1", "site.glb", _grid_mesh((-37.3, 62.7), (-12.1, 41.9)).export(file_type="glb"))
     before = load_mesh(str(_stored(store, "site.glb")))
     reply = save_turned_surfaces(store, "p", "site.glb", [0])
     assert reply.triangle_count == len(before.faces)
@@ -585,7 +585,7 @@ def test_a_glb_from_another_tool_with_odd_coordinates_is_saved(store):
 
 
 def test_an_stl_with_odd_coordinates_is_saved(store):
-    store.add_input("p", "test_surfaces", "site.stl", _grid_mesh((4_000.3, 4_100.3), (1_200.1, 1_254.1)).export(file_type="stl"))
+    store.add_criterion_test_surface("p", "1", "site.stl", _grid_mesh((4_000.3, 4_100.3), (1_200.1, 1_254.1)).export(file_type="stl"))
     reply = save_turned_surfaces(store, "p", "site.stl", [0])
     assert reply.original_kept is True
     assert load_mesh(str(_stored(store, "site.stl"))).face_normals[:, 2] == pytest.approx(-np.ones(reply.triangle_count), abs=1e-6)
@@ -682,7 +682,7 @@ def test_a_save_refused_by_the_refresh_writes_nothing(store_after_a_run, monkeyp
 def test_the_routes_answer_409_with_the_reason_when_the_file_changed(tmp_path):
     client, _ = build_client(tmp_path / "projects")
     create_project(client)
-    assert upload(client, "p", "test_surfaces", ("facades.obj", obj_panels([0, 20]))).status_code == 200
+    assert upload_test_surfaces(client, "p", ("facades.obj", obj_panels([0, 20]))).status_code == 200
     version = client.get("/api/projects/p/inspect").json()["files"][0]["version"]
     stored = tmp_path / "projects" / "p" / "inputs" / "test_surfaces" / "facades.obj"
     old_time = stored.stat().st_mtime_ns

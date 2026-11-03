@@ -687,25 +687,7 @@ def test_every_example_calculates_on_the_bundled_weather_file(tmp_path, use):
     assert underheating == sorted(underheating, reverse=True)     # the colder zones' walls are better insulated
 
 
-# ---- Values added later, and retired ----
-
-def test_a_building_with_one_room_per_facade_direction_reads_without_it(tmp_path):
-    """by_direction (one room per facade direction, 2026-10-30 to 31) is dropped from a stored building and from values given:
-    with it off the weights key is as before; with it on the building gets a new key, so its weights are out of date."""
-    for by_direction in (False, True):
-        assert typical_building.validate({**DEFAULT, "by_direction": by_direction}) == DEFAULT
-    assert "direction_rooms" not in typical_building.archetype_of(DEFAULT)
-    store, name = benefit_project(tmp_path)
-    project_json = store.read_project_json(name)
-    stored_key = typical_building.weights_key({**DEFAULT, "by_direction": True}, store.weather_file_path(name))
-    project_json.typical_building = TypicalBuildingEntry(values={**DEFAULT, "by_direction": True}, library_id="kenak-apartment-b",
-                                                         library_name="Apartment, zone Β", calculated_key=stored_key)
-    store.write_project_json(name, project_json)
-    assert typical_building.building_of(store.read_project_json(name)).values == DEFAULT
-    assert typical_building.current_key(store, name) != stored_key
-    reply = typical_building.reply(store, name)
-    assert reply.values == DEFAULT and reply.changed is False
-
+# ---- Values added later ----
 
 def test_a_building_stored_before_the_window_opening_calculates_with_its_defaults(tmp_path, fake_generator):
     """A building stored before vent_above and vent_ach existed takes the engine's window opening (25 °C, 4 per hour); its key

@@ -410,26 +410,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{name}/config": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Save Config
-         * @description Save the settings: the shared ones, and the criterion ones to the criterion *criterion* (the only criterion when there is one).
-         */
-        put: operations["save_config"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/projects/{name}/shared-settings": {
         parameters: {
             query?: never;
@@ -3125,62 +3105,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorDetailReply"];
-                };
-            };
-        };
-    };
-    save_config: {
-        parameters: {
-            query?: {
-                /** @description The id of a criterion; the first one when omitted. */
-                criterion?: string | null;
-            };
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConfigValuesRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConfigReply"];
-                };
-            };
-            /** @description There is no such criterion. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorDetailReply"];
-                };
-            };
-            /** @description A run of this project is active. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorDetailReply"];
-                };
-            };
-            /** @description Settings that do not validate (the fields), or a request that cannot be served as sent (a message). */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConfigErrorReply"] | components["schemas"]["ErrorDetailReply"];
                 };
             };
         };

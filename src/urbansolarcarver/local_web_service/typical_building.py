@@ -83,9 +83,6 @@ VALUE_KEYS = ("schedule", "t_set_heating", "t_set_cooling", "gains_w_m2", "fresh
               "ach_infiltration", "vent_above", "vent_ach")
 # The value of a key that came later, for a building stored before it: the engine's window opening of a free-running zone.
 LATER_VALUE_DEFAULTS = {**FREE_RUNNING_DEFAULTS}
-# Keys that buildings stored before their removal may hold, dropped when read: by_direction, one room per facade direction
-# (2026-10-30 to 31). A building that had it on gets a new weights key, so its weights are calculated again.
-RETIRED_VALUE_KEYS = ("by_direction",)
 # How the weights are calculated: the room free running against the comfort band of t_set_heating to t_set_cooling, its windows
 # opened by vent_above and vent_ach. Part of every weights key, so the weights of the conditioned room calculated before
 # (2026-10-31) are out of date.
@@ -227,14 +224,14 @@ def validate(values) -> dict:
     """The values checked and in their stored form (numbers as floats, every side of the room in wwr).
 
     Every building has the keys of VALUE_KEYS and those of its room (ROOM_KEYS); a key of LATER_VALUE_DEFAULTS that is missing (a
-    building stored before it) takes its default, and a key of RETIRED_VALUE_KEYS is dropped. Raises ConfigError with an error per field (the
+    building stored before it) takes its default. Raises ConfigError with an error per field (the
     field is the value's key, "wwr.<side>" for a window share): each value's type and range (window shares 0 to 0.9, factors 0 to
     1, dates "MM-DD", the choices of schedule and room), then the engine's own checks of the archetype
     (expand_shoebox, ZoneParams.from_archetype).
     """
     if not isinstance(values, dict):
         raise ConfigError("The typical building's values must be a mapping.", [ConfigFieldError(None, "The values must be a mapping.")])
-    values = {key: value for key, value in {**LATER_VALUE_DEFAULTS, **values}.items() if key not in RETIRED_VALUE_KEYS}
+    values = {**LATER_VALUE_DEFAULTS, **values}
     room = values.get("room")
     all_room_keys = {key for keys in ROOM_KEYS.values() for key in keys}
     known_room = isinstance(room, str) and room in ROOMS
@@ -538,17 +535,14 @@ def _valid_values_text(values_text: str) -> bool:
 
 def building_of(project_json: ProjectJson) -> TypicalBuildingEntry | None:
     """The project's building; None when none was chosen, or when the stored values no longer validate (the keys of an earlier
-    form of them), so the user chooses one again. A key of LATER_VALUE_DEFAULTS that the stored values lack takes its default; a key of
-    RETIRED_VALUE_KEYS is dropped."""
+    form of them), so the user chooses one again. A key of LATER_VALUE_DEFAULTS that the stored values lack takes its default."""
     building = project_json.typical_building
     if building is None or not _valid_values_text(json.dumps(building.values, sort_keys=True)):
         return None
     missing = {key: value for key, value in LATER_VALUE_DEFAULTS.items() if key not in building.values}
-    retired = set(RETIRED_VALUE_KEYS) & set(building.values)
-    if not missing and not retired:
+    if not missing:
         return building
-    values = {key: value for key, value in {**building.values, **missing}.items() if key not in retired}
-    return building.model_copy(update={"values": values})
+    return building.model_copy(update={"values": {**building.values, **missing}})
 
 
 def _file_digest(path: Path) -> str:

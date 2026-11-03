@@ -64,9 +64,8 @@ JOINED_FOLDER = "inputs/joined"
 SERVICE_OWNED_SETTINGS = ("max_volume_path", "test_surface_path", "context_path", "terrain_path", "epw_path", "out_dir", "device",
                           "simulated_weights_path")
 # Settings the browser does not set, left to the engine's own value: the sample spacing on the test surfaces (half the voxel
-# size), and the score rule, which was removed (an earlier version stored "summed" when it was chosen; scores are always
-# summed). One stored by an earlier version, or sent by an older page, is left out when the settings are read and written.
-SETTINGS_LEFT_TO_THE_ENGINE = ("grid_step", "score_rule")
+# size). One stored by an earlier version, or sent by an older page, is left out when the settings are read and written.
+SETTINGS_LEFT_TO_THE_ENGINE = ("grid_step",)
 # SERVICE_PATHS and OPTIONAL_SERVICE_PATHS (the shared paths of config.yaml) are in criteria.py; each criterion's test_surface_path is
 # the joined file of its own test surfaces.
 UNWANTED_FILE_NAME_CHARACTERS = re.compile(r"[^A-Za-z0-9_.-]")
@@ -135,6 +134,13 @@ def sanitize_file_name(name: str) -> str:
 
 def _utc_iso(timestamp_seconds: float) -> str:
     return datetime.fromtimestamp(timestamp_seconds, timezone.utc).isoformat(timespec="seconds")
+
+
+def _refuse_test_surfaces(role: str) -> None:
+    """ProjectError 422 for an upload or removal of test surfaces as a project input: they belong to a criterion (the
+    criterion's test-surfaces route) or to a study. Listing them as an input stays."""
+    if role == test_surfaces.ROLE:
+        raise ProjectError("Test surfaces belong to a criterion: add or remove them in the criterion.", status_code=422)
 
 
 class ProjectStore:
@@ -253,8 +259,12 @@ class ProjectStore:
         with self.project_lock(name):
             project_folder = self.create(name, example.mode, example.name)
             try:
+                criterion_id = self.criteria(name)[0].id
                 for role, file_name, data in example_files:
-                    self.add_input(name, role, file_name, data)
+                    if role == test_surfaces.ROLE:     # the project's one criterion protects them
+                        self.add_criterion_test_surface(name, criterion_id, file_name, data)
+                    else:
+                        self.add_input(name, role, file_name, data)
             except BaseException:
                 shutil.rmtree(project_folder, ignore_errors=True)   # the folder was made by this call, so no earlier project is lost
                 raise
@@ -818,15 +828,6 @@ class ProjectStore:
         else:
             self.write_project_json(name, project_json)
 
-    def _only_criterion(self, name: str) -> CriterionEntry:
-        """The criterion an upload or removal of the earlier app belongs to: the only one; ProjectError(422) with none or several."""
-        criteria = self.read_project_json(name).criteria
-        if len(criteria) > 1:
-            raise ProjectError("Say which criterion these test surfaces belong to.", status_code=422)
-        if not criteria:    # a project of an earlier version that was not opened since: it has no criterion yet
-            raise ProjectError("The project has no criterion for these test surfaces: add a criterion first.", status_code=422)
-        return criteria[0]
-
     def read_stored_config(self, name: str, criterion_id: str | None = None, *, for_engine: bool = True) -> dict:
         """The settings of one criterion as one flat mapping, service paths and device included (the single-criterion form of
         config.yaml that the app and the stage records work with), without the settings left to the engine
@@ -1036,16 +1037,13 @@ class ProjectStore:
         before it is kept, so a file the run would refuse is refused at upload. A file with the name of an earlier upload
         replaces it, also when the names differ only in letter case (one name, one file on Windows).
         Nothing on disk or in project.json changes unless the whole upload, joined file included, succeeds.
-        Test surfaces go to the only criterion (ProjectError 422 with several, see add_criterion_test_surface), and an upload
-        of them does not raise inputs_revision.
+        Test surfaces belong to a criterion (add_criterion_test_surface): ProjectError 422 here.
         """
         self._check_role(role)
+        _refuse_test_surfaces(role)
         clean_name = sanitize_file_name(file_name)
         extension = Path(clean_name).suffix.lower()
         with self.project_lock(name):
-            if role == test_surfaces.ROLE:
-                self.add_criterion_test_surface(name, self._only_criterion(name).id, file_name, data)
-                return self._reply(name, role, self.read_project_json(name))
             project_json = self.read_project_json(name)
             project_folder = self.open(name)
             if role == WEATHER_ROLE:
@@ -1067,14 +1065,12 @@ class ProjectStore:
     def remove_input(self, name: str, role: str, file_name: str) -> InputFilesReply:
         """Delete an uploaded file and rebuild the joined file of a mesh role; 404 when the file is not there.
 
-        Nothing is deleted unless the joined file of the remaining files could be built. A test surface file is taken out of the
-        only criterion (ProjectError 422 with several), and deleted when no criterion uses it any more.
+        Nothing is deleted unless the joined file of the remaining files could be built. Test surfaces belong to a criterion
+        (remove_criterion_test_surface): ProjectError 422 here.
         """
         self._check_role(role)
+        _refuse_test_surfaces(role)
         with self.project_lock(name):
-            if role == test_surfaces.ROLE:
-                self.remove_criterion_test_surface(name, self._only_criterion(name).id, file_name)
-                return self._reply(name, role, self.read_project_json(name))
             project_json = self.read_project_json(name)
             project_folder = self.open(name)
             if file_name not in project_json.input_files.get(role, {}):

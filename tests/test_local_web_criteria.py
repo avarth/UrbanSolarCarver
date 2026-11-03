@@ -376,10 +376,10 @@ def test_shared_settings_save_without_a_mode(tmp_path):
     assert again.settings["voxel_size"] == 3.0 and again.settings["north_deg"] == 15.0
     # the paths and the device are the service's, whatever is sent
     store.write_shared_settings("p", {"voxel_size": 3.0, "out_dir": "elsewhere", "device": "cuda", "epw_path": "x.epw",
-                                      "grid_step": 0.5, "score_rule": "summed"})
+                                      "grid_step": 0.5})
     stored = _stored(store, "p")
     assert stored["out_dir"] == "run" and stored["device"] == "cpu" and stored["epw_path"] == "inputs/weather.epw"
-    assert "grid_step" not in stored and "score_rule" not in stored
+    assert "grid_step" not in stored
 
 
 def test_shared_settings_are_stored_and_returned_as_the_engine_reads_them(tmp_path):

@@ -230,28 +230,18 @@ def test_a_run_needs_test_surfaces_in_every_active_criterion(tmp_path):
     assert missing_inputs(store, "p") == ["criteria"]
 
 
-def test_the_apps_test_surface_upload_goes_to_the_only_criterion(tmp_path):
+def test_test_surfaces_are_refused_as_a_project_input(tmp_path):
+    """Test surfaces belong to a criterion (or a study): the inputs path refuses them, and nothing changes."""
     store = _store_with_criteria(tmp_path, count=1)
-    revision = store.read_project_json("p").inputs_revision
-    reply = store.add_input("p", "test_surfaces", "facade.ply", _panel(0))
-    assert [file.name for file in reply.files] == ["facade.ply"] and reply.role == "test_surfaces"
-    assert _uses(store, "1") == ["facade.ply"]
-    assert test_surfaces.joined_path(store.open("p"), "1").is_file()
-    assert store.read_project_json("p").inputs_revision == revision
-    reply = store.remove_input("p", "test_surfaces", "facade.ply")
-    assert reply.files == [] and _uses(store, "1") == [] and _stored_file_names(store) == []
-    assert not test_surfaces.joined_path(store.open("p"), "1").exists()
-
-
-def test_the_apps_test_surface_upload_with_several_criteria_says_which_one(tmp_path):
-    store = _store_with_criteria(tmp_path)
-    with pytest.raises(ProjectError, match=r"^Say which criterion these test surfaces belong to\.$") as refused:
-        store.add_input("p", "test_surfaces", "facade.ply", _panel(0))
-    assert refused.value.status_code == 422
     store.add_criterion_test_surface("p", "1", "facade.ply", _panel(0))
-    with pytest.raises(ProjectError, match=r"^Say which criterion these test surfaces belong to\.$"):
-        store.remove_input("p", "test_surfaces", "facade.ply")
-    assert _stored_file_names(store) == ["facade.ply"]
+    before = store.read_project_json("p")
+    for refuse in (lambda: store.add_input("p", "test_surfaces", "other.ply", _panel(1)),
+                   lambda: store.remove_input("p", "test_surfaces", "facade.ply")):
+        with pytest.raises(ProjectError, match=r"^Test surfaces belong to a criterion") as refused:
+            refuse()
+        assert refused.value.status_code == 422
+    assert store.read_project_json("p") == before and _stored_file_names(store) == ["facade.ply"]
+    assert [file.name for file in store.input_files("p", "test_surfaces")] == ["facade.ply"]     # listing them stays
 
 
 def test_a_joined_file_without_normals_is_rebuilt_for_each_criterion(tmp_path):

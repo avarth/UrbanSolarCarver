@@ -95,6 +95,16 @@ versioning follows [Semantic Versioning](https://semver.org/).
   `ProjectStore.replace_max_volume_with_envelope`). The app dropped Carve further on 2026-10-26 for chained criteria, and
   no other client called the route. A project carved further before still opens: it keeps its `carving_chain` and
   `inputs/earlier_max_volumes/`, and the app still names the modes under its maximum volume file.
+- **The service route `PUT /projects/{name}/config`**, which saved the shared and one criterion's settings together. The
+  app has saved them with `PUT /projects/{name}/shared-settings` and `PATCH /projects/{name}/criteria/{id}` since
+  2026-10-26.
+- **Test surfaces as a project input**: an upload or removal through `/projects/{name}/inputs/test_surfaces` (which the
+  app before 2026-10-25 used, for the only criterion) is refused with 422; they go to a criterion or a study. Listing them
+  there stays.
+- **Two settings dropped on read**: `score_rule` (2026-10-22 only, before any release) and a typical building's
+  `by_direction` (2026-10-30 to 31). A config that still sets `score_rule` is refused with the field named; a building
+  that has `by_direction` is no longer read, so the window asks for a building again.
+- `UserConfig.effective_max_slope_deg`, which nothing called.
 
 ### Fixed
 

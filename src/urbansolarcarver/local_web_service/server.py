@@ -558,13 +558,6 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
             refuse_while_running(name)
             return store.remove_input(name, role, file_name)
 
-    @router.put("/projects/{name}/config", responses={404: _CRITERION_RESPONSES[404], 409: _ERROR_RESPONSES[409], 422: _CONFIG_OR_MESSAGE_ERROR})
-    def save_config(name: str, request: ConfigValuesRequest,
-                    criterion: str | None = Query(None, description=CRITERION_QUERY_DESCRIPTION)) -> ConfigReply:
-        """Save the settings: the shared ones, and the criterion ones to the criterion *criterion* (the only criterion when there is one)."""
-        with writable_project(name) as store:
-            return store.write_config_from_values(name, request.values, criterion)
-
     @router.put("/projects/{name}/shared-settings", responses={409: _ERROR_RESPONSES[409], 422: _CONFIG_OR_MESSAGE_ERROR})
     def save_shared_settings(name: str, request: ConfigValuesRequest) -> ConfigReply:
         """Save the settings shared by the criteria (voxel size, north, ...); no mode is needed. A key that is a criterion's setting is

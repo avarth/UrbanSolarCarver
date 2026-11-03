@@ -107,7 +107,7 @@ def add_project_with_inputs(tmp_path: Path) -> tuple[ProjectStore, str]:
     store = ProjectStore(tmp_path / "projects")
     store.create("p", "daylight")
     store.add_input("p", "max_volume", "volume.ply", box_bytes([0, 0, 5]))
-    store.add_input("p", "test_surfaces", "surface.ply", box_bytes([0, 0, 0], extents=(6, 6, 0.1)))
+    store.add_criterion_test_surface("p", "1", "surface.ply", box_bytes([0, 0, 0], extents=(6, 6, 0.1)))
     return store, "p"
 
 
@@ -415,6 +415,13 @@ def upload(client, name, role, file):
     return client.post(f"/api/projects/{name}/inputs/{role}", files={"file": (file_name, data, "application/octet-stream")})
 
 
+def upload_test_surfaces(client, name, file, criterion_id="1"):
+    """Upload a test surface file to a criterion of the project (the first by default)."""
+    file_name, data = file
+    return client.post(f"/api/projects/{name}/criteria/{criterion_id}/test-surfaces",
+                       files={"file": (file_name, data, "application/octet-stream")})
+
+
 def create_project(client, name="p", mode="daylight"):
     reply = client.post("/api/projects", json={"name": name, "mode": mode})
     assert reply.status_code == 200, reply.text
@@ -424,7 +431,7 @@ def create_project(client, name="p", mode="daylight"):
 def create_project_with_inputs(client, name="p", mode="daylight"):
     create_project(client, name, mode)
     assert upload(client, name, "max_volume", VOLUME).status_code == 200
-    assert upload(client, name, "test_surfaces", SURFACE).status_code == 200
+    assert upload_test_surfaces(client, name, SURFACE).status_code == 200
 
 
 def events_url(run_id, query=f"?token={TOKEN}"):
@@ -576,7 +583,7 @@ def write_earlier_version_project(store: ProjectStore, name: str, stages: Collec
     """
     store.create(name, "daylight")
     store.add_input(name, "max_volume", "volume.ply", box_bytes([0, 0, 5]))
-    store.add_input(name, "test_surfaces", "surface.ply", box_bytes([0, 0, 0], extents=(6, 6, 0.1)))
+    store.add_criterion_test_surface(name, "1", "surface.ply", box_bytes([0, 0, 0], extents=(6, 6, 0.1)))
     project_folder = store.open(name)
     if carved_further:
         earlier = project_folder / "inputs" / "earlier_max_volumes" / "1"

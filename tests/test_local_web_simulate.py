@@ -85,7 +85,7 @@ def service(tmp_path):
     engine = CheckEngine()
     client, worker = build_client(tmp_path / "projects", handle_request=engine)
     create_project_with_inputs(client)
-    worker.store.add_input("p", "test_surfaces", "plane.ply", plane_bytes())
+    worker.store.add_criterion_test_surface("p", "1", "plane.ply", plane_bytes())
     return client, worker, engine
 
 
@@ -164,7 +164,7 @@ def test_a_study_whose_metric_needs_the_missing_weather_file_is_refused(service)
 def test_a_study_the_engine_refuses_stays_refused_until_its_inputs_change_and_the_others_still_run(service, monkeypatch):
     client, worker, _engine = service
     store = worker.store
-    store.add_input("p", "test_surfaces", "small.ply", plane_bytes(size=2.0))
+    store.add_criterion_test_surface("p", "1", "small.ply", plane_bytes(size=2.0))
     large, small = add_study(store, "p"), add_study(store, "p", files=("small.ply",))
     monkeypatch.setattr(solar_check, "MAX_CHECK_POINTS", 50)     # the 6 m plane has 144 points at 0.5 m, the 2 m plane 16
     events = simulate_and_wait(worker)
@@ -362,7 +362,7 @@ def test_a_study_is_out_of_date_after_its_settings_its_files_the_weather_the_con
     store = worker.store
     project_folder = store.open("p")
     store.add_input("p", "weather", "golden.epw", BUNDLED_EPW.read_bytes())
-    store.add_input("p", "test_surfaces", "roof.ply", plane_bytes(z=3.0, size=4.0))
+    store.add_criterion_test_surface("p", "1", "roof.ply", plane_bytes(z=3.0, size=4.0))
     write_fake_chain_run(store, "p", ["1"])
     write_envelope_as_exported(project_folder)
     write_massing_as_built(project_folder)

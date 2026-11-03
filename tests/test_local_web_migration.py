@@ -243,7 +243,7 @@ def test_saving_the_settings_of_an_earlier_project_migrates_it_first(store):
     assert criterion.test_surface_files == ["surface.ply"]
     assert (store.open("p") / "run" / "criteria" / "1" / "preprocessing" / "manifest.json").is_file()
     assert stage_status(store, "p") == ALL_CURRENT
-    store.remove_input("p", "test_surfaces", "surface.ply")
+    store.remove_criterion_test_surface("p", "1", "surface.ply")
     assert store.input_files("p", "test_surfaces") == []
     assert not (store.open("p") / "inputs" / "test_surfaces" / "surface.ply").exists()
 

@@ -24,7 +24,7 @@ from _epw import BUNDLED_EPW
 from local_web_test_support import (
     AUTH, LAST_EVENT_TYPES, PORT, SURFACE, TOKEN, VOLUME, FakeRecycleBin, WaitsForCancel, box_bytes, build_client,
     create_project, create_project_with_inputs, decode_carved_by_criterion, decode_score_points, events_url, has_vertex_normals,
-    make_worker, read_events, start_run, upload, write_fake_finished_run_with_envelope, write_fake_run,
+    make_worker, read_events, start_run, upload, upload_test_surfaces, write_fake_finished_run_with_envelope, write_fake_run,
     write_joined_test_surfaces_without_normals,
 )
 from urbansolarcarver import __version__
@@ -184,8 +184,8 @@ def test_project_inputs_config_run_and_files(client):
     assert created["stage_status"]["stages"] == {stage: "missing" for stage in PIPELINE_STAGES}
     uploaded = upload(client, "p", "max_volume", VOLUME).json()
     assert uploaded["files"] == [{"name": "volume.ply", "triangle_count": 12}] and uploaded["joined_bounds"] is not None
-    assert upload(client, "p", "test_surfaces", SURFACE).status_code == 200
-    saved = client.put("/api/projects/p/config", json={"values": {"mode": "tilted_plane", "voxel_size": 2.0}})
+    assert upload_test_surfaces(client, "p", SURFACE).status_code == 200
+    saved = client.put("/api/projects/p/shared-settings", json={"values": {"voxel_size": 2.0}})
     assert saved.status_code == 200 and saved.json()["grid_plan"]["voxel_size"] == 2.0
     started = start_run(client)
     assert started["status"] == "started" and started["stages"] == list(PIPELINE_STAGES)
@@ -205,7 +205,7 @@ def test_project_inputs_config_run_and_files(client):
 def test_an_opened_project_carries_the_grid_of_its_stored_settings_without_changing_it(client, projects_folder):
     assert create_project(client, "p", "daylight")["grid_plan"] is None          # no max volume yet
     assert upload(client, "p", "max_volume", VOLUME).status_code == 200
-    saved = client.put("/api/projects/p/config", json={"values": {"mode": "daylight", "voxel_size": 2.0}}).json()
+    saved = client.put("/api/projects/p/shared-settings", json={"values": {"voxel_size": 2.0}}).json()
     config_path = projects_folder / "p" / "config.yaml"
     config_before = config_path.read_bytes()
     first, second = client.get("/api/projects/p").json(), client.get("/api/projects/p").json()
@@ -216,7 +216,7 @@ def test_an_opened_project_carries_the_grid_of_its_stored_settings_without_chang
 def test_an_opened_project_over_the_voxel_budget_still_gets_its_grid(client):
     create_project(client, "p", "daylight")
     assert upload(client, "p", "max_volume", VOLUME).status_code == 200
-    assert client.put("/api/projects/p/config", json={"values": {"mode": "daylight", "voxel_size": 1.0}}).status_code == 200
+    assert client.put("/api/projects/p/shared-settings", json={"values": {"voxel_size": 1.0}}).status_code == 200
     larger_volume = ("volume.ply", box_bytes([0, 0, 5], extents=(10_000, 10_000, 10)))     # replaces the first upload
     assert upload(client, "p", "max_volume", larger_volume).status_code == 200
     grid_plan = client.get("/api/projects/p").json()["grid_plan"]
@@ -240,7 +240,7 @@ def test_a_project_whose_config_yaml_does_not_validate_still_opens(client_after_
     assert client.get("/api/projects/p/stage-status").json()["stages"] == {stage: "out_of_date" for stage in PIPELINE_STAGES}
     refused_run = client.post("/api/projects/p/runs", json={"produce": ["thresholding"]})
     assert refused_run.status_code == 422 and refused_run.json()["field_errors"]
-    saved = client.put("/api/projects/p/config", json={"values": {"mode": "daylight", "voxel_size": 2.0}})
+    saved = client.put("/api/projects/p/shared-settings", json={"values": {"voxel_size": 2.0}})
     assert saved.status_code == 200 and client.get("/api/projects/p").json()["grid_plan"]["voxel_size"] == 2.0
 
 
@@ -254,7 +254,7 @@ def test_a_project_whose_config_yaml_has_a_yaml_syntax_error_opens_with_empty_se
     assert opened.json()["settings"] == {} and opened.json()["grid_plan"] is None
     assert opened.json()["stage_status"]["stages"] == {
         "preprocessing": "out_of_date", "thresholding": "out_of_date", "exporting": "missing", "massing": "missing"}
-    saved = client.put("/api/projects/p/config", json={"values": {"mode": "daylight", "voxel_size": 2.0}})
+    saved = client.put("/api/projects/p/shared-settings", json={"values": {"voxel_size": 2.0}})
     assert saved.status_code == 200, saved.text
     repaired = client.get("/api/projects/p").json()
     assert repaired["settings"]["mode"] == "daylight" and repaired["grid_plan"]["voxel_size"] == 2.0
@@ -284,7 +284,7 @@ def test_a_project_whose_old_joined_file_cannot_be_rebuilt_still_opens(client_wi
     write_joined_test_surfaces_without_normals(store, "p")
     (projects_folder / "p" / "inputs" / "test_surfaces" / "surface.ply").unlink()
     assert client_with_inputs.get("/api/projects/p").status_code == 200
-    assert client_with_inputs.delete("/api/projects/p/inputs/test_surfaces/surface.ply").status_code == 200
+    assert client_with_inputs.delete("/api/projects/p/criteria/1/test-surfaces/surface.ply").status_code == 200
 
 
 def test_the_examples_are_listed_with_a_description(client):
@@ -366,14 +366,14 @@ def test_creating_a_project_reports_bad_names_modes_and_duplicates(client):
 
 
 def test_invalid_setting_is_422_with_the_field(client_with_inputs):
-    reply = client_with_inputs.put("/api/projects/p/config", json={"values": {"mode": "daylight", "voxel_size": 0.0}})
+    reply = client_with_inputs.put("/api/projects/p/shared-settings", json={"values": {"voxel_size": 0.0}})
     assert reply.status_code == 422
     assert [error["field"] for error in reply.json()["field_errors"]] == ["voxel_size"] and reply.json()["grid_plan"] is None
     assert client_with_inputs.get("/api/projects/p").json()["settings"].get("voxel_size") != 0.0   # nothing was stored
 
 
 def test_grid_over_budget_reply_carries_the_plan(client_with_inputs):
-    reply = client_with_inputs.put("/api/projects/p/config", json={"values": {"mode": "daylight", "voxel_size": 0.0125, "grid_step": 0.0125}})
+    reply = client_with_inputs.put("/api/projects/p/shared-settings", json={"values": {"voxel_size": 0.0125}})
     assert reply.status_code == 422
     assert reply.json()["field_errors"][0]["field"] == "voxel_size"
     assert reply.json()["grid_plan"]["budget_voxels"] == 500_000_000 and reply.json()["grid_plan"]["total_voxels"] > 500_000_000
@@ -403,10 +403,10 @@ def test_changes_during_a_run_are_409(client_with_blocking_run):
     client, run_id = client_with_blocking_run
     assert upload(client, "p", "max_volume", VOLUME).status_code == 409
     assert client.delete("/api/projects/p/inputs/max_volume/volume.ply").status_code == 409
-    assert client.put("/api/projects/p/config", json={"values": {"mode": "daylight"}}).status_code == 409
-    assert "p" in client.put("/api/projects/p/config", json={"values": {"mode": "daylight"}}).json()["detail"]
+    assert client.patch("/api/projects/p/criteria/1", json={"values": {"mode": "daylight"}}).status_code == 409
+    assert "p" in client.patch("/api/projects/p/criteria/1", json={"values": {"mode": "daylight"}}).json()["detail"]
     create_project_with_inputs(client, "other")         # another project is free to change
-    assert client.put("/api/projects/other/config", json={"values": {"mode": "daylight"}}).status_code == 200
+    assert client.patch("/api/projects/other/criteria/1", json={"values": {"mode": "daylight"}}).status_code == 200
 
 
 def test_second_run_is_409(client_with_blocking_run):
@@ -426,7 +426,7 @@ def test_cancel_ends_the_event_stream_with_run_cancelled(client_with_blocking_ru
             events.append(websocket.receive_json())
     assert events[-1] == {"type": "run_cancelled"}
     assert client.post(f"/api/runs/{run_id}/cancel").json() == {"cancelled": False}      # the run has ended
-    assert client.put("/api/projects/p/config", json={"values": {"mode": "daylight"}}).status_code == 200   # and frees the project
+    assert client.patch("/api/projects/p/criteria/1", json={"values": {"mode": "daylight"}}).status_code == 200   # and frees the project
 
 
 # ---- Results ----
@@ -1049,8 +1049,8 @@ def test_delete_when_the_recycle_bin_fails_is_422_with_the_reason(client, monkey
 def test_reset_to_the_example_gives_the_example_inputs_and_no_results(client, recycle_bin, projects_folder, example_project_templates):
     example = example_project_templates.copy_example_project(ProjectStore(projects_folder), "mine", "new_building")
     other_mode = "daylight" if example.mode != "daylight" else "time-based"
-    assert client.put("/api/projects/mine/config", json={"values": {"mode": other_mode}}).status_code == 200
-    assert client.delete(f"/api/projects/mine/inputs/test_surfaces/{example.test_surfaces[-1]}").status_code == 200
+    assert client.patch("/api/projects/mine/criteria/1", json={"values": {"mode": other_mode}}).status_code == 200
+    assert client.delete(f"/api/projects/mine/criteria/1/test-surfaces/{example.test_surfaces[-1]}").status_code == 200
     run_id = start_run(client, "mine")["run_id"]
     assert read_events(client, run_id)[-1]["type"] == "run_finished"
     reply = client.post("/api/projects/mine/reset-to-example")
@@ -1447,18 +1447,16 @@ def test_test_surface_names_are_cleaned_and_a_name_with_a_path_part_reaches_no_o
     assert (projects_folder / "p" / "project.json").read_text(encoding="utf-8") == project_json
 
 
-def test_the_settings_of_a_criterion_are_saved_and_opened_by_the_criterion_parameter(client_with_two_criteria):
+def test_the_settings_of_a_criterion_are_opened_by_the_criterion_parameter(client_with_two_criteria):
     client = client_with_two_criteria
-    saved = client.put("/api/projects/p/config", params={"criterion": "2"}, json={"values": {"mode": "time-based", "voxel_size": 3.0}})
-    assert saved.status_code == 200 and saved.json()["settings"]["mode"] == "time-based"
+    assert client.patch("/api/projects/p/criteria/2", json={"values": {"mode": "time-based"}}).status_code == 200
+    assert client.put("/api/projects/p/shared-settings", json={"values": {"voxel_size": 3.0}}).status_code == 200
     second = client.get("/api/projects/p", params={"criterion": "2"}).json()
     first = client.get("/api/projects/p", params={"criterion": "1"}).json()
     assert second["settings"]["mode"] == "time-based" and first["settings"]["mode"] == "daylight"
     assert second["settings"]["voxel_size"] == first["settings"]["voxel_size"] == 3.0     # voxel_size is shared
     assert client.get("/api/projects/p").json()["settings"] == first["settings"]        # no parameter: the first criterion
     assert [entry["id"] for entry in second["criteria"]] == ["1", "2"]
-    # several criteria and no criterion: the settings belong to none
-    assert client.put("/api/projects/p/config", json={"values": {"mode": "daylight"}}).status_code == 422
 
 
 def test_an_unknown_criterion_is_404_with_its_id_in_every_route(client_with_two_criteria):
@@ -1471,7 +1469,6 @@ def test_an_unknown_criterion_is_404_with_its_id_in_every_route(client_with_two_
         ("put", "/api/projects/p/criteria/9/test-surfaces/surface.ply", {}),
         ("delete", "/api/projects/p/criteria/9/test-surfaces/surface.ply", {}),
         ("get", "/api/projects/p", {"params": {"criterion": "9"}}),
-        ("put", "/api/projects/p/config", {"params": {"criterion": "9"}, "json": {"values": {"mode": "daylight"}}}),
         ("get", "/api/projects/p/run/score-points", {"params": {"criterion": "9"}}),
         ("get", "/api/projects/p/run/sky-patches", {"params": {"criterion": "9"}}),
     ]
@@ -1519,7 +1516,6 @@ def test_criteria_routes_are_409_during_a_run_of_the_project(client_with_blockin
         ("post", "/api/projects/p/criteria/1/test-surfaces", {"files": {"file": (*OTHER_SURFACE, "application/octet-stream")}}),
         ("put", "/api/projects/p/criteria/1/test-surfaces/surface.ply", {}),
         ("delete", "/api/projects/p/criteria/1/test-surfaces/surface.ply", {}),
-        ("put", "/api/projects/p/config", {"params": {"criterion": "1"}, "json": {"values": {"mode": "daylight"}}}),
     ]
     for method, url, arguments in requests:
         reply = getattr(client, method)(url, **arguments)
@@ -1539,7 +1535,7 @@ def test_the_openapi_document_describes_the_criteria_routes():
     assert {"put", "delete"} <= set(paths["/api/projects/{name}/criteria/{criterion_id}/test-surfaces/{file_name}"])
     assert "204" in paths["/api/projects/{name}/criteria/{criterion_id}"]["delete"]["responses"]
     assert "get" in paths["/api/projects/{name}/run/carved-by-criterion"]
-    assert "criterion" in {parameter["name"] for parameter in paths["/api/projects/{name}/config"]["put"]["parameters"]}
+    assert "/api/projects/{name}/config" not in paths       # the settings are saved by shared-settings and by each criterion
     assert {"criteria", "criterion_status"} <= set(document["components"]["schemas"]["ProjectDetail"]["properties"])
     for path, method in (("/api/projects/{name}/criteria", "post"), ("/api/projects/{name}/criteria/{criterion_id}", "patch")):
         refused = paths[path][method]["responses"]["422"]["content"]["application/json"]["schema"]
@@ -1644,8 +1640,6 @@ def test_a_rejected_criterion_change_names_the_criterion_in_the_reply(client_wit
     client = client_with_two_criteria
     reply = client.patch("/api/projects/p/criteria/2", json={"values": {"mode": "time-based", "start_month": 13}})
     assert reply.status_code == 422 and reply.json()["criterion"] == "2" and reply.json()["field_errors"]
-    elsewhere = client.put("/api/projects/p/config", params={"criterion": "2"}, json={"values": {"mode": "time-based", "start_month": 13}})
-    assert elsewhere.status_code == 422 and elsewhere.json()["criterion"] is None
     schema = openapi_document()["components"]["schemas"]
     assert "criterion" in schema["ConfigErrorReply"]["properties"]
     assert {"criterion_id", "settings"} <= set(schema["CriterionSettingsReply"]["properties"])

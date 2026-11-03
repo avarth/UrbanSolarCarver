@@ -530,7 +530,7 @@ def test_real_two_phase_run_on_the_basic_perimeter_block(tmp_path):
     store = ProjectStore(tmp_path / "projects", device="cpu")
     store.create("block", "tilted_plane")
     store.add_input("block", "max_volume", "maxVolume.ply", (example_folder / "maxVolume.ply").read_bytes())
-    store.add_input("block", "test_surfaces", "testSrfs.ply", (example_folder / "testSrfs.ply").read_bytes())
+    store.add_criterion_test_surface("block", "1", "testSrfs.ply", (example_folder / "testSrfs.ply").read_bytes())
     change_settings(store, "block", voxel_size=2.0)
     worker = RunWorker(store, "cpu")
     run_folder = store.open("block") / "run"
@@ -564,7 +564,7 @@ def test_real_run_of_two_criteria_and_one_run_after_a_change_in_each(tmp_path):
     store = ProjectStore(tmp_path / "projects", device="cpu")
     store.create("block", "tilted_plane")
     store.add_input("block", "max_volume", "maxVolume.ply", (example_folder / "maxVolume.ply").read_bytes())
-    store.add_input("block", "test_surfaces", "testSrfs.ply", (example_folder / "testSrfs.ply").read_bytes())
+    store.add_criterion_test_surface("block", "1", "testSrfs.ply", (example_folder / "testSrfs.ply").read_bytes())
     change_settings(store, "block", voxel_size=2.0)
     store.duplicate_criterion("block", "1")
     worker = RunWorker(store, "cpu")

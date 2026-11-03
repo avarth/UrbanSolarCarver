@@ -539,7 +539,7 @@ def test_missing_inputs_lists_the_roles_without_a_joined_file(tmp_path):
     store = ProjectStore(tmp_path)
     store.create("p", "daylight")
     assert missing_inputs(store, "p") == ["max_volume", "test_surfaces:1"]
-    store.add_input("p", "test_surfaces", "surface.ply", box_bytes([0, 0, 0], extents=(6, 6, 0.1)))
+    store.add_criterion_test_surface("p", "1", "surface.ply", box_bytes([0, 0, 0], extents=(6, 6, 0.1)))
     assert missing_inputs(store, "p") == ["max_volume"]
 
 

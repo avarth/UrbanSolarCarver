@@ -17,7 +17,6 @@ from local_web_test_support import (
 )
 
 from urbansolarcarver.errors import ConfigError
-from urbansolarcarver.pydantic_schemas import UserConfig
 from urbansolarcarver.io import load_mesh
 from urbansolarcarver.run_context import RunContext, run_context
 from urbansolarcarver.surface_sampling import discretize_surface_with_normals
@@ -123,12 +122,12 @@ def test_reading_project_json_waits_for_the_project_lock(tmp_path):
 def test_two_test_surface_files_join_and_removal_rebuilds(tmp_path):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
     a = trimesh.creation.box(extents=[4, 4, 4]); b = trimesh.creation.box(extents=[2, 2, 2])
-    store.add_input("p", "test_surfaces", "a.ply", a.export(file_type="ply"))
-    reply = store.add_input("p", "test_surfaces", "b.ply", b.export(file_type="ply"))
-    assert [(f.name, f.triangle_count) for f in reply.files] == [("a.ply", len(a.faces)), ("b.ply", len(b.faces))]
+    store.add_criterion_test_surface("p", "1", "a.ply", a.export(file_type="ply"))
+    store.add_criterion_test_surface("p", "1", "b.ply", b.export(file_type="ply"))
+    assert [(f.name, f.triangle_count) for f in store.input_files("p", "test_surfaces")] == [("a.ply", len(a.faces)), ("b.ply", len(b.faces))]
     joined = trimesh.load(tmp_path / "p/inputs/joined/test_surfaces_1.ply", force="mesh")
     assert len(joined.faces) == len(a.faces) + len(b.faces)
-    store.remove_input("p", "test_surfaces", "a.ply")
+    store.remove_criterion_test_surface("p", "1", "a.ply")
     joined = trimesh.load(tmp_path / "p/inputs/joined/test_surfaces_1.ply", force="mesh")
     assert len(joined.faces) == len(b.faces)
 
@@ -354,7 +353,7 @@ def test_a_recorded_file_missing_on_disk_is_a_project_error_and_can_still_be_rem
 def test_rejection_message_names_the_uploaded_file_not_the_temporary_one(tmp_path):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
     with pytest.raises(ProjectError) as err:
-        store.add_input("p", "test_surfaces", "facade_b.obj", b"v 0 0 0\n")
+        store.add_criterion_test_surface("p", "1", "facade_b.obj", b"v 0 0 0\n")
     assert "facade_b.obj" in str(err.value)
     assert "upload" not in str(err.value) and str(tmp_path) not in str(err.value)
 
@@ -366,7 +365,7 @@ def test_uploads_from_two_threads_to_one_role_are_both_recorded(tmp_path):
     def upload(file_name, center):
         try:
             barrier.wait()
-            store.add_input("p", "test_surfaces", file_name, box_bytes(center))
+            store.add_criterion_test_surface("p", "1", file_name, box_bytes(center))
         except Exception as error:     # reported to the test thread below
             failures.append(error)
     threads = [threading.Thread(target=upload, args=(f"{letter}.ply", [index * 30, 0, 5])) for index, letter in enumerate("ab")]
@@ -391,13 +390,13 @@ def _block_centres_x(joined_path):
 def test_joined_file_follows_sorted_file_names_whatever_the_upload_order(tmp_path):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
     joined_path = tmp_path / "p/inputs/joined/test_surfaces_1.ply"
-    store.add_input("p", "test_surfaces", "b.ply", box_bytes([100, 0, 5]))
-    store.add_input("p", "test_surfaces", "a.ply", box_bytes([0, 0, 5]))
-    store.add_input("p", "test_surfaces", "c.ply", box_bytes([200, 0, 5]))
+    store.add_criterion_test_surface("p", "1", "b.ply", box_bytes([100, 0, 5]))
+    store.add_criterion_test_surface("p", "1", "a.ply", box_bytes([0, 0, 5]))
+    store.add_criterion_test_surface("p", "1", "c.ply", box_bytes([200, 0, 5]))
     assert _block_centres_x(joined_path) == [0, 100, 200]
-    store.remove_input("p", "test_surfaces", "a.ply")
+    store.remove_criterion_test_surface("p", "1", "a.ply")
     assert _block_centres_x(joined_path) == [100, 200]
-    store.add_input("p", "test_surfaces", "a.ply", box_bytes([0, 0, 5]))
+    store.add_criterion_test_surface("p", "1", "a.ply", box_bytes([0, 0, 5]))
     assert _block_centres_x(joined_path) == [0, 100, 200]
 
 
@@ -533,21 +532,6 @@ def test_a_stored_grid_step_is_dropped_so_the_engine_samples_at_half_the_voxel_s
     reply = store.write_config_from_values("p", {"mode": "daylight", "voxel_size": 2.0, "grid_step": 0.5})
     assert "grid_step" not in reply.settings
     assert "grid_step" not in yaml.safe_load(config_path.read_text(encoding="utf-8"))
-
-
-def test_a_stored_score_rule_is_dropped_and_the_project_still_loads(tmp_path, recwarn):
-    """The score rule was removed (scores are always summed): an earlier version stored "summed" when it was chosen. It is
-    left out when the settings are read and written, so the project loads and the next save writes the file without it."""
-    store = ProjectStore(tmp_path); store.create("p", "daylight")
-    config_path = tmp_path / "p" / "config.yaml"
-    stored = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    config_path.write_text(yaml.safe_dump({**stored, "score_rule": "summed"}), encoding="utf-8")
-    assert "score_rule" not in store.read_settings("p") and "score_rule" not in store.read_stored_config("p")
-    assert "score_rule" not in UserConfig.model_fields and store.load_project_config("p").mode == "daylight"
-    reply = store.write_config_from_values("p", {"mode": "daylight", "score_rule": "summed"})
-    assert "score_rule" not in reply.settings
-    assert "score_rule" not in yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    assert not [warning for warning in recwarn if "score_rule" in str(warning.message)]   # nothing to fix in the browser
 
 
 def test_config_from_settings_builds_the_config_of_a_settings_dict(tmp_path):
@@ -873,7 +857,7 @@ def test_reset_gives_a_fresh_copy_of_the_example_under_the_same_name(tmp_path, r
     store = ProjectStore(tmp_path)
     example = example_project_templates.copy_example_project(store, "My copy", "new_building")
     store.write_config_from_values("My copy", {"mode": "daylight" if example.mode != "daylight" else "time-based"})
-    store.remove_input("My copy", "test_surfaces", example.test_surfaces[0])
+    store.remove_criterion_test_surface("My copy", "1", example.test_surfaces[0])
     (tmp_path / "My copy" / "run" / "old_result.txt").write_text("old", encoding="utf-8")
     store.reset_project_to_example("My copy", example, _example_input_files(example))
     assert recycle_bin.folders == [(tmp_path / "My copy").resolve()]

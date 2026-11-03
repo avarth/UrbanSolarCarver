@@ -388,7 +388,7 @@ def test_a_file_a_study_uses_stays_when_it_is_taken_out_of_the_criterion(project
     store, name = project_with_inputs
     recycle_bin = _with_recycle_bin(monkeypatch)
     store.add_study(name, from_criterion="1")
-    store.remove_input(name, "test_surfaces", "surface.ply")      # the old form for a project's only criterion
+    store.remove_criterion_test_surface(name, "1", "surface.ply")
     assert recycle_bin.files == [] and _stored_files(store, name) == ["surface.ply"]
     assert [file.name for file in store.input_files(name, "test_surfaces")] == ["surface.ply"]
     assert store.criteria(name)[0].test_surface_files == [] and not test_surfaces.joined_path(store.open(name), "1").exists()
