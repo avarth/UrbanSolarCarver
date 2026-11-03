@@ -24,7 +24,7 @@ from _epw import BUNDLED_EPW
 from local_web_test_support import (
     AUTH, LAST_EVENT_TYPES, PORT, SURFACE, TOKEN, VOLUME, FakeRecycleBin, WaitsForCancel, box_bytes, build_client,
     create_project, create_project_with_inputs, decode_carved_by_criterion, decode_score_points, events_url, has_vertex_normals,
-    make_worker, read_events, start_run, upload, write_envelope_as_exported, write_fake_finished_run_with_envelope, write_fake_run,
+    make_worker, read_events, start_run, upload, write_fake_finished_run_with_envelope, write_fake_run,
     write_joined_test_surfaces_without_normals,
 )
 from urbansolarcarver import __version__
@@ -1315,20 +1315,6 @@ def test_default_warm_up_prepares_the_cpu():
 
 
 # ---- Carve further ----
-
-def test_carve_further_makes_the_envelope_the_max_volume_and_resets_the_settings(client_after_fake_run, projects_folder):
-    write_envelope_as_exported(projects_folder / "p")
-    reply = client_after_fake_run.post("/api/projects/p/carve-further", headers=AUTH)
-    assert reply.status_code == 200
-    detail = reply.json()
-    assert [file["name"] for file in detail["inputs"]["max_volume"]] == ["carved_envelope_1.ply"]
-    assert detail["carving_chain"][0]["mode"] == "daylight" and detail["settings"]["mode"] == "time-based"
-
-
-def test_carve_further_during_a_run_is_refused(client_with_blocking_run):
-    client, _ = client_with_blocking_run
-    assert client.post("/api/projects/p/carve-further", headers=AUTH).status_code == 409
-
 
 def test_context_and_terrain_routes_upload_list_and_remove(client_with_inputs):
     client = client_with_inputs

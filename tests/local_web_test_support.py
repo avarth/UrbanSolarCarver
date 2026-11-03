@@ -34,7 +34,7 @@ with warnings.catch_warnings():     # newer Starlette versions announce that Tes
 
 from urbansolarcarver.io import load_mesh, save_mesh
 from urbansolarcarver.local_web_service import create_app, project_removal, test_surfaces
-from urbansolarcarver.local_web_service.api_models import StageRecord
+from urbansolarcarver.local_web_service.api_models import CarvingChainStep, StageRecord
 from urbansolarcarver.local_web_service.example_catalog import read_examples
 from urbansolarcarver.local_web_service.projects import INPUTS_FOLDER, JOINED_FOLDER, ProjectStore
 from urbansolarcarver.local_web_service.run_worker import RunWorker
@@ -570,18 +570,25 @@ def write_earlier_version_project(store: ProjectStore, name: str, stages: Collec
     with the stage's record in stage_records. The stages written are current as that version told it: each record holds the
     config.yaml content, the inputs revision and the run id of its manifest, and each manifest names its upstream's run id.
 
-    *carved_further*: the project was carved further once (the Allatini form), so its maximum volume is carved_envelope_1.ply,
-    the uploaded one is in inputs/earlier_max_volumes/1/ and project.json has a carving_chain step.
+    *carved_further*: the project was carved further once, as versions before 2026-10-26 did (the Allatini form): its
+    maximum volume is carved_envelope_1.ply, the uploaded one is in inputs/earlier_max_volumes/1/ and project.json has a
+    carving_chain step.
     """
     store.create(name, "daylight")
     store.add_input(name, "max_volume", "volume.ply", box_bytes([0, 0, 5]))
     store.add_input(name, "test_surfaces", "surface.ply", box_bytes([0, 0, 0], extents=(6, 6, 0.1)))
     project_folder = store.open(name)
     if carved_further:
-        envelope_path = project_folder / "envelope.ply"
-        envelope_path.write_bytes(box_bytes([0, 0, 3], extents=(8, 8, 6)))
-        store.replace_max_volume_with_envelope(name, envelope_path, "daylight", store.read_settings(name))
-        envelope_path.unlink()
+        earlier = project_folder / "inputs" / "earlier_max_volumes" / "1"
+        earlier.mkdir(parents=True)
+        (earlier / "volume.ply").write_bytes(box_bytes([0, 0, 5]))
+        store.add_input(name, "max_volume", "carved_envelope_1.ply", box_bytes([0, 0, 3], extents=(8, 8, 6)))
+        store.remove_input(name, "max_volume", "volume.ply")
+        project_json = store.read_project_json(name)
+        project_json.carving_chain.append(CarvingChainStep(
+            step=1, mode="daylight", settings={key: value for key, value in store.read_settings(name).items() if not key.endswith("_path") and key != "device"},
+            carved_on="2026-10-25T10:00:00+00:00", earlier_max_volume_files=["volume.ply"], max_volume_file="carved_envelope_1.ply"))
+        store.write_project_json(name, project_json)
     config = {**store.read_stored_config(name), "test_surface_path": EARLIER_JOINED_TEST_SURFACES}
     os.replace(test_surfaces.joined_path(project_folder, "1"), project_folder / EARLIER_JOINED_TEST_SURFACES)
     (project_folder / "config.yaml").write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")

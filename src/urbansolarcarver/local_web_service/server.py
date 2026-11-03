@@ -43,7 +43,6 @@ from .api_models import (
     NewLibraryEntryRequest, TypicalBuildingLibraryEntry, TypicalBuildingReply, TypicalBuildingRequest, TypicalBuildingWeightsReply,
     TypicalBuildingProgressReply, UpdateLibraryEntryRequest,
 )
-from .carve_further import carve_further
 from .criteria import active_criteria, find_criterion
 from .example_catalog import EXAMPLE_PROJECTS_FOLDER, EXAMPLE_WEATHER_FILE_NAME, read_examples
 from .folder_picker import FolderPickerUnavailable
@@ -558,15 +557,6 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         with store.project_lock(name):
             refuse_while_running(name)
             return store.remove_input(name, role, file_name)
-
-    @router.post("/projects/{name}/carve-further", responses=_ERROR_RESPONSES)
-    def carve_project_further(name: str) -> ProjectDetail:
-        """Make the exported envelope the maximum volume and return the settings to a new project's (carve_further.py)."""
-        store = folder_in_use.store
-        with store.project_lock(name):
-            refuse_while_running(name)
-            carve_further(store, name)
-            return project_detail(store, name)
 
     @router.put("/projects/{name}/config", responses={404: _CRITERION_RESPONSES[404], 409: _ERROR_RESPONSES[409], 422: _CONFIG_OR_MESSAGE_ERROR})
     def save_config(name: str, request: ConfigValuesRequest,

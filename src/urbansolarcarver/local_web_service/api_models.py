@@ -20,7 +20,9 @@ class StageRecord(BaseModel):
 
 
 class CarvingChainStep(BaseModel):
-    """One "carve further": the exported envelope of a run became the project's maximum volume.
+    """One "carve further" of a version before 2026-10-26: the exported envelope of a run became the project's maximum
+    volume. No version writes it now (chained criteria replaced carve further); a project that has one keeps it, and the app
+    names the modes under the maximum volume file.
 
     The files it replaced are kept in inputs/earlier_max_volumes/<step>/, so the chain can be traced back to the
     maximum volume the user uploaded.

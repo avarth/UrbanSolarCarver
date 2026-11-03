@@ -89,6 +89,13 @@ versioning follows [Semantic Versioning](https://semver.org/).
   shown without that share. The time of the last run of the open project, a pipeline run or a simulation, is in the top
   bar beside the device status, "Last run 7.0 s", after a run in this page; a narrow window leaves it out.
 
+### Removed
+
+- **The service route `POST /projects/{name}/carve-further`** and the code behind it (`carve_further.py`,
+  `ProjectStore.replace_max_volume_with_envelope`). The app dropped Carve further on 2026-10-26 for chained criteria, and
+  no other client called the route. A project carved further before still opens: it keeps its `carving_chain` and
+  `inputs/earlier_max_volumes/`, and the app still names the modes under its maximum volume file.
+
 ### Fixed
 
 - **The New building example's roofs no longer have a bottom.** `neighbor_roofs.ply` closed four of its pitched roofs with

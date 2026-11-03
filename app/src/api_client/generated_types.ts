@@ -410,26 +410,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{name}/carve-further": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Carve Project Further
-         * @description Make the exported envelope the maximum volume and return the settings to a new project's (carve_further.py).
-         */
-        post: operations["carve_project_further"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/projects/{name}/config": {
         parameters: {
             query?: never;
@@ -1232,7 +1212,9 @@ export interface components {
         };
         /**
          * CarvingChainStep
-         * @description One "carve further": the exported envelope of a run became the project's maximum volume.
+         * @description One "carve further" of a version before 2026-10-26: the exported envelope of a run became the project's maximum
+         *     volume. No version writes it now (chained criteria replaced carve further); a project that has one keeps it, and the app
+         *     names the modes under the maximum volume file.
          *
          *     The files it replaced are kept in inputs/earlier_max_volumes/<step>/, so the chain can be traced back to the
          *     maximum volume the user uploaded.
@@ -3125,46 +3107,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InputFilesReply"];
-                };
-            };
-            /** @description A run of this project is active. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorDetailReply"];
-                };
-            };
-            /** @description The request cannot be served as sent. */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorDetailReply"];
-                };
-            };
-        };
-    };
-    carve_project_further: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectDetail"];
                 };
             };
             /** @description A run of this project is active. */

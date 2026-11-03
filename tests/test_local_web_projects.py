@@ -1215,22 +1215,6 @@ def test_existing_project_without_role_folders_accepts_context(project_with_inpu
     assert [file.name for file in store.input_files(name, "context")] == ["ctx.ply"]
 
 
-def test_carve_further_keeps_context_and_terrain(project_with_inputs):
-    from local_web_test_support import make_worker, run_and_wait, write_envelope_as_exported
-    store, name = project_with_inputs
-    store.add_input(name, "context", "ctx.ply", box_bytes([30, 0, 5]))
-    store.add_input(name, "terrain", "ground.ply", _sheet_bytes())
-    joined = store.open(name) / "inputs" / "joined"
-    before = {role: (joined / f"{role}.ply").read_bytes() for role in ("context", "terrain")}
-    run_and_wait(make_worker(store), name, ["exporting"])
-    envelope_path = store.open(name) / "run" / "exporting" / "export.ply"
-    write_envelope_as_exported(store.open(name))
-    store.replace_max_volume_with_envelope(name, envelope_path, "daylight", store.read_stored_config(name))
-    assert {role: (joined / f"{role}.ply").read_bytes() for role in ("context", "terrain")} == before
-    stored = _stored_config(store, name)
-    assert stored["context_path"] == "inputs/joined/context.ply" and stored["terrain_path"] == "inputs/joined/terrain.ply"
-
-
 def test_context_upload_is_joined_without_fixing_its_normals(project_with_inputs):
     """The joined context keeps the faces as uploaded (an inside-out box stays inside out): fixing normals is slow on large
     context and nothing reads them."""
