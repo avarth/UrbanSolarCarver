@@ -91,6 +91,11 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **The New building example's roofs no longer have a bottom.** `neighbor_roofs.ply` closed four of its pitched roofs with
+  a flat base facing down (965 m², a third of the file's area), so a share of its test points faced the ground: they read 0
+  in Simulate and their rays did not steer the carving. The bases are removed (1,809 faces down to 1,293; 43 roof surfaces),
+  in the packaged example and in `examples/test_inputs/new_building/`. A project made from the example before keeps its
+  copy; make it again from Try an example to get the new file.
 - **Simulate's study values no longer break into stripes with the test surfaces shown.** The patches and the test
   surfaces they lie on were pulled forward in depth by the same amount, so with the Test surfaces layer turned on the two
   took turns pixel by pixel, more at grazing angles. The patches are now pulled further forward.
