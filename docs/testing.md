@@ -17,8 +17,8 @@ Times are wall times on an 8-core / 16-thread AMD Zen 2 with an RTX 3060, measur
 |---|---|---|---|
 | 0 | While editing | `python -m pytest tests/test_floor_plates.py -m "not slow"` | seconds |
 | 1 | After every change | `python -m pytest -m "not slow" -n 8` | about 55 s |
-| 2 | Before each commit | `python -m pytest -m "not sweep" -n 8` | about 2.5 min |
-| 3 | Before merging | `python -m pytest -n 8` | about 2.7 min |
+| 2 | Before each commit | `python -m pytest -m "not sweep" -n 8` | about 2 min |
+| 3 | Before merging | `python -m pytest -n 8` | about 2.5 min |
 
 When `app/` changed, also run the front-end checks of the same tier (see below): `npm test` takes about 32 s (12 s of it ESLint),
 `npm run typecheck` 5 s and `npm run build` 7 s.

@@ -27,6 +27,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **The simulated weights take about 4 s instead of 7 s, with the same numbers.** The attribution computes a run perturbed
+  at hour t only from hour t on, starting from the base run's state, and takes the base run from its first row; the sun is
+  placed once for all the windows. Calculate in the Typical building window takes about 5 s, and the tests that calculate
+  weights about half as long.
 - **The 3D view's layers come from one list** in the app: each layer's object, whether the layers menu lists it, and
   whether it is shown and dimmed are one entry, which one hook gives the scene (30 effects in the view pane down to
   12). What a layer offers the scene (theme colours, its summary, recolouring, picking) is typed (`layer_hooks.ts`).

@@ -288,6 +288,20 @@ def _air_temperature(p, consts, t_m_prev, t_e, phi_int, phi_sol, phi_hc):
 _PROGRESS_HOURS = HOURS // 20
 
 
+def _rows_started(h: int, n: int, states) -> int:
+    """The number of leading rows the march computes in hour *h*: all *n* of a single trajectory, else the base row and the
+    rows perturbed up to hour *h* (1 + 2·(h + 1)).
+
+    A row perturbed in a later hour has had the base row's inputs so far, so it holds the base row's state; it is not computed
+    until its hour comes, when it takes the base row's state (each array of *states*, in place). The rows come out the same as
+    when all of them are computed every hour, at about half the work."""
+    if n == 1:
+        return 1
+    for state in states:
+        state[1 + 2 * h:3 + 2 * h] = state[0]
+    return 3 + 2 * h
+
+
 def _march(p, t_out, phi_int, phi_sol_base, *, deltas: float | None = None,
            t_m_init: float = 20.0, record_series: bool = False, progress=None):
     """Step through the 8760 hours of the year, vectorized over trajectories.
@@ -328,22 +342,24 @@ def _march(p, t_out, phi_int, phi_sol_base, *, deltas: float | None = None,
             consts = consts_by_hour[h]
         t_e = float(t_out[h])
         p_int = float(phi_int[h])
+        k = _rows_started(h, n, (t_m, q_h, q_c))
         if deltas is None:
             phi_sol = float(phi_sol_base[h])
         else:
-            phi_sol = np.full(n, float(phi_sol_base[h]))
+            phi_sol = np.full(k, float(phi_sol_base[h]))
             phi_sol[1 + 2 * h] += deltas
             phi_sol[2 + 2 * h] -= deltas
+        t_m_start = t_m[:k]
 
         # Step 1: free-float (C.4.2)
-        t_air_0, _ = _air_temperature(p, consts, t_m, t_e, p_int, phi_sol, 0.0)
+        t_air_0, _ = _air_temperature(p, consts, t_m_start, t_e, p_int, phi_sol, 0.0)
         heat = t_air_0 < p.t_set_heating
         cool = t_air_0 > p.t_set_cooling
 
         # Step 2: 10 W/m² test load and linear interpolation to set-point.
         # The system is affine in phi_hc, so the interpolation is exact.
         # Heating and cooling power is unlimited (no maximum-capacity check).
-        t_air_10, _ = _air_temperature(p, consts, t_m, t_e, p_int, phi_sol,
+        t_air_10, _ = _air_temperature(p, consts, t_m_start, t_e, p_int, phi_sol,
                                        phi_10)
         slope = t_air_10 - t_air_0
         t_set = np.where(heat, p.t_set_heating, p.t_set_cooling)
@@ -352,10 +368,10 @@ def _march(p, t_out, phi_int, phi_sol_base, *, deltas: float | None = None,
         phi_nd = np.where(heat | cool, phi_nd, 0.0)
 
         # Final evaluation with the applied power advances the state.
-        t_air, t_m = _air_temperature(p, consts, t_m, t_e, p_int, phi_sol,
-                                      phi_nd)
-        q_h += np.maximum(phi_nd, 0.0)
-        q_c += np.maximum(-phi_nd, 0.0)
+        t_air, t_m[:k] = _air_temperature(p, consts, t_m_start, t_e, p_int, phi_sol,
+                                          phi_nd)
+        q_h[:k] += np.maximum(phi_nd, 0.0)
+        q_c[:k] += np.maximum(-phi_nd, 0.0)
         if record_series:
             series_air[h] = t_air if np.isscalar(t_air) else t_air[0]
             series_tm[h] = t_m if np.isscalar(t_m) else t_m[0]
@@ -412,11 +428,18 @@ def attribute_solar_gains(p: ZoneParams, t_out, phi_int, phi_sol,
     0.02 from such switching are clipped silently; larger ones are also
     clipped but trigger a warning.
     """
-    t_out = np.asarray(t_out, dtype=np.float64)
-    phi_int = np.asarray(phi_int, dtype=np.float64)
-    phi_sol = np.asarray(phi_sol, dtype=np.float64)
-    q_h, q_c, *_ = _march(p, t_out, phi_int, phi_sol, deltas=float(eps),
-                          t_m_init=t_m_init, progress=progress)
+    benefit, harm, _ = _conditioned_weights(p, t_out, phi_int, phi_sol, eps, t_m_init, progress)
+    return benefit, harm
+
+
+def _conditioned_weights(p: ZoneParams, t_out, phi_int, phi_sol, eps: float = 1.0, t_m_init: float = 20.0,
+                         progress=None) -> Tuple[np.ndarray, np.ndarray, SimulationResult]:
+    """:func:`attribute_solar_gains`'s benefit and harm, and :func:`simulate`'s result for the same zone: the attribution's
+    base row is that run, so the year is marched once for both."""
+    t_out, phi_int, phi_sol = (np.asarray(a, dtype=np.float64) for a in (t_out, phi_int, phi_sol))
+    q_h, q_c, s_air, s_tm, s_dem = _march(p, t_out, phi_int, phi_sol, deltas=float(eps),
+                                          t_m_init=t_m_init, record_series=True, progress=progress)
+    base = SimulationResult(q_heating_wh=float(q_h[0]), q_cooling_wh=float(q_c[0]), t_air=s_air, t_m=s_tm, demand_w=s_dem)
     d_qh = (q_h[1::2] - q_h[2::2]) / (2.0 * eps)   # +eps rows minus −eps rows
     d_qc = (q_c[1::2] - q_c[2::2]) / (2.0 * eps)
     benefit = -d_qh
@@ -429,7 +452,7 @@ def attribute_solar_gains(p: ZoneParams, t_out, phi_int, phi_sol,
                 "attribute_solar_gains: %s outside [0, 1] beyond switching "
                 "tolerance (min %.3f, max %.3f); check inputs.", name, low, high,
             )
-    return np.clip(benefit, 0.0, 1.0), np.clip(harm, 0.0, 1.0)
+    return np.clip(benefit, 0.0, 1.0), np.clip(harm, 0.0, 1.0), base
 
 
 # ---------------------------------------------------------------------------
@@ -497,22 +520,23 @@ def _march_free(p, t_out, phi_int, phi_sol_base, h_open: float, vent_above: floa
         o = opened_by_hour[h] if opened_by_hour is not None else opened
         t_e = float(t_out[h])
         p_int = float(phi_int[h])
-        phi_sol = np.full(n, float(phi_sol_base[h]))
+        k = _rows_started(h, n, (t_m, under, over, below, above))
+        phi_sol = np.full(k, float(phi_sol_base[h]))
         if deltas is not None:
             phi_sol[1 + 2 * h] += deltas
             phi_sol[2 + 2 * h] -= deltas
-        t_closed, tm_closed = _air_temperature(p, c, t_m, t_e, p_int, phi_sol, 0.0)
-        t_open, tm_open = _air_temperature(open_p, o, t_m, t_e, p_int, phi_sol, 0.0)
+        t_closed, tm_closed = _air_temperature(p, c, t_m[:k], t_e, p_int, phi_sol, 0.0)
+        t_open, tm_open = _air_temperature(open_p, o, t_m[:k], t_e, p_int, phi_sol, 0.0)
         drop = t_closed - t_open
         cools = drop > 0.0
         share = np.where((t_closed > vent_above) & cools,
                          np.clip((t_closed - vent_above) / np.where(cools, drop, 1.0), 0.0, 1.0), 0.0)
         t_air = t_closed - share * drop
-        t_m = tm_closed - share * (tm_closed - tm_open)
-        under += np.maximum(low - t_air, 0.0)
-        over += np.maximum(t_air - high, 0.0)
-        below += t_air < low
-        above += t_air > high
+        t_m[:k] = tm_closed - share * (tm_closed - tm_open)
+        under[:k] += np.maximum(low - t_air, 0.0)
+        over[:k] += np.maximum(t_air - high, 0.0)
+        below[:k] += t_air < low
+        above[:k] += t_air > high
         if record_series:
             series_air[h], series_tm[h], series_share[h] = t_air[0], t_m[0], share[0]
 
@@ -567,11 +591,22 @@ def attribute_free_running(p: ZoneParams, t_out, phi_int, phi_sol, h_open: float
     silently, larger ones with a warning (as in :func:`attribute_solar_gains`). The other arguments are as in
     :func:`simulate_free_running`; ``progress`` as in :func:`attribute_solar_gains`.
     """
+    benefit, harm, _ = _free_running_weights(p, t_out, phi_int, phi_sol, h_open, vent_above, eps, t_m_init, progress)
+    return benefit, harm
+
+
+def _free_running_weights(p: ZoneParams, t_out, phi_int, phi_sol, h_open: float, vent_above: float, eps: float,
+                          t_m_init: "float | None" = None, progress=None) -> Tuple[np.ndarray, np.ndarray, FreeRunningResult]:
+    """:func:`attribute_free_running`'s benefit and harm, and :func:`simulate_free_running`'s result for the same zone: the
+    attribution's base row is that run, so the year is marched once for both."""
     t_out, phi_int, phi_sol = _hourly_arrays(t_out, phi_int, phi_sol)
     if t_m_init is None:
         t_m_init = _periodic_start(p, t_out, phi_int, phi_sol, h_open, vent_above)
-    under, over, *_ = _march_free(p, t_out, phi_int, phi_sol, h_open, vent_above, deltas=float(eps), t_m_init=t_m_init,
-                                  progress=progress)
+    under, over, below, above, s_air, s_tm, s_share = _march_free(
+        p, t_out, phi_int, phi_sol, h_open, vent_above, deltas=float(eps), t_m_init=t_m_init, record_series=True,
+        progress=progress)
+    base = FreeRunningResult(underheating_kh=float(under[0]), overheating_kh=float(over[0]), hours_below=int(below[0]),
+                             hours_above=int(above[0]), t_air=s_air, t_m=s_tm, window_share=s_share)
     scale = loss_coefficient(p) / (2.0 * eps)
     benefit = (under[2::2] - under[1::2]) * scale       # −eps rows minus +eps rows: the underheating one more Wh removes
     harm = (over[1::2] - over[2::2]) * scale
@@ -581,7 +616,7 @@ def attribute_free_running(p: ZoneParams, t_out, phi_int, phi_sol, h_open: float
         if low < -tol or high > 1.0 + tol:
             log.warning("attribute_free_running: %s outside [0, 1] beyond tolerance (min %.3f, max %.3f); check inputs.",
                         name, low, high)
-    return np.clip(benefit, 0.0, 1.0), np.clip(harm, 0.0, 1.0)
+    return np.clip(benefit, 0.0, 1.0), np.clip(harm, 0.0, 1.0), base
 
 
 # ---------------------------------------------------------------------------
@@ -600,9 +635,10 @@ def transmitted_solar_from_epw(
     convention (0 = N, 90 = E, 180 = S, 270 = W); g_value is the glazing's
     total solar energy transmittance (0-1); altitude is that of the
     window's normal, 0 (the default) for a vertical window, 90 for a
-    horizontal skylight.  The irradiance on each window plane [W/m²] comes
-    from Ladybug's ``Wea.directional_irradiance`` (isotropic sky, ground
-    reflectance 0.2, no obstructions); it is multiplied by area and
+    horizontal skylight.  The irradiance on each window plane [W/m²] is
+    that of Ladybug's ``Wea.directional_irradiance`` (isotropic sky, ground
+    reflectance 0.2, no obstructions), with the sun placed once for all the
+    windows (:func:`_plane_irradiance`); it is multiplied by area and
     g_value.
 
     ``hourly_factors``: optional per-window hourly transmission multipliers
@@ -617,14 +653,55 @@ def _window_gains(epw_path: str, windows) -> list:
     """The unshaded hourly gain of each window [W]: area x g x irradiance on
     its plane, one (8760,) array per window (see transmitted_solar_from_epw)."""
     wea = read_weather_file(epw_path).solar_irradiance_wea()
+    hours = _sun_hours(wea)
     gains = []
     for window in windows:
         azimuth, area, g = window[:3]
         altitude = float(window[3]) if len(window) > 3 else 0.0
-        irr, *_ = wea.directional_irradiance(altitude, float(azimuth))
-        gains.append(float(area) * float(g) * np.asarray(
-            irr.values, dtype=np.float64))
+        gains.append(float(area) * float(g) * _plane_irradiance(hours, altitude, float(azimuth)))
     return gains
+
+
+def _sun_hours(wea) -> list:
+    """For each hour of the Wea: the sun's altitude [°] and direction (a Ladybug Vector3D), the direct normal and diffuse
+    horizontal irradiance, and the global horizontal irradiance, as Wea.directional_irradiance computes them. Computed once for
+    all the windows (Ladybug's Sunpath takes about 0.2 s a year, which directional_irradiance pays again for each window)."""
+    import math
+    from ladybug.sunpath import Sunpath
+    sunpath = Sunpath.from_location(wea.location)
+    sunpath.is_leap_year = wea.is_leap_year
+    hours = []
+    for moment, dnr, dhr in zip(wea.datetimes, wea.direct_normal_irradiance, wea.diffuse_horizontal_irradiance):
+        sun = sunpath.calculate_sun_from_date_time(moment)
+        direction = _polar_to_vector(math.radians(sun.azimuth), math.radians(sun.altitude))
+        hours.append((sun.altitude, direction, dnr, dhr, dhr + dnr * math.cos(math.radians(90 - sun.altitude))))
+    return hours
+
+
+def _polar_to_vector(azimuth: float, altitude: float):
+    """A unit Vector3D from an azimuth and an altitude in radians, as in Wea.directional_irradiance."""
+    import math
+    from ladybug_geometry.geometry3d.pointvector import Vector3D
+    mult = math.cos(altitude)
+    return Vector3D(math.sin(azimuth) * mult, math.cos(azimuth) * mult, math.sin(altitude))
+
+
+def _plane_irradiance(hours, altitude: float, azimuth: float, ground_reflectance: float = 0.2) -> np.ndarray:
+    """The total irradiance [W/m²] on a plane whose normal has *altitude* and *azimuth* [°], each hour of *hours*
+    (:func:`_sun_hours`): Ladybug's Wea.directional_irradiance with an isotropic sky, step for step in the same order, so the
+    same values."""
+    import math
+    normal = _polar_to_vector(math.radians(azimuth), math.radians(altitude))
+    sky_view = (math.sin(math.radians(altitude)) / 2) + 0.5
+    ground_view = 0.5 - (math.sin(math.radians(altitude)) / 2)
+    total = np.empty(len(hours))
+    for i, (sun_altitude, direction, dnr, dhr, e_glob) in enumerate(hours):
+        vec_angle = direction.angle(normal)
+        srf_dir = 0
+        if sun_altitude > 0 and vec_angle < math.pi / 2:
+            srf_dir = dnr * math.cos(vec_angle)
+        total[i] = srf_dir + dhr * sky_view + e_glob * ground_reflectance * ground_view
+    return total
 
 
 def _summed_gains(window_gains, hourly_factors=None) -> np.ndarray:
@@ -1034,10 +1111,10 @@ def _save_heatmaps(benefit: np.ndarray, harm: np.ndarray, path, operation: str =
     return path
 
 
-# The share of one room's time in each of its steps (measured: 0.3 s for
-# the windows' irradiance, 4.3 s for the attribution, 0.75 s for the base
-# run), for the progress it reports.
-_ROOM_STEP_SHARES = {"windows": 0.06, "attribution": 0.8, "base": 0.14}
+# The share of one room's time in each of its steps (measured 2026-11-03: 0.7 s
+# for the weather file and the windows' irradiance, 3.2 s for the attribution,
+# whose base row is the base run), for the progress it reports.
+_ROOM_STEP_SHARES = {"windows": 0.17, "attribution": 0.83}
 
 
 def _room_weights(epw_path: str, arch: dict, internal_gains_w_m2, eps: float, outdoor_temperature,
@@ -1085,8 +1162,8 @@ def _room_weights(epw_path: str, arch: dict, internal_gains_w_m2, eps: float, ou
     params = ZoneParams.from_archetype(**arch)
     t_out = outdoor_temperature()
 
-    # The irradiance of each window is computed once (Ladybug's transposition
-    # takes about 0.25 s a window) for the shaded and the unshaded sums.
+    # The irradiance of each window is computed once for the shaded and the
+    # unshaded sums.
     window_gains = _window_gains(epw_path, windows)
     report(_ROOM_STEP_SHARES["windows"])
     phi_sol = _summed_gains(window_gains, shading)
@@ -1116,19 +1193,17 @@ def _room_weights(epw_path: str, arch: dict, internal_gains_w_m2, eps: float, ou
 
     if operation == "free_running":
         h_open = window_conductance(arch["volume"], vent["vent_ach"])
-        benefit, harm = attribute_free_running(params, t_out, phi_int, phi_sol, h_open, vent["vent_above"],
-                                               eps=_FREE_RUNNING_EPS, progress=attribution_progress)
-        # The degree-hours of the zone as given, recorded so a reader need not simulate again.
-        free = simulate_free_running(params, t_out, phi_int, phi_sol, h_open, vent["vent_above"])
+        # With the degree-hours of the zone as given, recorded so a reader need not simulate again.
+        benefit, harm, free = _free_running_weights(params, t_out, phi_int, phi_sol, h_open, vent["vent_above"],
+                                                    _FREE_RUNNING_EPS, progress=attribution_progress)
         outcome = {"underheating_kh": free.underheating_kh, "overheating_kh": free.overheating_kh,
                    "hours_below": free.hours_below, "hours_above": free.hours_above,
                    "comfort_band_c": [params.t_set_heating, params.t_set_cooling],
                    "loss_coefficient_w_k": loss_coefficient(params)}
     else:
-        benefit, harm = attribute_solar_gains(params, t_out, phi_int, phi_sol, eps=eps, progress=attribution_progress)
-        # The annual demand of the zone as given (shaded solar and internal gains),
+        # With the annual demand of the zone as given (shaded solar and internal gains),
         # recorded so a reader need not simulate again.
-        base = simulate(params, t_out, phi_int, phi_sol)
+        benefit, harm, base = _conditioned_weights(params, t_out, phi_int, phi_sol, eps, progress=attribution_progress)
         outcome = {"heating_kwh_m2": base.q_heating_wh / 1000.0 / params.floor_area,
                    "cooling_kwh_m2": base.q_cooling_wh / 1000.0 / params.floor_area}
     report(1.0)

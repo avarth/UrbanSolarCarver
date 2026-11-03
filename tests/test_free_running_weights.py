@@ -118,4 +118,17 @@ def test_the_generator_writes_a_free_running_zone(tmp_path):
     assert "heating_kwh_m2" not in meta and meta["comfort_band_c"] == [20.0, 26.0]
     assert (meta["archetype"]["vent_above"], meta["archetype"]["vent_ach"]) == (24.0, 3.0)
     assert 0 < meta["hours_below"] < HOURS and meta["underheating_kh"] > 0 and meta["overheating_kh"] >= 0
+    # The degree-hours are those of simulate_free_running on the same zone (the generator takes them from its attribution's base
+    # row), exactly.
+    from urbansolarcarver.archetype_defaults import ARCHETYPE_DEFAULTS
+    from urbansolarcarver.weather_file import read_weather_file
+    zone = sw.expand_shoebox({key: value for key, value in archetype.items() if key not in ("operation", "vent_above", "vent_ach")})
+    windows = zone.pop("windows")
+    p = ZoneParams.from_archetype(**zone)
+    free = sw.simulate_free_running(p, read_weather_file(str(BUNDLED_EPW)).dry_bulb_temperature(),
+                                    _constant(ARCHETYPE_DEFAULTS["internal_gains_w_m2"] * p.floor_area),
+                                    sw.transmitted_solar_from_epw(str(BUNDLED_EPW), windows),
+                                    sw.window_conductance(zone["volume"], 3.0), 24.0)
+    assert ((meta["underheating_kh"], meta["overheating_kh"], meta["hours_below"], meta["hours_above"])
+            == (free.underheating_kh, free.overheating_kh, free.hours_below, free.hours_above))
     assert meta["loss_coefficient_w_k"] > 0 and benefit.max() > 0.5 and benefit.max() <= 1.0

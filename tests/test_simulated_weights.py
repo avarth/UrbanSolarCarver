@@ -650,6 +650,21 @@ class TestShadingPeriod:
             _shading_factors(windows, None, None, None, [152, 243])
 
 
+@pytest.mark.slow
+def test_the_irradiance_on_a_window_is_ladybugs_directional_irradiance(example_epw_path):
+    """transmitted_solar_from_epw places the sun once for all the windows and transposes onto each plane as Ladybug's
+    Wea.directional_irradiance does: the same values, exactly, for walls, a tilted plane and a skylight."""
+    from urbansolarcarver.simulated_weights import transmitted_solar_from_epw
+    from urbansolarcarver.weather_file import read_weather_file
+
+    epw = str(example_epw_path)
+    wea = read_weather_file(epw).solar_irradiance_wea()
+    for azimuth, altitude in ((180.0, 0.0), (75.0, 0.0), (250.0, 30.0), (0.0, 90.0)):
+        total, *_ = wea.directional_irradiance(altitude, azimuth)
+        ours = transmitted_solar_from_epw(epw, [(azimuth, 1.0, 1.0, altitude)])
+        assert np.array_equal(ours, np.asarray(total.values, dtype=np.float64)), (azimuth, altitude)
+
+
 def test_the_sun_is_up_when_ladybug_gives_direct_sun(example_epw_path):
     """sun_up_hours places the sun where transmitted_solar_from_epw does: no
     direct sun reaches a surface in an hour marked 0."""

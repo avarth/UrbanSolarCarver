@@ -669,7 +669,7 @@ def test_calculate_with_the_engine_gives_the_numbers_of_its_file(client, project
 @pytest.mark.slow
 @pytest.mark.parametrize("use", ["apartment", "office"])      # two tests of four examples, so two workers share them
 def test_every_example_calculates_on_the_bundled_weather_file(tmp_path, use):
-    """Each example's weights on the Golden weather file (about 10 s each); the numbers are printed (-s) for the docs."""
+    """Each example's weights on the Golden weather file (about 5 s each); the numbers are printed (-s) for the docs."""
     numbers = {}
     entries = [entry for entry in typical_building.library() if entry.id.startswith(f"kenak-{use}-")]
     assert len(entries) == 4
