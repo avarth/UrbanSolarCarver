@@ -10,6 +10,25 @@ export type CardStatus =
   | { kind: "current" | "out_of_date" | "running" | "bypassed" | "no_test_surfaces" | "not_run" }
   | { kind: "updates_from"; from: string };
 
+/** What a run of the project would do: its analysis (and the carving after it), only the carving, or nothing (null). */
+export type RunAction = "analysis" | "carving" | null;
+
+/** The run the stages call for (the project's, which sum up the criteria that are on): Criteria's pinned button offers this one. */
+export function runActionOf(stages: Record<"preprocessing" | "thresholding", StageState>): RunAction {
+  if (stages.preprocessing !== "current") return "analysis";
+  return stages.thresholding === "current" ? null : "carving";
+}
+
+/**
+ * "Carving updated: Daylight, Solar energy." for the criteria *carvedIds* of a finished run, by their names; "Carving updated."
+ * with one criterion (absent *criterionNames*) or when the names are gone; null when the run carved nothing.
+ */
+export function carvingUpdatedText(carvedIds: readonly string[], criterionNames: Readonly<Record<string, string>> | undefined): string | null {
+  if (carvedIds.length === 0) return null;
+  const names = carvedIds.flatMap((id) => criterionNames?.[id] ?? []);
+  return names.length === 0 ? messages.carvingUpdated : messages.carvingUpdatedOf(names.join(", "));
+}
+
 /** The stages of each criterion that is on, by criterion id (a bypassed criterion is not in it). */
 export type StagesByCriterion = Record<string, Record<"preprocessing" | "thresholding", StageState>>;
 

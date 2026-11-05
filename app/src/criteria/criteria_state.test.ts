@@ -2,8 +2,8 @@ import { expect, test } from "vitest";
 import type { CriterionCarvingSummary, CriterionEntry } from "../api_client/client";
 import type { StageState } from "../stages";
 import {
-  activeCriteria, cardLineOf, cardResultLine, cardStatusText, chainSummaryLine, criterionStatus, filesOfOtherCriteria, orderAfterDropping, orderAfterMoving,
-  selectionAfterRemoving, criteriaProtectingNothing, stagesByCriterionOf, stagesDuringRun,
+  activeCriteria, cardLineOf, cardResultLine, cardStatusText, carvingUpdatedText, chainSummaryLine, criterionStatus, filesOfOtherCriteria, orderAfterDropping, orderAfterMoving,
+  runActionOf, selectionAfterRemoving, criteriaProtectingNothing, stagesByCriterionOf, stagesDuringRun,
 } from "./criteria_state";
 
 function entry(id: string, overrides: Partial<CriterionEntry> = {}): CriterionEntry {
@@ -187,4 +187,19 @@ test("a card's line is its result while current, else its status", () => {
   expect(cardLineOf({ kind: "current" }, undefined)).toBe("");
   expect(cardLineOf({ kind: "bypassed" }, summary(CARVING, 1250.4))).toBe("Off");
   expect(cardLineOf({ kind: "updates_from", from: "Daylight on windows" }, undefined)).toBe("Updates from Daylight on windows");
+});
+
+test("the line of a carving update names the criteria it carved, none with one criterion, and is absent when it carved none", () => {
+  expect(carvingUpdatedText(["2", "3"], { 1: "A", 2: "B", 3: "C" })).toBe("Carving updated: B, C.");
+  expect(carvingUpdatedText(["1"], undefined)).toBe("Carving updated.");
+  expect(carvingUpdatedText(["9"], { 1: "A" })).toBe("Carving updated.");
+  expect(carvingUpdatedText([], { 1: "A" })).toBeNull();
+});
+
+test("the run a project needs: the analysis when it is not current, else the carving, else none", () => {
+  expect(runActionOf({ preprocessing: "missing", thresholding: "missing" })).toBe("analysis");
+  expect(runActionOf({ preprocessing: "out_of_date", thresholding: "current" })).toBe("analysis");
+  expect(runActionOf({ preprocessing: "current", thresholding: "out_of_date" })).toBe("carving");
+  expect(runActionOf({ preprocessing: "current", thresholding: "missing" })).toBe("carving");
+  expect(runActionOf({ preprocessing: "current", thresholding: "current" })).toBeNull();
 });

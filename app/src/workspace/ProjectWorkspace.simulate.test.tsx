@@ -151,7 +151,10 @@ test("Run posts /simulate, shows progress, and refreshes the studies when it fin
 });
 
 test("Run is unavailable during a Design run, and Design's Run analysis during a simulation", async () => {
-  await openSimulate(undefined, (service) => { service.studies = [study("1", "sun_hours", ["facades.obj"])]; });
+  await openSimulate(undefined, (service) => {
+    service.studies = [study("1", "sun_hours", ["facades.obj"])];
+    service.criterionStages = { 1: { preprocessing: "out_of_date", thresholding: "out_of_date" } };
+  }, { preprocessing: "out_of_date", thresholding: "out_of_date" });
   await switchMode("design");
   await pressRunAnalysis();
   expect(FakeWebSocket.opened).toHaveLength(1);

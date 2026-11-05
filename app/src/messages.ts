@@ -443,6 +443,9 @@ export const messages = {
   sliderHighestScore: (highestText: string) => `${highestText}, the highest score`,
   updateWhenThresholdChanges: "Update when I change the threshold",
   updateCarving: "Update carving",
+  // Under the pinned buttons once a carving update has finished, while its results are current.
+  carvingUpdated: "Carving updated.",
+  carvingUpdatedOf: (criterionNames: string) => `Carving updated: ${criterionNames}.`,
   buildEnvelopeAndMassing: "Build envelope and massing",
   // Why the build buttons wait while Carving is locked: a build would run the analysis first (M10). With several criteria they name
   // the criterion whose analysis is missing or out of date instead (carvingWaitsForAnalysisOf, addTestSurfacesFirst).

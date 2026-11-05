@@ -16,6 +16,7 @@ import type { LayerName } from "../viewer/scene";
 import type { ViewerPaneProps } from "../viewer_overlays/ViewerPane";
 import { CarvingStep, thresholdControlOf, useAutoUpdate } from "../criteria/CarvingStep";
 import { CriteriaRunBar } from "../criteria/CriteriaRunBar";
+import { carvingUpdatedText, runActionOf } from "../criteria/criteria_state";
 import type { CriteriaOfResults } from "../criteria/use_workspace_criteria";
 import { EnvelopeAndMassingStep } from "../steps/EnvelopeAndMassingStep";
 import { exportDownloads, ExportStep, type ExportDownload } from "../steps/ExportStep";
@@ -23,7 +24,7 @@ import { RunProgress, type GoToSetting } from "../common/RunProgress";
 import { RunReportPanel } from "../steps/RunReportPanel";
 import { runAnalysisAfterSaving, RunAnalysisButton, SettingsToFix } from "../settings_form/SettingsStep";
 import {
-  activeRunReason, criterionProgressOf, pipelineRecordOf, runProgressShare, runStages, stageRunState, type RunLoop, type RunOrigin, type RunOutcome,
+  activeRunReason, criteriaCarvedBy, criterionProgressOf, pipelineRecordOf, runProgressShare, runStages, stageRunState, type RunLoop, type RunOrigin, type RunOutcome,
   type RunRecord,
 } from "../common/run_state";
 import { useResultsFollowingRun, useRunResults, type RunResults } from "../steps/run_results";
@@ -310,9 +311,9 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     thresholdQueue.current.submit({ values, mode: form.mode }, context.criterionId ?? "");
   };
 
-  const feedback = (origin: RunOrigin, foldWarnings = false) => (
+  const feedback = (origin: RunOrigin, foldWarnings = false, finishedNote: string | null = null) => (
     <RunProgress runs={runs} project={project} origin={origin} mode={form.mode} onGoToSetting={context.goToSetting} criterionNames={context.criterionNames}
-                 shownCriterionId={context.criterionId} criterionKeys={context.criterionKeys} foldWarnings={foldWarnings} />
+                 shownCriterionId={context.criterionId} criterionKeys={context.criterionKeys} foldWarnings={foldWarnings} finishedNote={finishedNote} />
   );
 
   const carvingUpdateRunning = runs.activeRun?.project === project && runs.activeRun.origin === "carving_update";
@@ -387,17 +388,23 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
                    showsDisabledReason={false} />
     </>
   );
-  // Criteria's pinned bar: Run analysis and the build, with the progress and outcome of Run analysis and of a carving update (whose
-  // controls are in the Carving rule section, which may be closed), each failure with its links to the settings to fix. The
-  // warnings of a run fold behind one line, so the bar stays short.
+  // Criteria's pinned bar: the run the project needs and the build, with the progress and outcome of Run analysis and of a carving
+  // update (whose controls are in the Carving rule section, which may be closed), each failure with its links to the settings to
+  // fix. The warnings of a run fold behind one line, so the bar stays short. While a carving update runs the bar offers no run: it
+  // is bringing up to date the stages that would ask for one. Its Update carving starts the same run for any criterion shown, on or
+  // off, as it reads the chain's stages. The line of a finished update stays while the chain is current.
+  const neededRun = runActionOf(stages);
+  const runAction = carvingUpdateRunning ? null : neededRun;
+  const carvingUpdatedNote = neededRun === null && record !== null && !(record.isSuperseded?.() ?? false)
+    ? carvingUpdatedText(criteriaCarvedBy(record.state), context.criterionNames) : null;
   const criteriaRunBar = (
-    <CriteriaRunBar runBlocker={runBlocker} onRunAnalysis={() => void startAfterSaving(ANALYSIS_STAGES, "carving_run_analysis")}
-                    buildBlocker={pinnedBuildBlocker}
+    <CriteriaRunBar runAction={runAction} runBlocker={runBlocker} buildBlocker={pinnedBuildBlocker}
+                    onRun={() => void (runAction === "carving" ? startAfterSaving(CARVING_STAGES, "carving_update") : startAfterSaving(ANALYSIS_STAGES, "carving_run_analysis"))}
                     onBuild={() => {
                       context.openStep("envelope_and_massing");
                       void startAfterSaving(BUILD_STAGES, "build");
                     }}
-                    feedback={<>{feedback("carving_run_analysis", true)}{feedback("carving_update", true)}</>} />
+                    feedback={<>{feedback("carving_run_analysis", true)}{feedback("carving_update", true, carvingUpdatedNote)}</>} />
   );
   const content = {
     envelope_and_massing: (

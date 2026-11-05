@@ -357,6 +357,7 @@
 
 /* The open step's run button with its progress, failure details and warnings: at most half the panel, scrolling beyond that,
    so a long list at 200 % zoom (UX 12) never pushes the step list out of the panel. */
+.step-pinned-action:empty { display: none; }     /* nothing to run or say: no strip under the steps */
 .step-pinned-action {
   flex: none;
   box-sizing: border-box;     /* the half includes the padding and the border */

@@ -211,6 +211,11 @@ export function criterionProgressOf(state: RunState): Record<string, Record<stri
   return progress;
 }
 
+/** The ids of the criteria whose thresholding the run has in its order, in that order. */
+export function criteriaCarvedBy(state: RunState): string[] {
+  return state.order.filter((key) => stageOfKey(key) === "thresholding").flatMap((key) => criterionOfKey(key) ?? []);
+}
+
 /** How far the run is, 0 to 1, for the progress bar: the finished stages and the batch fraction of the running one. */
 export function runProgressShare(state: RunState): number {
   if (state.order.length === 0) return 1;

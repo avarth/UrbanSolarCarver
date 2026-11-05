@@ -473,7 +473,8 @@ function OpenProject(props: ProjectWorkspaceProps) {
     void resultSteps.startRun(ANALYSIS_STAGES, "settings_run_analysis").then((outcome) => { if (outcome === "finished") openTheStep("criteria"); });
   });
   const pinnedActions: Partial<Record<StepName, ReactNode>> = {
-    site_and_grid: (
+    // Offered while an analysis is missing or out of date; how the last run from here ended stays when none is.
+    site_and_grid: shownStages.preprocessing === "current" ? resultSteps.feedback("settings_run_analysis") : (
       <RunAnalysisButton blocker={workspaceCriteria.siteAndGridRunBlocker} onRunAnalysis={runAnalysis} feedback={resultSteps.feedback("settings_run_analysis")} />
     ),
     ...resultSteps.pinnedAction,

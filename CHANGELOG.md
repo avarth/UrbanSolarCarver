@@ -114,6 +114,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **The Criteria bar offers only the run the project needs.** It said Run analysis even with nothing to run, and a carving
+  update left no trace. Now it shows Run analysis while an analysis is missing or out of date, Update carving while only a
+  carving is, and neither when everything is current; Run analysis in Site and grid shows only for an analysis. A finished
+  carving update says which criteria it carved: "Carving updated: Daylight, Solar energy."
 - **The New building example's roofs no longer have a bottom.** `neighbor_roofs.ply` closed four of its pitched roofs with
   a flat base facing down (965 m², a third of the file's area), so a share of its test points faced the ground: they read 0
   in Simulate and their rays did not steer the carving. The bases are removed (1,809 faces down to 1,293; 43 roof surfaces),

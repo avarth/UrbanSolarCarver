@@ -2,7 +2,7 @@
 // criterion's stages named with the criterion when the project has several, spec 7.3),
 // the batch count during the ray tracing, the elapsed time and Cancel; once it ended, how it ended (a failure with a Details
 // fold and a link to the setting it names, "Cancelled.") and the warnings it reported, listed or, in the Criteria step's pinned bar,
-// folded behind one line ("2 warnings"). A notice of the run loop shows for three seconds: "Results are up to date" when the
+// folded behind one line ("2 warnings"); a carving update also says which criteria it carved. A notice of the run loop shows for three seconds: "Results are up to date" when the
 // service had nothing to run, "A run is in progress" for a press during a run.
 import { useEffect, useId, useState } from "react";
 import { messages } from "../messages";
@@ -120,7 +120,7 @@ function RunFailure({ record, mode, onGoToSetting, shownCriterionId, criterionNa
   );
 }
 
-function RunEnded(props: EndedRunContext & { record: RunRecord }) {
+function RunEnded({ finishedNote, ...props }: EndedRunContext & { record: RunRecord; finishedNote?: string | null }) {
   const { record } = props;
   if (record.refusal !== null) return <p className="run-outcome run-outcome-error">{record.refusal}</p>;
   switch (record.state.final) {
@@ -131,7 +131,7 @@ function RunEnded(props: EndedRunContext & { record: RunRecord }) {
     case "connection_lost":
       return <p className="run-outcome run-outcome-error">{messages.runConnectionLost}</p>;
     default:
-      return null;
+      return finishedNote == null ? null : <p className="run-outcome">{finishedNote}</p>;
   }
 }
 
@@ -179,10 +179,12 @@ interface RunProgressProps {
   foldWarnings?: boolean;
   /** The names of the studies, by id: a simulation's progress names the study being run. */
   studyNames?: Readonly<Record<string, string>>;
+  /** What a run of this origin that finished is said with; absent or null: nothing. */
+  finishedNote?: string | null;
 }
 
 export function RunProgress({ runs, project, origin, mode, onGoToSetting, criterionNames, shownCriterionId, criterionKeys, foldWarnings = false,
-                              studyNames }: RunProgressProps) {
+                              studyNames, finishedNote }: RunProgressProps) {
   const record = runs.current;
   const isThisButton = record !== null && record.project === project && record.origin === origin;
   const notice = runs.notice !== null && runs.notice.project === project && runs.notice.origin === origin ? runs.notice.message : null;
@@ -196,7 +198,7 @@ export function RunProgress({ runs, project, origin, mode, onGoToSetting, criter
             ? <StageList state={record.state} onCancel={runs.cancel} criterionNameOf={(id) => criterionNames?.[id] ?? null}
                          studyNameOf={(id) => studyNames?.[id] ?? null} />
             : <RunEnded record={record} mode={mode} onGoToSetting={onGoToSetting} shownCriterionId={shownCriterionId} criterionNames={criterionNames}
-                        criterionKeys={criterionKeys} />}
+                        criterionKeys={criterionKeys} finishedNote={finishedNote} />}
           {record.state.issues.length > 0 && <RunIssues key={record.serial} issues={record.state.issues} folded={foldWarnings} />}
         </>
       )}

@@ -68,7 +68,7 @@ export class ChainService extends FakeService {
     if (path === "/stage-status") {
       this.requests.push(`${method} ${fullPath}`);
       const active = this.entries.filter((entry) => !entry.bypassed).map((entry) => [entry.id, this.criterionStages[entry.id]]);
-      return json<StageStatusReply>({ stages: this.stages, criteria: Object.fromEntries(active) });
+      return json<StageStatusReply>({ stages: { ...this.stages, ...summedStages(Object.fromEntries(active)) }, criteria: Object.fromEntries(active) });
     }
     if (path === "/run/summary") {
       this.requests.push(`${method} ${fullPath}`);

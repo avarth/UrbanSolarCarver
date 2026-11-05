@@ -66,19 +66,22 @@ test("one criterion shows its row in the list, with the switch on and no drag ha
   showCriterionEditor();
   openPanelSection("Test surfaces");
   expect(protectedFiles()).toEqual(["surfaces.obj"]);
-  expect(buttonIn(pinnedBar(), "Run analysis")).toBeDefined();
   expect(buttonIn(pinnedBar(), "Build envelope and massing")).toBeDefined();
   expect(stepRow("Criteria").querySelector(".step-summary")).toBeNull();               // open, no setting to fix
   openStep("Inputs");
   expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Solar time-based, 61 % kept");
 });
 
-test("the criteria step pins run analysis and build, both enabled once carved; Inputs has neither", async () => {
+test("the criteria step pins the build, and Run analysis while the analysis is out of date; Inputs has neither", async () => {
   service = new FakeService(CARVED, CARVING);
   await openWorkspace(service, project(CARVED));
   openStep("Criteria");
-  expect(buttonIn(pinnedBar(), "Run analysis").disabled).toBe(false);
+  expect(buttonIn(pinnedBar(), "Run analysis")).toBeUndefined();
   expect(buttonIn(pinnedBar(), "Build envelope and massing").disabled).toBe(false);
+  service.stages = { ...CARVED, preprocessing: "out_of_date" };
+  await act(async () => window.dispatchEvent(new Event("focus")));         // the stage status is read again
+  await settle();
+  expect(buttonIn(pinnedBar(), "Run analysis").disabled).toBe(false);
   openStep("Inputs");
   expect(buttonIn(container(), "Run analysis")).toBeUndefined();                                                   // only for Criteria
   expect(buttonIn(container(), "Build envelope and massing")).toBeUndefined();
@@ -113,8 +116,9 @@ test("build waits in the pinned bar until every criterion is carved", async () =
 });
 
 test("during a run the criterion's controls are disabled and the pinned bar says why once, under both buttons", async () => {
-  service = new FakeService(CARVED, CARVING);
-  await openWorkspace(service, project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
+  const analysisOutOfDate: Record<PipelineStage, StageState> = { ...CARVED, preprocessing: "out_of_date" };
+  service = new FakeService(analysisOutOfDate, CARVING);
+  await openWorkspace(service, project(analysisOutOfDate, { threshold: { method: "cutoff", value: 1.5 } }));
   openStep("Criteria");
   await pressRunAnalysis();
   expect(service.runsStarted).toHaveLength(1);
