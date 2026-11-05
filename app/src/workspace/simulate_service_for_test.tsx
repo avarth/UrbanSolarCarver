@@ -65,8 +65,10 @@ export class SimulateService extends ChainService {
   uploadRefusal: string | null = null;
   /** GET studies/{id}/values: the packed values of each study's last result; a study without them has none (404). */
   valuesOf: Record<string, ArrayBuffer> = {};
-  /** GET studies/{id}/sky-patches: the sky dome of each study's last result; a study without one has none (404). */
+  /** GET studies/{id}/sky-patches: the sky dome of each study's last result; a result without one answers null. */
   skyDomeOf: Record<string, SkyDome> = {};
+  /** The status GET studies/{id}/sky-patches fails with; null: it answers. */
+  studySkyPatchesFailWith: number | null = null;
 
   constructor(entries: CriterionEntry[], criterionStages: Record<string, CriterionStages>) {
     super(entries, criterionStages);
@@ -113,8 +115,8 @@ export class SimulateService extends ChainService {
       return values === undefined ? json<ErrorDetailReply>({ detail: `The study '${id}' has no result yet.` }, 404) : new Response(values);
     }
     if (method === "GET" && part === "sky-patches") {
-      const dome = this.skyDomeOf[id];
-      return dome === undefined ? json<ErrorDetailReply>({ detail: `The study '${id}' has no sky patches.` }, 404) : json<SkyDome>(dome);
+      if (this.studySkyPatchesFailWith !== null) return json<ErrorDetailReply>({ detail: "Failed" }, this.studySkyPatchesFailWith);
+      return json<SkyDome | null>(this.skyDomeOf[id] ?? null);
     }
     if (method === "PATCH" && part === undefined && Object.keys(body).length === 1 && "target" in body) {
       this.studyPatches.push({ id, body });

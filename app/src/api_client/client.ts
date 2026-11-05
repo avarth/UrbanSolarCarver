@@ -386,9 +386,9 @@ export async function getStudyValues(token: string, project: string, studyId: st
   return (await send(token, `${studyPath(project, studyId)}/values`)).arrayBuffer();
 }
 
-/** The sky patches of a study's last result with the value each carried; 404 for a sun hours study or a result without them. */
-export async function getStudySkyPatches(token: string, project: string, studyId: string): Promise<SkyDome> {
-  return requestJson<SkyDome>(token, `${studyPath(project, studyId)}/sky-patches`);
+/** The sky patches of a study's last result with the value each carried; null for a sun hours study or a result without them. */
+export async function getStudySkyPatches(token: string, project: string, studyId: string): Promise<SkyDome | null> {
+  return requestJson<SkyDome | null>(token, `${studyPath(project, studyId)}/sky-patches`);
 }
 
 // Inspect: what each input file holds, and the orientation of the test surfaces (turn a surface, restore the original).
@@ -444,7 +444,7 @@ export const cancelRun = (token: string, runId: string) =>
 
 export const getRunSummary = (token: string, project: string) => requestJson<RunSummary>(token, `${projectPath(project)}/run/summary`);
 export const getSkyPatches = (token: string, project: string, criterionId?: string) =>
-  requestJson<SkyDome>(token, forCriterion(`${projectPath(project)}/run/sky-patches`, criterionId));
+  requestJson<SkyDome | null>(token, forCriterion(`${projectPath(project)}/run/sky-patches`, criterionId));
 
 /** The score points of the last run as the service packs them (binary); of the criterion given, else of the last criterion that is on. */
 export async function getScorePoints(token: string, project: string, criterionId?: string): Promise<ArrayBuffer> {

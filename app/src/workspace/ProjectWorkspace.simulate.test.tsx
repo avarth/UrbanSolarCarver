@@ -14,7 +14,7 @@ import { press } from "../viewer_overlays/render_for_test";
 import { cardLine } from "./chain_service_for_test";
 import {
   CARVING, ENVELOPE, NOTHING_RUN, FakeService, buttonIn, container, endWorkspaceTest, openStep, openWorkspace, pinnedBar, pressRunAnalysis, project, reasonOf,
-  settle, startWorkspaceTest, stepRow, switchMode,
+  settle, startWorkspaceTest, stepRow, switchMode, reportedServiceProblems,
 } from "./project_workspace_for_test";
 import {
   addStudyButton, addStudyMenuItems, chooseAddStudy, openSimulate, openStudySettings, runButton, selectedStudyName, simulateService, study,
@@ -673,12 +673,21 @@ test("without a weather file the Sun panel says one is needed and reads nothing"
 test("a study run before its sky patches were kept lists the Sky dome as missing, saying to run it again", async () => {
   await openSimulate(undefined, (service) => {
     service.studies = [study("1", "sky_view", ["facades.obj"], "current")];
-    service.valuesOf = { 1: studyValuesOf({ open: [90, 90], max_volume: [40, 60] }, "%") };       // no skyDomeOf: 404
+    service.valuesOf = { 1: studyValuesOf({ open: [90, 90], max_volume: [40, 60] }, "%") };       // no skyDomeOf: null
   });
   await act(async () => buttonIn(container(), "Layers").click());
   const entry = [...container().querySelectorAll("li")].find((item) => item.textContent?.startsWith("Sky dome"))!;
   expect(entry.querySelector("input")!.disabled).toBe(true);
   expect(entry.textContent).toContain("Run the study again to see its sky dome");
+});
+
+test("access lost while a study's sky patches are read is reported, not taken for a study without them", async () => {
+  await openSimulate(undefined, (service) => {
+    service.studies = [study("1", "sky_view", ["facades.obj"], "current")];
+    service.valuesOf = { 1: studyValuesOf({ open: [90, 90], max_volume: [40, 60] }, "%") };
+    service.studySkyPatchesFailWith = 401;
+  });
+  expect(reportedServiceProblems).toHaveLength(1);
 });
 
 test("the switch beside Studies hides the selected study from the view and shows it again", async () => {

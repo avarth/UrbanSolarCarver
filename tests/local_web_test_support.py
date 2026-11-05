@@ -506,6 +506,7 @@ def write_fake_run(tmp_path, shape=(4, 3, 2), with_mask=True, with_compared_scor
     raw_scores = np.arange(np.prod(shape), dtype=np.float32).reshape(shape)
     np.save(preprocessing / "voxel_grid.npy", voxel_grid)
     np.save(preprocessing / "scores.npy", raw_scores)
+    (preprocessing / "footprint.json").write_text("{}", encoding="utf-8")
     if with_patch_weights:
         np.save(preprocessing / "patch_weights.npy", np.linspace(0.0, 1.0, 145, dtype=np.float32))
     (preprocessing / "manifest.json").write_text(schema_to_json(PreprocessingManifest(
@@ -605,6 +606,7 @@ def write_earlier_version_project(store: ProjectStore, name: str, stages: Collec
         (run / "preprocessing").mkdir(parents=True)
         np.save(run / "preprocessing" / "voxel_grid.npy", np.ones((4, 3, 2), dtype=bool))
         np.save(run / "preprocessing" / "scores.npy", np.arange(24, dtype=np.float32).reshape(4, 3, 2))
+        (run / "preprocessing" / "footprint.json").write_text("{}", encoding="utf-8")
         (run / "preprocessing" / "manifest.json").write_text(schema_to_json(PreprocessingManifest(
             run_id="pre-run", scores_path="scores.npy", scores_kind="weighted_sum", shape=(4, 3, 2), origin=(-5.0, -5.0, 0.0),
             voxel_size=2.0, mode="daylight", voxel_grid_path="voxel_grid.npy", sample_point_count=5, grid_step=0.5,

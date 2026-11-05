@@ -175,7 +175,7 @@ export interface ResultSteps {
   carvingRule: ReactNode;
   /** The bar pinned under a step: in Criteria, Run analysis and Build envelope and massing with the progress of their runs. */
   pinnedAction: Partial<Record<StepName, ReactNode>>;
-  viewer: Pick<ViewerPaneProps, "results" | "dimmedLayers" | "missingLayers" | "runProgress" | "overlayContent">;
+  viewer: Pick<ViewerPaneProps, "results" | "dimmedLayers" | "missingLayers" | "missingLayerNotes" | "runProgress" | "overlayContent">;
   results: RunResults;
   /** The criteria whose thresholding the last run did and whose new numbers are not in yet: their cards say Running. */
   criteriaAwaitingNumbers: ReadonlySet<string>;
@@ -443,8 +443,10 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
       // The by-criterion layer follows every criterion that is on, not only the selected one: it is dimmed too when any of them is not current.
       dimmedLayers: [...new Set([...dimmedLayersOf(record, ownStages, stagesBeingFetched, context.criterionId),
                                  ...(context.carvedByCriterionOutOfDate === true ? ["carved_by_criterion" as const] : [])])],
-      missingLayers: [...missingLayersOf(record, viewerResults, context.isWeightedMode),
-                      ...(context.carvedByCriterionWanted === true && viewerResults.carvedByCriterion === null ? ["carved_by_criterion" as const] : [])],
+      missingLayers: [...new Set([...missingLayersOf(record, viewerResults, context.isWeightedMode),
+                                  ...(viewerResults.skyDomeUnreadable ? ["sky_dome" as const] : []),
+                                  ...(context.carvedByCriterionWanted === true && viewerResults.carvedByCriterion === null ? ["carved_by_criterion" as const] : [])])],
+      missingLayerNotes: viewerResults.skyDomeUnreadable ? { sky_dome: messages.skyDomeUnreadable } : undefined,
       runProgress: running ? runProgressShare(record.state) : null,
       overlayContent: runReportOpen
         ? <RunReportPanel onClose={() => setRunReportOpen(false)} />

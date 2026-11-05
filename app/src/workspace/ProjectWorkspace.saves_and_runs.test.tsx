@@ -2,7 +2,7 @@
 // locks and build buttons that follow from them, as the unit tests of each cannot show them together. The notice of a new weather
 // file is in ProjectWorkspace.weather_notice, the runs and saves of several criteria in ProjectWorkspace.chain_runs.
 import { act } from "react";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
 import { packScorePoints } from "../viewer/packed_results_for_test";
@@ -12,7 +12,7 @@ import type { PipelineStage, StageState } from "../stages";
 import { FACADES, ROOFS, WINDOWS, card, openChain, periodFieldText, select } from "./chain_service_for_test";
 import {
   CARVED, CARVING, ENVELOPE, FakeService, MASSING, NOTHING_RUN, TRIANGLE_OBJ, buildPart, buttonIn, container,
-  dimmedCarvingLayers, endWorkspaceTest, openPanelSection, openStep, openWorkspace, panelSectionOpen, pinnedBar, pressRunAnalysis, project, reasonOf, settle,
+  dimmedCarvingLayers, endWorkspaceTest, openPanelSection, openStep, openWorkspace, panelSectionOpen, pinnedBar, pressRunAnalysis, project, reasonOf, reportedServiceProblems, settle,
   startWorkspaceTest, stepIsOpen, stepRow, thresholdField, thresholdOf, togglePanelSection, type, typeAndLeave, voxelSizeField, waitForTheSave,
 } from "./project_workspace_for_test";
 
@@ -172,6 +172,38 @@ test("a shared change refused for the criterion's mode is saved again once a mod
   expect(container().querySelector(".step-error")).toBeNull();
   await pressRunAnalysis();
   expect(service.runsStarted).toEqual([["thresholding"]]);
+});
+
+describe("the sky dome of a finished run", () => {
+  const openWithSkyPatches = async (failWith: number | null) => {
+    service = new FakeService(CARVED, CARVING);
+    service.summary = { carving: CARVING, envelope: null, massing: null };
+    service.runSkyPatchesFailWith = failWith;
+    await openWorkspace(service, project(CARVED));
+  };
+  const skyDomeEntry = async () => {
+    await act(async () => buttonIn(container(), "Layers").click());
+    return [...container().querySelectorAll("li")].find((item) => item.textContent?.startsWith("Sky dome"));
+  };
+
+  test("a run without sky patches lists no Sky dome: nothing is missing", async () => {
+    await openWithSkyPatches(null);
+    expect(await skyDomeEntry()).toBeUndefined();
+    expect(reportedServiceProblems).toEqual([]);
+  });
+
+  test("sky patches that cannot be read list the Sky dome as missing, saying how to write them again", async () => {
+    await openWithSkyPatches(500);
+    const entry = (await skyDomeEntry())!;
+    expect(entry.querySelector("input")!.disabled).toBe(true);
+    expect(entry.textContent).toContain("could not be read");
+  });
+
+  test("access lost while they are read is reported to the app, not as a missing layer", async () => {
+    await openWithSkyPatches(401);
+    expect(reportedServiceProblems).toHaveLength(1);
+    expect(await skyDomeEntry()).toBeUndefined();
+  });
 });
 
 test("a page opened during a run it does not follow: Run analysis answered with up to date brings the carving the service holds", async () => {

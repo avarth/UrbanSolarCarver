@@ -1490,7 +1490,8 @@ def test_results_of_a_criterion_and_of_the_chain_are_served(client_with_two_crit
         assert reply.status_code == 200 and reply.headers["content-type"] == "application/octet-stream", query
         header, indices, _scores, kept, _compared = decode_score_points(reply.content)
         assert header["occupied_count"] == 18 and (kept == (indices % kept_every == 0)).all(), query
-    assert client.get("/api/projects/p/run/sky-patches", params={"criterion": "1"}).status_code == 404     # a time-based run has no patches
+    no_patches = client.get("/api/projects/p/run/sky-patches", params={"criterion": "1"})
+    assert no_patches.status_code == 200 and no_patches.json() is None                                     # a time-based run has none
     carved = client.get("/api/projects/p/run/carved-by-criterion")
     assert carved.status_code == 200 and carved.headers["content-type"] == "application/octet-stream"
     assert carved.headers["cache-control"] == "no-cache"

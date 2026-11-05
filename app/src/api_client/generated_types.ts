@@ -827,8 +827,9 @@ export interface paths {
         };
         /**
          * Study Sky Patches
-         * @description The sky patches of the study's last result with the value each carried for its metric; 404 for an unknown study, one
-         *     without a result, a sun hours study (its directions are sun positions) or a result from before the values were kept.
+         * @description The sky patches of the study's last result with the value each carried for its metric; null for a result without them, a
+         *     sun hours study (its directions are sun positions) or one from before the values were kept; 404 for an unknown study or one
+         *     without a result.
          */
         get: operations["study_sky_patches"];
         put?: never;
@@ -1048,7 +1049,8 @@ export interface paths {
         };
         /**
          * Run Sky Patches
-         * @description The sky patches of a criterion's run (default: the last criterion that is on).
+         * @description The sky patches of a criterion's run (default: the last criterion that is on); null for a run without them (time-based and
+         *     tilted plane runs). 404 for a criterion that has not run.
          */
         get: operations["run_sky_patches"];
         put?: never;
@@ -4242,7 +4244,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SkyDome"];
+                    "application/json": components["schemas"]["SkyDome"] | null;
                 };
             };
             /** @description There is no such study. */
@@ -4794,7 +4796,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SkyDome"];
+                    "application/json": components["schemas"]["SkyDome"] | null;
                 };
             };
             /** @description Validation Error */

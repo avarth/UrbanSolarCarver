@@ -212,12 +212,10 @@ def test_summary_massing_names_the_mesh_file_in_the_chosen_format_its_manifest_n
     assert build_run_summary(store, name).massing.export_mesh_file == "plates.obj"
 
 
-def test_sky_dome_has_145_patches_or_is_not_available(project_with_inputs):
+def test_sky_dome_has_145_patches_or_is_none_for_a_run_without_them(project_with_inputs):
     store, name = project_with_inputs
     write_fake_run(store.open(name))                                    # no patch_weights.npy
-    with pytest.raises(ProjectError) as error:
-        build_sky_dome(store, name)
-    assert error.value.status_code == 404
+    assert build_sky_dome(store, name) is None
     store.create("weighted", "daylight")
     write_fake_run(store.open("weighted"), with_patch_weights=True)
     dome = build_sky_dome(store, "weighted")
@@ -233,8 +231,7 @@ def test_the_sky_dome_defaults_to_the_last_active_criterion_and_can_name_another
     write_fake_run(store.open(name), with_patch_weights=True)           # criterion "1" has patch weights, "2" has none
     write_fake_run(store.open(name), criterion_id="2")
     assert len(build_sky_dome(store, name, "1").directions) == 145
-    with pytest.raises(ProjectError):
-        build_sky_dome(store, name)
+    assert build_sky_dome(store, name) is None
     store.update_criterion(name, "2", bypassed=True)
     assert len(build_sky_dome(store, name).directions) == 145
 

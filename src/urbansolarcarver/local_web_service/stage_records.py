@@ -5,8 +5,9 @@ manifest. Preprocessing and thresholding run once per criterion, so each criteri
 (``criterion_records``), with the fingerprint of its joined test surfaces; exporting and massing are built once, from the
 last criterion that is on, and their records (``stage_records``) hold that criterion's settings. A stage is ``current``
 when its record still matches the project, ``out_of_date`` when it completed but its settings, its inputs or the stage it
-read changed since, and ``missing`` when it never completed (or a run that was cut off removed its record). The engine
-compares settings only and does not know whether a stage ever ran, so this module is where the service decides that.
+read changed since, and ``missing`` when it never completed (or a run that was cut off removed its record, or a file its
+preprocessing wrote is gone from the project folder). The engine compares settings only and does not know whether a stage
+ever ran, so this module is where the service decides that.
 
 What goes out of date: the maximum volume, context, terrain, weather file or a shared setting change every criterion's
 settings or the inputs revision, so everything; a criterion's own settings or test surfaces (its fingerprint) date its
@@ -30,6 +31,7 @@ from . import stored_files, test_surfaces, typical_building
 from .api_models import ProjectJson, StageRecord, StageState, StageStatusReply
 from .criteria import active_criteria, criterion_run_folder, reads_weather_file, uses_typical_building
 from .projects import INPUTS_FOLDER, JOINED_FOLDER, REQUIRED_MESH_ROLES, RUN_FOLDER, WEATHER_FILE_NAME, WEATHER_ROLE, ProjectStore
+from .score_points import resolve_stored_path
 
 MANIFEST_FILE_NAME = "manifest.json"
 ANALYSIS_STAGES = ("preprocessing", "thresholding")     # the stages every criterion runs, and every result is built on
@@ -47,6 +49,8 @@ GRID_STEP_DEFAULT_BEFORE_IT_FOLLOWED_THE_VOXEL_SIZE = 1.0
 # A preprocessing manifest without this field is from before preprocessing recorded the unit of its scores, when the weighted
 # modes summed patch weights without the area each sample point stands for: a score cutoff on those scores means another thing.
 SCORE_UNIT_FIELD = "score_unit"
+# The preprocessing manifest fields that name the files it wrote; time-based and tilted plane runs have no patch weights.
+PREPROCESSING_OUTPUT_FIELDS = ("scores_path", "voxel_grid_path", "footprint_path", "patch_weights_path")
 
 
 @dataclass(frozen=True)
@@ -101,13 +105,24 @@ def _read_criterion_manifest(run_folder: Path, criterion_id: str, stage: str) ->
     return _read_manifest_file(criterion_run_folder(run_folder, criterion_id, stage) / MANIFEST_FILE_NAME)
 
 
+def _read_preprocessing_manifest(run_folder: Path, criterion_id: str) -> dict | None:
+    """As _read_criterion_manifest; also None when a file the manifest names is gone, so the stage is missing and a run writes it again."""
+    manifest = _read_criterion_manifest(run_folder, criterion_id, "preprocessing")
+    if manifest is None:
+        return None
+    folder = criterion_run_folder(run_folder, criterion_id, "preprocessing")
+    stored_paths = [manifest[field_name] for field_name in PREPROCESSING_OUTPUT_FIELDS if manifest.get(field_name)]
+    return manifest if all(resolve_stored_path(folder, path).is_file() for path in stored_paths) else None
+
+
 def criterion_status(store: ProjectStore, name: str) -> dict[str, dict[str, StageState]]:
     """The state of the preprocessing and the thresholding of every criterion that is on, in chain order; a bypassed criterion is
     not listed, and with no criterion on the mapping is empty.
 
-    A criterion's preprocessing is current when its record and manifest exist, the inputs revision and the fingerprint of its
-    test surfaces are the recorded ones and its settings would not run it again. Its thresholding is current when its
-    preprocessing is current and is the run the thresholding read, its settings would not run it again, and it was decided after
+    A criterion's preprocessing is current when its record, its manifest and the files the manifest names exist, the inputs
+    revision and the fingerprint of its test surfaces are the recorded ones and its settings would not run it again. Its
+    thresholding is current when its preprocessing is current and is the run the thresholding read, its settings would not run
+    it again, and it was decided after
     the thresholding run of the previous criterion that is on (none for the first), which is current.
     """
     return _project_status(store, name).criteria
@@ -146,7 +161,7 @@ def _project_status(store: ProjectStore, name: str) -> _ProjectStatus:
         last_config = _criterion_config(store, name, criterion_id)
         records = project_json.criterion_records.get(criterion_id, {})
         preprocessing = _preprocessing_state(
-            store, name, project_json, records.get("preprocessing"), _read_criterion_manifest(run_folder, criterion_id, "preprocessing"),
+            store, name, project_json, records.get("preprocessing"), _read_preprocessing_manifest(run_folder, criterion_id),
             last_config, test_surfaces.fingerprint(project_folder, criterion_id), building_key if uses_typical_building(criterion) else None)
         thresholding = _thresholding_state(
             store, name, project_json, records.get("thresholding"), _read_criterion_manifest(run_folder, criterion_id, "thresholding"),

@@ -221,6 +221,24 @@ def test_a_stage_without_its_manifest_is_missing_and_its_dependants_out_of_date(
         "preprocessing": "current", "thresholding": "missing", "exporting": "out_of_date", "massing": "out_of_date"}
 
 
+@pytest.mark.parametrize("field_name", ["scores_path", "voxel_grid_path", "footprint_path", "patch_weights_path"])
+def test_preprocessing_with_an_output_file_gone_is_missing_so_a_run_writes_it_again(built_project, field_name):
+    store, name, _worker = built_project
+    manifest_path = store.open(name) / "run" / "criteria" / "1" / "preprocessing" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest[field_name] = "a_file_that_is_gone.npy"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    assert stage_status(store, name)["preprocessing"] == "missing"
+    assert choose_stages(store, name, ["thresholding"]).trace_criteria == ["1"]
+
+
+def test_a_run_without_sky_patches_is_current_though_its_manifest_names_no_patch_weights(built_project):
+    store, name, _worker = built_project
+    manifest_path = store.open(name) / "run" / "criteria" / "1" / "preprocessing" / "manifest.json"
+    assert json.loads(manifest_path.read_text(encoding="utf-8")).get("patch_weights_path") is None
+    assert stage_status(store, name) == ALL_CURRENT
+
+
 def test_a_record_whose_settings_no_longer_build_a_config_is_out_of_date(built_project):
     store, name, _worker = built_project
     project_json = store.read_project_json(name)
@@ -259,6 +277,8 @@ def _write_preprocessing_manifest_from_before_it_recorded_the_sample_spacing(sto
                     "patch_weights_path": "patch_weights.npy", "sample_point_count": 36, "footprint_path": "footprint.npy",
                     "max_volume_lowest_z": 0.0, "max_volume_highest_z": 10.0, "score_unit": "m²"}
     manifest_path.write_text(json.dumps(old_manifest), encoding="utf-8")
+    for file_name in ("scores.npy", "voxel_grid.npy", "patch_weights.npy", "footprint.npy"):
+        (manifest_path.parent / file_name).touch()
 
 
 def _built_at_voxel_size(project_with_inputs, voxel_size):

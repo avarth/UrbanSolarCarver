@@ -673,6 +673,7 @@ export const messages = {
   testSurfacesOfCriterion: (criterionName: string, off: boolean) => (off ? `${criterionName} (off)` : criterionName),
   carvedByCriterionMissing: "Shows once every criterion that is on has run.",
   noResultForStage: "No result for this stage: the last run stopped before it",
+  skyDomeUnreadable: "The sky dome of this run could not be read: its file may be damaged. Change a value under Settings and run the analysis to write it again.",
   viewerNeedsWebGl: "The 3D view cannot start because this browser cannot use WebGL here, for example over a remote desktop, or when " +
     "the graphics card is blocked. The steps on the left still work. To see the 3D view, open this page in another browser or at the computer itself.",
   layers: "Layers",

@@ -25,6 +25,8 @@ export interface RunResults {
   summary: RunSummary | null;
   scorePoints: ScorePoints | null;
   skyDome: SkyDome | null;
+  /** The sky dome was asked for and could not be read; not so for a run that has none, which the service answers with null. */
+  skyDomeUnreadable: boolean;
   envelope: THREE.BufferGeometry | null;
   massing: THREE.BufferGeometry | null;
   platesFile: PlatesFile | null;
@@ -32,9 +34,9 @@ export interface RunResults {
   carvedByCriterion: CarvedByCriterion | null;
 }
 
-type ResultName = keyof RunResults;
+type ResultName = Exclude<keyof RunResults, "skyDomeUnreadable">;
 
-const NO_RESULTS: RunResults = { summary: null, scorePoints: null, skyDome: null, envelope: null, massing: null, platesFile: null, carvedByCriterion: null };
+const NO_RESULTS: RunResults = { summary: null, scorePoints: null, skyDome: null, skyDomeUnreadable: false, envelope: null, massing: null, platesFile: null, carvedByCriterion: null };
 
 /**
  * What each stage writes. The score points need the carving's mask, so they follow thresholding, not the analysis; the run
@@ -135,15 +137,16 @@ export function useRunResults({ origin, stagesWithResults, criterionId, criterio
     const fetches = names.map((name) => {
       const request = (latestRequest.current[name] ?? 0) + 1;
       latestRequest.current[name] = request;
-      const keep = (value: RunResults[ResultName]) => {
-        if (latestRequest.current[name] === request) setResults((current) => ({ ...current, [name]: value }));
+      const keep = (value: RunResults[ResultName], unreadable = false) => {
+        if (latestRequest.current[name] !== request) return;
+        setResults((current) => ({ ...current, [name]: value, ...(name === "skyDome" ? { skyDomeUnreadable: unreadable } : {}) }));
       };
-      return fetchResult(name, summary).then(keep).catch((error) => {
-        keep(null);
+      return fetchResult(name, summary).then((value) => keep(value)).catch((error) => {
         // A result the stage has not written is a 404 and stays null. Any other failure that is not a refusal may be a lost
         // engine: the app asks GET health before it says so, so a mesh the view cannot read only costs that check.
         const isMissingResult = error instanceof ApiError && error.status === NOT_FOUND;
-        if (!isMissingResult) reportServiceProblem(error, source.current.onServiceProblem);
+        const reported = !isMissingResult && reportServiceProblem(error, source.current.onServiceProblem);
+        keep(null, !isMissingResult && !reported);
       });
     });
     return Promise.all(fetches).then(() => undefined);     // each fetch handles its own failure, so none rejects
@@ -193,7 +196,7 @@ export function useRunResults({ origin, stagesWithResults, criterionId, criterio
   useEffect(() => {
     if (criterionId === firstCriterion.current) return;
     firstCriterion.current = criterionId;
-    setResults((current) => ({ ...current, scorePoints: null, skyDome: null }));
+    setResults((current) => ({ ...current, scorePoints: null, skyDome: null, skyDomeUnreadable: false }));
     // A request still out for the criterion before is not kept.
     for (const name of CRITERION_RESULTS) latestRequest.current[name] = (latestRequest.current[name] ?? 0) + 1;
     askedOfCriterion.current = new Set();

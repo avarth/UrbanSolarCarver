@@ -74,6 +74,8 @@ export class FakeService {
   inputFileContents: Record<string, string> = {};
   /** The reply of GET sun-path; null: not there (404). */
   sunPath: SunPath | null = null;
+  /** The status GET run/sky-patches fails with; null: it answers that the run has no sky patches (null), as for a time-based run. */
+  runSkyPatchesFailWith: number | null = null;
   /** The reply of GET sun-chart (Simulate's sun tool). */
   sunChart: SunChart = { key_days: [], hour_lines: [], day: { date: "12-21", runs: [[[-0.5, -0.5, 0.71], [0, -0.6, 0.8]]] } };
   /** GET sun-positions: the sun is up from 08:00 to 16:00, toward SUN_UP, every step of the range asked for, on one day. */
@@ -185,6 +187,9 @@ export class FakeService {
                     days_sampled: 1, day_step: 1, step_minutes: step });
     }
     if (path === "/run/summary") return json<RunSummary>(this.summary);
+    if (path === "/run/sky-patches") {
+      return this.runSkyPatchesFailWith === null ? json<null>(null) : json<ErrorDetailReply>({ detail: "Failed" }, this.runSkyPatchesFailWith);
+    }
     if (method === "POST" && path.startsWith("/inputs/")) {
       await holdReply(this.uploadsAnswerWhen);
       const role = path.replace("/inputs/", "");
@@ -279,6 +284,7 @@ let rendered: RenderedOverlay | null = null;
 
 /** For each test file's beforeEach. */
 export function startWorkspaceTest() {
+  reportedServiceProblems.length = 0;
   // settle and waitForTheSave move the fake clock instead of waiting in real time.
   vi.useFakeTimers();
   FakeWebSocket.opened = [];
@@ -305,6 +311,9 @@ export function unmountWorkspace() {
 export { settle, type, typeAndLeave } from "../viewer_overlays/render_for_test";
 export const waitForTheSave = () => act(async () => { await vi.advanceTimersByTimeAsync(SAVE_DELAY_MILLISECONDS + 50); });
 
+/** What the open workspace handed to onServiceProblem since the test started. */
+export const reportedServiceProblems: unknown[] = [];
+
 export async function openWorkspace(
   service: FakeService, opened: ProjectDetail,
   steps: Pick<ComponentProps<typeof ProjectWorkspace>, "startSteps" | "onStepsChange" | "onSettingsSaverReady"> = {},
@@ -324,7 +333,7 @@ export async function openWorkspace(
     return (
       <>
         <ProjectWorkspace token="token" project={opened} schema={schema} modes={modes} criterionKeys={CRITERION_KEYS} warmUpState="ready" runs={runs}
-                          mode={mode} onServiceProblem={() => {}} onShowProjects={() => {}} onInspectUnsavedChange={leaving.onUnsavedChange}
+                          mode={mode} onServiceProblem={(error) => reportedServiceProblems.push(error)} onShowProjects={() => {}} onInspectUnsavedChange={leaving.onUnsavedChange}
                           onInspectTurnsReady={leaving.onTurnsReady} {...steps} />
         {leaving.dialog}
       </>

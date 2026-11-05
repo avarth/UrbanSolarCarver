@@ -117,7 +117,7 @@ export function useStudyView({ studies, active, runs, envelopeBuilt, massingBuil
   const skyDomeTitle = messages.studySkyDomeLegend(selected?.entry.metric);
   const hasResult = selected !== null && (selected.state === "current" || selected.state === "out_of_date");
   const running = runs.activeRun !== null;
-  const reportValuesProblem = useEffectEvent((error: unknown) => {
+  const reportReadProblem = useEffectEvent((error: unknown) => {
     if (!(error instanceof ApiError && error.status === NOT_FOUND)) reportServiceProblem(error, onServiceProblem);
   });
   // Read when a study with a result is selected, and again when a run ends (a simulation writes new values); not during a run. They
@@ -134,13 +134,15 @@ export function useStudyView({ studies, active, runs, envelopeBuilt, massingBuil
     }).catch((error: unknown) => {
       if (!wanted) return;
       setLoaded(null);
-      reportValuesProblem(error);
+      reportReadProblem(error);
     });
-    // The sky dome is read beside the values; none is not a problem (a sun hours study, or a result from before it was kept).
+    // The sky dome is read beside the values; a result without one answers null (a sun hours study, or one from before it was kept).
     getStudySkyPatches(token, project, selectedId).then((dome) => {
       if (wanted) setLoadedSky({ id: selectedId, dome });
-    }).catch(() => {
-      if (wanted) setLoadedSky({ id: selectedId, dome: null });
+    }).catch((error: unknown) => {
+      if (!wanted) return;
+      setLoadedSky({ id: selectedId, dome: null });
+      reportReadProblem(error);
     });
     return () => { wanted = false; };
   }, [active, token, project, selectedId, hasResult, running]);

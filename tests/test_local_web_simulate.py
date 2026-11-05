@@ -468,7 +468,7 @@ def test_values_route_packs_the_header_quads_and_columns(service):
     assert client.get("/api/projects/p/studies/99/values").status_code == 404
 
 
-def test_sky_patches_route_gives_each_patch_its_value_and_404_without_them(service):
+def test_sky_patches_route_gives_each_patch_its_value_null_for_a_result_without_them_and_404_without_a_result(service):
     client, worker, _engine = service
     store = worker.store
     study = add_study(store, "p")
@@ -480,7 +480,8 @@ def test_sky_patches_route_gives_each_patch_its_value_and_404_without_them(servi
     stored = json.loads((store.open("p") / "simulate" / study / "check_sky.json").read_text(encoding="utf-8"))
     assert len(dome["directions"]) == len(dome["solid_angles"]) == 145 and dome["weights"] == stored["weights"]
     (store.open("p") / "simulate" / study / "check_sky.json").unlink()                         # a result from before
-    assert client.get(f"/api/projects/p/studies/{study}/sky-patches").status_code == 404
+    no_patches = client.get(f"/api/projects/p/studies/{study}/sky-patches")
+    assert no_patches.status_code == 200 and no_patches.json() is None
     assert client.get("/api/projects/p/studies/99/sky-patches").status_code == 404
 
 

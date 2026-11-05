@@ -130,15 +130,16 @@ def _massing_summary(run_folder: Path) -> MassingSummary | None:
     )
 
 
-def build_sky_dome(store: ProjectStore, name: str, criterion_id: str | None = None) -> SkyDome:
+def build_sky_dome(store: ProjectStore, name: str, criterion_id: str | None = None) -> SkyDome | None:
     """The 145 Tregenza patches with the weights of a criterion's preprocessing; the last criterion that is on unless *criterion_id*
-    names one. ProjectError 404 for a criterion without patch weights (or without preprocessing output, or an unknown one)."""
+    names one. None for a run without patch weights (time-based and tilted plane runs have none); ProjectError 404 for a criterion
+    without preprocessing output, or an unknown one."""
     criterion_id = chosen_criterion_id(store, name, criterion_id)
     preprocessing = read_stage_manifest(store.open(name) / RUN_FOLDER, "preprocessing", PreprocessingManifest, criterion_id)
     if preprocessing is None:
         raise ProjectError(NO_SCORES_MESSAGE, status_code=404)
     if preprocessing[0].patch_weights_path is None:
-        raise ProjectError("This run has no sky patch weights (time-based and tilted plane runs have none).", status_code=404)
+        return None
     manifest, manifest_folder = preprocessing
     import torch
     from ..sky_patches import fetch_tregenza_patch_directions, tregenza_solid_angles

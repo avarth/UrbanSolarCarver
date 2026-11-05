@@ -118,6 +118,13 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A sky dome that cannot be read is no longer silent.** After a finished run it disappeared without a word, and in Simulate any
+  failure reading it was ignored, a stopped engine or lost access included. **Layers** now lists it as missing and says how to write
+  it again, and lost access is reported. A run or study without sky patches, such as a time-based one, is not a failure: both
+  `sky-patches` routes answer `null` for it instead of 404.
+- **A file of the analysis that is gone from the project folder no longer leaves the project stuck.** The stage stayed current, so
+  the result was missing and no Run analysis was offered. The stage now counts as missing and a run writes the file again.
+- **The browser tab has an icon**, in place of a blank one and a 404 for `favicon.ico`.
 - **The Criteria bar offers only the run the project needs.** It said Run analysis even with nothing to run, and a carving
   update left no trace. Now it shows Run analysis while an analysis is missing or out of date, Update carving while only a
   carving is, and neither when everything is current; Run analysis in Site and grid shows only for an analysis. A finished

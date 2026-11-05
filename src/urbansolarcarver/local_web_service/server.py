@@ -757,17 +757,17 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         return Response(values, media_type="application/octet-stream", headers=NO_CACHE)
 
     @router.get("/projects/{name}/studies/{study_id}/sky-patches", responses={404: _STUDY_RESPONSES[404]})
-    def study_sky_patches(name: str, study_id: str) -> SkyDome:
-        """The sky patches of the study's last result with the value each carried for its metric; 404 for an unknown study, one
-        without a result, a sun hours study (its directions are sun positions) or a result from before the values were kept."""
+    def study_sky_patches(name: str, study_id: str) -> SkyDome | None:
+        """The sky patches of the study's last result with the value each carried for its metric; null for a result without them, a
+        sun hours study (its directions are sun positions) or one from before the values were kept; 404 for an unknown study or one
+        without a result."""
         store = folder_in_use.store
         with store.project_lock(name):
             find_study(store.read_project_json(name), study_id)
-            dome = simulation.study_sky_patches(study_folder(store.open(name), study_id))
-        if dome is None:
-            raise ProjectError(f"The study '{study_id}' has no sky patches: it has no result, measures sun hours, or was run before "
-                               "they were kept.", status_code=404)
-        return dome
+            folder = study_folder(store.open(name), study_id)
+            if simulation.read_summary(folder) is None:
+                raise ProjectError(f"The study '{study_id}' has no result yet.", status_code=404)
+            return simulation.study_sky_patches(folder)
 
     @router.post("/projects/{name}/simulate", responses={404: {"model": ErrorDetailReply, "description": "There is no such project."}, **_ERROR_RESPONSES})
     def simulate(name: str) -> StartRunReply:
@@ -869,8 +869,9 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         return build_run_summary(folder_in_use.store, name)
 
     @router.get("/projects/{name}/run/sky-patches")
-    def run_sky_patches(name: str, criterion: str | None = Query(None, description=RESULTS_CRITERION_QUERY_DESCRIPTION)) -> SkyDome:
-        """The sky patches of a criterion's run (default: the last criterion that is on)."""
+    def run_sky_patches(name: str, criterion: str | None = Query(None, description=RESULTS_CRITERION_QUERY_DESCRIPTION)) -> SkyDome | None:
+        """The sky patches of a criterion's run (default: the last criterion that is on); null for a run without them (time-based and
+        tilted plane runs). 404 for a criterion that has not run."""
         return build_sky_dome(folder_in_use.store, name, criterion)
 
     @router.get("/projects/{name}/run/score-points", response_class=Response, responses={200: {"content": {"application/octet-stream": {}}}})
