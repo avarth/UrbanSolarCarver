@@ -27,8 +27,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 - **Developer checks.** `tools/check_references.py` reports routes, files and names in the docs that no longer exist
   (`tests/test_docs_references.py` runs it). Ruff runs in `tests/test_architecture.py`, with mistakes as its rules and no
-  formatting. `tools/find_dead_code.py` lists what nothing uses, or only the tests use, with vulture. `tools/repo_state.py`
-  prints where the repository stands, asking GitHub rather than the local tracking refs.
+  formatting. `tools/repo_state.py` prints where the repository stands, asking GitHub rather than the local tracking refs.
 
 ### Changed
 

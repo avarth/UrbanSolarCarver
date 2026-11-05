@@ -111,8 +111,7 @@ name a page gives must exist in the service or the code. Run the script itself t
 
 `tests/test_architecture.py` runs Ruff with the rules in `pyproject.toml`: unused imports and variables, undefined names, syntax
 errors, mutable defaults and comparisons whose result is thrown away. It finds mistakes and leaves style alone, and it does not
-format. `ruff check . --fix` clears what it can fix itself. `tools/find_dead_code.py` runs vulture, and its list is a report
-to read rather than a rule: it lists what nothing uses and what only the tests use, and it can only match names.
+format. `ruff check . --fix` clears what it can fix itself.
 
 ## Keeping out of the user's folders
 
