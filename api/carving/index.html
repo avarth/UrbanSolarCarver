@@ -2048,7 +2048,9 @@ of <em>settings</em>.  Returns None when no sun position is above
 <p>One ray from each sample point toward every Tregenza patch on the
 outward side of its normal; rays of points whose <em>point_weights</em>
 (edge_taper) entry is 0 are dropped.  The patch weights are those of
-<code>settings.mode</code> over the hours <em>hoys</em>.</p>
+<code>settings.mode</code> over the hours <em>hoys</em>; in the modes whose <code>incidence</code>
+is set (irradiance, benefit) each traced ray counts its patch weight times
+cos θ to its surface's normal, which the kernels apply per ray or sub-ray.</p>
 <p>With <code>settings.rays_per_patch</code> above 1, the kernels trace each ray as
 that many jittered sub-rays (<code>sub_rays</code>), and a ray is kept for every
 patch the surface faces in part, not only those whose centre it faces.</p>

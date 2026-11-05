@@ -1108,6 +1108,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.simulated_weights.FreeRunningResult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FreeRunningResult
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.simulated_weights.nearest_mass_class" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1134,6 +1145,50 @@
     <span class="md-ellipsis">
       
         attribute_solar_gains
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.simulated_weights.window_conductance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        window_conductance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.simulated_weights.loss_coefficient" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        loss_coefficient
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.simulated_weights.simulate_free_running" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        simulate_free_running
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.simulated_weights.attribute_free_running" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        attribute_free_running
       
     </span>
   </a>
@@ -1473,6 +1528,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.simulated_weights.FreeRunningResult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FreeRunningResult
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.simulated_weights.nearest_mass_class" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1499,6 +1565,50 @@
     <span class="md-ellipsis">
       
         attribute_solar_gains
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.simulated_weights.window_conductance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        window_conductance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.simulated_weights.loss_coefficient" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        loss_coefficient
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.simulated_weights.simulate_free_running" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        simulate_free_running
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.simulated_weights.attribute_free_running" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        attribute_free_running
       
     </span>
   </a>
@@ -1639,9 +1749,9 @@ in directly, so the comparison tests the hourly recurrence: annual heating
 and cooling demands agree within 1 Wh (or a relative 1e-6), and hourly air
 and mass temperatures and demands agree at sampled hours.
 Reference data: <code>tests/data/oracle_5r1c_reference.json</code>;
-regression: <code>tests/test_simulated_weights.py</code>. Design, coefficient provenance,
-and declared limitations: <code>design/simulated-weights.md</code>; user-level
-documentation: <code>docs/simulated-weights.md</code>.</p>
+regression: <code>tests/test_simulated_weights.py</code>. The equations, the artifact,
+the coefficient provenance and the declared limitations:
+<code>docs/simulated-weights.md</code>.</p>
 <p>This module is deliberately NumPy-only at import time (no torch, no
 ladybug) so it stays usable as a standalone generator; the EPW-facing
 helper imports Ladybug lazily.</p>
@@ -1818,6 +1928,55 @@ value nor 8760, or when the total air change rate is not positive
 
 </div>
 
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="urbansolarcarver.simulated_weights.FreeRunningResult" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>              <code class="highlight language-python"><span class="n">FreeRunningResult</span><span class="p">(</span><span class="n">underheating_kh</span><span class="p">,</span> <span class="n">overheating_kh</span><span class="p">,</span> <span class="n">hours_below</span><span class="p">,</span> <span class="n">hours_above</span><span class="p">,</span> <span class="n">t_air</span><span class="p">,</span> <span class="n">t_m</span><span class="p">,</span> <span class="n">window_share</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#urbansolarcarver.simulated_weights.FreeRunningResult" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Annual outcome of :func:<code>simulate_free_running</code> (single trajectory).</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
 
 <div class="doc doc-object doc-function">
 
@@ -1864,7 +2023,7 @@ year [°C].  Raises ValueError if an array does not have shape (8760,).</p>
 
 
 <h3 id="urbansolarcarver.simulated_weights.attribute_solar_gains" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">attribute_solar_gains</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">t_out</span><span class="p">,</span> <span class="n">phi_int</span><span class="p">,</span> <span class="n">phi_sol</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">t_m_init</span><span class="o">=</span><span class="mf">20.0</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">attribute_solar_gains</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">t_out</span><span class="p">,</span> <span class="n">phi_int</span><span class="p">,</span> <span class="n">phi_sol</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">t_m_init</span><span class="o">=</span><span class="mf">20.0</span><span class="p">,</span> <span class="n">progress</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.simulated_weights.attribute_solar_gains" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -1875,14 +2034,100 @@ year [°C].  Raises ValueError if an array does not have shape (8760,).</p>
 <p>Returns <code>(benefit, harm)</code>, each (8760,) in [0, 1]:
 the fraction of one extra watt-hour of solar gain at hour t that
 offsets heating demand / becomes cooling load over the year.
-<code>eps</code> is the perturbation size [W]; the other arguments are as in
-:func:<code>simulate</code>.</p>
+<code>eps</code> is the perturbation size [W]; <code>progress</code>, when given, is
+called with the share of the year done (0 to 1); the other arguments
+are as in :func:<code>simulate</code>.</p>
 <p>Values are marginal at this archetype's operating point.  At hours
 where the control switches between heating, free-floating and
 cooling, the derivative is not defined and the central difference
 gives an average of the one-sided slopes.  Out-of-range values up to
 0.02 from such switching are clipped silently; larger ones are also
 clipped but trigger a warning.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.simulated_weights.window_conductance" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">window_conductance</span><span class="p">(</span><span class="n">volume</span><span class="p">,</span> <span class="n">vent_ach</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.simulated_weights.window_conductance" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The extra ventilation conductance [W/K] of windows opened fully: 1200 J/(m³K), the volumetric heat capacity of air, x the
+volume [m³] x vent_ach [1/h] / 3600.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.simulated_weights.loss_coefficient" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">loss_coefficient</span><span class="p">(</span><span class="n">p</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.simulated_weights.loss_coefficient" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The zone's steady-state heat loss coefficient [W/K] with its windows closed: the windows, the opaque fabric (H_tr,em in
+series with H_tr,ms) and the ventilation (its mean over the year when it follows a schedule).</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.simulated_weights.simulate_free_running" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">simulate_free_running</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">t_out</span><span class="p">,</span> <span class="n">phi_int</span><span class="p">,</span> <span class="n">phi_sol</span><span class="p">,</span> <span class="n">h_open</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">vent_above</span><span class="o">=</span><span class="n">FREE_RUNNING_DEFAULTS</span><span class="p">[</span><span class="s1">&#39;vent_above&#39;</span><span class="p">],</span> <span class="n">t_m_init</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.simulated_weights.simulate_free_running" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Annual simulation of a free-running zone: no heating or cooling, windows opened as :func:<code>_march_free</code> describes, the
+comfort band from the zone's heating to its cooling set point. <code>h_open</code> [W/K] is the extra ventilation of the windows
+fully open (:func:<code>window_conductance</code>; 0, the default, keeps them closed). <code>t_m_init</code> is the mass temperature at the start
+of the year [°C]; None (the default) starts from a periodic steady state (:func:<code>_periodic_start</code>). The other arguments are as
+in :func:<code>simulate</code>; ValueError if an array does not have shape (8760,).</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.simulated_weights.attribute_free_running" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">attribute_free_running</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">t_out</span><span class="p">,</span> <span class="n">phi_int</span><span class="p">,</span> <span class="n">phi_sol</span><span class="p">,</span> <span class="n">h_open</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">vent_above</span><span class="o">=</span><span class="n">FREE_RUNNING_DEFAULTS</span><span class="p">[</span><span class="s1">&#39;vent_above&#39;</span><span class="p">],</span> <span class="n">eps</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span> <span class="n">t_m_init</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">progress</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.simulated_weights.attribute_free_running" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Marginal hourly benefit/harm of solar gain in a free-running zone, by central-difference perturbation (<code>eps</code> [W] in one
+hour at a time).</p>
+<p>Returns <code>(benefit, harm)</code>, each (8760,) in [0, 1]: the degree-hours below the comfort band that one extra watt-hour of
+solar gain at hour t removes over the year, and the degree-hours above it that it adds, each times the zone's heat loss
+coefficient (:func:<code>loss_coefficient</code>). The product is a share of the watt-hour: in steady state, a watt-hour that all goes
+into warming a zone below the band removes 1/H degree-hours, which counts 1. Out-of-range values up to 0.02 are clipped
+silently, larger ones with a warning (as in :func:<code>attribute_solar_gains</code>). The other arguments are as in
+:func:<code>simulate_free_running</code>; <code>progress</code> as in :func:<code>attribute_solar_gains</code>.</p>
 
 
     </div>
@@ -1900,14 +2145,17 @@ clipped but trigger a warning.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Hourly transmitted solar gain [W] for a set of vertical windows.</p>
-<p><code>windows</code>: sequence of (azimuth_deg, area_m2, g_value); azimuth in
-Ladybug convention (0 = N, 90 = E, 180 = S, 270 = W); g_value is the
-glazing's total solar energy transmittance (0-1).  The irradiance on
-each window plane [W/m²] comes from Ladybug's
-<code>Wea.directional_irradiance</code> for a vertical surface (isotropic sky,
-ground reflectance 0.2, no obstructions); it is multiplied by
-area and g_value.</p>
+        <p>Hourly transmitted solar gain [W] for a set of windows.</p>
+<p><code>windows</code>: sequence of (azimuth_deg, area_m2, g_value) or
+(azimuth_deg, area_m2, g_value, altitude_deg); azimuth in Ladybug
+convention (0 = N, 90 = E, 180 = S, 270 = W); g_value is the glazing's
+total solar energy transmittance (0-1); altitude is that of the
+window's normal, 0 (the default) for a vertical window, 90 for a
+horizontal skylight.  The irradiance on each window plane [W/m²] is
+that of Ladybug's <code>Wea.directional_irradiance</code> (isotropic sky, ground
+reflectance 0.2, no obstructions), with the sun placed once for all the
+windows (:func:<code>_plane_irradiance</code>); it is multiplied by area and
+g_value.</p>
 <p><code>hourly_factors</code>: optional per-window hourly transmission multipliers
 (one (8760,) array per window, e.g. shading coefficients); default 1.</p>
 <p>Returns an (8760,) array of the summed gain over all windows [W].</p>
@@ -1950,8 +2198,8 @@ Ladybug Sunpath at the middle of each hour (the Wea's datetimes).</p>
     <div class="doc doc-contents ">
 
         <p>Write the simulated_weights.json artifact and return its path.</p>
-<p>The schema is described in <code>design/simulated-weights.md</code>.  Values are
-rounded to 6 decimals.  Raises ValueError if either series is not 8760
+<p>The schema is described in <code>docs/simulated-weights.md</code>.  Values are
+rounded to 6 decimals.  Raises ValueError if a series is not 8760
 finite values in [0, 1].</p>
 
 
@@ -1972,8 +2220,10 @@ finite values in [0, 1].</p>
 
         <p>Read and validate a simulated_weights.json artifact.</p>
 <p>Returns (benefit, harm, meta): two (8760,) float64 arrays and the
-metadata dict.  Raises ValueError if the file cannot be read or parsed,
-has an unsupported schema_version, or holds invalid series.</p>
+metadata dict (a file that also holds rooms per facade direction gives
+the averaged room's).  Raises
+ValueError if the file cannot be read or parsed, has an unsupported
+schema_version, or holds invalid series.</p>
 
 
     </div>
@@ -2036,7 +2286,7 @@ exposure that is not true or false.</p>
 
 
 <h3 id="urbansolarcarver.simulated_weights.generate_simulated_weights" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">generate_simulated_weights</span><span class="p">(</span><span class="n">epw_path</span><span class="p">,</span> <span class="n">archetype</span><span class="p">,</span> <span class="n">out_path</span><span class="p">,</span> <span class="n">internal_gains_w_m2</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">generate_simulated_weights</span><span class="p">(</span><span class="n">epw_path</span><span class="p">,</span> <span class="n">archetype</span><span class="p">,</span> <span class="n">out_path</span><span class="p">,</span> <span class="n">internal_gains_w_m2</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">progress</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.simulated_weights.generate_simulated_weights" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -2046,12 +2296,20 @@ exposure that is not true or false.</p>
         <p>Run the full 5R1C weights pipeline: EPW + archetype → artifact.</p>
 <p><code>archetype</code> holds the :meth:<code>ZoneParams.from_archetype</code> keyword
 arguments plus <code>windows</code>: a list of [azimuth_deg, area_m2, g_value]
-(or the shoebox geometry shorthand, see :func:<code>expand_shoebox</code>).
+or [azimuth_deg, area_m2, g_value, altitude_deg] (or the shoebox
+geometry shorthand, see :func:<code>expand_shoebox</code>).
 Optional keys: <code>shading_permanent</code>, <code>shading_hot</code> and
 <code>hot_months</code> or <code>shading_hot_period</code> (transmission multipliers,
-see :func:<code>_shading_factors</code>), and the internal-gain keys below.
+see :func:<code>_shading_factors</code>) and the internal-gain keys below.
 <code>ach_vent</code> may be 8760 hourly values (see
 :meth:<code>ZoneParams.from_archetype</code>).</p>
+<p><code>operation</code> (one of OPERATIONS, default <code>"conditioned"</code>) says how
+the zone is run. Conditioned: ideal heating and cooling to the set
+points, the weights by :func:<code>attribute_solar_gains</code>. Free running: no
+heating or cooling, the comfort band from <code>t_set_heating</code> to
+<code>t_set_cooling</code>, windows opened for natural ventilation by the keys
+<code>vent_above</code> [°C] and <code>vent_ach</code> [1/h] (FREE_RUNNING_DEFAULTS; free
+running only), the weights by :func:<code>attribute_free_running</code>.</p>
 <p>Internal gains are either a single flat value [W/m²], a 24-value
 daily occupancy profile [W/m² per hour of day], tiled over the year,
 or 8760 hourly values from 1 January 0:00.
@@ -2059,14 +2317,22 @@ They may come from the <code>internal_gains_w_m2</code> /
 <code>internal_gains_profile_w_m2</code> archetype keys, or be passed as the
 <code>internal_gains_w_m2</code> argument (which takes precedence). Default 5.0.</p>
 <p><code>eps</code> is the solar-gain perturbation [W] used by
-:func:<code>attribute_solar_gains</code>.  Writes the JSON artifact to
-<code>out_path</code> and, if matplotlib is installed, a heatmap PNG next to it
-with the same name; returns the artifact path.  The artifact's meta
-also holds the zone's annual heating and cooling demand per m² of floor
-(<code>heating_kwh_m2</code>, <code>cooling_kwh_m2</code>, in kWh/m²), from
-:func:<code>simulate</code> with the same gains, and <code>sun_up</code>, 8760 values of
-0 or 1 marking the hours with the sun above the horizon
-(:func:<code>sun_up_hours</code>).</p>
+:func:<code>attribute_solar_gains</code>.  <code>progress</code>, when given, is called
+with the share of the calculation done (0 to 1, rising, by the
+measured time of each step), about 20 times, and with 1 once
+the artifact is written.  Writes the JSON artifact to
+<code>out_path</code> and, if matplotlib is installed, a heatmap PNG of the
+series next to it with the same name; returns the artifact
+path.  The artifact's meta also holds the zone's annual heating and
+cooling demand per m² of floor (<code>heating_kwh_m2</code>, <code>cooling_kwh_m2</code>,
+in kWh/m²), from :func:<code>simulate</code> with the same gains, and <code>sun_up</code>,
+8760 values of 0 or 1 marking the hours with the sun above the horizon
+(:func:<code>sun_up_hours</code>).  Free running, it holds <code>operation</code> and, in
+place of the demands, the zone's degree-hours below and above the band
+(<code>underheating_kh</code>, <code>overheating_kh</code>, in K·h), its hours outside it
+(<code>hours_below</code>, <code>hours_above</code>), the band (<code>comfort_band_c</code>) and the
+loss coefficient the weights are scaled by (<code>loss_coefficient_w_k</code>),
+from :func:<code>simulate_free_running</code>.</p>
 
 
     </div>

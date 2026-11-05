@@ -1927,7 +1927,7 @@ direction (the patch centre).</p>
 
 
 <h3 id="urbansolarcarver.ray_tracing.trace_and_score_dda" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">trace_and_score_dda</span><span class="p">(</span><span class="n">min_corner</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="n">resolution</span><span class="p">,</span> <span class="n">origins</span><span class="p">,</span> <span class="n">ray_dirs</span><span class="p">,</span> <span class="n">patch_ids</span><span class="p">,</span> <span class="n">patch_weights</span><span class="p">,</span> <span class="n">scores</span><span class="p">,</span> <span class="n">ray_length</span><span class="p">,</span> <span class="n">point_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">point_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">surface_normals</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">occupancy</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">sub_rays</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">skip</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">trace_and_score_dda</span><span class="p">(</span><span class="n">min_corner</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="n">resolution</span><span class="p">,</span> <span class="n">origins</span><span class="p">,</span> <span class="n">ray_dirs</span><span class="p">,</span> <span class="n">patch_ids</span><span class="p">,</span> <span class="n">patch_weights</span><span class="p">,</span> <span class="n">scores</span><span class="p">,</span> <span class="n">ray_length</span><span class="p">,</span> <span class="n">point_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">point_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">surface_normals</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">occupancy</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">sub_rays</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">skip</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">incidence</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.ray_tracing.trace_and_score_dda" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -2205,6 +2205,24 @@ whose entry is nonzero are not traced (the context blocks them).</p>
                   <code>None</code>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>incidence</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Multiply each ray's weight by cos θ, the cosine between its traced
+direction (the sub-ray's, with <em>sub_rays</em>) and its source surface's
+normal; requires <code>surface_normals</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>False</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -2228,7 +2246,7 @@ whose entry is nonzero are not traced (the context blocks them).</p>
 write into a copy), if <code>point_ids</code> is given with neither
 <code>point_weights</code> nor <code>surface_normals</code>, or if either of those
 is given without <code>point_ids</code>, or if <code>occupancy</code> is given
-without <code>surface_normals</code>, or <em>sub_rays</em> without
+without <code>surface_normals</code>, or <em>sub_rays</em> or <em>incidence</em> without
 <code>surface_normals</code>, or <em>skip</em> of another length.</p>
               </div>
             </td>
@@ -2245,7 +2263,7 @@ without <code>surface_normals</code>, or <em>sub_rays</em> without
 
 
 <h3 id="urbansolarcarver.ray_tracing.trace_point_access_dda" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">trace_point_access_dda</span><span class="p">(</span><span class="n">min_corner</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="n">resolution</span><span class="p">,</span> <span class="n">origins</span><span class="p">,</span> <span class="n">ray_dirs</span><span class="p">,</span> <span class="n">patch_ids</span><span class="p">,</span> <span class="n">patch_weights</span><span class="p">,</span> <span class="n">access</span><span class="p">,</span> <span class="n">ray_length</span><span class="p">,</span> <span class="n">occupancy</span><span class="p">,</span> <span class="n">point_ids</span><span class="p">,</span> <span class="n">point_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">surface_normals</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">skin_occupancy</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">sub_rays</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">trace_point_access_dda</span><span class="p">(</span><span class="n">min_corner</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="n">resolution</span><span class="p">,</span> <span class="n">origins</span><span class="p">,</span> <span class="n">ray_dirs</span><span class="p">,</span> <span class="n">patch_ids</span><span class="p">,</span> <span class="n">patch_weights</span><span class="p">,</span> <span class="n">access</span><span class="p">,</span> <span class="n">ray_length</span><span class="p">,</span> <span class="n">occupancy</span><span class="p">,</span> <span class="n">point_ids</span><span class="p">,</span> <span class="n">point_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">surface_normals</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">skin_occupancy</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">sub_rays</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">incidence</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.ray_tracing.trace_point_access_dda" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -2354,6 +2372,22 @@ face counts as neither accessible nor blocked.</p>
                   <code>None</code>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>incidence</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>As in :func:<code>trace_and_score_dda</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>False</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -2373,7 +2407,8 @@ face counts as neither accessible nor blocked.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>If <code>access</code> is not a contiguous float64 tensor of even length.</p>
+                <p>If <code>access</code> is not a contiguous float64 tensor of even length, or
+<em>incidence</em> is given without <code>surface_normals</code>.</p>
               </div>
             </td>
           </tr>
@@ -2959,7 +2994,7 @@ traced with.  <em>patch_ids</em> is required with <em>sub_rays</em>.</p>
 
 
 <h3 id="urbansolarcarver.ray_tracing.mesh_blocks_sky_sub_rays" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">mesh_blocks_sky_sub_rays</span><span class="p">(</span><span class="n">blocking</span><span class="p">,</span> <span class="n">origins</span><span class="p">,</span> <span class="n">patch_ids</span><span class="p">,</span> <span class="n">point_ids</span><span class="p">,</span> <span class="n">surface_normals</span><span class="p">,</span> <span class="n">sub_rays</span><span class="p">,</span> <span class="n">patch_weights</span><span class="p">,</span> <span class="n">max_t</span><span class="p">,</span> <span class="n">point_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">origin_offset</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> <span class="n">min_hit</span><span class="o">=</span><span class="mf">0.001</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">mesh_blocks_sky_sub_rays</span><span class="p">(</span><span class="n">blocking</span><span class="p">,</span> <span class="n">origins</span><span class="p">,</span> <span class="n">patch_ids</span><span class="p">,</span> <span class="n">point_ids</span><span class="p">,</span> <span class="n">surface_normals</span><span class="p">,</span> <span class="n">sub_rays</span><span class="p">,</span> <span class="n">patch_weights</span><span class="p">,</span> <span class="n">max_t</span><span class="p">,</span> <span class="n">point_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">origin_offset</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> <span class="n">min_hit</span><span class="o">=</span><span class="mf">0.001</span><span class="p">,</span> <span class="n">incidence</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.ray_tracing.mesh_blocks_sky_sub_rays" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -2971,8 +3006,8 @@ traced with.  <em>patch_ids</em> is required with <em>sub_rays</em>.</p>
 <code>sub_rays.count</code> sub-rays, tested one thread each in launches of
 about 16 million.  Returns each sub-ray's status and, per test point,
 how many sub-rays it faces and their weight (<code>patch_weights[patch] /
-count</code>, times <em>point_weights</em> when given), and how much of that the
-mesh blocks.</p>
+count</code>, times <em>point_weights</em> when given, times cos θ to the point's
+normal with <em>incidence</em>), and how much of that the mesh blocks.</p>
 
 
     </div>

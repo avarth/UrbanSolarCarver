@@ -884,21 +884,38 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#urbansolarcarver.api.PipelineResult" class="md-nav__link">
+  <a href="#urbansolarcarver.api.run_pipeline" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PipelineResult
+        run_pipeline
       
     </span>
   </a>
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#urbansolarcarver.api.run_pipeline" class="md-nav__link">
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#urbansolarcarver.api_core.pipeline_result" class="md-nav__link">
     <span class="md-ellipsis">
       
-        run_pipeline
+        pipeline_result
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="pipeline_result">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.api_core.pipeline_result.PipelineResult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PipelineResult
       
     </span>
   </a>
@@ -1889,21 +1906,38 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#urbansolarcarver.api.PipelineResult" class="md-nav__link">
+  <a href="#urbansolarcarver.api.run_pipeline" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PipelineResult
+        run_pipeline
       
     </span>
   </a>
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#urbansolarcarver.api.run_pipeline" class="md-nav__link">
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#urbansolarcarver.api_core.pipeline_result" class="md-nav__link">
     <span class="md-ellipsis">
       
-        run_pipeline
+        pipeline_result
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="pipeline_result">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.api_core.pipeline_result.PipelineResult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PipelineResult
       
     </span>
   </a>
@@ -2551,58 +2585,6 @@
 
 
 
-<div class="doc doc-object doc-class">
-
-
-
-<h3 id="urbansolarcarver.api.PipelineResult" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>              <code class="highlight language-python"><span class="n">PipelineResult</span><span class="p">(</span><span class="n">preprocessing</span><span class="p">,</span> <span class="n">thresholding</span><span class="p">,</span> <span class="n">exporting</span><span class="p">,</span> <span class="n">massing</span><span class="p">,</span> <span class="n">issues</span><span class="p">)</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
-  </span>
-
-<a href="#urbansolarcarver.api.PipelineResult" class="headerlink" title="Permanent link">&para;</a></h3>
-
-
-    <div class="doc doc-contents ">
-
-
-
-        <p>What one :func:<code>run_pipeline</code> call produced.</p>
-<p>Each stage attribute holds the Result of a stage that ran in this call and
-is None for a stage that did not.  <code>issues</code> are the conditions reported
-during the call, from all stages, in the order they were noticed.</p>
-
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-children">
-
-
-
-
-
-
-
-
-
-
-
-
-  </div>
-
-    </div>
-
-</div>
-
 
 <div class="doc doc-object doc-function">
 
@@ -2758,7 +2740,7 @@ given to the thresholding stage as its <code>after</code> (see
 
   
       dataclass
-   (urbansolarcarver.api.PipelineResult)" href="#urbansolarcarver.api.PipelineResult">PipelineResult</a></code>
+   (urbansolarcarver.api_core.pipeline_result.PipelineResult)" href="#urbansolarcarver.api_core.pipeline_result.PipelineResult">PipelineResult</a></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -2818,6 +2800,101 @@ not on the path to a produced stage.</p>
     </div>
 
 </div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="urbansolarcarver.api_core.pipeline_result" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-module"></code>            <code>urbansolarcarver.api_core.pipeline_result</code>
+
+
+<a href="#urbansolarcarver.api_core.pipeline_result" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p><code>PipelineResult</code>: what one <code>run_pipeline</code> call produced, and what <code>run_chain</code> holds per criterion.</p>
+<p>It lives here, below <code>api</code>, because both <code>api.run_pipeline</code> and <code>api_core.chain.run_chain</code> build it.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="urbansolarcarver.api_core.pipeline_result.PipelineResult" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>              <code class="highlight language-python"><span class="n">PipelineResult</span><span class="p">(</span><span class="n">preprocessing</span><span class="p">,</span> <span class="n">thresholding</span><span class="p">,</span> <span class="n">exporting</span><span class="p">,</span> <span class="n">massing</span><span class="p">,</span> <span class="n">issues</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#urbansolarcarver.api_core.pipeline_result.PipelineResult" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>What one :func:<code>~urbansolarcarver.run_pipeline</code> call produced.</p>
+<p>Each stage attribute holds the Result of a stage that ran in this call and
+is None for a stage that did not.  <code>issues</code> are the conditions reported
+during the call, from all stages, in the order they were noticed.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
 
 
 
@@ -3923,6 +4000,12 @@ or lacks or misuses a key (see <code>engine_requests</code>).</p>
 
     <div class="doc doc-contents first">
 
+        <p>Preprocessing stage: score every voxel of the maximum volume by what it blocks.</p>
+<p>Voxelizes the maximum volume, samples the test surfaces into points with outward normals, traces rays from them
+(toward the sky patches, the sun positions or the tilted planes, depending on the mode) through the voxel grid, and
+writes each voxel's score to <code>scores.npy</code> with the grid, the footprint, the sample points, the manifest and the
+diagnostics. Thresholding reads these files.</p>
+
 
 
 
@@ -4223,6 +4306,12 @@ allocated).</p>
 <a href="#urbansolarcarver.api_core.thresholding" class="headerlink" title="Permanent link">&para;</a></h2>
 
     <div class="doc doc-contents first">
+
+        <p>Thresholding stage: decide which voxels to carve from their scores.</p>
+<p>Reads the preprocessing scores, optionally smooths them, applies the threshold (<code>carve_fraction</code>, <code>headtail</code> or a
+number) together with <code>carve_above</code> and the slope limit, and writes the kept voxels to <code>mask.npy</code>. With <code>after</code>
+(the previous criterion's result) it decides only among the voxels that criterion kept. It can be re-run with other
+threshold settings without tracing the rays again.</p>
 
 
 

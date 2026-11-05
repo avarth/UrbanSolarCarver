@@ -809,6 +809,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#keeping-out-of-the-users-folders" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keeping out of the user's folders
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shared-scenes-and-fakes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shared scenes and fakes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#running-in-parallel" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1422,6 +1444,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#keeping-out-of-the-users-folders" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keeping out of the user's folders
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shared-scenes-and-fakes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shared scenes and fakes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#running-in-parallel" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1453,7 +1497,7 @@
 
 
 <h1 id="running-the-tests">Running the tests<a class="headerlink" href="#running-the-tests" title="Permanent link">&para;</a></h1>
-<p>The Python suite (about 1330 tests in <code>tests/</code>) and the front-end suite (about 480 vitest tests in <code>app/</code>) run locally:
+<p>The Python suite (about 2,030 tests in <code>tests/</code>) and the front-end suite (about 985 vitest tests in <code>app/</code>) run locally:
 there is no CI, because the engine runs on the GPU and hosted runners have none. Tests marked <code>gpu</code> are skipped
 automatically without CUDA.</p>
 <p>Install the test dependencies once with <code>pip install -e .[dev]</code> (it includes pytest-xdist, which runs tests in
@@ -1461,7 +1505,7 @@ parallel with <code>-n</code>). Run the commands below from the repository root 
 git worktree that has no environment of its own, put the worktree's sources first: <code>PYTHONPATH=src python -m pytest ...</code>
 (in PowerShell, <code>$env:PYTHONPATH = "src"</code> once).</p>
 <h2 id="four-tiers">Four tiers<a class="headerlink" href="#four-tiers" title="Permanent link">&para;</a></h2>
-<p>Times are wall times on an 8-core / 16-thread AMD Zen 2 with an RTX 3060, measured 2026-10-19.</p>
+<p>Times are wall times on an 8-core / 16-thread AMD Zen 2 with an RTX 3060, measured 2026-11-02.</p>
 <table>
 <thead>
 <tr>
@@ -1482,31 +1526,35 @@ git worktree that has no environment of its own, put the worktree's sources firs
 <td>1</td>
 <td>After every change</td>
 <td><code>python -m pytest -m "not slow" -n 8</code></td>
-<td>about 45 s</td>
+<td>about 55 s</td>
 </tr>
 <tr>
 <td>2</td>
 <td>Before each commit</td>
 <td><code>python -m pytest -m "not sweep" -n 8</code></td>
-<td>about 65 s</td>
+<td>about 2 min</td>
 </tr>
 <tr>
 <td>3</td>
 <td>Before merging</td>
 <td><code>python -m pytest -n 8</code></td>
-<td>about 100 s</td>
+<td>about 2.5 min</td>
 </tr>
 </tbody>
 </table>
-<p>When <code>app/</code> changed, also run the front-end checks of the same tier (see below): <code>npm test</code> takes about 12 s,
+<p>When <code>app/</code> changed, also run the front-end checks of the same tier (see below): <code>npm test</code> takes about 32 s (12 s of it ESLint),
 <code>npm run typecheck</code> 5 s and <code>npm run build</code> 7 s.</p>
+<p>Every tier also checks the import rules of the <a href="../project-map/">Project Map</a>: <code>tests/test_architecture.py</code> for the
+Python package (with <code>npm test</code>'s <code>deps</code> script for the app). <code>npm test</code> also runs ESLint (<code>npm run lint</code>,
+<code>app/eslint.config.js</code>): the React hooks rules check effect dependencies and what components do during render, and a
+line that sets a rule aside says why.</p>
 <h3 id="tier-0-the-files-you-are-editing">Tier 0: the files you are editing<a class="headerlink" href="#tier-0-the-files-you-are-editing" title="Permanent link">&para;</a></h3>
 <p>Run the test file of the module you are changing, or one test with <code>-k</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>tests/test_floor_plates.py<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;not slow&quot;</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>tests/test_floor_plates.py<span class="w"> </span>-k<span class="w"> </span>end_wings
 </code></pre></div>
 <p><code>--lf</code> runs only the tests that failed last time, which is quick after a fix. In <code>app/</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>npx<span class="w"> </span>vitest<span class="w"> </span>run<span class="w"> </span>src/steps/ModeStep.test.tsx
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>npx<span class="w"> </span>vitest<span class="w"> </span>run<span class="w"> </span>src/criteria/ModeStep.test.tsx
 </code></pre></div>
 <h3 id="tier-1-after-every-change">Tier 1: after every change<a class="headerlink" href="#tier-1-after-every-change" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;not slow&quot;</span><span class="w"> </span>-n<span class="w"> </span><span class="m">8</span>
@@ -1572,9 +1620,97 @@ After the run, <code>tests/conftest.py</code> also lists each test outside <code
 faster. Times grow by about half under <code>-n 8</code>, so a test listed only in a parallel run may be fine on its own.</p>
 <p>An exact count in a test (panels, sample points, kept voxels of a packaged example) carries a comment on how to take
 the new value after a deliberate change of the example files or of the code that produces it.</p>
+<h2 id="keeping-out-of-the-users-folders">Keeping out of the user's folders<a class="headerlink" href="#keeping-out-of-the-users-folders" title="Permanent link">&para;</a></h2>
+<p><code>tests/conftest.py</code> does this for every test, without a fixture to ask for:</p>
+<ul>
+<li><code>no_real_home_folder</code> gives each test a home folder of its own (<code>HOME</code> and <code>USERPROFILE</code>), so no test reads or writes
+  the user's <code>~/.urbansolarcarver</code> (the typical building library, the preferences, the daemon key) or
+  <code>~/UrbanSolarCarver/projects</code>. A test that looks into the home folder asks for it by a <code>home_folder</code> fixture.</li>
+<li><code>pytest_configure</code> pins Warp's kernel cache (<code>WARP_CACHE_PATH</code>) to its usual folder first: with the home folder
+  moved, Warp would otherwise make a new cache in the working folder (an <code>NVIDIA</code> folder in the checkout) and compile
+  every kernel again. A daemon started by a test gets the same environment (<code>tests/_daemon_home.py</code>).</li>
+<li><code>no_real_recycle_bin</code> removes what the local web service would send to the recycle bin.</li>
+</ul>
+<p><code>tests/test_isolation.py</code> checks the first two.</p>
+<h2 id="shared-scenes-and-fakes">Shared scenes and fakes<a class="headerlink" href="#shared-scenes-and-fakes" title="Permanent link">&para;</a></h2>
+<p>Before writing a scene or a fake of your own, use these.</p>
+<table>
+<thead>
+<tr>
+<th>Where</th>
+<th>What</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tests/conftest.py</code></td>
+<td><code>tiny_cube_mesh</code> (a 10 m cube, z -5 to 5), <code>tiny_surface_mesh</code> (a 6 m quad 1 m under it, facing up), <code>tmp_mesh_files</code>, <code>example_epw_path</code>, <code>project_with_inputs</code>, <code>example_project_templates</code></td>
+</tr>
+<tr>
+<td><code>tests/_stage_scene.py</code></td>
+<td><code>cube_volume</code>, <code>surface_under_cube</code>, <code>cube_config</code> and <code>daylight_cube_config</code>: the same cube and surface as a validated daylight config on the CPU, the smallest scene that runs every stage; for stage plumbing, not for which voxels a mode carves (the surface looks straight up through the cube from any side)</td>
+</tr>
+<tr>
+<td><code>tests/_plot_scene.py</code></td>
+<td><code>plot_scene</code>: a 12 x 12 x 18 m plot, a 10 m street and a 12 m neighbour whose south facade is the test surface and whose mass is the context, optionally turned by <code>north_deg</code>; <code>PlotScene.config(folder, mode, epw_path)</code> (1 m voxels, CPU) and <code>PlotScene.voxels</code> with <code>assert_carves_the_north_side</code>: which side a mode or stage carves, in about a second</td>
+</tr>
+<tr>
+<td><code>tests/_chain_scene.py</code></td>
+<td>a box with two facades, on which two chained criteria decide about different voxels</td>
+</tr>
+<tr>
+<td><code>tests/cases.py</code>, <code>tests/oracle.py</code>, <code>tests/montecarlo.py</code></td>
+<td>the typology scenes run end to end, an independent reference implementation, and the randomised sweep</td>
+</tr>
+<tr>
+<td><code>tests/local_web_test_support.py</code></td>
+<td>projects for the local web service (<code>add_project_with_inputs</code>, <code>box_bytes</code>), <code>FakeEngine</code> (writes run_chain's folders without computing), <code>FakeRecycleBin</code></td>
+</tr>
+<tr>
+<td><code>tests/_geometry.py</code></td>
+<td><code>box_between(lo, hi)</code>: a box mesh from two corners</td>
+</tr>
+<tr>
+<td><code>tests/_epw.py</code>, <code>tests/_daemon_home.py</code></td>
+<td><code>BUNDLED_EPW</code> and <code>resolve_epw</code> (a test that needs a weather file asks for <code>example_epw_path</code>, which skips without one); <code>isolated_home_env</code> and <code>start_daemon(home, answers)</code>, a real daemon subprocess with a home folder of its own, started on a free port</td>
+</tr>
+<tr>
+<td><code>app/src/workspace/project_workspace_for_test.tsx</code></td>
+<td><code>FakeService</code>, the service an open project talks to; <code>json&lt;Reply&gt;(body)</code> checks a reply against the service's type when given it</td>
+</tr>
+<tr>
+<td><code>app/src/workspace/chain_service_for_test.tsx</code>, <code>simulate_service_for_test.tsx</code></td>
+<td>the same for several criteria, and for Simulate</td>
+</tr>
+<tr>
+<td><code>app/src/viewer/fake_scene_for_test.ts</code></td>
+<td><code>FakeViewerScene</code>, typed against <code>ViewerScene</code>'s public methods; it records what the pane asked it to draw</td>
+</tr>
+<tr>
+<td><code>app/src/api_client/project_session_for_test.tsx</code></td>
+<td><code>inProjectSession(element)</code>: a hook or panel of an open project rendered without the workspace</td>
+</tr>
+<tr>
+<td><code>app/src/api_client/fake_websocket_for_test.ts</code></td>
+<td>a run's events</td>
+</tr>
+<tr>
+<td><code>app/src/viewer_overlays/render_for_test.tsx</code></td>
+<td>rendering with React's <code>act</code>; <code>click</code>, <code>press</code>, <code>type</code>, <code>typeAndLeave</code>, <code>byRole</code>, <code>accessibleName</code>; <code>settle()</code>, which waits until no reply is outstanding and nothing changed for two rounds (it throws, naming the unanswered requests, after 50 rounds; a reply a fake holds on purpose goes through <code>holdReply</code>); <code>addStyleSheetForTest</code> for computed styles</td>
+</tr>
+<tr>
+<td><code>app/src/api_client/service_data_for_test.ts</code></td>
+<td>the service's settings schema, modes and criterion keys as the app gets them (<code>SERVICE_SCHEMA</code>, <code>SERVICE_MODES</code>, <code>SERVICE_CRITERION_KEYS</code>, <code>serviceSchemaWith</code>, <code>serviceModes</code>), from a JSON snapshot written by <code>python tools/write_app_test_service_data.py</code>; <code>tests/test_local_web_api_types.py</code> fails when the snapshot or <code>generated_types.ts</code> no longer matches the service</td>
+</tr>
+</tbody>
+</table>
 <h2 id="running-in-parallel">Running in parallel<a class="headerlink" href="#running-in-parallel" title="Permanent link">&para;</a></h2>
-<p><code>-n 8</code> starts 8 worker processes and hands out single tests to them; each worker pays about 8 s of imports and
-collection once. Tests must not depend on one another or on a shared file: each uses its own <code>tmp_path</code>. The engine computes each
+<p><code>-n 8</code> starts 8 worker processes and hands out tests to them; each worker pays about 10 s of imports and collection
+once. <code>pyproject.toml</code> adds <code>--dist worksteal</code>: a worker that runs out of tests takes some from another's queue. With
+the default scheduling, tests given out in a block (the eight Monte Carlo cases, 15 to 38 s each) kept one worker
+busy for 210 s while the others had stopped at about 110 to 160 s; the whole suite took 235 s, with worksteal 188 s.
+A test that runs over about 40 s still ends up alone at the end of the run: split it with <code>parametrize</code> so two workers
+share it. Tests must not depend on one another or on a shared file: each uses its own <code>tmp_path</code>. The engine computes each
 sky matrix in a temporary folder of its own, so workers computing sky matrices at the same time do not share
 Ladybug's weather folder. When another checkout is testing on
 the same machine at the same time, <code>-n 4</code> leaves it room.</p>

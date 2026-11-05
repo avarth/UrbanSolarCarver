@@ -1744,8 +1744,10 @@ buildings (527,000 test points, test surfaces beside the volumes, so little band
 generated inside the tracing kernels, so memory does not grow with them. The rays are ordered by patch, so the GPU
 threads that run together trace the same direction from neighbouring points and find the voxels they visit in its
 cache; this is what keeps the extra rays cheap.
-<code>rays_per_patch: 1</code> reproduces the scores of earlier versions. Time-based mode traces sun positions and <code>tilted_plane</code>
+<code>rays_per_patch: 1</code> reproduces the scores of the versions before sub-rays in <code>daylight</code> and <code>radiative_cooling</code>; in
+<code>irradiance</code> and <code>benefit</code> the cosine below changes them. Time-based mode traces sun positions and <code>tilted_plane</code>
 its planes, so neither reads this setting.</p>
+<p>In <code>irradiance</code> and <code>benefit</code> a ray's weight is also multiplied by cos θ to its surface's normal (see <a href="#for-weighted-modes-irradiance-benefit-daylight-radiative_cooling">Thresholding strategies</a>); <code>daylight</code> and <code>radiative_cooling</code> keep the patch weight.</p>
 <h2 id="context-and-terrain">Context and terrain<a class="headerlink" href="#context-and-terrain" title="Permanent link">&para;</a></h2>
 <p>Two optional meshes describe what is around (or inside) the site and stays whatever is built: <code>context_path</code> for
 existing buildings and large trees, <code>terrain_path</code> for the ground. Both are opaque. Balconies, external shading
@@ -1829,7 +1831,7 @@ the columns context took.</p>
 </tr>
 </tbody>
 </table>
-<p>The patch weights of <code>irradiance</code> and <code>benefit</code> are kWh/m² per patch (Ladybug's sky matrix), counted on a surface facing the patch: there is no reduction for the angle at which a ray meets its surface, so the kWh are those a surface turned towards each sky patch would receive. The <code>daylight</code> and <code>radiative_cooling</code> weights are each patch's share of its sky and sum to 1, so 1 m² is the whole sky of 1 m² of open horizontal surface (a vertical facade sees half of it at most). Summed over a set of voxels a score counts what they block more than once when a ray crosses several of them; it compares voxels, it is not an energy balance. Scores written before this unit was introduced (preprocessing manifests without <code>score_unit</code>) were sums of patch weights without the area, and changed four times when the sample spacing halved.</p>
+<p>The patch weights of <code>irradiance</code> and <code>benefit</code> are kWh/m² per patch (Ladybug's sky matrix), counted on a surface facing the patch. The patches lie in the model's frame; with <code>north_deg</code> the sky is turned before Radiance's gendaymtx bins the sun into them, so each patch carries the radiation of the sky in its direction. Each ray counts its share of that weight times cos θ, the cosine of the angle between the ray and its surface's normal (per ray, so per sub-ray with <code>rays_per_patch</code> above 1), so the kWh are those the protected surface receives: a patch low in front of a facade counts fully, one grazing it nearly nothing, and a facade counts the sun that reaches it, as Simulate's solar energy does. Over a year in Golden an open horizontal point then receives 1,597 kWh/m² against the weather file's global horizontal 1,620, an open south facade 1,170 and a north one 263. The <code>daylight</code> and <code>radiative_cooling</code> weights are each patch's share of its sky and sum to 1, so 1 m² is the whole sky of 1 m² of open horizontal surface (a vertical facade sees half of it at most). Summed over a set of voxels a score counts what they block more than once when a ray crosses several of them; it compares voxels, it is not an energy balance. Scores written before this unit was introduced (preprocessing manifests without <code>score_unit</code>) were sums of patch weights without the area, and changed four times when the sample spacing halved.</p>
 <table>
 <thead>
 <tr>

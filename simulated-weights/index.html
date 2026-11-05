@@ -664,6 +664,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="The engine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#free-running" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Free running
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -674,6 +691,89 @@
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-model-in-detail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The model in detail
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The model in detail">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#conductances-wk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Conductances (W/K)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gains-and-the-hourly-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gains and the hourly step
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#archetype-details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Archetype details
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#attribution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attribution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-weights-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The weights file
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-benefit-mode-uses-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How benefit mode uses it
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1402,6 +1502,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="The engine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#free-running" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Free running
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1412,6 +1529,89 @@
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-model-in-detail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The model in detail
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The model in detail">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#conductances-wk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Conductances (W/K)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gains-and-the-hourly-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gains and the hourly step
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#archetype-details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Archetype details
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#attribution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attribution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-weights-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The weights file
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-benefit-mode-uses-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How benefit mode uses it
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1568,7 +1768,34 @@
 </tr>
 </tbody>
 </table>
-<p>Attributing against the annual totals captures <strong>thermal lag</strong>: a noon gain stored in the mass and released into the cold evening still earns heating credit. All 17,521 year-simulations (the base run plus two per hour) run as one vectorized NumPy batch, in seconds.</p>
+<p>Attributing against the annual totals captures <strong>thermal lag</strong>: a noon gain stored in the mass and released into the cold evening still earns heating credit. All 17,521 year-simulations (the base run plus two per hour) run as one vectorized NumPy batch, in seconds. A run perturbed at hour t has the base run's inputs until then, so it is computed only from hour t on, starting from the base run's state (about half the work, the same numbers); the base run is the batch's first row, which also gives the outcome the artifact records.</p>
+<h3 id="free-running">Free running<a class="headerlink" href="#free-running" title="Permanent link">&para;</a></h3>
+<p>The zone can also run <strong>free</strong> (archetype key <code>operation: free_running</code>; the browser app always uses it): no heating or cooling system, only passive performance. The two set points become the limits of a <strong>comfort band</strong> (<code>t_set_heating</code> to <code>t_set_cooling</code>), and the windows open for natural ventilation:</p>
+<ul>
+<li>In each hour the air temperature is evaluated with the windows closed and with them fully open (<code>vent_ach</code> extra air changes per hour, default 4). When the closed air would be above <code>vent_above</code> (default 25 °C) and opening cools it, the windows open as far as needed to bring the air to <code>vent_above</code>, at most fully; the hour's air and mass temperatures are interpolated between the two evaluations by that share. They stay shut when outdoors is warmer.</li>
+<li>The year starts from a <strong>periodic steady state</strong>: the mass temperature at the end of a first year run from 20 °C, since a free-running zone's mass keeps the winter's state for weeks.</li>
+<li>The outcome is in <strong>degree-hours</strong>: in each hour, how many degrees the air is below the band (underheating) or above it (overheating), added over the year (K·h).</li>
+</ul>
+<p>The attribution perturbs each hour's solar gain by ±10 W (a larger step than the conditioned ±1 W, because degree-hours change in steps where the air crosses a limit of the band) and gives:</p>
+<table>
+<thead>
+<tr>
+<th>Series</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>benefit[t]</code></td>
+<td>degree-hours below the band that one more watt-hour of sun at hour <em>t</em> removes over the year, × the zone's heat loss coefficient H</td>
+</tr>
+<tr>
+<td><code>harm[t]</code></td>
+<td>degree-hours above the band that it adds, × H</td>
+</tr>
+</tbody>
+</table>
+<p>The factor H (W/K: windows, opaque fabric and the mean ventilation, windows closed, <code>simulated_weights.loss_coefficient</code>) makes the series a share of the watt-hour in [0, 1], as the conditioned ones are. In steady state a watt-hour that all goes into warming a room below the band removes 1/H degree-hours, which counts 1; one that arrives while the room is already in the band counts 0, until the mass carries it into a colder hour. Benefit minus harm is a comfort balance in one unit. The functions are <code>simulate_free_running</code> and <code>attribute_free_running</code>.</p>
 <h2 id="origin-and-validation">Origin and validation<a class="headerlink" href="#origin-and-validation" title="Permanent link">&para;</a></h2>
 <p>The engine is an <strong>independent implementation</strong>, written directly from the ISO 13790 Annex C equation set in NumPy (<code>urbansolarcarver/simulated_weights.py</code>). It is <strong>not</strong> a fork, port, or adaptation of an existing simulator.</p>
 <p>It is <strong>cross-validated against <a href="https://github.com/architecture-building-systems/RC_BuildingSimulator">RC_BuildingSimulator</a></strong>, the ETH Zurich Architecture &amp; Building Systems group's MIT-licensed implementation of the same annex (Jayathissa et al., "Optimising building net energy demand with dynamic BIPV shading", <em>Applied Energy</em> 202, 2017). The validation setup:</p>
@@ -1580,7 +1807,147 @@
 <li><strong>Artifacts</strong>: the oracle's driving arrays and reference outputs are committed verbatim in <code>tests/data/oracle_5r1c_reference.json</code>; the regression runs in the test suite on every change (<code>tests/test_simulated_weights.py</code>), deterministically, with no weather generation at test time.</li>
 </ul>
 <p>Beyond the oracle comparison, the engine is checked for <strong>steady-state energy-balance closure</strong> against an independent hand-derived network reduction (constant outdoor temperature, no gains: demand converges to conductance × ΔT with the air node held at setpoint), and for the physical property that heavier mass classes flatten hour-to-hour mass-temperature variation.</p>
-<p>Full derivation notes and the coefficient provenance live in the repository at <code>design/simulated-weights.md</code>.</p>
+<p>The attribution is checked on the same scenarios: winter hours have a high benefit and no harm, summer afternoons a high harm and a benefit near 0, a winter noon keeps a high benefit (the lag credit), and a heavier mass class gives flatter weights over the day. The hook into benefit mode is checked in <code>tests/test_modes.py</code> and <code>tests/test_pipeline.py</code>: a schedule of all ones gives the plain irradiance weights, a schedule of the balance-point rule's ones and zeros gives the simple weights exactly, and <code>include_harm</code> gives clip(benefit − harm, 0). The script that captured the oracle data is <code>tests/data/capture_oracle_5r1c.py</code> (its paths to the oracle are machine-specific).</p>
+<p>On the demo site (a CUDA workstation, RTX 3060), the simulated weights move about 9 % of the sky's weight relative to the simple rule: less to the east-morning sky, more to the south-west afternoon, the sign of thermal lag. With <code>include_harm</code> the shift reaches 20 to 30 % and gathers in the low southern sky. Tutorial 5 (<code>examples/5_benefit_5r1c.ipynb</code>) reproduces the comparison.</p>
+<h2 id="the-model-in-detail">The model in detail<a class="headerlink" href="#the-model-in-detail" title="Permanent link">&para;</a></h2>
+<h3 id="conductances-wk">Conductances (W/K)<a class="headerlink" href="#conductances-wk" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Conductance</th>
+<th>Value</th>
+<th>Joins</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>H_ve</code>, ventilation</td>
+<td><code>1200 · b_ek · V · ACH_tot / 3600</code>, with <code>b_ek = 1 − (ACH_vent / ACH_tot) · η_hr</code> (heat recovery, ISO 13790 Annex E)</td>
+<td>supply air (= outdoor air, no preheating) and indoor air</td>
+</tr>
+<tr>
+<td><code>H_tr,is</code></td>
+<td><code>h_is · A_tot</code>, <code>h_is = 3.45 W/m²K</code>, <code>A_tot = Λ_at · A_f</code>, <code>Λ_at = 4.5</code></td>
+<td>indoor air and surface</td>
+</tr>
+<tr>
+<td><code>H_tr,w</code></td>
+<td><code>Σ U_w · A_w</code> (glazing, no mass)</td>
+<td>outdoor air and surface</td>
+</tr>
+<tr>
+<td><code>H_tr,ms</code></td>
+<td><code>h_ms · A_m</code>, <code>h_ms = 9.1 W/m²K</code></td>
+<td>surface and mass</td>
+</tr>
+<tr>
+<td><code>H_tr,em</code></td>
+<td><code>1 / (1/H_tr,op − 1/H_tr,ms)</code> (the opaque envelope less its surface part, §12.2.2)</td>
+<td>outdoor air and mass</td>
+</tr>
+</tbody>
+</table>
+<p><code>A_f</code> is the floor area and <code>V</code> the volume. RC_BuildingSimulator takes <code>H_tr,em = U_op · A_op</code> directly; the validation feeds both engines the same values, so the recurrence is compared, not this convention.</p>
+<p>The mass classes of ISO 13790 Table 12, per m² of floor:</p>
+<table>
+<thead>
+<tr>
+<th>Class</th>
+<th>A_m</th>
+<th>C_m (J/K)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>very light</td>
+<td>2.5 · A_f</td>
+<td>80,000 · A_f</td>
+</tr>
+<tr>
+<td>light</td>
+<td>2.5 · A_f</td>
+<td>110,000 · A_f</td>
+</tr>
+<tr>
+<td>medium</td>
+<td>2.5 · A_f</td>
+<td>165,000 · A_f</td>
+</tr>
+<tr>
+<td>heavy</td>
+<td>3.0 · A_f</td>
+<td>260,000 · A_f</td>
+</tr>
+<tr>
+<td>very heavy</td>
+<td>3.5 · A_f</td>
+<td>370,000 · A_f</td>
+</tr>
+</tbody>
+</table>
+<p>With <code>mass_capacity_kj_m2k</code> instead of a class, <code>C_m = capacity · 1000 · A_f</code>, and <code>A_m</code> is that of the class nearest in capacity (the lighter one on a tie).</p>
+<h3 id="gains-and-the-hourly-step">Gains and the hourly step<a class="headerlink" href="#gains-and-the-hourly-step" title="Permanent link">&para;</a></h3>
+<p>The internal gains <code>Φ_int</code> and the transmitted solar gains <code>Φ_sol</code> are split between the nodes (C.1 to C.3):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Φ_ia = 0.5 · Φ_int                                          to the air
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>Φ_m  = (A_m / A_tot) · (0.5 · Φ_int + Φ_sol)                to the mass
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>Φ_st = (1 − A_m / A_tot − H_tr,w / (9.1 · A_tot))
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>       · (0.5 · Φ_int + Φ_sol)                              to the surface
+</code></pre></div>
+<p>The heating or cooling power <code>Φ_HC</code> enters the air node. With the auxiliary conductances (C.6 to C.8)</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>H_tr,1 = 1 / (1/H_ve + 1/H_tr,is)
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>H_tr,2 = H_tr,1 + H_tr,w
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>H_tr,3 = 1 / (1/H_tr,2 + 1/H_tr,ms)
+</code></pre></div>
+<p>the mass node steps by Crank-Nicolson over one hour (C.4, C.5):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>Φ_m,tot = Φ_m + H_tr,em · θ_e
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>        + H_tr,3 · (Φ_st + H_tr,w · θ_e + H_tr,1 · ((Φ_ia + Φ_HC) / H_ve + θ_sup)) / H_tr,2
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>θ_m,t = [θ_m,t−1 · (C_m/3600 − 0.5 · (H_tr,3 + H_tr,em)) + Φ_m,tot]
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>      / [C_m/3600 + 0.5 · (H_tr,3 + H_tr,em)]
+</code></pre></div>
+<p>The hour's mass temperature is the mean <code>θ_m = (θ_m,t + θ_m,t−1) / 2</code> (C.9), and the surface and air follow (C.10, C.11):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>θ_s   = [H_tr,ms · θ_m + Φ_st + H_tr,w · θ_e + H_tr,1 · (θ_sup + (Φ_ia + Φ_HC) / H_ve)]
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>      / [H_tr,ms + H_tr,w + H_tr,1]
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>θ_air = [H_tr,is · θ_s + H_ve · θ_sup + Φ_ia + Φ_HC] / [H_tr,is + H_ve]
+</code></pre></div>
+<p>A conditioned zone's demand in each hour takes three steps (C.4.2):</p>
+<ol>
+<li>The zone runs without heating or cooling (<code>Φ_HC = 0</code>). If the air stays between the set points, there is no demand.</li>
+<li>Otherwise a test load <code>Φ_HC,10 = 10 W/m² · A_f</code> is applied, and the demand is interpolated to the set point that was crossed: <code>Φ_HC,nd = Φ_HC,10 · (θ_set − θ_air,0) / (θ_air,10 − θ_air,0)</code>.</li>
+<li>The system's capacity is unlimited.</li>
+</ol>
+<p>The heating demand adds the positive <code>Φ_HC,nd</code> over the year, the cooling demand the negative ones.</p>
+<p>With an hourly <code>ach_vent</code>, <code>H_ve</code> changes each hour, and the time loop takes each hour's <code>H_ve</code> with the constants that depend on it. Heat recovery applies to that hour's ventilation, and infiltration stays one value. 8,760 equal values give the result of one value exactly.</p>
+<h3 id="archetype-details">Archetype details<a class="headerlink" href="#archetype-details" title="Permanent link">&para;</a></h3>
+<p>In the shoebox form, <code>expand_shoebox()</code> derives the floor area, the volume, the window area per facade and the opaque area: the walls less their windows, plus the roof and floor when exposed. A part that is not exposed is adiabatic. With <code>u_wall</code>, <code>u_roof</code> and <code>u_floor</code>, <code>H_tr,op = u_wall · opaque walls + u_roof · roof + u_floor · floor</code>, each U needed only when its part is exposed. Giving both <code>u_opaque</code> and <code>u_wall</code> is an error, and so is giving both <code>mass_class</code> and <code>mass_capacity_kj_m2k</code>.</p>
+<p>The shading factors multiply each window's <code>Φ_sol</code>. <code>shading_hot</code> applies during <code>hot_months</code> or during <code>shading_hot_period: [first_day, last_day]</code> (days 1 to 365, both included, wrapping the new year when the first is later), one or the other. The attribution is scaled by each hour's effective transmission, <code>f_eff(t) = Φ_sol,shaded / Φ_sol,unshaded</code>, so the weights stay a share of a watt-hour of <em>exterior</em> sun. The transmitted solar comes from the weather file through Ladybug's directional irradiance on each window, <code>Φ_sol(t) = Σ A_w · g · I(t)</code>; only the hourly weights leave the generator, and USC's sky patches never see these areas.</p>
+<h3 id="attribution">Attribution<a class="headerlink" href="#attribution" title="Permanent link">&para;</a></h3>
+<p>All 1 + 2 × 8,760 = 17,521 runs (the base year and a +ε and a −ε run for each hour) march together as one NumPy batch. Each run carries one state, its mass temperature, and the heating and cooling branches are masks. The values are marginal, at the archetype's operating point. Near a switch between heating, free floating and cooling the derivative is a one-sided one, which the central differences smooth. The series are clipped to [0, 1], with a warning when a value lies more than 0.02 outside.</p>
+<h3 id="the-weights-file">The weights file<a class="headerlink" href="#the-weights-file" title="Permanent link">&para;</a></h3>
+<p><code>usc simulate-weights</code> (<code>generate_simulated_weights</code>) writes <code>simulated_weights.json</code>, with a <code>.png</code> beside it that shows benefit and harm as day × hour charts:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="p">{</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">&quot;schema_version&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="nt">&quot;meta&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="nt">&quot;method&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;iso13790-5r1c-perturbation&quot;</span><span class="p">,</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">    </span><span class="nt">&quot;operation&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;conditioned&quot;</span><span class="p">,</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">    </span><span class="nt">&quot;epw&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;the weather file as given&gt;&quot;</span><span class="p">,</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">    </span><span class="nt">&quot;archetype&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="s2">&quot;...the archetype, expanded...&quot;</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">    </span><span class="nt">&quot;eps_w&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">1.0</span><span class="p">,</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">    </span><span class="nt">&quot;heating_kwh_m2&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.0</span><span class="p">,</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">    </span><span class="nt">&quot;cooling_kwh_m2&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.0</span><span class="p">,</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">    </span><span class="nt">&quot;sun_up&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">8760</span><span class="w"> </span><span class="err">values</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="err">or</span><span class="w"> </span><span class="mi">1</span><span class="p">],</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="w">    </span><span class="nt">&quot;generated&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;ISO timestamp&gt;&quot;</span><span class="p">,</span>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="w">    </span><span class="nt">&quot;generator&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;usc simulate-weights (iso13790-5r1c)&quot;</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="w">  </span><span class="p">},</span>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="w">  </span><span class="nt">&quot;hourly&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="w">    </span><span class="nt">&quot;benefit&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">8760</span><span class="w"> </span><span class="err">values</span><span class="w"> </span><span class="err">i</span><span class="kc">n</span><span class="w"> </span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">]],</span>
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="w">    </span><span class="nt">&quot;harm&quot;</span><span class="p">:</span><span class="w">    </span><span class="p">[</span><span class="mi">8760</span><span class="w"> </span><span class="err">values</span><span class="w"> </span><span class="err">i</span><span class="kc">n</span><span class="w"> </span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">]]</span>
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="p">}</span>
+</code></pre></div>
+<p>The 8,760 values are the hours of a non-leap year, index = hour of the year. A free-running zone has <code>method</code> <code>iso13790-5r1c-free-running-perturbation</code>, <code>eps_w</code> 10, and in place of the two demands <code>underheating_kh</code>, <code>overheating_kh</code>, <code>hours_below</code>, <code>hours_above</code>, <code>comfort_band_c</code> and <code>loss_coefficient_w_k</code>. <code>sun_up</code> marks the hours with the sun above the horizon at the weather file's site, at the middle of each hour (<code>sun_up_hours()</code>), so a reader can tell a night hour from a day hour whose weight is 0. Files of schema version 1, and version 2 files that still hold the rooms per facade direction of 30 October 2026, are read for their <code>hourly.benefit</code> and <code>harm</code>.</p>
+<h3 id="how-benefit-mode-uses-it">How benefit mode uses it<a class="headerlink" href="#how-benefit-mode-uses-it" title="Permanent link">&para;</a></h3>
+<p>With <code>simulated_weights_path</code> set, each hour's direct and diffuse radiation in the weather data is scaled by <code>benefit[t]</code> before the cumulative sky matrix is built. The sky integration then spreads each hour's weight over the patches that hour's sun and sky occupied; the cold-hours rule is the special case of weights 0 and 1. <code>include_harm: true</code> subtracts the matrix scaled by <code>harm[t]</code>, clipped at 0. <code>balance_temperature</code> and <code>balance_offset</code> are not used, with a warning if they were changed. The file is read again on every preprocessing run, and its <code>meta</code> goes into the preprocessing diagnostics. With <code>diagnostic_plots: true</code>, the diagnostics also hold the comparison dome: the difference between these weights and the simple rule's for the same config (<code>sky_patch_comparison_image</code>, with the shift in <code>diagnostic.json</code>).</p>
 <h2 id="what-you-supply-the-archetype">What you supply: the archetype<a class="headerlink" href="#what-you-supply-the-archetype" title="Permanent link">&para;</a></h2>
 <p>The archetype describes a <em>typical</em> building in about ten numbers. Two equivalent forms are accepted (<code>configs/archetype_example.yaml</code> shows both):</p>
 <p><strong>Shoebox form</strong> (areas derived for you):</p>
@@ -1610,9 +1977,10 @@
 </tr>
 </tbody>
 </table>
-<p><strong>Explicit form</strong>: <code>floor_area</code>, <code>volume</code>, <code>area_opaque</code>, <code>area_window</code>, and a <code>windows</code> list of <code>[azimuth_deg, area_m2, g_value]</code>.</p>
+<p><strong>Explicit form</strong>: <code>floor_area</code>, <code>volume</code>, <code>area_opaque</code>, <code>area_window</code>, and a <code>windows</code> list of <code>[azimuth_deg, area_m2, g_value]</code>, or <code>[azimuth_deg, area_m2, g_value, altitude_deg]</code> for a window that is not vertical (the altitude of its normal: 90 for a horizontal skylight).</p>
 <p><strong>Both forms</strong> additionally take: <code>u_opaque</code>, <code>u_window</code> (W/m²K), <code>ach_vent</code>, <code>ach_infiltration</code> (1/h), <code>heat_recovery</code> (0-1), <code>mass_class</code> (<code>very_light</code> … <code>very_heavy</code>, ISO 13790 Table 12), <code>t_set_heating</code>, <code>t_set_cooling</code> (°C), and internal gains as either a flat <code>internal_gains_w_m2</code> (W/m², default 5) or a 24-value daily profile <code>internal_gains_profile_w_m2</code>.</p>
-<p>The shoebox form may instead give <code>u_wall</code> with <code>u_roof</code> and <code>u_floor</code> (W/m²K) and the switches <code>roof_exposed</code> (default true) and <code>floor_exposed</code> (default false): the walls, and the roof and floor when exposed, each at its own U; <code>u_opaque</code> keeps its meaning (walls and roof at one U). The thermal mass may be <code>mass_capacity_kj_m2k</code> (kJ/m²K of floor) instead of <code>mass_class</code>; <code>internal_gains_w_m2</code> and <code>ach_vent</code> also take 8,760 hourly values (a schedule), and the summer shading may run over <code>shading_hot_period: [first_day, last_day]</code> (days of the year, wrapping the new year when the first is later) instead of <code>hot_months</code>. The repository's <code>design/simulated-weights.md</code> §3 gives the details.</p>
+<p>The shoebox form may instead give <code>u_wall</code> with <code>u_roof</code> and <code>u_floor</code> (W/m²K) and the switches <code>roof_exposed</code> (default true) and <code>floor_exposed</code> (default false): the walls, and the roof and floor when exposed, each at its own U; <code>u_opaque</code> keeps its meaning (walls and roof at one U). The thermal mass may be <code>mass_capacity_kj_m2k</code> (kJ/m²K of floor) instead of <code>mass_class</code>; <code>internal_gains_w_m2</code> and <code>ach_vent</code> also take 8,760 hourly values (a schedule), and the summer shading may run over <code>shading_hot_period: [first_day, last_day]</code> (days of the year, wrapping the new year when the first is later) instead of <code>hot_months</code>. <a href="#archetype-details">Archetype details</a> gives the rules.</p>
+<p><strong>How the zone runs</strong> (optional): <code>operation</code> is <code>conditioned</code> (the default: ideal heating and cooling to the set points) or <code>free_running</code> (<a href="#free-running">Free running</a>: the set points are the comfort band), and a free-running zone takes <code>vent_above</code> (°C, default 25) and <code>vent_ach</code> (1/h, default 4) for its windows. These two keys belong to a free-running zone only; with a conditioned one they are refused.</p>
 <p><strong>Shading coefficients</strong> (optional, declared multipliers; no device geometry is modelled):</p>
 <table>
 <thead>
@@ -1639,12 +2007,12 @@
 <p>Each coefficient accepts a scalar (all facades) or a per-facade mapping (<code>{south: 0.8, west: 0.9}</code>); windows are assigned to their nearest cardinal facade. The perturbation attribution is attenuated by the same factors, so the weights describe a marginal joule of <em>exterior</em> solar: a July joule arriving while the awning is out counts for little. The declared coefficients are recorded in the artifact's provenance. Note that a fixed overhang's blocking is concentrated in high-sun hours, so its effect is usually best expressed through <code>shading_hot</code> rather than <code>shading_permanent</code>.</p>
 <p>The shipped example values are deliberately <strong>neutral, with no national defaults</strong>. For real projects, source values from <a href="https://episcope.eu/building-typology/">TABULA</a> (EU building-stock typologies), DOE prototype buildings (US), or your national code tables.</p>
 <p>The <code>usc archetype</code> command builds and validates the file for you, printing the derived floor area, volume, and per-facade window areas so mistakes surface before any simulation runs:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>usc<span class="w"> </span>archetype<span class="w"> </span>-o<span class="w"> </span>my_building.yaml<span class="w"> </span>-s<span class="w"> </span><span class="nv">width</span><span class="o">=</span><span class="m">12</span><span class="w"> </span>-s<span class="w"> </span><span class="nv">wwr_south</span><span class="o">=</span><span class="m">0</span>.4<span class="w"> </span>-s<span class="w"> </span><span class="nv">mass_class</span><span class="o">=</span>heavy
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>usc<span class="w"> </span>archetype<span class="w"> </span>--from<span class="w"> </span>my_building.yaml<span class="w"> </span>-o<span class="w"> </span>variant.yaml<span class="w"> </span>-s<span class="w"> </span><span class="nv">mass_class</span><span class="o">=</span>light<span class="w">   </span><span class="c1"># derive a variant</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>usc<span class="w"> </span>archetype<span class="w"> </span>-o<span class="w"> </span>my_building.yaml<span class="w"> </span>-s<span class="w"> </span><span class="nv">width</span><span class="o">=</span><span class="m">12</span><span class="w"> </span>-s<span class="w"> </span><span class="nv">wwr_south</span><span class="o">=</span><span class="m">0</span>.4<span class="w"> </span>-s<span class="w"> </span><span class="nv">mass_class</span><span class="o">=</span>heavy
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>usc<span class="w"> </span>archetype<span class="w"> </span>--from<span class="w"> </span>my_building.yaml<span class="w"> </span>-o<span class="w"> </span>variant.yaml<span class="w"> </span>-s<span class="w"> </span><span class="nv">mass_class</span><span class="o">=</span>light<span class="w">   </span><span class="c1"># derive a variant</span>
 </code></pre></div>
-<p>In Grasshopper, <strong>USC_Archetype</strong> assembles the archetype from five family feeder components (USC_ZoneGeometry / Fabric / Ventilation / Operation / Shading, one wire each), feeding <strong>USC_SimulateWeights</strong>, whose output path wires into <strong>USC_BenefitParams</strong>.</p>
+<p>In Grasshopper, <strong>USC_Archetype</strong> assembles the archetype from five family feeder components (USC_ZoneGeometry / Fabric / Ventilation / Operation / Shading, one wire each), feeding <strong>USC_SimulateWeights</strong>, whose output path wires into <strong>USC_BenefitParams</strong>. Its room runs free unless USC_ZoneOperation's <code>free_running</code> is False, which also takes <code>vent_above</code> and <code>vent_ach</code>; <code>usc archetype</code> and an archetype file without <code>operation</code> give a conditioned zone.</p>
 <h2 id="in-the-app">In the app<a class="headerlink" href="#in-the-app" title="Permanent link">&para;</a></h2>
-<p>In the browser app a Solar usefulness criterion offers the weights as <strong>Which hours count</strong>: <strong>Energy-weighted</strong> (the other choice, <strong>Cold hours</strong>, is the balance temperature rule). The app describes the model as a simple hourly model of one room, names no standard in its labels and help, and does not use the name 5R1C, which stays the engine's. A project has one <strong>typical building</strong>, the archetype of every energy-weighted criterion, chosen from a library and edited in a window that opens over the app (<a href="../ui/#the-typical-building">Browser UI: the typical building</a>).</p>
+<p>In the browser app a Solar usefulness criterion offers the weights as <strong>Which hours count</strong>: <strong>Energy-weighted</strong> (the other choice, <strong>Cold hours</strong>, is the balance temperature rule). The app describes the model as a simple hourly model of one room, names no standard in its labels and help, and does not use the name 5R1C, which stays the engine's. A project has one <strong>typical building</strong>, the archetype of every energy-weighted criterion, chosen from a library and edited in a window that opens over the app (<a href="../ui/#the-typical-building">Browser UI: the typical building</a>). Its room runs <strong>free</strong> (<a href="#free-running">Free running</a>): the weights measure passive performance, the sun that keeps the room in its comfort band, not the energy a heating or cooling system would save.</p>
 <p>ISO 13790:2008 has been withdrawn and replaced by EN ISO 52016-1:2017, whose hourly method gives each building element several nodes instead of one lumped mass. The engine keeps the 13790 method, the one validated against RC_BuildingSimulator.</p>
 <h3 id="the-values-of-the-sheet">The values of the sheet<a class="headerlink" href="#the-values-of-the-sheet" title="Permanent link">&para;</a></h3>
 <p>The sheet's values (<code>local_web_service/typical_building.py</code>, <code>archetype_of</code>) become a shoebox archetype:</p>
@@ -1661,8 +2029,8 @@
 <td>the hours in which the internal gains and the fresh air apply, as 8,760-value <code>internal_gains_w_m2</code> and <code>ach_vent</code> (0 outside them); Always gives one value each. The weekday of 1 January is the weather file's (its DATA PERIODS line; Monday when it gives none)</td>
 </tr>
 <tr>
-<td>Set points, heat recovery</td>
-<td><code>t_set_heating</code>, <code>t_set_cooling</code>, <code>heat_recovery</code></td>
+<td>Comfort band, from and to; heat recovery</td>
+<td><code>t_set_heating</code>, <code>t_set_cooling</code> (the band's limits), <code>heat_recovery</code>; <code>operation: free_running</code></td>
 </tr>
 <tr>
 <td>Internal gains while in use, W/m²</td>
@@ -1675,6 +2043,10 @@
 <tr>
 <td>Infiltration, air changes per hour</td>
 <td><code>ach_infiltration</code>, in every hour</td>
+</tr>
+<tr>
+<td>Open the windows above, °C; open windows let in at most, air changes per hour</td>
+<td><code>vent_above</code>, <code>vent_ach</code></td>
 </tr>
 <tr>
 <td>U of the walls, of the windows; whole-window g</td>
@@ -1698,10 +2070,10 @@
 </tr>
 </tbody>
 </table>
-<p>The three cases of use are examples of hours, not an editor: gains and fresh air are on in the hours of the case and off outside them, with no holidays. The project's values (project.json, the library's YAML files) use the keys of <code>typical_building.VALUE_KEYS</code>: <code>schedule</code> (<code>residential</code>, <code>office</code>, <code>always</code>), <code>t_set_heating</code>, <code>t_set_cooling</code>, <code>gains_w_m2</code>, <code>fresh_air_m3h_m2</code>, <code>heat_recovery</code>, <code>u_wall</code>, <code>u_window</code>, <code>g_value</code>, <code>mass_capacity_kj_m2k</code>, <code>shading_factor</code> (null for none), <code>shading_start</code>, <code>shading_end</code> ("MM-DD"), <code>room</code> (<code>average</code> with <code>depth</code>, or <code>box</code> with <code>width</code>, <code>length</code>, <code>orientation</code>), <code>height</code>, <code>wwr</code>, <code>roof_exposed</code>, <code>u_roof</code>, <code>floor_exposed</code>, <code>u_floor</code>, <code>ach_infiltration</code>.</p>
+<p>The three cases of use are examples of hours, not an editor: gains and fresh air are on in the hours of the case and off outside them, with no holidays. The project's values (project.json, the library's YAML files) use the keys of <code>typical_building.VALUE_KEYS</code>: <code>schedule</code> (<code>residential</code>, <code>office</code>, <code>always</code>), <code>t_set_heating</code>, <code>t_set_cooling</code>, <code>gains_w_m2</code>, <code>fresh_air_m3h_m2</code>, <code>heat_recovery</code>, <code>u_wall</code>, <code>u_window</code>, <code>g_value</code>, <code>mass_capacity_kj_m2k</code>, <code>shading_factor</code> (null for none), <code>shading_start</code>, <code>shading_end</code> ("MM-DD"), <code>room</code> (<code>average</code> with <code>depth</code>, or <code>box</code> with <code>width</code>, <code>length</code>, <code>orientation</code>), <code>height</code>, <code>wwr</code>, <code>roof_exposed</code>, <code>u_roof</code>, <code>floor_exposed</code>, <code>u_floor</code>, <code>ach_infiltration</code>, <code>vent_above</code>, <code>vent_ach</code> (a building stored before they existed reads as 25 °C and 4 per hour).</p>
 <p><strong>The default room.</strong> The weights do not depend on the size of the room, only on its ratios: facade and window per m² of floor, volume per m² of floor. The default room ("average") is a square plan turned 45° with all four walls exposed and the same window share on each, so its windows face NE, SE, SW and NW and no direction is favoured. Its side is four times the room depth, which gives it the facade per m² of floor of a room that deep with one facade: 6 m deep is a 24 × 24 m square. An average room of depth d is the box of width and length 4d at orientation 45° whose north, east, south and west shares are the NE, SE, SW and NW ones. The explicit box (width, length, orientation, a share per wall) is the other kind of room.</p>
 <p><strong>Roof and floor are adiabatic by default</strong>: the room stands for a storey between others, and no heat passes through its ceiling and floor. A top storey or a floor over pilotis is turned on under Advanced, Roof and floor, with its own U.</p>
-<p>The weights describe one room with the mean exposure of the building's facades. They are the same for every facade of the carved volume within an hour (the time of day carries the direction of the sun): a south facade and a north facade of the same building get the same weight in the same hour. Weights per facade direction (one room per orientation) are not in the app.</p>
+<p>The weights describe one room with the mean exposure of the building's facades: they are the same for every facade of the carved volume within an hour (the time of day carries the direction of the sun), so a Wh of sun is worth the same on a south facade and on a north one in the same hour. A facade's direction enters through how much sun it receives from each sky patch: in benefit mode a ray counts its patch weight times the cosine of its angle to the surface (<a href="../modes/#for-weighted-modes-irradiance-benefit-daylight-radiative_cooling">Carving Modes</a>), so a north facade, which receives little, constrains a massing little. What lies behind a test surface is not known, so no room per facade is assumed.</p>
 <h3 id="the-library">The library<a class="headerlink" href="#the-library" title="Permanent link">&para;</a></h3>
 <p>The library is apart from projects: the built-in examples, read-only, and the user's own entries, one YAML file each in <code>~/.urbansolarcarver/typical_buildings/</code> (beside the user preferences file), so an own entry serves every projects folder. A project keeps its own copy of the values and the name of the entry it came from; changing or deleting the entry does not change the project, and the sheet says "Changed from" the entry once the copy differs.</p>
 <p>A new project has <strong>no typical building</strong> until one is chosen from the library: the box in the criterion's Settings says "None chosen", and a run with an energy-weighted criterion that is on is refused as a missing input (<code>missing_inputs</code> names <code>typical_building</code>) until one is chosen. A building stored with the keys of an earlier form of the values (before 2026-10-29) reads as none chosen, and an own entry with such keys is left out of the library.</p>
@@ -1771,9 +2143,9 @@
 <td>table 2.1 (hours a day and days a week; which hours is the app's choice)</td>
 </tr>
 <tr>
-<td>Set points</td>
-<td>20 / 26 °C</td>
-<td>20 / 26 °C</td>
+<td>Comfort band (the set points)</td>
+<td>20 to 26 °C</td>
+<td>20 to 26 °C</td>
 <td>table 2.2</td>
 </tr>
 <tr>
@@ -1820,77 +2192,77 @@
 </tr>
 </tbody>
 </table>
-<p>The same for all eight: whole-window g 0.55 (glass 0.76 at normal incidence, × 0.9 for the mean over the angles, × 0.8 for a 20 % frame, §4.2.7); infiltration 5.5 m³/h per m² of window (§4.4.1), which in the examples' room is 115.2 m² of window × 5.5 / 1,728 m³ = 0.37 air changes per hour (the value the examples carry, to 2 decimals; a room of another depth or window share has another value); summer shading 0.77, the mean of the reference building's factors for NE, SE, SW and NW windows (0.80, 0.73, 0.73, 0.80, §4.3.1), over the zone's cooling period and none outside it; the average room 6 m deep with a 3 m storey, 40 % window share on each side, roof and floor adiabatic (their U values are the zone's, so turning them on gives the KENAK values). The 250 kJ/m²K takes the effective mass area of the ISO 13790 class nearest in capacity (heavy, 260).</p>
-<p>The office lighting gain counts the reference building's full installed power, 16 W/m², in every hour of use. Daylight would lower it in a real office, so the office examples overstate the internal gains of sunny hours, and so the cooling and the harm.</p>
-<p>On the bundled Golden, CO weather file the examples give (heating and cooling of the base run, and the hours with the sun up whose benefit weight is above 0.01, of 4,438):</p>
+<p>The same for all eight: whole-window g 0.55 (glass 0.76 at normal incidence, × 0.9 for the mean over the angles, × 0.8 for a 20 % frame, §4.2.7); infiltration 5.5 m³/h per m² of window (§4.4.1), which in the examples' room is 115.2 m² of window × 5.5 / 1,728 m³ = 0.37 air changes per hour (the value the examples carry, to 2 decimals; a room of another depth or window share has another value); summer shading 0.77, the mean of the reference building's factors for NE, SE, SW and NW windows (0.80, 0.73, 0.73, 0.80, §4.3.1), over the zone's cooling period and none outside it; the average room 6 m deep with a 3 m storey, 40 % window share on each side, roof and floor adiabatic (their U values are the zone's, so turning them on gives the KENAK values). The 250 kJ/m²K takes the effective mass area of the ISO 13790 class nearest in capacity (heavy, 260). The window opening, above 25 °C and up to 4 air changes per hour, is the engine's default, not a KENAK value.</p>
+<p>The office lighting gain counts the reference building's full installed power, 16 W/m², in every hour of use. Daylight would lower it in a real office, so the office examples overstate the internal gains of sunny hours, and so the overheating and the harm.</p>
+<p>On the bundled Golden, CO weather file the examples give (the free-running room's degree-hours below and above the comfort band, and the hours with the sun up whose benefit weight is above 0.01, of 4,438):</p>
 <table>
 <thead>
 <tr>
 <th>Example</th>
-<th style="text-align: right;">Heating, kWh/m² a year</th>
-<th style="text-align: right;">Cooling, kWh/m² a year</th>
+<th style="text-align: right;">Below the band, K·h a year</th>
+<th style="text-align: right;">Above the band, K·h a year</th>
 <th style="text-align: right;">Hours that count</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Apartment, zone Α</td>
-<td style="text-align: right;">49.1</td>
-<td style="text-align: right;">22.6</td>
-<td style="text-align: right;">2,459</td>
+<td style="text-align: right;">34,632</td>
+<td style="text-align: right;">1,917</td>
+<td style="text-align: right;">2,461</td>
 </tr>
 <tr>
 <td>Apartment, zone Β</td>
-<td style="text-align: right;">44.0</td>
-<td style="text-align: right;">24.1</td>
-<td style="text-align: right;">2,395</td>
+<td style="text-align: right;">32,363</td>
+<td style="text-align: right;">1,965</td>
+<td style="text-align: right;">2,409</td>
 </tr>
 <tr>
 <td>Apartment, zone Γ</td>
-<td style="text-align: right;">40.0</td>
-<td style="text-align: right;">27.3</td>
-<td style="text-align: right;">2,258</td>
+<td style="text-align: right;">30,472</td>
+<td style="text-align: right;">2,130</td>
+<td style="text-align: right;">2,295</td>
 </tr>
 <tr>
 <td>Apartment, zone Δ</td>
-<td style="text-align: right;">36.0</td>
-<td style="text-align: right;">28.7</td>
-<td style="text-align: right;">2,236</td>
+<td style="text-align: right;">28,488</td>
+<td style="text-align: right;">2,173</td>
+<td style="text-align: right;">2,252</td>
 </tr>
 <tr>
 <td>Office, zone Α</td>
-<td style="text-align: right;">33.4</td>
-<td style="text-align: right;">40.1</td>
-<td style="text-align: right;">2,028</td>
+<td style="text-align: right;">22,856</td>
+<td style="text-align: right;">3,114</td>
+<td style="text-align: right;">2,068</td>
 </tr>
 <tr>
 <td>Office, zone Β</td>
-<td style="text-align: right;">28.9</td>
-<td style="text-align: right;">42.5</td>
-<td style="text-align: right;">1,954</td>
+<td style="text-align: right;">20,444</td>
+<td style="text-align: right;">3,187</td>
+<td style="text-align: right;">1,971</td>
 </tr>
 <tr>
 <td>Office, zone Γ</td>
-<td style="text-align: right;">25.5</td>
-<td style="text-align: right;">46.6</td>
-<td style="text-align: right;">1,899</td>
+<td style="text-align: right;">18,444</td>
+<td style="text-align: right;">3,377</td>
+<td style="text-align: right;">1,932</td>
 </tr>
 <tr>
 <td>Office, zone Δ</td>
-<td style="text-align: right;">22.2</td>
-<td style="text-align: right;">48.9</td>
-<td style="text-align: right;">1,791</td>
+<td style="text-align: right;">16,356</td>
+<td style="text-align: right;">3,441</td>
+<td style="text-align: right;">1,852</td>
 </tr>
 </tbody>
 </table>
 <h3 id="calculate">Calculate<a class="headerlink" href="#calculate" title="Permanent link">&para;</a></h3>
-<p><strong>Calculate</strong> in the window runs <code>generate_simulated_weights</code> with the project's weather file into <code>inputs/typical_building/weights.json</code> (with <code>weights.png</code>) and shows <strong>Effect of sunlight, by hour</strong>: a day-by-hour chart of benefit minus harm when the criterion has <code>include_harm</code> (red where the sun offsets heating, blue where it adds to cooling), of benefit alone otherwise, with the hours that have the sun down (<code>meta["sun_up"]</code>) in grey; then the base run's annual heating and cooling demand, which the generator records in the artifact's <code>meta</code> (<code>heating_kwh_m2</code>, <code>cooling_kwh_m2</code>), and the hours that count. The calculation is keyed by a hash of the values and of the weather file: a change of either marks the weights out of date, and Run analysis calculates them again before it analyses an energy-weighted criterion, so a run never uses old weights. The generated <code>config.yaml</code> of such a criterion has <code>simulated_weights_path</code> and no <code>balance_temperature</code> or <code>balance_offset</code>. The explicit-area form, per-facade shading factors and uploading a ready weights file stay in the CLI and Grasshopper.</p>
+<p><strong>Calculate</strong> in the window runs <code>generate_simulated_weights</code> with the project's weather file into <code>inputs/typical_building/weights.json</code> (with <code>weights.png</code>) and shows <strong>Effect of sunlight, by hour</strong>: a day-by-hour chart of benefit minus harm when the criterion has <code>include_harm</code> (red where the sun offsets heating, blue where it adds to cooling), of benefit alone otherwise, with the hours that have the sun down (<code>meta["sun_up"]</code>) in grey; then the free-running room's degree-hours below and above the comfort band and its hours outside it, which the generator records in the artifact's <code>meta</code> (<code>underheating_kh</code>, <code>overheating_kh</code>, <code>hours_below</code>, <code>hours_above</code>; a file calculated before 2026-10-31 holds the conditioned room's <code>heating_kwh_m2</code> and <code>cooling_kwh_m2</code> instead, and the window shows those), and the hours that count. Calculate takes about 5 s; a bar under the button shows how far it has come (<code>generate_simulated_weights</code> reports the share done through its <code>progress</code> argument, by the measured time of each step, about 20 times). The calculation is keyed by a hash of the values, of the method (<code>typical_building.WEIGHTS_METHOD</code>, so the conditioned weights of every building calculated before 2026-10-31 are out of date) and of the weather file: a change of any marks the weights out of date, and Run analysis calculates them again before it analyses an energy-weighted criterion, so a run never uses old weights. The generated <code>config.yaml</code> of such a criterion has <code>simulated_weights_path</code> and no <code>balance_temperature</code> or <code>balance_offset</code>. The explicit-area form, per-facade shading factors and uploading a ready weights file stay in the CLI and Grasshopper.</p>
 <h2 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h2>
 <p>The weights are a <em>marginal, single-zone, schedule-free</em> physical signal. They capture effects the binary balance-point rule cannot (thermal lag, mass state, gain saturation), but the model makes the following simplifications on purpose:</p>
 <ul>
-<li><strong>Single zone, lumped mass</strong>: the weights are facade-independent within an hour; time-of-day carries the directional signal. One room stands for the whole building (the app's average room has the mean exposure of its facades), not a room per facade direction. Perimeter-zone effects are out of scope for a massing tool.</li>
-<li><strong>Ideal, unlimited conditioning</strong> at the air node, at constant set points: no setback. Internal gains and ventilation may follow an hourly schedule (the app's three example cases of use); infiltration and the set points do not.</li>
-<li><strong>Fixed air-change rates</strong>: no night flushing, and no <em>adaptive</em> shading control. Without a declared <code>shading_hot</code> coefficient the <code>harm</code> channel is <strong>overstated</strong>, since real buildings have cheap defenses against summer sun that they lack for missing winter sun; declaring seasonal shading in the archetype makes harm a defensible estimate instead of a worst case. <code>include_harm</code> remains opt-in.</li>
+<li><strong>Single zone, lumped mass</strong>: the weights are facade-independent within an hour; time-of-day carries the directional signal, and one room stands for the whole building (the app's average room has the mean exposure of its facades). A room behind a south facade that its own sun already warms values more sun less than the averaged room does; rooms per facade direction were tried (2026-10-30) and removed, because what lies behind a test surface is not known and the tool protects the absolute gains each facade receives. Perimeter-zone effects are out of scope for a massing tool.</li>
+<li><strong>Conditioned</strong>: ideal, unlimited conditioning at the air node, at constant set points, no setback. <strong>Free running</strong>: a fixed comfort band, with degree-hours below and above it counted alike (1 K·h is 1 K·h on either side), and no adaptive comfort. Internal gains and ventilation may follow an hourly schedule (the app's three example cases of use); infiltration and the set points do not.</li>
+<li><strong>Window opening by rule</strong>: a free-running zone opens its windows as far as needed above <code>vent_above</code> when outdoors is cooler, up to <code>vent_ach</code>, in any hour, night included; there is no wind or stack model and no occupant behaviour. A conditioned zone has fixed air-change rates, no night flushing. Neither has <em>adaptive</em> shading control. Without a declared <code>shading_hot</code> coefficient the <code>harm</code> channel is <strong>overstated</strong>, since real buildings have cheap defenses against summer sun that they lack for missing winter sun; declaring seasonal shading in the archetype makes harm a defensible estimate instead of a worst case. <code>include_harm</code> remains opt-in.</li>
 <li><strong>Schedules without holidays</strong>: the app's example cases of use repeat every week of the year; the office lighting counts its full installed power in every hour of use, with no daylight.</li>
 <li><strong>Marginal linearization</strong>: the weights describe one <em>extra</em> watt at the archetype's operating point; window sizes and g-values in the archetype set where gains saturate, and are recorded in the artifact's provenance metadata.</li>
 <li><strong>Unshaded derivation</strong>: the weights are computed for an unshaded archetype while the carve itself creates shading context; a first-order acceptable inconsistency for massing studies.</li>
@@ -1898,7 +2270,7 @@
 </ul>
 <div class="admonition warning">
 <p class="admonition-title">Treat <code>include_harm</code> as a bracketing scenario</p>
-<p>Without declared seasonal shading, harm is conservatively overstated (no night ventilation is modelled either), so the benefit-only weighting is the recommended default. Declaring <code>shading_hot</code> + <code>hot_months</code> in the archetype makes the harm channel a defensible estimate; even then, enable the subtraction deliberately for overheating-critical projects rather than as the standard mode.</p>
+<p>Without declared seasonal shading, harm is conservatively overstated (in a conditioned zone no night ventilation is modelled either; a free-running zone opens its windows), so the benefit-only weighting is the recommended default. Declaring <code>shading_hot</code> + <code>hot_months</code> in the archetype makes the harm channel a defensible estimate; even then, enable the subtraction deliberately for overheating-critical projects rather than as the standard mode.</p>
 </div>
 <h2 id="traceability">Traceability<a class="headerlink" href="#traceability" title="Permanent link">&para;</a></h2>
 <p>Every artifact records its full provenance (<code>meta</code>: method, EPW, the complete expanded archetype, perturbation size, timestamp), and every carve that consumes one records that provenance in its preprocessing diagnostics. The artifact file is read again on every preprocessing run, so a regenerated artifact takes effect on the next run. With <code>diagnostic_plots: true</code>, the run also writes a comparison dome quantifying how the simulated weights shifted the sky relative to the simple rule under the same configuration.</p>
