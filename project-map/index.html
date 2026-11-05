@@ -1454,16 +1454,17 @@ What each file does is written at the top of the file itself.</p>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>├── grasshopper/            Rhino Grasshopper plugin
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>├── docs/                   MkDocs documentation source
 <a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>│   └── publications/       The ReSBE 2026 paper (PDF, CC BY-NC-ND 4.0)
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>├── tools/                  Developer scripts (the maps below, Grasshopper smoke tests)
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>├── tools/                  Developer scripts (the maps below, repository state, reference check, lockfile, app test data, Grasshopper smoke test)
 <a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>├── benchmarks/             Timing scripts
 <a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>├── pyproject.toml          Package metadata, dependencies and the Python import rules
 <a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>├── setup_env.py            Automated environment setup (GPU detection)
-<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>├── mkdocs.yml              Documentation site configuration
-<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>├── CHANGELOG.md            Release history
-<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>├── CITATION.cff            Citation metadata
-<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>├── CONTRIBUTING.md         Contribution guidelines
-<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>├── LICENSE                 AGPL-3.0
-<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>└── README.md               Project landing page
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>├── requirements-lock.txt   The exact versions the tests last passed on, which setup_env.py installs
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>├── mkdocs.yml              Documentation site configuration
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>├── CHANGELOG.md            Release history
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>├── CITATION.cff            Citation metadata
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>├── CONTRIBUTING.md         Contribution guidelines
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>├── LICENSE                 AGPL-3.0
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>└── README.md               Project landing page
 </code></pre></div>
 <h2 id="the-python-package-in-seven-layers">The Python package in seven layers<a class="headerlink" href="#the-python-package-in-seven-layers" title="Permanent link">&para;</a></h2>
 <p>Each module of <code>src/urbansolarcarver/</code> sits in one layer. A module may import from the layers below it, never from a

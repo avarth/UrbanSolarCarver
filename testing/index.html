@@ -1615,11 +1615,16 @@ serial run catches a test that only passes after another one has run. Also run, 
 </table>
 <p>Mark a new test <code>slow</code> when it takes more than about a second, and <code>sweep</code> when it repeats a check over many
 parameter values that other tests already cover at a few chosen ones. <code>pyproject.toml</code> runs pytest with
-<code>--strict-markers</code> (a misspelt marker is an error) and <code>--durations=15</code> (every run ends with its 15 slowest tests).
-After the run, <code>tests/conftest.py</code> also lists each test outside <code>slow</code> that took over 1 s; mark it <code>slow</code> or make it
+<code>--strict-markers</code> (a misspelt marker is an error). Add <code>--durations=15</code> to a run to list its 15 slowest tests.
+After the run, <code>tests/conftest.py</code> lists each test outside <code>slow</code> that took over 1 s; mark it <code>slow</code> or make it
 faster. Times grow by about half under <code>-n 8</code>, so a test listed only in a parallel run may be fine on its own.</p>
 <p>An exact count in a test (panels, sample points, kept voxels of a packaged example) carries a comment on how to take
 the new value after a deliberate change of the example files or of the code that produces it.</p>
+<p><code>tests/test_docs_references.py</code> runs <code>tools/check_references.py</code> on the docs: every route, backticked file and backticked
+name a page gives must exist in the service or the code. Run the script itself to see the whole list.</p>
+<p><code>tests/test_architecture.py</code> runs Ruff with the rules in <code>pyproject.toml</code>: unused imports and variables, undefined names, syntax
+errors, mutable defaults and comparisons whose result is thrown away. It finds mistakes and leaves style alone, and it does not
+format. <code>ruff check . --fix</code> clears what it can fix itself.</p>
 <h2 id="keeping-out-of-the-users-folders">Keeping out of the user's folders<a class="headerlink" href="#keeping-out-of-the-users-folders" title="Permanent link">&para;</a></h2>
 <p><code>tests/conftest.py</code> does this for every test, without a fixture to ask for:</p>
 <ul>

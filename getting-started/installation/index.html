@@ -1407,7 +1407,11 @@
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>python<span class="w"> </span>setup_env.py<span class="w"> </span>--dry-run<span class="w">         </span><span class="c1"># show what would be installed</span>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>python<span class="w"> </span>setup_env.py<span class="w"> </span>--no-ui<span class="w">           </span><span class="c1"># leave out the browser UI (the ui extra)</span>
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>python<span class="w"> </span>setup_env.py<span class="w"> </span>--venv-dir<span class="w"> </span>PATH<span class="w">   </span><span class="c1"># put the virtual environment at PATH</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>python<span class="w"> </span>setup_env.py<span class="w"> </span>--latest<span class="w">          </span><span class="c1"># the newest versions, not the tested ones</span>
 </code></pre></div>
+<p><code>setup_env.py</code> installs the versions in <code>requirements-lock.txt</code>, which the tests last passed on, so results can be reproduced.
+They need Python 3.12 or older. With a newer Python, or if PyTorch reports that your GPU is too new for it, add <code>--latest</code> for the
+newest versions, which have not been tested with this release.</p>
 <h2 id="manual-installation">Manual installation<a class="headerlink" href="#manual-installation" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>python<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>.venv
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>.venv/Scripts/activate<span class="w">          </span><span class="c1"># Windows</span>
@@ -1416,7 +1420,7 @@
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>pip<span class="w"> </span>install<span class="w"> </span>torch<span class="w"> </span>--index-url<span class="w"> </span>https://download.pytorch.org/whl/cu126
 <a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.<span class="o">[</span>dev,ui<span class="o">]</span><span class="w">       </span><span class="c1"># leave out ,ui if you do not want the browser UI</span>
 </code></pre></div>
-<p>Pick the PyTorch index for your driver on https://pytorch.org/get-started/locally/ (<code>nvidia-smi</code> shows the highest CUDA version the driver supports; <code>python setup_env.py --dry-run</code> shows the index the installer would choose). PyTorch stops publishing to older indexes, so prefer one that still receives releases.</p>
+<p>This route takes the newest versions, not the tested ones. Pick the PyTorch index for your driver on https://pytorch.org/get-started/locally/ (<code>nvidia-smi</code> shows the highest CUDA version the driver supports; <code>python setup_env.py --dry-run</code> shows the index the installer would choose). PyTorch stops publishing to older indexes, so prefer one that still receives releases.</p>
 <p>An editable install keeps the version number it was installed with. After pulling a new version, refresh it with <code>pip install -e . --no-deps</code> so <code>usc --version</code> reports it.</p>
 <h2 id="browser-ui">Browser UI<a class="headerlink" href="#browser-ui" title="Permanent link">&para;</a></h2>
 <p>The browser interface is an optional extra of the package (<code>ui</code>). <code>setup_env.py</code> installs it unless <code>--no-ui</code> is given. To add it to an existing environment:</p>
