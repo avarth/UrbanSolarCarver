@@ -15,6 +15,7 @@ python setup_env.py --cpu             # force CPU-only (no CUDA)
 python setup_env.py --dry-run         # show what would be installed
 python setup_env.py --no-ui           # leave out the browser UI (the ui extra)
 python setup_env.py --venv-dir PATH   # put the virtual environment at PATH
+python setup_env.py --locked          # the exact versions the tests last passed on
 ```
 
 ## Manual installation

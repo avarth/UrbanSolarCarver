@@ -14,6 +14,7 @@ Usage
     python setup_env.py --dry-run         # show what would be installed
     python setup_env.py --no-ui           # leave out the browser UI (the ui extra)
     python setup_env.py --venv-dir PATH   # put the virtual environment at PATH
+    python setup_env.py --locked          # the exact versions in requirements-lock.txt
 
 Requirements
 ------------
@@ -33,6 +34,10 @@ What this script does
    --no-ui: pip install -e .[dev])
 6. Verifies that torch, warp and urbansolarcarver import
 7. Precompiles the Warp kernels so the first run does not pay the compile time
+
+With --locked, steps 3 to 5 install the versions the tests last passed on, from
+requirements-lock.txt, with its torch from its wheel index. Without it, torch and
+the other packages are the newest that pyproject.toml allows.
 """
 
 from __future__ import annotations
@@ -48,6 +53,7 @@ from pathlib import Path
 # ── Constants ──────────────────────────────────────────────────────────
 
 VENV_DIR = ".venv"
+LOCKFILE = Path(__file__).resolve().parent / "requirements-lock.txt"
 MIN_PYTHON = (3, 10)
 
 # Deepest path the torch wheel creates under site-packages (its dist-info
@@ -169,6 +175,32 @@ def resolve_torch_index(cuda_version: str | None, force_cpu: bool,
     return CUDA_WHEEL_INDEXES[cuda], f"CUDA {driver_text} (cu{cuda[0]}{cuda[1]} wheels, torch {torch_text})"
 
 
+def locked_torch(lock_text: str, cuda_version: str | None, force_cpu: bool) -> tuple[str, str, str]:
+    """Return (requirement, index_url, description) of the torch in *lock_text*.
+
+    The driver must run the wheels the lockfile names (drivers run wheels built
+    for their CUDA version or older); otherwise, as with no driver or a forced
+    CPU install, the same torch version comes as CPU wheels.
+    """
+    torch = re.search(r"^torch==(\S+)$", lock_text, re.MULTILINE)
+    wheels = re.search(r"^# torch-wheels: (\S+)$", lock_text, re.MULTILINE)
+    if not torch or not wheels:
+        log(f"{LOCKFILE.name} does not give torch and its wheels", "error")
+        sys.exit(1)
+    requirement = f"torch=={torch.group(1)}"
+    needed = [cuda for cuda, url in CUDA_WHEEL_INDEXES.items() if url.endswith("/" + wheels.group(1))]
+    if force_cpu or cuda_version is None or not needed:
+        return requirement, CPU_WHEEL_INDEX, f"CPU-only, torch {torch.group(1)}"
+    try:
+        driver = tuple(int(part) for part in cuda_version.split(".")[:2])
+    except ValueError:
+        return requirement, CPU_WHEEL_INDEX, f"CPU-only, torch {torch.group(1)} (unreadable CUDA {cuda_version})"
+    if driver < needed[0]:
+        log(f"CUDA {cuda_version} cannot run the locked {wheels.group(1)} wheels; using CPU wheels", "warn")
+        return requirement, CPU_WHEEL_INDEX, f"CPU-only, torch {torch.group(1)} (CUDA {cuda_version} too old)"
+    return requirement, CUDA_WHEEL_INDEXES[needed[0]], f"{wheels.group(1)} wheels, torch {torch.group(1)}"
+
+
 def venv_python(venv_dir: Path) -> Path:
     """Return path to the venv's Python executable."""
     if platform.system() == "Windows":
@@ -255,6 +287,10 @@ def main():
         "--no-ui", action="store_true",
         help="Do not install the ui extra (the packages behind 'usc ui')"
     )
+    parser.add_argument(
+        "--locked", action="store_true",
+        help=f"Install the exact versions the tests last passed on ({LOCKFILE.name})"
+    )
     args = parser.parse_args()
 
     # ── 0. Check Python version ──
@@ -273,7 +309,13 @@ def main():
     else:
         log("No NVIDIA GPU detected; installing CPU-only PyTorch", "warn")
 
-    index_url, desc = resolve_torch_index(cuda_version, args.cpu)
+    if args.locked:
+        torch_requirement, index_url, desc = locked_torch(LOCKFILE.read_text(encoding="utf-8"), cuda_version, args.cpu)
+        constraints = ["-c", str(LOCKFILE)]
+        torch_options = ["--no-deps"]   # its dependencies come next, under the constraints: the wheel index would give newer ones
+    else:
+        torch_requirement, constraints, torch_options = "torch", [], []
+        index_url, desc = resolve_torch_index(cuda_version, args.cpu)
     log(f"PyTorch target: {desc}")
     log(f"Index URL: {index_url}")
 
@@ -283,8 +325,8 @@ def main():
     if args.dry_run:
         log("Dry run, would execute:", "info")
         print(f"  1. python -m venv {venv_dir}")
-        print(f"  2. pip install torch --index-url {index_url}")
-        print(f"  3. pip install -e {install_target}")
+        print(f"  2. pip install {' '.join([torch_requirement, *torch_options])} --index-url {index_url}")
+        print(f"  3. pip install {' '.join(constraints + ['-e', install_target])}")
         return
 
     # ── 2. Create venv ──
@@ -306,11 +348,11 @@ def main():
     # ── 4. Install PyTorch ──
     log(f"Installing PyTorch ({desc})...")
     run([str(vpy), "-m", "pip", "install",
-         "torch", "--index-url", index_url, "--quiet"])
+         torch_requirement, *torch_options, "--index-url", index_url, "--quiet"])
 
     # ── 5. Install UrbanSolarCarver + all deps ──
     log("Installing UrbanSolarCarver and dependencies...")
-    run([str(vpy), "-m", "pip", "install", "-e", install_target, "--quiet"])
+    run([str(vpy), "-m", "pip", "install", *constraints, "-e", install_target, "--quiet"])
 
     # ── 6. Verify ──
     log("Verifying installation...")

@@ -36,6 +36,10 @@ python setup_env.py --venv-dir ../usc-fresh-install
 
 Then delete the folder. Fix what fails in `pyproject.toml` or `setup_env.py`.
 
+`requirements-lock.txt` holds the exact versions the tests last passed on. Add `--locked` to install those, for example to
+reproduce published results; without it you get the newest versions `pyproject.toml` allows, which is what this check should
+try too. After upgrading a package in your environment and passing the tests, run `tools/write_lockfile.py` and commit the file.
+
 ## Code Style
 
 - Follow existing patterns in the codebase.

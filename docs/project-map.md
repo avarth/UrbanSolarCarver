@@ -16,10 +16,11 @@ UrbanSolarCarver/
 ├── grasshopper/            Rhino Grasshopper plugin
 ├── docs/                   MkDocs documentation source
 │   └── publications/       The ReSBE 2026 paper (PDF, CC BY-NC-ND 4.0)
-├── tools/                  Developer scripts (the maps below, repository state, reference check, app test data, Grasshopper smoke test)
+├── tools/                  Developer scripts (the maps below, repository state, reference check, lockfile, app test data, Grasshopper smoke test)
 ├── benchmarks/             Timing scripts
 ├── pyproject.toml          Package metadata, dependencies and the Python import rules
 ├── setup_env.py            Automated environment setup (GPU detection)
+├── requirements-lock.txt   The exact versions the tests last passed on (setup_env.py --locked)
 ├── mkdocs.yml              Documentation site configuration
 ├── CHANGELOG.md            Release history
 ├── CITATION.cff            Citation metadata
