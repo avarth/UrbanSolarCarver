@@ -82,6 +82,27 @@ def test_a_locked_install_falls_back_to_cpu_wheels_of_the_same_torch(driver, for
     assert description.startswith("CPU-only")
 
 
+def test_the_default_install_takes_the_lockfile_and_latest_asks_the_indexes(monkeypatch):
+    monkeypatch.setattr(setup_env, "newest_torch_on_index", offered)
+    requirement, options, constraints, url, _ = setup_env.install_choice(False, "13.2", force_cpu=False)
+    assert requirement.startswith("torch==") and options == ["--no-deps"]
+    assert constraints == ["-c", str(setup_env.LOCKFILE)]
+    assert url.endswith("/cu121")
+    # newest_torch_on is bound as a default argument, so --latest reaches the indexes through it
+    monkeypatch.setattr(setup_env.resolve_torch_index, "__defaults__", (offered,))
+    requirement, options, constraints, url, _ = setup_env.install_choice(True, "13.2", force_cpu=False)
+    assert (requirement, options, constraints) == ("torch", [], [])
+    assert url.endswith("/cu132")
+
+
+@pytest.mark.parametrize("version, stopped", [((3, 10), False), ((3, 12), False), ((3, 13), True), ((3, 14), True)])
+def test_a_locked_install_stops_on_a_python_the_locked_versions_do_not_support(version, stopped):
+    problem = setup_env.locked_python_problem(version)
+    assert bool(problem) is stopped
+    if stopped:
+        assert "--latest" in problem
+
+
 def test_a_lockfile_without_torch_stops_the_install():
     with pytest.raises(SystemExit):
         setup_env.locked_torch("numpy==1.26.4\n", "12.8", force_cpu=False)

@@ -25,8 +25,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
   state during render). The 153 findings were cleared without changing what the app does; one line sets a rule aside,
   with its reason.
 
-- **`requirements-lock.txt` and `setup_env.py --locked`** install the exact versions the tests last passed on, torch included.
-  A plain `setup_env.py` still takes the newest versions `pyproject.toml` allows. `tools/write_lockfile.py` writes the file.
+- **`setup_env.py` installs the tested versions.** It used to take the newest torch and packages `pyproject.toml` allows, so a
+  fresh install could run a torch the tests had never seen. It now installs `requirements-lock.txt`, written by
+  `tools/write_lockfile.py`, and so do the launchers on their first run. `--latest` gives the old behaviour; the locked versions
+  need Python 3.12 or older, and the script says so before it installs anything.
 - **Developer checks.** `tools/check_references.py` reports routes, files and names in the docs that no longer exist
   (`tests/test_docs_references.py` runs it). Ruff runs in `tests/test_architecture.py`, with mistakes as its rules and no
   formatting. `tools/repo_state.py` prints where the repository stands, asking GitHub rather than the local tracking refs.

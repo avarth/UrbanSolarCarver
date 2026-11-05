@@ -5,7 +5,7 @@ UrbanSolarCarver: Environment Setup
 
 One-command bootstrap: creates a virtual environment, detects your GPU,
 installs the correct PyTorch build, and installs UrbanSolarCarver with
-all dependencies.
+all dependencies, at the versions the tests last passed on.
 
 Usage
 -----
@@ -14,7 +14,7 @@ Usage
     python setup_env.py --dry-run         # show what would be installed
     python setup_env.py --no-ui           # leave out the browser UI (the ui extra)
     python setup_env.py --venv-dir PATH   # put the virtual environment at PATH
-    python setup_env.py --locked          # the exact versions in requirements-lock.txt
+    python setup_env.py --latest          # the newest versions pyproject.toml allows, not tested
 
 Requirements
 ------------
@@ -26,18 +26,18 @@ What this script does
 1. Creates  .venv/  in the repo if it doesn't exist (on Windows, falls back to
    ~/.usc-venv when the repo path is too deep for the 260-character path limit)
 2. Reads the CUDA version supported by the driver from  nvidia-smi
-3. Asks the PyTorch wheel indexes the driver can run which torch they offer,
-   and picks the one with the newest torch
-4. Upgrades pip and installs PyTorch from that index
+3. Takes the torch version and wheel index in requirements-lock.txt
+4. Upgrades pip and installs that PyTorch
 5. Installs UrbanSolarCarver in editable mode with its dependencies, including
-   warp-lang and the ui extra for  usc ui  (pip install -e .[dev,ui]; with
-   --no-ui: pip install -e .[dev])
+   warp-lang and the ui extra for  usc ui  (pip install -c requirements-lock.txt
+   -e .[dev,ui]; with --no-ui: .[dev])
 6. Verifies that torch, warp and urbansolarcarver import
 7. Precompiles the Warp kernels so the first run does not pay the compile time
 
-With --locked, steps 3 to 5 install the versions the tests last passed on, from
-requirements-lock.txt, with its torch from its wheel index. Without it, torch and
-the other packages are the newest that pyproject.toml allows.
+With --latest, step 3 instead asks the PyTorch wheel indexes the driver can run
+which torch they offer and picks the newest, and step 5 takes the newest versions
+pyproject.toml allows. Use it for a Python or a GPU too new for the locked versions,
+or to try an upgrade (see CONTRIBUTING.md).
 """
 
 from __future__ import annotations
@@ -55,6 +55,7 @@ from pathlib import Path
 VENV_DIR = ".venv"
 LOCKFILE = Path(__file__).resolve().parent / "requirements-lock.txt"
 MIN_PYTHON = (3, 10)
+MAX_LOCKED_PYTHON = (3, 12)  # numpy 1.26.4 and torch 2.5.1 have no wheels for 3.13
 
 # Deepest path the torch wheel creates under site-packages (its dist-info
 # license tree nests ~160 chars); used to predict Windows MAX_PATH failures.
@@ -175,6 +176,15 @@ def resolve_torch_index(cuda_version: str | None, force_cpu: bool,
     return CUDA_WHEEL_INDEXES[cuda], f"CUDA {driver_text} (cu{cuda[0]}{cuda[1]} wheels, torch {torch_text})"
 
 
+def locked_python_problem(version: tuple[int, int]) -> str | None:
+    """What to tell the user when a locked install cannot work on Python *version*, else None."""
+    if version <= MAX_LOCKED_PYTHON:
+        return None
+    return (f"The tested package versions do not support Python {version[0]}.{version[1]}: use Python "
+            f"{MAX_LOCKED_PYTHON[0]}.{MAX_LOCKED_PYTHON[1]} or older, or add --latest for the newest versions, "
+            "which have not been tested.")
+
+
 def locked_torch(lock_text: str, cuda_version: str | None, force_cpu: bool) -> tuple[str, str, str]:
     """Return (requirement, index_url, description) of the torch in *lock_text*.
 
@@ -199,6 +209,16 @@ def locked_torch(lock_text: str, cuda_version: str | None, force_cpu: bool) -> t
         log(f"CUDA {cuda_version} cannot run the locked {wheels.group(1)} wheels; using CPU wheels", "warn")
         return requirement, CPU_WHEEL_INDEX, f"CPU-only, torch {torch.group(1)} (CUDA {cuda_version} too old)"
     return requirement, CUDA_WHEEL_INDEXES[needed[0]], f"{wheels.group(1)} wheels, torch {torch.group(1)}"
+
+
+def install_choice(latest: bool, cuda_version: str | None, force_cpu: bool) -> tuple[str, list[str], list[str], str, str]:
+    """Return (torch requirement, its pip options, the pip constraints, index_url, description)."""
+    if latest:
+        index_url, description = resolve_torch_index(cuda_version, force_cpu)
+        return "torch", [], [], index_url, description
+    requirement, index_url, description = locked_torch(LOCKFILE.read_text(encoding="utf-8"), cuda_version, force_cpu)
+    # --no-deps: torch's dependencies come next, under the constraints; its wheel index would give newer ones.
+    return requirement, ["--no-deps"], ["-c", str(LOCKFILE)], index_url, description
 
 
 def venv_python(venv_dir: Path) -> Path:
@@ -288,8 +308,8 @@ def main():
         help="Do not install the ui extra (the packages behind 'usc ui')"
     )
     parser.add_argument(
-        "--locked", action="store_true",
-        help=f"Install the exact versions the tests last passed on ({LOCKFILE.name})"
+        "--latest", action="store_true",
+        help=f"Install the newest versions pyproject.toml allows instead of those in {LOCKFILE.name}, which the tests last passed on"
     )
     args = parser.parse_args()
 
@@ -299,6 +319,10 @@ def main():
             f"found {sys.version_info[0]}.{sys.version_info[1]}", "error")
         sys.exit(1)
     log(f"Python {sys.version_info[0]}.{sys.version_info[1]}.{sys.version_info[2]}")
+    problem = None if args.latest else locked_python_problem(sys.version_info[:2])
+    if problem:
+        log(problem, "error")
+        sys.exit(1)
 
     # ── 1. Detect GPU ──
     cuda_version = detect_cuda_version()
@@ -309,13 +333,7 @@ def main():
     else:
         log("No NVIDIA GPU detected; installing CPU-only PyTorch", "warn")
 
-    if args.locked:
-        torch_requirement, index_url, desc = locked_torch(LOCKFILE.read_text(encoding="utf-8"), cuda_version, args.cpu)
-        constraints = ["-c", str(LOCKFILE)]
-        torch_options = ["--no-deps"]   # its dependencies come next, under the constraints: the wheel index would give newer ones
-    else:
-        torch_requirement, constraints, torch_options = "torch", [], []
-        index_url, desc = resolve_torch_index(cuda_version, args.cpu)
+    torch_requirement, torch_options, constraints, index_url, desc = install_choice(args.latest, cuda_version, args.cpu)
     log(f"PyTorch target: {desc}")
     log(f"Index URL: {index_url}")
 

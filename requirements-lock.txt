@@ -1,5 +1,5 @@
 # The versions the tests last passed on. Written by tools/write_lockfile.py; do not edit by hand.
-# Python 3.10.6 on Windows. A pip constraints file: python setup_env.py --locked installs from it.
+# Python 3.10.6 on Windows. A pip constraints file: setup_env.py installs from it.
 # torch-wheels: cu121
 annotated-doc==0.0.5
 annotated-types==0.7.0

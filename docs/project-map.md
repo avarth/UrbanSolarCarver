@@ -20,7 +20,7 @@ UrbanSolarCarver/
 ├── benchmarks/             Timing scripts
 ├── pyproject.toml          Package metadata, dependencies and the Python import rules
 ├── setup_env.py            Automated environment setup (GPU detection)
-├── requirements-lock.txt   The exact versions the tests last passed on (setup_env.py --locked)
+├── requirements-lock.txt   The exact versions the tests last passed on, which setup_env.py installs
 ├── mkdocs.yml              Documentation site configuration
 ├── CHANGELOG.md            Release history
 ├── CITATION.cff            Citation metadata

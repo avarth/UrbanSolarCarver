@@ -36,9 +36,10 @@ python setup_env.py --venv-dir ../usc-fresh-install
 
 Then delete the folder. Fix what fails in `pyproject.toml` or `setup_env.py`.
 
-`requirements-lock.txt` holds the exact versions the tests last passed on. Add `--locked` to install those, for example to
-reproduce published results; without it you get the newest versions `pyproject.toml` allows, which is what this check should
-try too. After upgrading a package in your environment and passing the tests, run `tools/write_lockfile.py` and commit the file.
+`setup_env.py` installs the exact versions in `requirements-lock.txt`, which the tests last passed on. Before a release, also try
+what is new: repeat the check with `--latest`, run the whole suite including the GPU tests, and compare the results of a few
+example projects with the locked versions, because a new torch can move numbers without failing a test. If that holds, run
+`tools/write_lockfile.py` from that environment and commit the file. An upgrade of torch or Warp counts as an engine change.
 
 ## Code Style
 

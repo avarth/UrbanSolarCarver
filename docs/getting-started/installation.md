@@ -15,8 +15,12 @@ python setup_env.py --cpu             # force CPU-only (no CUDA)
 python setup_env.py --dry-run         # show what would be installed
 python setup_env.py --no-ui           # leave out the browser UI (the ui extra)
 python setup_env.py --venv-dir PATH   # put the virtual environment at PATH
-python setup_env.py --locked          # the exact versions the tests last passed on
+python setup_env.py --latest          # the newest versions, not the tested ones
 ```
+
+`setup_env.py` installs the versions in `requirements-lock.txt`, which the tests last passed on, so results can be reproduced.
+They need Python 3.12 or older. With a newer Python, or if PyTorch reports that your GPU is too new for it, add `--latest` for the
+newest versions, which have not been tested with this release.
 
 ## Manual installation
 
@@ -29,7 +33,7 @@ pip install torch --index-url https://download.pytorch.org/whl/cu126
 pip install -e .[dev,ui]       # leave out ,ui if you do not want the browser UI
 ```
 
-Pick the PyTorch index for your driver on https://pytorch.org/get-started/locally/ (`nvidia-smi` shows the highest CUDA version the driver supports; `python setup_env.py --dry-run` shows the index the installer would choose). PyTorch stops publishing to older indexes, so prefer one that still receives releases.
+This route takes the newest versions, not the tested ones. Pick the PyTorch index for your driver on https://pytorch.org/get-started/locally/ (`nvidia-smi` shows the highest CUDA version the driver supports; `python setup_env.py --dry-run` shows the index the installer would choose). PyTorch stops publishing to older indexes, so prefer one that still receives releases.
 
 An editable install keeps the version number it was installed with. After pulling a new version, refresh it with `pip install -e . --no-deps` so `usc --version` reports it.
 
