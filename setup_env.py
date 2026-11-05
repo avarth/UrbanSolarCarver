@@ -38,7 +38,6 @@ What this script does
 from __future__ import annotations
 
 import argparse
-import os
 import platform
 import re
 import shutil
@@ -372,7 +371,7 @@ def main():
     print()
     print(f"  Activate:  {venv_dir}\\Scripts\\activate" if platform.system() == "Windows"
           else f"  Activate:  source {venv_dir}/bin/activate")
-    print(f"  CLI:       urbansolarcarver --help")
+    print("  CLI:       urbansolarcarver --help")
     if not args.no_ui:
         launcher = "start-urbansolarcarver.bat" if platform.system() == "Windows" else "./start-urbansolarcarver.sh"
         print(f"  Browser:   {launcher}  (or: usc ui)")

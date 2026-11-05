@@ -6,7 +6,6 @@ With rays_per_patch 4, 9 or 16 the kernels trace that many rays per patch, one
 at a hashed place in each cell of equal solid angle, with that share of the
 patch weight.
 """
-import math
 
 import numpy as np
 import pytest

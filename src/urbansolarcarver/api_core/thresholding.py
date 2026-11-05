@@ -9,7 +9,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Union, overload
+from typing import TYPE_CHECKING, Union, overload
 import numpy as np
 from ..load_config import user_config
 from ..errors import StageChainError
@@ -18,6 +18,9 @@ from ..run_context import Issue, RunContext, report_issue, stage_context
 from ..scoring import carve_fraction_threshold, headtail_threshold
 from ..column_postprocessing import carve_above_scores, limit_column_slope
 from ..mode_registry import MODES
+
+if TYPE_CHECKING:
+    from .preprocessing import PreprocessingResult
 from ..stage_settings import (
     RunOptions, ThresholdingSettings, applied_smoothing_radius_m, requested_smoothing_radius_m,
 )

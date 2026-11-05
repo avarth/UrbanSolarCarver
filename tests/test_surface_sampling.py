@@ -102,7 +102,7 @@ class TestEdgeSampling:
     def test_edge_coverage(self):
         """Every boundary segment should have a sample point nearby."""
         from urbansolarcarver.surface_sampling import sample_planar_surface
-        from shapely.geometry import Polygon, LineString
+        from shapely.geometry import LineString
         mesh = self._make_flat_quad(1.0, 1.0)
         step = 0.3
         pts, norms, qv, qf, _w = sample_planar_surface(mesh, sample_step=step)
@@ -124,8 +124,7 @@ class TestEdgeSampling:
 
     def test_no_duplicate_near_grid(self):
         """Edge points should not be too close to interior grid points."""
-        from urbansolarcarver.surface_sampling import sample_planar_surface, _sample_boundary_edges
-        from shapely.geometry import Polygon
+        from urbansolarcarver.surface_sampling import sample_planar_surface
         mesh = self._make_flat_quad(2.0, 2.0)
         step = 0.4
         pts, _, _, _, _w = sample_planar_surface(mesh, sample_step=step)

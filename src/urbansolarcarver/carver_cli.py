@@ -372,7 +372,7 @@ def cmd_preprocessing(
         if est['warning']:
             typer.secho(f"    Warning: {est['warning']}", fg="yellow")
         else:
-            typer.secho(f"    Grid size looks reasonable", fg="green")
+            typer.secho("    Grid size looks reasonable", fg="green")
         typer.echo()
         raise typer.Exit(0)
 

@@ -49,7 +49,7 @@ Repository = "https://github.com/avarth/UrbanSolarCarver"
 Issues = "https://github.com/avarth/UrbanSolarCarver/issues"
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "pytest-xdist>=3.5", "mapbox-earcut", "httpx>=0.27", "import-linter>=2.1", "pydeps>=3.0"]
+dev = ["pytest>=7.0", "pytest-xdist>=3.5", "mapbox-earcut", "httpx>=0.27", "import-linter>=2.1", "pydeps>=3.0", "ruff>=0.15", "vulture>=2.14"]
 # Local browser UI (usc ui)
 ui = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9", "websockets>=12", "send2trash>=1.8"]
 # Rebuild the Grasshopper .ghuser files (grasshopper/build_ghuser.py)
@@ -85,6 +85,18 @@ markers = [
   "sweep: exhaustive parameter sweeps and Monte Carlo seeds, also marked slow, run before merging; skip with -m 'not sweep'",
   "gpu: needs a CUDA GPU; skipped automatically when torch sees none (see tests/conftest.py)",
 ]
+
+# Ruff finds mistakes, not style: it does not format, and tests/test_architecture.py runs it. The rules: pyflakes (unused imports and
+# variables, undefined names), syntax errors, mutable defaults, a comparison whose result is thrown away, and pylint's errors.
+[tool.ruff]
+extend-exclude = ["benchmarks", "examples", "app", "docs", "src/urbansolarcarver/ui_static", "src/urbansolarcarver/example_projects"]
+
+[tool.ruff.lint]
+select = ["F", "E9", "B006", "B015", "PLE"]
+
+[tool.ruff.lint.per-file-ignores]
+"grasshopper/components/*" = ["F821"]    # a component's inputs are globals Grasshopper defines
+"tools/grasshopper_example_solve_in_rhino.py" = ["F821"]    # SETTINGS comes from the launcher
 
 # Import rules (import-linter): how the package is layered, checked by tests/test_architecture.py and by `lint-imports`.
 # docs/project-map.md explains the layers. A new module must be placed in a layer (exhaustive).

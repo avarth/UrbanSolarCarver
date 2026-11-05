@@ -19,7 +19,6 @@ from pathlib import Path
 
 import numpy as np
 import trimesh
-from shapely.affinity import rotate as shp_rotate
 from shapely.geometry import LineString, Point, Polygon, box
 from shapely.geometry.polygon import orient
 from shapely.ops import unary_union

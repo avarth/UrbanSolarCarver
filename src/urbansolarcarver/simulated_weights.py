@@ -37,7 +37,7 @@ from __future__ import annotations
 import functools
 import json
 import logging
-from dataclasses import dataclass, asdict, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Sequence, Tuple
 

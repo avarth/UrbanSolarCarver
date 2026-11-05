@@ -9,13 +9,16 @@ Visualization helpers live in ``_diagnostics``, reporting in ``_reporting``.
 """
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Union
+from typing import TYPE_CHECKING, Union
 
 import json
 
 from ..errors import StageChainError
 from ..load_config import load_config, user_config
 from ._stage_io import LoadedManifest, load_upstream
+
+if TYPE_CHECKING:
+    import numpy as np
 
 
 def _resolve_cfg(cfg: Union[user_config, str, Path]) -> user_config:

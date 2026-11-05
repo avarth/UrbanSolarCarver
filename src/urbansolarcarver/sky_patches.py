@@ -39,11 +39,14 @@ import numpy as np
 import torch
 
 from .compute_device import resolve_compute_device
-from typing import List, Sequence          
+from typing import TYPE_CHECKING, Sequence
 import math
 from urbansolarcarver.session import session_cache
 from urbansolarcarver.run_context import report_issue
 from urbansolarcarver.weather_file import read_weather_file
+
+if TYPE_CHECKING:
+    from ladybug.viewsphere import ViewSphere
 
 # Ladybug objects are imported on first use, so importing this module does
 # not require Ladybug, and are then kept for reuse.

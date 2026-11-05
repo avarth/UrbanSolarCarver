@@ -40,7 +40,7 @@ import math
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, NamedTuple, Optional, Union
+from typing import TYPE_CHECKING, Dict, NamedTuple, Optional, Union
 
 import numpy as np
 
@@ -48,6 +48,9 @@ from .check_files import POINTS_FILE, SKY_FILE, SUMMARY_FILE, VALUES_FILE, file_
 from .check_settings import CHECK_METRICS, CheckSettings, settings_digest
 from .compute_device import resolve_compute_device, warp_device_name
 from .run_context import active_context, report_issue, report_progress
+
+if TYPE_CHECKING:
+    import trimesh
 
 CHECK_FOLDER = "check"
 # The geometry the other columns are compared with in the summary.

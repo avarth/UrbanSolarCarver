@@ -2,7 +2,6 @@
 context buildings, and dropping the rays they block can only keep more of the plot."""
 import json
 
-import numpy as np
 import pytest
 
 import cases

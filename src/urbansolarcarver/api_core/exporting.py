@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Union, overload
+from typing import TYPE_CHECKING, Optional, Union, overload
 
 import numpy as np
 
@@ -27,6 +27,9 @@ from ..compute_device import resolve_compute_device
 from ..run_context import Issue, RunContext, stage_context
 from ..stage_settings import ExportingSettings, RunOptions
 from ..meshing import finalize_mesh
+
+if TYPE_CHECKING:
+    from .thresholding import ThresholdingResult
 import time
 
 # Everything exporting writes into its folder, besides manifest.json; every

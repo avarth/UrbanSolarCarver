@@ -7,7 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Iterable, Optional, Union
 
-from .chain_config import ChainConfig, Criterion, load_chain
+from .chain_config import ChainConfig, Criterion, load_chain  # noqa: F401 (public names of this module)
 from .load_config import build_config, load_config, user_config
 from .api_core import (
     preprocessing, thresholding, exporting, massing,

@@ -109,6 +109,11 @@ the new value after a deliberate change of the example files or of the code that
 `tests/test_docs_references.py` runs `tools/check_references.py` on the docs: every route, backticked file and backticked
 name a page gives must exist in the service or the code. Run the script itself to see the whole list.
 
+`tests/test_architecture.py` runs Ruff with the rules in `pyproject.toml`: unused imports and variables, undefined names, syntax
+errors, mutable defaults and comparisons whose result is thrown away. It finds mistakes and leaves style alone, and it does not
+format. `ruff check . --fix` clears what it can fix itself. `tools/find_dead_code.py` runs vulture, and its list is a report
+to read rather than a rule: it lists what nothing uses and what only the tests use, and it can only match names.
+
 ## Keeping out of the user's folders
 
 `tests/conftest.py` does this for every test, without a fixture to ask for:

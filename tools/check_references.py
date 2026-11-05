@@ -21,7 +21,8 @@ UNCHECKED_DOCS = "superpowers"
 NOT_IN_A_FRESH_CHECKOUT = {"app/openapi.json"}  # generated and ignored by git, named by the docs
 
 CODE_FOLDERS = ("src", "app/src", "app/scripts", "grasshopper", "configs", "tools", "tests", "setup_env.py", "pyproject.toml", "mkdocs.yml")
-NOT_THE_CODE = ("ui_static/", "example_projects/", "generated_types.ts")  # built or generated: they keep a name alive after the code lost it
+# Built or generated files, and this check with its test, which quote removed names: each would keep a name alive after the code lost it.
+NOT_THE_CODE = ("ui_static/", "example_projects/", "generated_types.ts", "check_references.py", "test_docs_references.py")
 CODE_TEXT = (".py", ".ts", ".tsx", ".mjs", ".yaml", ".yml", ".toml", ".json")
 EXTERNAL_NAMES = {"nvidia-smi"}  # commands of other programs that the docs name
 
@@ -107,7 +108,7 @@ def path_problems(text: str, names: dict[str, list[Path]]) -> list[str]:
 
 def code_words() -> set[str]:
     words = set()
-    for file in git("ls-files", *CODE_FOLDERS).splitlines():
+    for file in git("ls-files", "--cached", "--others", "--exclude-standard", *CODE_FOLDERS).splitlines():
         path = ROOT / file
         if file.endswith(CODE_TEXT) and not any(part in file for part in NOT_THE_CODE) and path.is_file():
             words |= set(re.findall(r"[A-Za-z_][\w-]*", path.read_text(encoding="utf-8", errors="replace")))

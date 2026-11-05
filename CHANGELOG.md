@@ -25,9 +25,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
   state during render). The 153 findings were cleared without changing what the app does; one line sets a rule aside,
   with its reason.
 
-- **Two developer scripts.** `tools/check_references.py` reports routes, files and names in the docs that no longer exist
-  (`tests/test_docs_references.py` runs it). `tools/repo_state.py` prints where the repository stands, asking GitHub rather
-  than the local tracking refs.
+- **Developer checks.** `tools/check_references.py` reports routes, files and names in the docs that no longer exist
+  (`tests/test_docs_references.py` runs it). Ruff runs in `tests/test_architecture.py`, with mistakes as its rules and no
+  formatting. `tools/find_dead_code.py` lists what nothing uses, or only the tests use, with vulture. `tools/repo_state.py`
+  prints where the repository stands, asking GitHub rather than the local tracking refs.
 
 ### Changed
 

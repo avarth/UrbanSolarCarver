@@ -2,7 +2,6 @@
 grid memory estimate in grid_planning.py."""
 import numpy as np
 import pytest
-from pathlib import Path
 
 from urbansolarcarver.api_core._diagnostics import save_histogram, score_statistics
 
