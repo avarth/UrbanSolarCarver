@@ -99,12 +99,15 @@ serial run catches a test that only passes after another one has run. Also run, 
 
 Mark a new test `slow` when it takes more than about a second, and `sweep` when it repeats a check over many
 parameter values that other tests already cover at a few chosen ones. `pyproject.toml` runs pytest with
-`--strict-markers` (a misspelt marker is an error) and `--durations=15` (every run ends with its 15 slowest tests).
-After the run, `tests/conftest.py` also lists each test outside `slow` that took over 1 s; mark it `slow` or make it
+`--strict-markers` (a misspelt marker is an error). Add `--durations=15` to a run to list its 15 slowest tests.
+After the run, `tests/conftest.py` lists each test outside `slow` that took over 1 s; mark it `slow` or make it
 faster. Times grow by about half under `-n 8`, so a test listed only in a parallel run may be fine on its own.
 
 An exact count in a test (panels, sample points, kept voxels of a packaged example) carries a comment on how to take
 the new value after a deliberate change of the example files or of the code that produces it.
+
+`tests/test_docs_references.py` runs `tools/check_references.py` on the docs: every route, backticked file and backticked
+name a page gives must exist in the service or the code. Run the script itself to see the whole list.
 
 ## Keeping out of the user's folders
 

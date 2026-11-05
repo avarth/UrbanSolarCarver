@@ -387,4 +387,4 @@ A type error stops `npm run build` before anything is written.
 
 Commit the rebuilt `ui_static/` with the source change: a test compares the hash in `build_info.json` with the sources and fails when they differ.
 
-If the service's API changed, regenerate the client types with `npm run api-types`. It runs `python` with the `ui` extra installed, so activate the repository's environment first (in a git worktree without an environment, set `PYTHONPATH=../src` and use a Python that has the extra).
+If the service's API changed, regenerate the client types with `npm run api-types`. It finds the repository's `.venv` itself, also from a git worktree without an environment of its own, and reads that checkout's sources.
