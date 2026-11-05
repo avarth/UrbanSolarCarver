@@ -1,6 +1,6 @@
 # Running the tests
 
-The Python suite (about 2,080 tests in `tests/`) and the front-end suite (about 1,010 vitest tests in `app/`) run locally:
+The Python suite (about 2,030 tests in `tests/`) and the front-end suite (about 985 vitest tests in `app/`) run locally:
 there is no CI, because the engine runs on the GPU and hosted runners have none. Tests marked `gpu` are skipped
 automatically without CUDA.
 
