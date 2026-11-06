@@ -401,6 +401,65 @@ def test_cancel_gives_run_cancelled_and_leaves_the_stages_missing(project_with_i
     assert released_sessions[0].released == 1
 
 
+class StopsAfter(FakeEngine):
+    """FakeEngine that runs *stop* (given the context) when the progress label *label* reports that it is done."""
+
+    def __init__(self, label, stop=lambda context: context.cancel()):
+        super().__init__()
+        self._label, self._stop = label, stop
+
+    def __call__(self, request, session, context):
+        forward_progress = context.on_progress
+
+        def on_progress(stage, done, total):
+            forward_progress(stage, done, total)
+            if stage == self._label and done > 0 and self._stop is not None:
+                stop, self._stop = self._stop, None
+                stop(context)
+
+        context.on_progress = on_progress
+        super().__call__(request, session, context)
+
+
+def fail_the_run(context):
+    raise RuntimeError("out of memory")
+
+
+MISSING = {"preprocessing": "missing", "thresholding": "missing"}
+
+
+@pytest.mark.parametrize("stop, final_event", [(lambda context: context.cancel(), "run_cancelled"), (fail_the_run, "run_failed")])
+def test_a_run_that_stops_keeps_the_records_of_the_criteria_it_finished(chain_of_two, stop, final_event):
+    store, name = chain_of_two
+    engine = StopsAfter("criterion 1", stop)
+    worker = make_worker(store, handle_request=engine)
+    reply = run_and_wait(worker, name, ["exporting", "massing"])
+    assert worker.run_state(reply.run_id).events[-1]["type"] == final_event
+    assert criterion_status(store, name) == {"1": CURRENT, "2": MISSING}
+    run_folder = store.open(name) / "run"
+    finished = {stage: run_id_in(run_folder / "criteria" / "1" / stage) for stage in ("preprocessing", "thresholding")}
+    next_reply = run_and_wait(worker, name, ["exporting", "massing"])
+    assert engine.requests[1].trace_criteria == ["2"]
+    assert next_reply.criterion_stages == {"1": [], "2": ["preprocessing", "thresholding"]}
+    assert {stage: run_id_in(run_folder / "criteria" / "1" / stage) for stage in finished} == finished
+    assert stage_status(store, name) == ALL_CURRENT
+
+
+def test_a_stopped_run_does_not_record_the_output_of_an_earlier_run(chain_of_two):
+    store, name = chain_of_two
+    run_and_wait(make_worker(store), name, ["exporting", "massing"])
+    store.update_criterion(name, "1", values={"rays_per_patch": 9})
+    store.update_criterion(name, "2", values={"rays_per_patch": 9})
+    run_and_wait(make_worker(store, handle_request=StopsAfter("criterion 1")), name, ["exporting", "massing"])
+    assert criterion_status(store, name) == {"1": CURRENT, "2": MISSING}
+
+
+def test_a_run_cancelled_after_exporting_keeps_the_envelope(chain_of_two):
+    store, name = chain_of_two
+    run_and_wait(make_worker(store, handle_request=StopsAfter("exporting")), name, ["exporting", "massing"])
+    assert stage_status(store, name) == {**ALL_CURRENT, "massing": "missing"}
+
+
 def test_cancel_of_an_unknown_or_finished_run_is_false(project_with_inputs):
     store, name = project_with_inputs
     worker = make_worker(store)

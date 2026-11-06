@@ -100,3 +100,9 @@ def test_every_mode_names_the_unit_of_its_scores():
         "time-based": "m²·h", "irradiance": "kWh", "benefit": "kWh", "daylight": "m²", "radiative_cooling": "m²",
         "tilted_plane": "rays",
     }
+
+
+def test_a_night_cooling_score_is_the_weighted_sky_it_blocks_times_the_area_of_the_sample_points(tmp_path):
+    score, blocked_weight, manifest = _occupied_voxel_score_and_zenith_weight(tmp_path, "radiative_cooling", 0.5)
+    assert score == pytest.approx(blocked_weight * 0.5 ** 2, rel=1e-5)
+    assert manifest.score_unit == "m²"

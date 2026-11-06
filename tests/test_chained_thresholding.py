@@ -86,7 +86,7 @@ def test_nothing_left_to_carve_gives_an_empty_mask_and_an_issue(tmp_path):
     with pytest.warns(UserWarning, match="everything carved"):
         _, _, thr1_all_carved = _first_criterion(s, tmp_path, threshold=0.0)
     assert not np.load(thr1_all_carved.mask_path).any()
-    c2 = s.config(tmp_path / "c2", test_surface_path=s.east, carve_fraction=0.5)
+    c2 = s.config(tmp_path / "c2", test_surface_path=s.east, carve_fraction=0.5, carve_above=True)
     pre2 = preprocessing(c2, tmp_path / "c2/pre")
     with pytest.warns(UserWarning, match="kept no voxel"):
         thr2 = thresholding(pre2, c2, tmp_path / "c2/thr", after=thr1_all_carved)
@@ -95,6 +95,7 @@ def test_nothing_left_to_carve_gives_an_empty_mask_and_an_issue(tmp_path):
     assert thr2.voxels_kept == 0 and thr2.voxels_removed == 0
     diag = json.loads((thr2.out_dir / "diagnostics/diagnostic.json").read_text())
     assert diag["voxels_at_start"] == 0 and diag["voxels_kept"] == 0
+    assert diag["carve_above_applied"] is False and diag["carve_above_min_consecutive"] is None
     assert (thr2.out_dir / "manifest.json").is_file()
 
 

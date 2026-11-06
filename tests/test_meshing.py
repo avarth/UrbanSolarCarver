@@ -102,6 +102,39 @@ class TestPruneVoxels:
         assert cleaned[10, 10, 10] == 1, "Large component should survive"
 
 
+class TestPruneVoxelsMorph:
+    """The light cleanup of the cubic path: small components, then voxels with fewer than two occupied neighbours."""
+
+    @staticmethod
+    def _prune(cells, min_voxels, shape=(8, 8, 8)):
+        from urbansolarcarver.meshing import prune_voxels_morph
+        grid = torch.zeros(shape, dtype=torch.uint8)
+        for cell in cells:
+            grid[cell] = 1
+        cleaned = prune_voxels_morph(grid, min_voxels)
+        assert cleaned.dtype == torch.uint8 and cleaned.shape == grid.shape
+        assert not (cleaned.bool() & ~grid.bool()).any()      # only removes
+        return {tuple(cell) for cell in cleaned.nonzero().tolist()}
+
+    def test_a_component_under_the_size_goes_and_one_at_it_stays(self):
+        small = [(0, 0, z) for z in range(3)]
+        block = [(x, y, z) for x in (4, 5) for y in (4, 5) for z in (4, 5)]
+        assert self._prune(small + block, 8) == set(block)
+        assert (0, 0, 1) in self._prune(small + block, 3)
+
+    def test_voxels_touching_at_a_corner_are_one_component(self):
+        diagonal = [(1, 1, 1), (2, 2, 2), (3, 3, 3)]
+        assert self._prune(diagonal, 3) == {(2, 2, 2)}      # kept as one component; the two ends have one neighbour each
+
+    def test_a_speck_and_the_ends_of_a_rod_go(self):
+        rod = [(1, 1, z) for z in range(1, 6)]
+        assert self._prune(rod + [(6, 6, 6)], 1) == {(1, 1, z) for z in range(2, 5)}
+
+    def test_the_grid_border_counts_as_empty(self):
+        corner_block = [(x, y, z) for x in (0, 1) for y in (0, 1) for z in (0, 1)]
+        assert self._prune(corner_block, 1) == set(corner_block)
+
+
 class TestPMDiffusion:
     """Tests for Perona-Malik anisotropic diffusion."""
 

@@ -319,3 +319,36 @@ def test_each_patch_is_centred_on_its_point_and_faces_its_normal(corners):
     winding /= np.linalg.norm(winding, axis=1, keepdims=True)
     np.testing.assert_allclose(winding, normals, atol=1e-5)
     np.testing.assert_allclose(normals[0], mesh.face_normals[0], atol=1e-6)
+
+
+def _plate_with_a_sliver(rise):
+    import trimesh
+    """A flat 10 x 10 m plate whose south edge carries a sliver triangle: its apex stands *rise* above the edge, so its normal is 90 degrees off."""
+    vertices = [[0, 0, 0], [10, 0, 0], [5, 0, rise], [10, 10, 0], [0, 10, 0]]
+    faces = [[2, 1, 3], [2, 3, 4], [2, 4, 0], [0, 1, 2]]
+    return trimesh.Trimesh(np.array(vertices, dtype=np.float64), np.array(faces), process=False)
+
+
+def test_a_sliver_that_stays_on_the_plane_does_not_fail_a_flat_panel():
+    from urbansolarcarver.surface_sampling import discretize_surface_with_normals
+    points, _, _, _, _ = discretize_surface_with_normals(_plate_with_a_sliver(1e-6), 1.0)
+    assert len(points) > 0 and np.ptp(points[:, 2]) < 1e-5
+
+
+def test_a_sliver_that_leaves_the_plane_still_fails_the_panel():
+    from urbansolarcarver.surface_sampling import discretize_surface_with_normals
+    with pytest.warns(UserWarning, match="1 non-planar"):
+        points, _, _, _, _ = discretize_surface_with_normals(_plate_with_a_sliver(0.01), 1.0)
+    assert len(points) == 0
+
+
+def test_every_roof_of_the_new_building_example_is_sampled():
+    from pathlib import Path
+    from urbansolarcarver.io import load_mesh
+    from urbansolarcarver.run_context import RunContext, run_context
+    from urbansolarcarver.surface_sampling import discretize_surface_with_normals
+    roofs = Path(__file__).resolve().parent.parent / "src/urbansolarcarver/example_projects/new_building/neighbor_roofs.ply"
+    context = RunContext()
+    with run_context(context):
+        points, *_ = discretize_surface_with_normals(load_mesh(str(roofs)), 1.0)
+    assert context.issues == [] and len(points) == 2378

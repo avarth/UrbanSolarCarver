@@ -118,6 +118,11 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Flat test surfaces with sliver triangles are sampled.** A sliver a few micrometres high, whose normal is rounding noise, made
+  the whole surface count as not planar, so it was skipped and not protected: 8 of the 43 roofs of the New building example. A face
+  now counts against a surface only when it leaves the surface's plane by more than 0.1 mm.
+- **A cancelled or failed run keeps what it finished.** The next run no longer traces the criteria before the one that stopped.
+- **`carve_above_applied` is false** in the diagnostics of a criterion with no voxel left to decide about.
 - **A sky dome that cannot be read is no longer silent.** After a finished run it disappeared without a word, and in Simulate any
   failure reading it was ignored, a stopped engine or lost access included. **Layers** now lists it as missing and says how to write
   it again, and lost access is reported. A run or study without sky patches, such as a time-based one, is not a failure: both

@@ -24,7 +24,10 @@ from ..stage_settings import PIPELINE_STAGES
 from . import simulation, stored_files, test_surfaces, typical_building
 from .api_models import StartRunReply
 from .projects import RUN_FOLDER, ProjectError, ProjectStore, naming_criterion
-from .stage_records import ANALYSIS_STAGES, RunSettings, StageChoice, choose_stages, forget_stages, missing_inputs, record_stages, run_settings
+from .stage_records import (
+    ANALYSIS_STAGES, RunSettings, StageChoice, choose_stages, forget_stages, missing_inputs, record_finished_stages, record_stages,
+    run_settings, stage_run_ids,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -188,7 +191,8 @@ class RunWorker:
             if not choice.stages:
                 return StartRunReply(status="up_to_date", run_id=None, stages=[], criterion_stages={})
             # Removed before the engine starts: a run that stops without finishing (a crash, a closed service)
-            # leaves these stages missing, so the next run completes them.
+            # leaves these stages missing, so the next run completes them. A cancel or a failure the worker sees
+            # records the stages that finished (_final_event_of_run).
             forget_stages(self._store, name, choice.stages, choice.criterion_stages)
             state = RunState(uuid.uuid4().hex, name, choice.stages)
             context = RunContext()
@@ -256,7 +260,9 @@ class RunWorker:
             state.finish(final_event or _run_failed_event("RunAborted", "The run stopped unexpectedly."))
 
     def _final_event_of_run(self, state: RunState, context: RunContext, choice: StageChoice, settings: RunSettings) -> dict:
-        """Run the engine and give the event that ends the run, whether it finished, was cancelled or failed."""
+        """Run the engine and give the event that ends the run, whether it finished, was cancelled or failed. A cancelled or failed
+        run keeps the records of the stages it finished, so the next run does not repeat them."""
+        run_ids_before = stage_run_ids(self._store, state.project, choice)
         try:
             self._calculate_typical_building(state, context, choice, settings)
             self._call_engine(state, context, choice)
@@ -264,17 +270,27 @@ class RunWorker:
             return {"type": "run_finished", "stages": state.stages,
                     "files": _result_files(self._store.open(state.project) / RUN_FOLDER)}
         except RunCancelled:
+            self._keep_finished_stages(state, choice, settings, run_ids_before)
             return {"type": "run_cancelled"}
         except StageChainError:
             _log.exception("A run of project '%s' found its earlier stages unusable", state.project)
             forget_stages(self._store, state.project, PIPELINE_STAGES)
             return _run_failed_event("StageChainError", STAGE_CHAIN_MESSAGE)
         except ConfigError as error:
+            self._keep_finished_stages(state, choice, settings, run_ids_before)
             return _run_failed_event("ConfigError", str(error), [
                 {"field": field_error.field, "message": field_error.message} for field_error in error.errors])
         except Exception as error:
             _log.exception("A run of project '%s' failed", state.project)
+            self._keep_finished_stages(state, choice, settings, run_ids_before)
             return _run_failed_event(type(error).__name__, str(error))
+
+    def _keep_finished_stages(self, state: RunState, choice: StageChoice, settings: RunSettings, run_ids_before: dict) -> None:
+        """Record what a stopped run finished. A failure here leaves those stages missing and does not change how the run ended."""
+        try:
+            record_finished_stages(self._store, state.project, choice, settings, run_ids_before)
+        except Exception:
+            _log.exception("The stages a stopped run of project '%s' finished could not be recorded", state.project)
 
     def _final_event_of_simulation(self, context: RunContext, requests: list, forwarder: _StudyEventsForwarder) -> dict:
         """Run each study's request and give the event that ends the simulation. A study the engine refuses (too many test points,

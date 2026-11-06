@@ -300,3 +300,16 @@ class TestLimitColumnSlope:
         from urbansolarcarver.column_postprocessing import limit_column_slope
         with pytest.raises(ValueError):
             limit_column_slope(np.ones((2, 2, 2), bool), np.ones((2, 2, 2), bool), 90.0)
+
+
+@pytest.mark.parametrize("min_consecutive", [1, 2, 3])
+def test_the_engine_agrees_with_the_definition_on_random_grids(min_consecutive):
+    """The oracle's carve_above is written apart from the kernel, so the end-to-end checks that use it are independent."""
+    import oracle
+    from urbansolarcarver.column_postprocessing import carve_above_columns
+    random = np.random.default_rng(min_consecutive)
+    for _ in range(30):
+        occupied = random.random((6, 5, 12)) < 0.8
+        mask = random.random((6, 5, 12)) < 0.6
+        np.testing.assert_array_equal(carve_above_columns(mask, occupied, min_consecutive),
+                                      oracle.carve_above(mask, occupied, min_consecutive))

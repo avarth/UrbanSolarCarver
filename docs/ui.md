@@ -164,6 +164,8 @@ A refused run points at the criterion that caused it, in the pinned bar and in t
 - A criterion that protects nothing opens its editor with the Test surfaces section open; the bar says "Add test surfaces to *name*." **Run analysis** waits with "Add test surfaces to *name* to run the analysis" while any criterion that is on has none.
 - With every criterion off, the run waits with "Turn on a criterion to run".
 
+A run that is cancelled or fails keeps what it finished: the next run starts with the first stage that did not finish, so the criteria before it are not traced again.
+
 **Build envelope and massing** waits until every criterion that is on is carved, and builds once, from the last criterion.
 
 ### The 3D view with several criteria

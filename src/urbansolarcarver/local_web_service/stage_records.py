@@ -423,21 +423,47 @@ def record_stages(store: ProjectStore, name: str, choice: StageChoice, settings:
     each criterion's preprocessing and thresholding that ran, with its settings and test surface fingerprint (and the typical
     building's key in the preprocessing of a criterion that uses it), and exporting and massing, with the settings of the last
     criterion."""
+    _record(store, name, settings, stage_run_ids(store, name, choice))
+
+
+def stage_run_ids(store: ProjectStore, name: str, choice: StageChoice) -> dict[tuple[str | None, str], str | None]:
+    """The run_id of the manifest on disk of each stage of *choice*, None without one: (criterion id, stage) for preprocessing and
+    thresholding, (None, stage) for exporting and massing."""
     run_folder = store.open(name) / RUN_FOLDER
+    run_ids = {}
+    for criterion_id, stages in choice.criterion_stages.items():
+        for stage in stages:
+            manifest = _read_criterion_manifest(run_folder, criterion_id, stage)
+            run_ids[criterion_id, stage] = manifest.get("run_id") if manifest is not None else None
+    for stage in choice.stages:
+        if stage in LEAF_STAGES:
+            manifest = _read_manifest(run_folder, stage)
+            run_ids[None, stage] = manifest.get("run_id") if manifest is not None else None
+    return run_ids
+
+
+def record_finished_stages(store: ProjectStore, name: str, choice: StageChoice, settings: RunSettings,
+                           run_ids_before: dict[tuple[str | None, str], str | None]) -> None:
+    """As record_stages for a run that stopped before its end: only the stages it finished, whose manifest is not the one of
+    *run_ids_before* (stage_run_ids when it started). A stage writes its manifest last, so a new one means the stage is complete."""
+    finished = {stage: run_id for stage, run_id in stage_run_ids(store, name, choice).items()
+                if run_id is not None and run_id != run_ids_before.get(stage)}
+    _record(store, name, settings, finished)
+
+
+def _record(store: ProjectStore, name: str, settings: RunSettings, run_ids: dict[tuple[str | None, str], str]) -> None:
+    """Write the records of the stages of *run_ids* (as stage_run_ids), with *settings*."""
     with store.project_lock(name):
         project_json = store.read_project_json(name)
-        for criterion_id, stages in choice.criterion_stages.items():
-            for stage in stages:
+        for (criterion_id, stage), run_id in run_ids.items():
+            if criterion_id is None:
+                project_json.stage_records[stage] = StageRecord(
+                    config=settings.leaf_settings, inputs_revision=settings.inputs_revision, manifest_run_id=run_id)
+            else:
                 project_json.criterion_records.setdefault(criterion_id, {})[stage] = StageRecord(
-                    config=settings.criteria[criterion_id], inputs_revision=settings.inputs_revision,
-                    manifest_run_id=_read_criterion_manifest(run_folder, criterion_id, stage)["run_id"],
+                    config=settings.criteria[criterion_id], inputs_revision=settings.inputs_revision, manifest_run_id=run_id,
                     test_surfaces_fingerprint=settings.test_surfaces_fingerprints[criterion_id],
                     weights_key=settings.weights_keys.get(criterion_id) if stage == "preprocessing" else None)
-        for stage in choice.stages:
-            if stage in LEAF_STAGES:
-                project_json.stage_records[stage] = StageRecord(
-                    config=settings.leaf_settings, inputs_revision=settings.inputs_revision,
-                    manifest_run_id=_read_manifest(run_folder, stage)["run_id"])
         store.write_project_json(name, project_json)
 
 

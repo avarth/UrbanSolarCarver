@@ -532,6 +532,11 @@ class AnalysisMesh:
         return out
 
 
+# A face whose normal is off the panel's counts against the panel only when it leaves the panel's plane by more than this. Modelling
+# tools leave sliver triangles a few micrometres high on flat faces, and rounding makes their normals noise.
+_OFF_PLANE_TOLERANCE_M = 1e-4
+
+
 def discretize_surface_with_normals(
     mesh: trimesh.Trimesh,
     sample_step: float = 1.0,
@@ -543,8 +548,9 @@ def discretize_surface_with_normals(
     point/normal pairs.
 
     Each connected component whose faces all lie within
-    `coplanarity_tol_deg` of the component's area-weighted mean normal is
-    sampled with ``sample_planar_surface``; other components are skipped
+    `coplanarity_tol_deg` of the component's area-weighted mean normal, or
+    stay within 0.1 mm of its plane, is sampled with
+    ``sample_planar_surface``; other components are skipped
     with a UserWarning.  The quad analysis mesh has one face per sample
     point, suitable for per-face colouring (e.g. "LB Spatial Heatmap" in
     Grasshopper/Rhino).
@@ -592,7 +598,8 @@ def discretize_surface_with_normals(
 
     for component_index, submesh in enumerate(submeshes):
         # 1) Planarity check on the faces with real area: a zero-area sliver
-        #    has a (0, 0, 0) normal and must not disqualify the panel.
+        #    has a (0, 0, 0) normal and must not disqualify the panel. Nor does
+        #    a sliver whose normal is off but that stays on the panel's plane.
         face_areas = submesh.area_faces
         real = face_areas > 1e-12 * max(float(face_areas.max()), 1e-30)
         face_normals = submesh.face_normals[real]
@@ -603,9 +610,13 @@ def discretize_surface_with_normals(
             continue
         mean_normal /= norm_len
         angles = np.degrees(np.arccos(np.clip(face_normals @ mean_normal, -1.0, 1.0)))
-        if angles.max() > coplanarity_tol_deg:
-            skipped["non-planar"].append(component_index)
-            continue
+        off_normal = angles > coplanarity_tol_deg
+        if off_normal.any():
+            plane_point = np.average(submesh.triangles_center[real], axis=0, weights=face_areas[real])
+            off_plane = np.abs((submesh.triangles[real][off_normal] - plane_point) @ mean_normal)
+            if off_plane.max() > _OFF_PLANE_TOLERANCE_M:
+                skipped["non-planar"].append(component_index)
+                continue
 
         # 2) Sample this planar sheet
         pts3d, nrm3d, qv, qf, wts = sample_planar_surface(

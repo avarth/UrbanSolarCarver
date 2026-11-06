@@ -376,12 +376,27 @@ def score_agreement(run: Run) -> dict:
 
 
 # ----------------------------------------------------------------- checks
+def carve_above(mask: np.ndarray, occupied: np.ndarray, min_consecutive: int = 1) -> np.ndarray:
+    """*mask* with carve_above applied, written from the definition and sharing no code with the engine's kernel: in each (x, y)
+    column, from the ground up, the first run of at least *min_consecutive* carved occupied voxels (an empty cell ends a run)
+    removes every occupied voxel above it. A shorter run stays carved and triggers nothing."""
+    result = mask.copy()
+    for x, y in zip(*np.nonzero(occupied.any(axis=2))):
+        run_length = 0
+        for z in range(occupied.shape[2]):
+            carved = occupied[x, y, z] and not mask[x, y, z]
+            run_length = run_length + 1 if carved else 0
+            if run_length >= min_consecutive:
+                result[x, y, z + 1:] &= ~occupied[x, y, z + 1:]
+                break
+    return result
+
+
 def kept_grid(run: Run) -> np.ndarray:
     """Occupied voxels kept after thresholding and carve_above (pre-cleanup)."""
-    from urbansolarcarver.column_postprocessing import carve_above_columns
     m = run.mask
     if run.cfg.get("carve_above", True):
-        m = carve_above_columns(m, run.occ, run.cfg.get("carve_above_min_consecutive", 1))
+        m = carve_above(m, run.occ, run.cfg.get("carve_above_min_consecutive", 1))
     return run.occ & m
 
 

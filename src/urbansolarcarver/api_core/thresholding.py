@@ -488,8 +488,8 @@ def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstr
         "after_run_id": None if previous is None else previous.manifest.run_id,
         # The occupied voxels this criterion decides about (the ones the previous criterion kept).
         "voxels_at_start": occupied,
-        "carve_above_applied": effective["carve_above"],
-        "carve_above_min_consecutive": effective["carve_above_min_consecutive"] if effective["carve_above"] else None,
+        "carve_above_applied": carve_above,
+        "carve_above_min_consecutive": effective["carve_above_min_consecutive"] if carve_above else None,
         "carve_above_extra_voxels_removed": carve_above_removed,
         "max_slope_deg": max_slope,
         "slope_limit_extra_voxels_removed": slope_removed,
