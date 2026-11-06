@@ -17,7 +17,7 @@ const PROJECTS = [
   { name: "Older", created: "2026-10-01T09:00:00", modified: "2026-10-02T09:00:00", mode: "time-based" },
   { name: "Newer", created: "2026-10-01T09:00:00", modified: "2026-10-16T14:05:00", mode: "irradiance" },
 ];
-const EXAMPLES = [{ name: "new_building", title: "New building among neighbors", description: "A plot of about 18 by 17 m." }];
+const EXAMPLES = [{ name: "new_building", title: "New building among neighbors", mode: "irradiance", description: "A plot of about 18 by 17 m." }];
 const FOLDER: ProjectsFolderReply = { path: "D:\\USC projects", source: "default", can_change: true };
 const NO_ACTIONS: ProjectActions = {
   openFolder: async () => null, rename: async () => null, delete: async () => null, resetToExample: async () => null,
@@ -79,7 +79,7 @@ test("three cards: a new project with the name hint, the projects newest first, 
   expect(cards[0].textContent).toContain("Up to 64 letters, numbers, spaces, hyphens or underscores.");
   expect([...cards[1].querySelectorAll(".start-choice-name")].map((name) => name.textContent)).toEqual(["Newer", "Older"]);
   expect(cards[1].querySelector(".start-choice-detail")!.textContent).toBe("16 Oct 2026, 14:05");
-  expect(cards[2].textContent).toContain("New building among neighborsA plot of about 18 by 17 m.");
+  expect(cards[2].textContent).toContain("New building among neighborsSolar energy. A plot of about 18 by 17 m.");
 });
 
 test("Create project sends the name; a refusal is shown under the field", async () => {

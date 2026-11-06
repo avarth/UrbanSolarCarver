@@ -352,3 +352,14 @@ def test_every_roof_of_the_new_building_example_is_sampled():
     with run_context(context):
         points, *_ = discretize_surface_with_normals(load_mesh(str(roofs)), 1.0)
     assert context.issues == [] and len(points) == 2378
+
+def test_the_skipped_surfaces_are_told_with_their_reason_and_triangles():
+    import trimesh
+    from urbansolarcarver.surface_sampling import SkippedSurfaces, discretize_surface_with_normals
+    flat = trimesh.Trimesh([[0, 0, 0], [4, 0, 0], [4, 4, 0], [0, 4, 0]], [[0, 1, 2], [0, 2, 3]], process=False)
+    bent = trimesh.Trimesh([[10, 0, 0], [14, 0, 0], [14, 1, 3], [10, 0, 3]], [[0, 1, 2], [0, 2, 3]], process=False)
+    skipped = SkippedSurfaces()
+    with pytest.warns(UserWarning, match="1 non-planar"):
+        discretize_surface_with_normals(trimesh.util.concatenate([flat, bent]), 1.0, skipped_surfaces=skipped)
+    assert skipped.surface_count == 2 and [surface["reason"] for surface in skipped.surfaces] == ["non-planar"]
+    assert skipped.surfaces[0]["triangles"].shape == (2, 3, 3) and skipped.surfaces[0]["triangles"][:, :, 0].min() == 10

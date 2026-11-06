@@ -313,6 +313,18 @@ class SkyDome(BaseModel):
     weights: list[float]
 
 
+class SkippedSurface(BaseModel):
+    """A test surface the sampling left out."""
+    reason: Literal["degenerate", "non-planar", "no samples"]
+    vertices: list[list[float]]     # three per triangle, in world coordinates
+
+
+class SkippedSurfaces(BaseModel):
+    """The test surfaces of a criterion's run that protect nothing, and how many there were in all."""
+    surface_count: int
+    surfaces: list[SkippedSurface]
+
+
 class SunMarker(BaseModel):
     """The sun at one whole hour of the analysis period."""
     hour: int
@@ -429,6 +441,7 @@ class ExampleInfo(BaseModel):
     name: str
     title: str
     description: str
+    mode: str
     project: str | None = None  # the existing project made from this example (the most recently modified), None when there is none
 
 

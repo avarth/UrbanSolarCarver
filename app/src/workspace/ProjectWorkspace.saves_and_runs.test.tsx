@@ -53,7 +53,7 @@ test("a settings change saves; Run analysis starts a run; its events finish it; 
   expect(service.count("GET /run/summary")).toBe(1);
   expect(service.count("GET /stage-status")).toBe(2);
   expect(stepIsOpen("Criteria")).toBe(true);                                 // a finished analysis opens Criteria
-  expect(stepRow("Criteria").textContent).toContain("Update when I change the threshold");     // the carving rule, no longer waiting
+  expect(stepRow("Criteria").textContent).toContain("Update the carving as I change these settings");     // the carving rule, no longer waiting
   expect(stepRow("Criteria").textContent).not.toContain("Run the analysis to see the carving");
   expect(dimmedCarvingLayers()).toEqual([]);
   openStep("Site and grid");
@@ -223,7 +223,7 @@ test("a page opened during a run it does not follow: Run analysis answered with 
   // The carving and the analysis before it, which the page did not hold as current, are asked for; not the envelope or the massing.
   expect(service.requests.slice(requestsBefore).filter((request) => request.startsWith("GET /run/"))
     .map((request) => request.split("?")[0]).sort())
-    .toEqual(["GET /run/score-points", "GET /run/sky-patches", "GET /run/summary"]);
+    .toEqual(["GET /run/score-points", "GET /run/skipped-surfaces", "GET /run/sky-patches", "GET /run/summary"]);
   expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Solar time-based, 61\u00a0% kept");
   openStep("Criteria");
   expect(stepRow("Criteria").textContent).not.toContain("Run the analysis to see the carving");
@@ -281,12 +281,12 @@ test("a refused mode change locks the carving: the old mode's carving is not sho
   openPanelSection("Mode");
   act(() => modeTile("Daylight").click());
   // Locked at once, before the save is sent: the stored settings, which the stage status describes, are still Solar time-based.
-  expect(stepRow("Criteria").textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
+  expect(stepRow("Criteria").textContent).toContain("The mode or the settings changed since the analysis. Run it again to update the carving.");
   await waitForTheSave();
   await settle();
   expect(service.count("PATCH /criteria/1")).toBe(1);
   expect(service.savedValues).toEqual([]);                     // refused: config.yaml still says Solar time-based
-  expect(stepRow("Criteria").textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
+  expect(stepRow("Criteria").textContent).toContain("The mode or the settings changed since the analysis. Run it again to update the carving.");
   expect(thresholdField().disabled).toBe(true);
   expect(dimmedCarvingLayers()).toEqual(["carved_voxels", "kept_voxels", "sky_dome"]);
   expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("1 setting to fix");
@@ -303,7 +303,7 @@ test("a refused mode change locks the carving: the old mode's carving is not sho
   expect(service.savedValues).toEqual([{ mode: "daylight", max_slope_deg: 45 }]);
   expect(service.count("POST /runs")).toBe(0);
   expect(FakeWebSocket.opened).toHaveLength(0);
-  expect(stepRow("Criteria").textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
+  expect(stepRow("Criteria").textContent).toContain("The mode or the settings changed since the analysis. Run it again to update the carving.");
 });
 
 test("a failed run's link to a setting opens its step and focuses the input its label names: a slider's number field", async () => {
@@ -362,7 +362,7 @@ test("go to a carving setting opens the Carving rule, closed before, and focuses
   await settle();
   expect(panelSectionOpen("Carving rule")).toBe(true);              // the error marked in the field opened it
   togglePanelSection("Carving rule");
-  act(() => buttonIn(container(), "Go to steepest step between columns").click());
+  act(() => buttonIn(container(), "Go to steepest slope of the envelope").click());
   expect(panelSectionOpen("Carving rule")).toBe(true);
   expect(container().querySelector('[data-setting="max_slope_deg"]')!.contains(document.activeElement)).toBe(true);
 });

@@ -117,7 +117,7 @@ test("the tile's i opens the same tooltip by click, and is hidden from a screen 
     expect(infoButtonOf(name).hasAttribute("aria-expanded")).toBe(false);
   }
   click(infoButtonOf("Angle rule"));
-  expect(document.querySelector('[role="tooltip"]')!.textContent).toContain("Needs a plane angle.");
+  expect(document.querySelector('[role="tooltip"]')!.textContent).toContain("Uses a plane angle (45° to start).");
   expect(infoButtonOf("Angle rule").dataset.open).toBe("true");      // drawn pressed while its tooltip is pinned
   expect(infoButtonOf("Daylight").dataset.open).toBeUndefined();
 });
@@ -199,7 +199,7 @@ test("a tooltip pinned with the i closes when another tile is chosen or the poin
   click(info("Daylight"));
   pressPointer(info("Angle rule"));
   click(info("Angle rule"));
-  expect(document.querySelector('[role="tooltip"]')!.textContent).toContain("Needs a plane angle.");
+  expect(document.querySelector('[role="tooltip"]')!.textContent).toContain("Uses a plane angle (45° to start).");
   expect(document.querySelector('[role="tooltip"]')!.textContent).not.toContain("overcast sky");
   // A press outside the step closes it.
   pressPointer(outside);
@@ -220,9 +220,9 @@ test("the settings a mode change set back to their defaults are named under the 
   rendered = renderForTest(<ModeStep mode="time-based" onChoose={() => {}} disabledReason={null} weatherDropZone={null}
                                      valuesReset={{ settings: ["max_slope_deg", "voxel_size"], mode: "time-based" }} />);
   expect(rendered.container.querySelector(".mode-values-reset")!.textContent)
-    .toBe("Steepest step between columns and voxel size are back to their defaults: Solar time-based cannot use the values you had set.");
+    .toBe("Steepest slope of the envelope and voxel size are back to their defaults: Solar time-based cannot use the values you had set.");
   rendered.rerender(<ModeStep mode="time-based" onChoose={() => {}} disabledReason={null} weatherDropZone={null}
                               valuesReset={{ settings: ["max_slope_deg"], mode: "time-based" }} />);
   expect(rendered.container.querySelector(".mode-values-reset")!.textContent)
-    .toBe("Steepest step between columns is back to its default: Solar time-based cannot use the value you had set.");
+    .toBe("Steepest slope of the envelope is back to its default: Solar time-based cannot use the value you had set.");
 });

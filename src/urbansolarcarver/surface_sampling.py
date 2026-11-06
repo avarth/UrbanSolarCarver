@@ -38,6 +38,8 @@ Data types and units
 - Points and normals: np.ndarray, shape (N, 3), world units.
 """
 
+from dataclasses import dataclass, field
+
 import numpy as np
 import trimesh
 from scipy.spatial import cKDTree
@@ -50,7 +52,15 @@ from .run_context import report_issue
 from .stage_settings import PreprocessingSettings
 
 
-def sample_surface(insolation_mesh, settings: PreprocessingSettings):
+@dataclass
+class SkippedSurfaces:
+    """What the sampling left out: how many surfaces it saw, and for each one skipped the reason ("degenerate", "non-planar" or
+    "no samples") and its triangles ((T, 3, 3) array)."""
+    surface_count: int = 0
+    surfaces: list = field(default_factory=list)
+
+
+def sample_surface(insolation_mesh, settings: PreprocessingSettings, skipped_surfaces: "SkippedSurfaces | None" = None):
     """
     Sample quasi-planar patches to produce point/normal sets for carving.
 
@@ -80,7 +90,7 @@ def sample_surface(insolation_mesh, settings: PreprocessingSettings):
     """
     sample_points, sample_normals, analysis_mesh, sample_weights, taper_stats = (
         discretize_surface_with_normals(
-            insolation_mesh, settings.grid_step, edge_taper=settings.edge_taper
+            insolation_mesh, settings.grid_step, edge_taper=settings.edge_taper, skipped_surfaces=skipped_surfaces
         )
     )
 
@@ -542,6 +552,7 @@ def discretize_surface_with_normals(
     sample_step: float = 1.0,
     coplanarity_tol_deg: float = 5.0,
     edge_taper: float = 0.0,
+    skipped_surfaces: "SkippedSurfaces | None" = None,
 ) -> tuple[np.ndarray, np.ndarray, "AnalysisMesh | None", np.ndarray, list]:
     """
     Sample the nearly planar connected components of a mesh and return
@@ -568,6 +579,8 @@ def discretize_surface_with_normals(
         from 0 at each component's outline to 1 at ``edge_taper`` inward.
         Distances are measured in the component's plane, which the
         coplanarity check guarantees exists.
+    skipped_surfaces : SkippedSurfaces or None
+        Filled with the surfaces seen and the ones skipped, when given.
 
     Returns
     -------
@@ -596,6 +609,13 @@ def discretize_surface_with_normals(
     taper_stats: list = []
     skipped = {"degenerate": [], "non-planar": [], "no samples": []}
 
+    def skip(reason: str, index: int, surface: trimesh.Trimesh) -> None:
+        skipped[reason].append(index)
+        if skipped_surfaces is not None:
+            skipped_surfaces.surfaces.append({"reason": reason, "triangles": np.asarray(surface.triangles)})
+
+    if skipped_surfaces is not None:
+        skipped_surfaces.surface_count = len(submeshes)
     for component_index, submesh in enumerate(submeshes):
         # 1) Planarity check on the faces with real area: a zero-area sliver
         #    has a (0, 0, 0) normal and must not disqualify the panel. Nor does
@@ -606,7 +626,7 @@ def discretize_surface_with_normals(
         mean_normal = (face_normals * face_areas[real][:, None]).sum(axis=0)
         norm_len = np.linalg.norm(mean_normal)
         if norm_len < 1e-12:
-            skipped["degenerate"].append(component_index)
+            skip("degenerate", component_index, submesh)
             continue
         mean_normal /= norm_len
         angles = np.degrees(np.arccos(np.clip(face_normals @ mean_normal, -1.0, 1.0)))
@@ -615,7 +635,7 @@ def discretize_surface_with_normals(
             plane_point = np.average(submesh.triangles_center[real], axis=0, weights=face_areas[real])
             off_plane = np.abs((submesh.triangles[real][off_normal] - plane_point) @ mean_normal)
             if off_plane.max() > _OFF_PLANE_TOLERANCE_M:
-                skipped["non-planar"].append(component_index)
+                skip("non-planar", component_index, submesh)
                 continue
 
         # 2) Sample this planar sheet
@@ -624,7 +644,7 @@ def discretize_surface_with_normals(
         )
 
         if pts3d.size == 0:
-            skipped["no samples"].append(component_index)
+            skip("no samples", component_index, submesh)
             continue
 
         # 2b) Record taper statistics.  A component that never reaches

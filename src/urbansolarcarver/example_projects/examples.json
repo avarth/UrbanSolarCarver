@@ -15,7 +15,7 @@
   {
     "name": "new_building",
     "title": "New building among neighbors",
-    "description": "A plot of about 18 by 17 m for one new building 29 m high among existing neighbors, with their roofs and their windows as two test surface files.",
+    "description": "A plot of about 18 by 17 m for one new building 29 m high among existing neighbours, with their roofs and their windows as two test surface files.",
     "mode": "irradiance",
     "max_volume": [
       "max_volume.ply"

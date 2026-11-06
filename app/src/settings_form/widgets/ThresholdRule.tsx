@@ -1,4 +1,4 @@
-// The threshold setting (UX 5.5, 7). In time-based mode it is Shadow tolerated, a cutoff in m²·h; in the weighted modes it is
+// The threshold setting (UX 5.5, 7). In time-based mode it is Shade allowed per voxel, a cutoff in m²·h; in the weighted modes it is
 // the Carving rule: Manual, a carve amount (the engine's default, so unset), or Automatic; a cutoff the config holds shows as Manual.
 import { messages } from "../../messages";
 import { NumberInput, type ControlProps } from "./NumberInput";

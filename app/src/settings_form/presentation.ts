@@ -40,6 +40,7 @@ export interface SettingPresentation {
   essential: "all" | string[] | false;
   modes?: string[];
   shown_with_inputs?: string[];
+  shown_when_on?: string;
   display?: DisplayConversion;
   widget?: WidgetName;
   slider?: SliderRange;
@@ -58,6 +59,8 @@ export interface SettingView {
   /** The unit for a value of exactly 1; absent, *unit*. */
   unitOne?: string;
   help: string;
+  /** The on/off setting without which this one does nothing, so it is not drawn while that is off. */
+  shownWhenOn?: string;
   widget?: WidgetName;
   display?: DisplayConversion;
   slider?: SliderRange;
@@ -110,6 +113,7 @@ export function settingView(name: string, mode: string): SettingView {
     name,
     label: presentation.label_for_modes?.[mode] ?? presentation.label,
     unit: presentation.unit_for_modes?.[mode] ?? presentation.unit,
+    shownWhenOn: presentation.shown_when_on,
     unitOne: presentation.unit_one,
     help: presentation.help_for_modes?.[mode] ?? presentation.help,
     widget: presentation.widget,
@@ -209,7 +213,7 @@ export function shownSliderOf(view: SettingView): SliderRange | undefined {
   return { low: shown(view.slider.low), high: shown(view.slider.high), step: shown(view.slider.step) };
 }
 
-/** The modes that label the threshold "Shadow tolerated" (time-based): there it is a cutoff in m²·h, asked for as a number. */
+/** The modes that label the threshold "Shade allowed per voxel" (time-based): there it is a cutoff in m²·h, asked for as a number. */
 export function thresholdIsShadowToleratedIn(mode: string): boolean {
   return SETTING_PRESENTATIONS.threshold.label_for_modes?.[mode] !== undefined;
 }

@@ -56,7 +56,7 @@ export function criterionSettingsSummary(form: FormState, criterionKeys: Readonl
 }
 
 /**
- * "Carve 70 %" (Manual), "Cutoff 1.5 m²·h" (a fixed cutoff, in Shadow tolerated's unit or, in a weighted mode, the mode's score
+ * "Carve 70 %" (Manual), "Cutoff 1.5 m²·h" (a fixed cutoff, in Shade allowed per voxel's unit or, in a weighted mode, the mode's score
  * unit), "Automatic", or the angle rule's line.
  */
 export function carvingRuleSummary(form: FormState, scoreUnit = ""): string {
@@ -64,7 +64,7 @@ export function carvingRuleSummary(form: FormState, scoreUnit = ""): string {
   if (control === null) return messages.angleRuleSummary;
   const spec = shownValue(form, "threshold") as ThresholdSpec | null;
   if (control.name === "threshold" || spec?.method === "cutoff") {
-    // Shadow tolerated unset is a cutoff at 0, as the engine applies it.
+    // Shade allowed per voxel unset is a cutoff at 0, as the engine applies it.
     const cutoff = spec?.method === "cutoff" && typeof spec.value === "number" ? spec.value : 0;
     return messages.cutoffSummary(withUnit(formattedNumber(cutoff), control.name === "threshold" ? unitBesideValue(control) : scoreUnit));
   }

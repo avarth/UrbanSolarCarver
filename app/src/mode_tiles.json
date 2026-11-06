@@ -4,7 +4,7 @@
     "plain_name": "Angle rule",
     "one_line": "A fixed plane from each facade",
     "tooltip": "Removes everything above a plane at a fixed angle from each facade.",
-    "needs": "Needs a plane angle.",
+    "needs": "Uses a plane angle (45° to start).",
     "protects_hint": "Facades the angle is measured from, such as neighbouring facades.",
     "symbol": "facade_with_angled_line"
   },
@@ -49,7 +49,7 @@
     "plain_name": "Night cooling",
     "one_line": "View of the cold night sky",
     "tooltip": "Keeps a flat roof's view of the cold night sky. Experimental; assumes horizontal test surfaces.",
-    "needs": "Needs a night dew point.",
+    "needs": "Uses a night dew point (14 °C to start).",
     "protects_hint": "Flat roofs that cool toward the night sky.",
     "symbol": "crescent_moon_with_arrow"
   }

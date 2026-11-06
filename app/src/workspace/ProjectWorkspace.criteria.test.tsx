@@ -181,7 +181,7 @@ test("a criterion without test surfaces says what to add", async () => {
   await openWorkspace(service, { ...project(NOTHING_RUN, { mode: "daylight" }), inputs: { ...project(NOTHING_RUN).inputs, test_surfaces: [] },
                                  criteria: [criterionEntry({ mode: "daylight" }, [])] });
   openStep("Criteria");
-  expect(protectsBox().querySelector(".input-box-hint")!.textContent).toBe("Windows or facades that need daylight.");
+  expect(protectsBox().querySelector(".input-box-hint")!.textContent).toBe("Windows or facades that need daylight. Flat panels; a curved or folded one is skipped.");
   expect(buttonIn(protectsBox(), "Add test surfaces")).toBeDefined();
   const runButton = buttonIn(pinnedBar(), "Run analysis");
   expect(runButton.disabled).toBe(true);
@@ -288,7 +288,7 @@ test("a run failure's link to a criterion setting opens the editor of that crite
   await settle();
   showCriterionCards();
   expect(listShown()).toBe(true);
-  act(() => buttonIn(container(), "Go to steepest step between columns").click());
+  act(() => buttonIn(container(), "Go to steepest slope of the envelope").click());
   expect(listShown()).toBe(false);
   const slopeField = container().querySelector('[data-setting="max_slope_deg"]')!;
   expect(slopeField.contains(document.activeElement)).toBe(true);       // the field, not the editor's name, has the focus

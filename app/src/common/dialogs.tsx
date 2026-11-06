@@ -11,8 +11,11 @@ import "../theme/panels.css";
  * of a selector list ("button, input") grouped by selector, not in document order.
  */
 function focusableControls(dialog: HTMLElement): HTMLElement[] {
-  return [...dialog.querySelectorAll<HTMLElement>("*")].filter((element): element is HTMLButtonElement | HTMLInputElement =>
-    (element instanceof HTMLButtonElement || element instanceof HTMLInputElement) && !element.disabled);
+  return [...dialog.querySelectorAll<HTMLElement>("*")].filter((element) => {
+    if (element instanceof HTMLAnchorElement) return element.hasAttribute("href");
+    return (element instanceof HTMLButtonElement || element instanceof HTMLInputElement || element instanceof HTMLSelectElement
+            || element instanceof HTMLTextAreaElement) && !element.disabled;
+  });
 }
 
 export interface DialogFrameProps {

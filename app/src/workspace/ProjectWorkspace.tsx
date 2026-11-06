@@ -74,7 +74,7 @@ export const LAYERS_SHOWN_IN_STEP: Record<StepName, readonly LayerName[]> = {
   inputs: ["max_volume", "test_surfaces", "context", "terrain"],
   site_and_grid: ["max_volume", "test_surfaces", "context", "terrain", "sun_path"],
   criteria: ["max_volume", "test_surfaces", "context", "terrain", "sun_path", "kept_voxels", "sky_dome"],
-  envelope_and_massing: ["context", "terrain", "envelope", "building_massing"],
+  envelope_and_massing: ["test_surfaces", "context", "terrain", "envelope", "building_massing"],
   export: ["context", "terrain", "envelope", "building_massing"],
 };
 // The layers Simulate shows by default, for each geometry its study values are shown on.

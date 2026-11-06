@@ -38,7 +38,7 @@ interface ProtectsBoxProps {
 }
 
 export function protectsHintOf(mode: string): string {
-  return MODE_TILES.find((tile) => tile.engine_name === mode)?.protects_hint ?? messages.testSurfacesHint;
+  return `${MODE_TILES.find((tile) => tile.engine_name === mode)?.protects_hint ?? messages.testSurfacesHint} ${messages.flatPanelsHint}`;
 }
 
 interface FilesOfOtherCriteriaProps {

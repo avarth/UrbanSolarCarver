@@ -19,7 +19,7 @@ const LINE = "Removes 70 % of the obstruction, 18 400 m³, more than fits the li
 
 function headerProps(overrides: Partial<CriterionEditorHeaderProps> = {}): CriterionEditorHeaderProps {
   return {
-    entry: DAYLIGHT, line: LINE, position: 2, count: 3, onShowList: () => {}, onPrevious: () => {}, onNext: () => {}, disabledReason: null,
+    entry: DAYLIGHT, line: LINE, position: 2, count: 3, neighbourIds: { previous: "1", next: "3" }, onShowList: () => {}, onPrevious: () => {}, onNext: () => {}, disabledReason: null,
     deleteDisabledReason: null, onSetBypassed: () => {}, onChoose: () => {}, ...overrides,
   };
 }
@@ -149,4 +149,18 @@ test("the sticky header stays over the controls that scroll under it, the period
   } finally {
     removeStyles.forEach((remove) => remove());
   }
+});
+
+test("a move that opened nothing is not said when another criterion opens later", () => {
+  renderHeader({ neighbourIds: { previous: "1", next: "3" } });
+  click(button("Next criterion")!);        // the selection is refused, so the entry stays
+  rendered!.rerender(<CriterionEditorHeader {...headerProps({ entry: { ...DAYLIGHT, id: "9" }, neighbourIds: { previous: "1", next: "3" } })} />);
+  expect(rendered!.container.querySelector('[role="status"]')!.textContent).toBe("");
+});
+
+test("the criterion a move asked for is said once it opens", () => {
+  renderHeader({ neighbourIds: { previous: "1", next: "3" } });
+  click(button("Next criterion")!);
+  rendered!.rerender(<CriterionEditorHeader {...headerProps({ entry: { ...DAYLIGHT, id: "3" }, position: 3, neighbourIds: { previous: "2", next: null } })} />);
+  expect(rendered!.container.querySelector('[role="status"]')!.textContent).not.toBe("");
 });

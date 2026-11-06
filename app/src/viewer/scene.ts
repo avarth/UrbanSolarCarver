@@ -88,23 +88,12 @@ export function metresPerPixelAt(distanceMetres: number, fieldOfViewDegrees: num
 }
 
 /**
- * Where the camera looks so a framed sphere sits in the middle of the part of the view a floating panel leaves free: *centre* moved
- * toward the screen's left by half the panel's width (*insetPixels*) at the camera's distance (the length of *offset*, from the
- * target to the camera), so the sphere appears that much to the right. Looking straight down, the screen's right is east of the
- * north the view puts up.
+ * Shifts the picture *shiftPixels* to the right without moving the camera, so what the camera looks at, which it orbits about, sits
+ * in the middle of the part of the view a floating panel leaves free.
  */
-export function targetBesideInset(centre: Point3, offset: Point3, insetPixels: number, fieldOfViewDegrees: number, viewportHeightPixels: number,
-                                  northDegrees: number): Point3 {
-  if (insetPixels <= 0) return [centre[0], centre[1], centre[2]];
-  const forward = new THREE.Vector3(...offset).negate().normalize();
-  let right = forward.clone().cross(new THREE.Vector3(0, 0, 1));
-  if (right.lengthSq() < 1e-9) {
-    const [northX, northY] = northDirection(northDegrees);
-    right = new THREE.Vector3(northY, -northX, 0);
-  }
-  right.normalize();
-  const shift = (insetPixels / 2) * metresPerPixelAt(new THREE.Vector3(...offset).length(), fieldOfViewDegrees, viewportHeightPixels);
-  return new THREE.Vector3(...centre).addScaledVector(right, -shift).toArray() as Point3;
+export function shiftPicture(camera: THREE.PerspectiveCamera, shiftPixels: number, widthPixels: number, heightPixels: number): void {
+  if (shiftPixels > 0) camera.setViewOffset(widthPixels, heightPixels, -shiftPixels, 0, widthPixels, heightPixels);
+  else camera.clearViewOffset();
 }
 
 /** The view's accessible name (UX 12): the layers on screen, with their counts and whether they are out of date. */
@@ -132,6 +121,8 @@ interface CameraMove {
   toTarget: THREE.Vector3;
   from: THREE.Spherical;
   to: THREE.Spherical;
+  fromShift: number;
+  toShift: number;
 }
 
 function easeInOut(t: number): number {
@@ -165,6 +156,7 @@ export class ViewerScene {
   private readonly cameraListeners = new Set<(camera: CameraState) => void>();
   private theme: ViewportTheme = "light";
   private northDegrees = 0;
+  private pictureShift = 0;       // pixels to the right, set when framing: half of what a floating panel covers
   private skyDomeOpacity = DEFAULT_SKY_DOME_OPACITY;
   private envelopeSeeThrough = false;
   private groundAid: GroundAid = "grid";
@@ -350,7 +342,7 @@ export class ViewerScene {
     const [northX, northY] = northDirection(this.northDegrees);
     const offset = new THREE.Vector3(-northX * Math.sin(TOP_VIEW_TILT_RADIANS), -northY * Math.sin(TOP_VIEW_TILT_RADIANS), Math.cos(TOP_VIEW_TILT_RADIANS));
     offset.multiplyScalar(this.fittingDistance(radius));
-    this.moveCamera(this.targetBesideInset(centre, offset), offset);
+    this.moveCamera(centre, offset);
   }
 
   /** Calls *listener* now and after every camera change; returns the function that stops the calls. */
@@ -399,18 +391,12 @@ export class ViewerScene {
 
   private frameSphere(centre: THREE.Vector3, radius: number, instant = false): void {
     const offset = this.camera.position.clone().sub(this.controls.target).normalize().multiplyScalar(this.fittingDistance(radius));
-    this.moveCamera(this.targetBesideInset(centre, offset), offset, instant);
+    this.moveCamera(centre, offset, instant);
   }
 
   /** The covered width on the left, at most half the view, so a wide panel never leaves nothing to frame in. */
   private insetPixels(): number {
     return Math.min(Math.max(0, this.leftInset()), Math.max(1, this.container.clientWidth) / 2);
-  }
-
-  private targetBesideInset(centre: THREE.Vector3, offset: THREE.Vector3): THREE.Vector3 {
-    const target = targetBesideInset(centre.toArray() as Point3, offset.toArray() as Point3, this.insetPixels(), this.camera.fov,
-                                     Math.max(1, this.container.clientHeight), this.northDegrees);
-    return new THREE.Vector3(...target);
   }
 
   private refreshLayers(): void {
@@ -444,9 +430,7 @@ export class ViewerScene {
    * (nothing loaded yet) the ring is drawn around the local origin, EMPTY_SCENE_RADIUS_METRES wide, as the grid is.
    */
   private rebuildGroundAids(): void {
-    const modelLayers = this.slots.get("max_volume")!.object ? ["max_volume" as const] : LAYER_NAMES.filter((name) => name !== "sky_dome" && name !== "sun_path"
-      && !SURROUNDING_LAYERS.includes(name));
-    const modelBox = this.boxOf(modelLayers, false);     // a hidden maximum volume still sets the grid
+    const modelBox = this.modelBox();
     const size = modelBox.isEmpty() ? new THREE.Vector3() : modelBox.getSize(new THREE.Vector3());
     const centre = modelBox.isEmpty() ? new THREE.Vector3() : modelBox.getCenter(new THREE.Vector3());
     const longestSide = Math.max(size.x, size.y, size.z);
@@ -479,13 +463,26 @@ export class ViewerScene {
     return box;
   }
 
-  /** What the camera frames: the visible layers, the surroundings only when nothing else is shown (they can reach far beyond the site). */
+  /** The maximum volume, shown or not, or whatever is in the view without one: the grid stands on it and the camera orbits about it. */
+  private modelBox(): THREE.Box3 {
+    const modelLayers = this.slots.get("max_volume")!.object ? ["max_volume" as const] : LAYER_NAMES.filter((name) => name !== "sky_dome" && name !== "sun_path"
+      && !SURROUNDING_LAYERS.includes(name));
+    return this.boxOf(modelLayers, false);
+  }
+
+  /**
+   * What the camera frames, centred on the model so the orbit turns about it: the sphere reaches every visible layer, the surroundings
+   * only when nothing else is shown (they can reach far beyond the site).
+   */
   private contentSphere(): { centre: THREE.Vector3; radius: number } {
     const siteBox = this.boxOf(LAYER_NAMES.filter((name) => !SURROUNDING_LAYERS.includes(name)));
     const box = siteBox.isEmpty() ? this.boxOf(SURROUNDING_LAYERS) : siteBox;
     if (box.isEmpty()) return { centre: new THREE.Vector3(), radius: EMPTY_SCENE_RADIUS_METRES };
-    const sphere = box.getBoundingSphere(new THREE.Sphere());
-    return { centre: sphere.center, radius: Math.max(sphere.radius, 0.5) };
+    const modelBox = this.modelBox();
+    const centre = (modelBox.isEmpty() ? box : modelBox).getCenter(new THREE.Vector3());
+    const farthestCorner = new THREE.Vector3(Math.max(centre.x - box.min.x, box.max.x - centre.x), Math.max(centre.y - box.min.y, box.max.y - centre.y),
+                                             Math.max(centre.z - box.min.z, box.max.z - centre.z));
+    return { centre, radius: Math.max(farthestCorner.length(), 0.5) };
   }
 
   /** The camera distance at which a sphere of *radius* fills the narrower side of the part of the view no floating panel covers. */
@@ -496,9 +493,12 @@ export class ViewerScene {
     return (FRAME_MARGIN * radius) / Math.sin(Math.min(verticalHalfAngle, horizontalHalfAngle));
   }
 
+  /** The camera orbits about *target* in every workspace: a floating panel shifts the picture, not the target. */
   private moveCamera(target: THREE.Vector3, offset: THREE.Vector3, instant = false): void {
+    const shift = this.insetPixels() / 2;
     if (instant || prefersReducedMotion()) {
       this.cameraMove = null;
+      this.setPictureShift(shift);
       this.placeCamera(target, offset);
       return;
     }
@@ -508,8 +508,15 @@ export class ViewerScene {
       toTarget: target.clone(),
       from: sphericalAboutZ(this.camera.position.clone().sub(this.controls.target)),
       to: sphericalAboutZ(offset),
+      fromShift: this.pictureShift,
+      toShift: shift,
     };
     this.requestRender();
+  }
+
+  private setPictureShift(shift: number): void {
+    this.pictureShift = shift;
+    shiftPicture(this.camera, shift, Math.max(1, this.container.clientWidth), Math.max(1, this.container.clientHeight));
   }
 
   private placeCamera(target: THREE.Vector3, offset: THREE.Vector3): void {
@@ -531,6 +538,7 @@ export class ViewerScene {
       move.from.theta + turn * eased,
     );
     if (t >= 1) this.cameraMove = null;
+    this.setPictureShift(move.fromShift + (move.toShift - move.fromShift) * eased);
     this.placeCamera(move.fromTarget.clone().lerp(move.toTarget, eased), offsetOf(spherical));
   }
 
@@ -560,6 +568,7 @@ export class ViewerScene {
     const width = Math.max(1, this.container.clientWidth), height = Math.max(1, this.container.clientHeight);
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
+    this.setPictureShift(this.pictureShift);
     this.camera.updateProjectionMatrix();
     this.fitPixelSizedObjects();
     this.cameraChanged();

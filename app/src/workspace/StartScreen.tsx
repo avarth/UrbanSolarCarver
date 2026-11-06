@@ -6,6 +6,7 @@ import { useEffect, useEffectEvent, useId, useRef, useState, type FormEvent, typ
 import type { ExampleInfo, HealthReply, ProjectsFolderReply, ProjectSummary } from "../api_client/client";
 import { useLatest } from "../hooks/use_latest";
 import { dateAndTime, messages } from "../messages";
+import { MODE_TILES } from "../modes";
 import { MessageParts } from "../settings_form/SettingTooltip";
 import { projectFolderPath, sameProjectName } from "./ProjectDialogs";
 import { ProjectMenu, type ProjectActions } from "./ProjectMenu";
@@ -311,7 +312,7 @@ export function StartScreen({ health, projects, examples, projectsFolder, active
                                               onChooseFolder={() => void chooseFolder()} />
                         )} />
         <ChoiceListCard icon={CARD_ICONS.example} title={messages.tryExample} lead={messages.tryExampleLead} items={examples} emptyText="" keyOf={(example) => example.name} onChoose={onTryExample}
-                        render={(example) => ({ name: example.title, detail: example.description })} pickerWaitId={pickerWaitId} />
+                        render={(example) => ({ name: example.title, detail: messages.exampleDetail(MODE_TILES.find((tile) => tile.engine_name === example.mode)?.plain_name ?? example.mode, example.description) })} pickerWaitId={pickerWaitId} />
       </div>
       {health && (
         <footer className="start-footer">

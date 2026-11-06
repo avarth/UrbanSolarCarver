@@ -26,6 +26,7 @@ export type StartRunReply = Schemas["StartRunReply"];
 export type CancelRunReply = Schemas["CancelRunReply"];
 export type RunSummary = Schemas["RunSummary"];
 export type SkyDome = Schemas["SkyDome"];
+export type SkippedSurfaces = Schemas["SkippedSurfaces"];
 export type ProjectsFolderReply = Schemas["ProjectsFolderReply"];
 export type ProjectsFolderChoiceReply = Schemas["ProjectsFolderChoiceReply"];
 export type CriterionEntry = Schemas["CriterionEntry"];
@@ -443,6 +444,8 @@ export const cancelRun = (token: string, runId: string) =>
   requestJson<CancelRunReply>(token, `/api/runs/${encodeURIComponent(runId)}/cancel`, "POST");
 
 export const getRunSummary = (token: string, project: string) => requestJson<RunSummary>(token, `${projectPath(project)}/run/summary`);
+export const getSkippedSurfaces = (token: string, project: string, criterionId?: string) =>
+  requestJson<SkippedSurfaces | null>(token, forCriterion(`${projectPath(project)}/run/skipped-surfaces`, criterionId));
 export const getSkyPatches = (token: string, project: string, criterionId?: string) =>
   requestJson<SkyDome | null>(token, forCriterion(`${projectPath(project)}/run/sky-patches`, criterionId));
 

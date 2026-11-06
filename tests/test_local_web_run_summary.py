@@ -14,7 +14,7 @@ from local_web_test_support import (
 from urbansolarcarver.load_config import build_config_from_mode_starting_values
 from urbansolarcarver.local_web_service.project_names import ProjectError
 from urbansolarcarver.local_web_service.run_summary import (
-    build_run_summary, build_sky_dome, sun_marker_hours, sun_path_for_config,
+    build_skipped_surfaces, build_run_summary, build_sky_dome, sun_marker_hours, sun_path_for_config,
 )
 from urbansolarcarver.local_web_service.score_points import build_score_points
 
@@ -348,3 +348,15 @@ def test_analysis_hours_over_midnight_are_the_engines(arctic_epw):
     assert len(day.period_path) > 48 and all(vector[2] > 0 for vector in day.period_path)
     first_azimuth, last_azimuth = azimuth_degrees(day.period_path[0]), azimuth_degrees(day.period_path[-1])
     assert abs(first_azimuth - last_azimuth) > 30       # the early morning hours come first, then the evening ones
+
+def test_the_skipped_surfaces_of_a_run_are_served_and_none_means_null(project_with_inputs):
+    store, name = project_with_inputs
+    run = write_fake_finished_run(store.open(name))
+    assert build_skipped_surfaces(store, name) is None
+    folder = run / "criteria" / "1" / "preprocessing"
+    (folder / "skipped_surfaces.json").write_text(json.dumps(
+        {"surface_count": 43, "surfaces": [{"reason": "non-planar", "vertices": [[0, 0, 0], [1, 0, 0], [0, 1, 0]]}]}), encoding="utf-8")
+    manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+    (folder / "manifest.json").write_text(json.dumps({**manifest, "skipped_surfaces_path": "skipped_surfaces.json"}), encoding="utf-8")
+    skipped = build_skipped_surfaces(store, name, "1")
+    assert skipped.surface_count == 43 and skipped.surfaces[0].reason == "non-planar" and len(skipped.surfaces[0].vertices) == 3

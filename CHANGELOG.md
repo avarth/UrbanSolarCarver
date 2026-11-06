@@ -9,6 +9,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Skipped test surfaces** in the 3D view: a run saves the surfaces it left out and why (`skipped_surfaces.json`, `GET .../run/skipped-surfaces`), and the Layers menu draws them and says how many, as in "8 of 43 surfaces not protected: 8 not flat".
 - **Windows with an altitude** in an explicit archetype: a window may carry the altitude of its normal (90 for a
   skylight). The weights file is now schema version 2 (version 1 is still read; 0.10.0 refuses version 2).
 - **Progress of Calculate** in the typical building window: a bar under the button fills as the weights are calculated
@@ -128,6 +129,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - **A cancelled or failed run keeps what it finished.** The next run no longer traces the criteria before the one that stopped.
 - **A result file that is gone makes its stage missing** for every stage, not only preprocessing, so the next run writes it again.
 - **A result that cannot be read says so.** Score points, envelope and massing now show in the Layers menu with a note, as the sky dome did, in place of an empty layer without a word.
+- **One orbit in every workspace.** The view turns about the maximum volume in Carve, Simulate and Inspect: a floating panel shifts the picture, not the point the camera turns about, the sky dome and other visible layers count only in how far the camera stands, and leaving Inspect after it framed a file frames the model again.
+- **Clearer settings**: Smoothing passes and Cut voxels needed show only while their switch is on; plainer labels and help (Shade allowed per voxel, Ignore sun below, Steepest slope of the envelope, Part of a module allowed outside the envelope); mode tiles show their one line; example cards name the mode; Envelope and massing shows the test surfaces; the Angle rule legend and a Solar time-based cutoff of 0 say what the voxels are.
+- **The UI**: Tab goes round every control of a dialog; an editor whose criterion is gone shows the list; Escape over a tooltip in a dialog closes the tooltip, not the dialog; the status line says a criterion only when it is the one asked for; an edge strip left from Night cooling is said in the other weighted modes, which read it.
 - **`carve_above_applied` is false** in the diagnostics of a criterion with no voxel left to decide about.
 - **A sky dome that cannot be read is no longer silent.** After a finished run it disappeared without a word, and in Simulate any
   failure reading it was ignored, a stopped engine or lost access included. **Layers** now lists it as missing and says how to write

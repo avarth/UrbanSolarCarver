@@ -24,6 +24,8 @@ export interface CriterionEditorHeaderProps {
   position: number;
   /** How many criteria the project has; with one there is no position and no previous or next. */
   count: number;
+  /** The ids of the criteria before and after this one in carving order; null at the ends. */
+  neighbourIds: { previous: string | null; next: string | null };
   /** Back to the list of the criteria. */
   onShowList: () => void;
   /** Open the criterion before this one in carving order; not called at the first. */
@@ -50,23 +52,23 @@ function Chevron({ direction }: { direction: "left" | "up" | "down" }) {
 }
 
 export function CriterionEditorHeader(props: CriterionEditorHeaderProps) {
-  const { entry, position, count, disabledReason } = props;
+  const { entry, position, count, neighbourIds, disabledReason } = props;
   const mode = String(entry.settings?.mode ?? "");
   const symbol = MODE_TILES.find((tile) => tile.engine_name === mode)?.symbol;
   const classes = ["criterion-editor-header", entry.bypassed && "criterion-editor-header-bypassed"];
   // What the live region says: the criterion previous or next opened, once it is shown (empty until then).
-  const moved = useRef(false);
+  const movingTo = useRef<string | null>(null);
   const [said, setSaid] = useState("");
   const sayShown = useEffectEvent(() => {
-    if (!moved.current) return;
-    moved.current = false;
-    setSaid(messages.criterionShownAt(entry.name, messages.criterionPosition(position, count)));
+    const askedFor = movingTo.current === entry.id;
+    movingTo.current = null;
+    if (askedFor) setSaid(messages.criterionShownAt(entry.name, messages.criterionPosition(position, count)));
   });
   useEffect(() => sayShown(), [entry.id]);
   const isFirst = position <= 1, isLast = position >= count;
-  const move = (waits: boolean, open: () => void) => {
+  const move = (waits: boolean, neighbourId: string | null, open: () => void) => {
     if (waits) return;
-    moved.current = true;
+    movingTo.current = neighbourId;
     open();
   };
   return (
@@ -80,11 +82,11 @@ export function CriterionEditorHeader(props: CriterionEditorHeaderProps) {
           <span className="criterion-editor-neighbours">
             <span className="criterion-editor-position">{messages.criterionPosition(position, count)}</span>
             <button type="button" className="criterion-editor-step" aria-label={messages.previousCriterion} aria-disabled={isFirst || undefined}
-                    onClick={() => move(isFirst, props.onPrevious)}>
+                    onClick={() => move(isFirst, neighbourIds.previous, props.onPrevious)}>
               <Chevron direction="up" />
             </button>
             <button type="button" className="criterion-editor-step" aria-label={messages.nextCriterion} aria-disabled={isLast || undefined}
-                    onClick={() => move(isLast, props.onNext)}>
+                    onClick={() => move(isLast, neighbourIds.next, props.onNext)}>
               <Chevron direction="down" />
             </button>
           </span>

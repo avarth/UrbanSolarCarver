@@ -32,7 +32,7 @@ interface ModeStepProps {
   showsDisabledReason?: boolean;
 }
 
-/** "Steepest step between columns and voxel size are back to their defaults: ..." */
+/** "Steepest slope of the envelope and voxel size are back to their defaults: ..." */
 function valuesResetText({ settings, mode }: { settings: string[]; mode: string }): string {
   const labels = settings.map((name, index) => (index === 0 ? settingView(name, mode).label : settingView(name, mode).label.toLowerCase()));
   return messages.valuesResetForMode(listedWithAnd(labels), labels.length, plainModeName(mode));
@@ -155,7 +155,7 @@ export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone, valu
             <div key={tile.engine_name} className="mode-tile-cell"
                  onMouseEnter={() => { setHoveredIndex(index); setDismissed(false); }}
                  onMouseLeave={() => setHoveredIndex((current) => (current === index ? null : current))}>
-              <div ref={(element) => { tiles.current[index] = element; }} className="mode-tile" role="radio" aria-checked={chosen}
+              <div ref={(element) => { tiles.current[index] = element; }} className="mode-tile" data-line={tile.one_line} role="radio" aria-checked={chosen}
                    aria-disabled={disabled || undefined} aria-describedby={descriptionId}
                    tabIndex={index === focusIndex ? 0 : -1} onClick={() => choose(index)} onKeyDown={(event) => onTileKeyDown(event, index)}
                    onFocus={() => {

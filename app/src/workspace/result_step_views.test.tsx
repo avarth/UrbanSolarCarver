@@ -53,13 +53,13 @@ function carvingProps(overrides: Partial<CarvingStepProps> = {}): CarvingStepPro
   };
 }
 
-test("Solar time-based: Shadow tolerated with its slider ends and the histogram, with no number tiles under it", () => {
+test("Solar time-based: Shade allowed per voxel with its slider ends and the histogram, with no number tiles under it", () => {
   rendered = renderForTest(<CarvingStep {...carvingProps()} />);
   const text = rendered.container.textContent!;
-  expect(rendered.container.querySelector(".threshold-control label")!.textContent).toBe("Shadow tolerated");
-  expect(rendered.container.querySelector(".threshold-slider-ends")!.textContent).toBe("09.6\u00a0m²·h, the highest score");
+  expect(rendered.container.querySelector(".threshold-control label")!.textContent).toBe("Shade allowed per voxel");
+  expect(rendered.container.querySelector(".threshold-slider-ends")!.textContent).toBe("09.6\u00a0m²·h, the highest of any voxel");
   expect(text).toContain("More carving settings");
-  expect(text).toContain("Update when I change the threshold");
+  expect(text).toContain("Update the carving as I change these settings");
   expect(text).not.toContain("Update carving");
   expect(text).toContain("Scores of the voxels");
   expect(rendered.container.querySelector(".number-tile")).toBeNull();     // the card says what it removed, the top bar the last run's time
@@ -136,7 +136,7 @@ test("a weighted mode shows Carve amount in % and no number tiles; the angle rul
 
 test("an analysis out of date dims the carving, disables its controls and says so", () => {
   rendered = renderForTest(<CarvingStep {...carvingProps({ analysisOutOfDate: true })} />);
-  expect(rendered.container.textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
+  expect(rendered.container.textContent).toContain("The mode or the settings changed since the analysis. Run it again to update the carving.");
   expect(rendered.container.querySelector(".carving-content-dimmed")).not.toBeNull();
   expect(rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!.disabled).toBe(true);
   expect(rendered.container.querySelector<HTMLInputElement>(".switch-row input")!.disabled).toBe(true);
@@ -363,7 +363,7 @@ test("a failed run of another criterion names it for its own settings, not for a
   expect(onGoToSetting).toHaveBeenCalledWith("voxel_size", null);
   rendered.rerender(view("max_slope_deg"));
   expect(rendered.container.textContent).toContain("The run stopped on an error in the settings of Windows.");
-  expect(linkText()).toBe("Go to steepest step between columns of Windows");
+  expect(linkText()).toBe("Go to steepest slope of the envelope of Windows");
 });
 
 test("Cancelled, a stage chain error, the warnings of a run and Results are up to date", () => {
@@ -546,17 +546,17 @@ test("a cutoff the config holds in a weighted mode shows as Manual, at the carve
   expect(rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!.value).toBe("93.6");
 });
 
-test("the Shadow tolerated slider ends at the highest score the cutoff is compared with", () => {
+test("the Shade allowed per voxel slider ends at the highest score the cutoff is compared with", () => {
   // After Remove everything above a cut a higher cutoff carves nothing more; the raw score of a voxel may be higher.
   const comparedLower: ScorePoints = { ...SCORE_POINTS, header: { ...SCORE_POINTS.header, compared_score_max: 7.5 },
                                        comparedScores: Float32Array.from([0, 1, 5, 7.5]) };
   rendered = renderForTest(<CarvingStep {...carvingProps({ scorePoints: comparedLower })} />);
-  expect(rendered.container.querySelector(".threshold-slider-ends")!.textContent).toBe("07.5 m²·h, the highest score");
+  expect(rendered.container.querySelector(".threshold-slider-ends")!.textContent).toBe("07.5 m²·h, the highest of any voxel");
   rendered.unmount();
   // Without compared scores (no carving on this analysis yet) it ends at the highest raw score.
   const withoutCompared: ScorePoints = { ...SCORE_POINTS, header: { ...SCORE_POINTS.header, compared_score_max: null } };
   rendered = renderForTest(<CarvingStep {...carvingProps({ scorePoints: withoutCompared })} />);
-  expect(rendered.container.querySelector(".threshold-slider-ends")!.textContent).toBe("09.6 m²·h, the highest score");
+  expect(rendered.container.querySelector(".threshold-slider-ends")!.textContent).toBe("09.6 m²·h, the highest of any voxel");
 });
 
 test("choosing Manual starts from the amount the cut on the histogram carves; Automatic unsets the carve amount", () => {

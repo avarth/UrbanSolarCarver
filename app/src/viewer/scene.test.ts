@@ -3,7 +3,7 @@
 import * as THREE from "three";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { addStyleSheetForTest } from "../viewer_overlays/render_for_test";
-import { cameraOrientation, describeView, metresPerPixelAt, nextGroundAid, targetBesideInset, ViewerScene } from "./scene";
+import { cameraOrientation, describeView, metresPerPixelAt, nextGroundAid, shiftPicture, ViewerScene } from "./scene";
 
 vi.mock("three", async (importOriginal) => {
   const three = await importOriginal<typeof import("three")>();
@@ -27,17 +27,19 @@ test("camera yaw is the clockwise turn from the top view with +Y up the screen",
   expect(level.elevationDegrees).toBeCloseTo(0);
 });
 
-test("a floating panel over the left of the view moves the framed centre right by half its width, in the camera's right direction", () => {
-  // Looking north from 100 m south: the screen's right is east (+x). 45° field, 800 px high: 2 * 100 * tan(22.5°) / 800 m per pixel.
-  const metresPerPixel = (2 * 100 * Math.tan(Math.PI / 8)) / 800;
-  const target = targetBesideInset([0, 0, 0], [0, -100, 0], 300, 45, 800, 0);
-  expect(target[0]).toBeCloseTo(-150 * metresPerPixel, 9);      // the camera looks left of the centre, so the centre appears right
-  expect(target[1]).toBeCloseTo(0, 9);
-  expect(targetBesideInset([1, 2, 3], [0, -100, 0], 0, 45, 800, 0)).toEqual([1, 2, 3]);
-  // Straight down with north at 90° (east up the screen): the screen's right is south (-y)
-  const down = targetBesideInset([0, 0, 0], [0, 0, 100], 300, 45, 800, 90);
-  expect(down[0]).toBeCloseTo(0, 9);
-  expect(down[1]).toBeCloseTo(150 * metresPerPixel, 9);
+test("a shifted picture puts what the camera looks at to the right by the shift, and a shift of 0 clears it", () => {
+  const camera = new THREE.PerspectiveCamera(45, 1000 / 800, 1, 1000);
+  camera.position.set(0, -100, 0);
+  camera.up.set(0, 0, 1);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld();
+  shiftPicture(camera, 150, 1000, 800);
+  const projected = new THREE.Vector3(0, 0, 0).project(camera);
+  expect((projected.x + 1) / 2 * 1000).toBeCloseTo(650, 6);     // 150 px right of the middle of 1000 px
+  expect(projected.y).toBeCloseTo(0, 9);
+  shiftPicture(camera, 0, 1000, 800);
+  expect(camera.view?.enabled ?? false).toBe(false);
+  expect(new THREE.Vector3(0, 0, 0).project(camera).x).toBeCloseTo(0, 9);
 });
 
 test("metres per pixel at the orbit target", () => {
@@ -240,4 +242,29 @@ test("framing beside a panel: the free part of the view sets the distance, the m
   expect(clicked).toHaveLength(1);                          // under the panel there is nothing
   // A panel wider than half the view counts as half
   expect(framedWith(VIEW_WIDTH * 0.9)).toBeCloseTo(framedWith(VIEW_WIDTH * 0.5), 9);
+});
+
+test("framing orbits about the maximum volume, however far the other visible layers reach, and still fits them", () => {
+  const { scene } = viewerWithACube();
+  const box = (centre: [number, number, number], side: number) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(side, side, side));
+    mesh.position.set(...centre);
+    mesh.updateMatrixWorld();
+    return mesh;
+  };
+  scene.setLayer("max_volume", box([5, 5, 10], 10));
+  scene.setLayer("sky_dome", box([5, -20, 60], 100));
+  const { camera, controls } = scene as unknown as { camera: THREE.PerspectiveCamera; controls: { target: THREE.Vector3 } };
+
+  scene.frameAll(true);
+  expect(controls.target.toArray()).toEqual([5, 5, 10]);
+  const framed = camera.position.distanceTo(controls.target);
+  scene.setLayerVisible("max_volume", false);               // a hidden maximum volume stays the orbit point
+  scene.frameAll(true);
+  expect(controls.target.toArray()).toEqual([5, 5, 10]);
+  scene.setLayerVisible("max_volume", true);
+
+  scene.setLayer("sky_dome", null);
+  scene.frameAll(true);
+  expect(camera.position.distanceTo(controls.target)).toBeLessThan(framed);     // the dome's reach counted in the distance
 });

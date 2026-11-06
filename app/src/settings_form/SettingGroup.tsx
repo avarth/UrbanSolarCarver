@@ -4,8 +4,8 @@
 // hidden. Every field takes a row of its own, so a slider has the panel's width to be dragged along (the three massing sliders side
 // by side were too narrow to set a value with).
 import { useId, useState } from "react";
-import type { FormState } from "./form_state";
-import type { SettingGroupView } from "./presentation";
+import { shownValue, type FormState } from "./form_state";
+import type { SettingGroupView, SettingView } from "./presentation";
 import { fieldErrorOf, SettingField, type SettingFieldExtras } from "./SettingField";
 import { Subheading } from "./Subheading";
 import "./settings_form.css";
@@ -25,7 +25,9 @@ export function SettingGroup({ group, form, onChange, disabled = false, fieldExt
   const disabledField = (view: SettingGroupView["essential"][number]) => disabled && !(fieldsWithErrorEditable && fieldErrorOf(form, view) !== undefined);
   const [unfoldedByUser, setUnfoldedByUser] = useState(false);
   const foldId = useId();
-  const foldHoldsAnError = group.folded.some((view) => fieldErrorOf(form, view) !== undefined);
+  const isShown = (view: SettingView) => view.shownWhenOn === undefined || shownValue(form, view.shownWhenOn) !== false;
+  const folded = group.folded.filter(isShown);
+  const foldHoldsAnError = folded.some((view) => fieldErrorOf(form, view) !== undefined);
   const unfolded = unfoldedByUser || foldHoldsAnError;
   return (
     <div className="setting-group">
@@ -33,18 +35,18 @@ export function SettingGroup({ group, form, onChange, disabled = false, fieldExt
         <>
           <Subheading className="setting-group-title">{group.title}</Subheading>
           <div className="setting-group-essential">
-            {group.essential.map((view) => <SettingField key={view.name} view={view} form={form} onChange={onChange} disabled={disabledField(view)} extras={fieldExtras[view.name]} />)}
+            {group.essential.filter(isShown).map((view) => <SettingField key={view.name} view={view} form={form} onChange={onChange} disabled={disabledField(view)} extras={fieldExtras[view.name]} />)}
           </div>
         </>
       )}
-      {group.folded.length > 0 && (
+      {folded.length > 0 && (
         <>
           <button type="button" className="setting-fold" aria-expanded={unfolded} aria-controls={unfolded ? foldId : undefined} onClick={() => setUnfoldedByUser(!unfolded)}>
             {group.foldLabel}
           </button>
           {unfolded && (
             <div id={foldId} className="setting-group-folded">
-              {group.folded.map((view) => <SettingField key={view.name} view={view} form={form} onChange={onChange} disabled={disabledField(view)} extras={fieldExtras[view.name]} />)}
+              {folded.map((view) => <SettingField key={view.name} view={view} form={form} onChange={onChange} disabled={disabledField(view)} extras={fieldExtras[view.name]} />)}
             </div>
           )}
         </>

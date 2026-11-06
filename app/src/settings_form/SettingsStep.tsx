@@ -11,7 +11,7 @@ import {
   changedPeriodSettings, periodInWords, type AnalysisPeriodField, type ColdPeriodState, type Hemisphere,
 } from "./analysis_period";
 import { shownValue, type FormState, type SaveOutcome } from "./form_state";
-import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf, SETTING_PRESENTATIONS, settingsForStep, settingView, type StepName as FormStepName } from "./presentation";
+import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf, SETTING_PRESENTATIONS, settingIsShownIn, settingsForStep, settingView, type StepName as FormStepName } from "./presentation";
 import { fieldErrorOf, gridLineOf, SettingField, WarningIcon, type SettingFieldExtras } from "./SettingField";
 import { SettingGroup } from "./SettingGroup";
 import { gridIsOverBudget, smallestVoxelSizeWithinBudget } from "./grid_budget";
@@ -301,10 +301,18 @@ export function WeatherChangeRegion({ notice, form, onChange, disabled }: { noti
   );
 }
 
+/** The edge strip a weighted mode other than Night cooling reads with no field for it (a value left from Night cooling); null without one. */
+function edgeStripOutsideItsField(form: FormState): number | null {
+  const edgeStrip = form.userValues.edge_taper;
+  const hasField = settingIsShownIn("edge_taper", form.mode);
+  return !hasField && form.scoreKindByMode[form.mode] === "weighted_sum" && typeof edgeStrip === "number" && edgeStrip > 0 ? edgeStrip : null;
+}
+
 export function SettingsStep({ form, onChange, disabledReason, coldPeriod = null, hemisphere = "northern",
                                weatherChangeNotice, inputRoles = NO_INPUT_ROLES, settingShown, stepErrors = form.stepErrors,
                                showsDisabledReason = true }: SettingsStepProps) {
   const fieldExtras = { voxel_size: voxelSizeExtras(form), [ANALYSIS_PERIOD_FIELDS[0]]: { coldPeriod, hemisphere } };
+  const edgeStripCarriedOver = edgeStripOutsideItsField(form);
   return (
     <div className="settings-step">
       {disabledReason !== null && showsDisabledReason && <p className="step-reason">{disabledReason}</p>}
@@ -315,6 +323,7 @@ export function SettingsStep({ form, onChange, disabledReason, coldPeriod = null
       {settingsForStep("settings", form.mode, inputRoles, settingShown).map((group) => (
         <SettingGroup key={group.title} group={group} form={form} onChange={onChange} disabled={disabledReason !== null} fieldExtras={fieldExtras} />
       ))}
+      {edgeStripCarriedOver !== null && (settingShown?.("edge_taper") ?? true) && <p className="step-reason">{messages.edgeStripCarriedOver(edgeStripCarriedOver)}</p>}
     </div>
   );
 }

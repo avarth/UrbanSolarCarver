@@ -52,6 +52,8 @@ export function CriteriaStep({ panel, list, shows, onShowsChange, load = { state
   const selectedIndex = list.criteria.findIndex((criterion) => criterion.id === list.selectedId);
   const selected = list.criteria[selectedIndex];
   const selectedName = selected?.name ?? "";
+  // A selected criterion gone from the list has no editor: the list is the way back.
+  const showsList = shows === "list" || selected === undefined;
 
   useEffect(() => {
     if (cardFocusRequested.current && shows === "list") {
@@ -98,23 +100,22 @@ export function CriteriaStep({ panel, list, shows, onShowsChange, load = { state
     </div>
   );
   return (
-    <div ref={step} className={shows === "editor" ? "criteria-step criteria-step-editor" : "criteria-step"}>
-      {shows === "list" ? (
+    <div ref={step} className={showsList ? "criteria-step" : "criteria-step criteria-step-editor"}>
+      {showsList ? (
         <>
           <CriterionList {...shownList} />
           {chainLine !== null && <p className="chain-summary">{chainLine}</p>}
         </>
       ) : (
         <>
-          {selected !== undefined && (
-            <CriterionEditorHeader entry={selected} line={list.lineOf(selected)} position={selectedIndex + 1} count={list.criteria.length}
-                                   onShowList={() => { onShowsChange("list"); requestCardFocus(); }}
-                                   onPrevious={() => list.onSelect(list.criteria[selectedIndex - 1].id)}
-                                   onNext={() => list.onSelect(list.criteria[selectedIndex + 1].id)}
-                                   disabledReason={list.disabledReason} deleteDisabledReason={list.criteria.length === 1 ? messages.onlyCriterionStays : null}
-                                   onSetBypassed={(on) => void sayRefusal(list.onSetBypassed(selected.id, on))}
-                                   onChoose={(item) => (item === "duplicate" ? void sayRefusal(shownList.onDuplicate(selected.id)) : openDialog(item, selected))} />
-          )}
+          <CriterionEditorHeader entry={selected} line={list.lineOf(selected)} position={selectedIndex + 1} count={list.criteria.length}
+                                 neighbourIds={{ previous: list.criteria[selectedIndex - 1]?.id ?? null, next: list.criteria[selectedIndex + 1]?.id ?? null }}
+                                 onShowList={() => { onShowsChange("list"); requestCardFocus(); }}
+                                 onPrevious={() => list.onSelect(list.criteria[selectedIndex - 1].id)}
+                                 onNext={() => list.onSelect(list.criteria[selectedIndex + 1].id)}
+                                 disabledReason={list.disabledReason} deleteDisabledReason={list.criteria.length === 1 ? messages.onlyCriterionStays : null}
+                                 onSetBypassed={(on) => void sayRefusal(list.onSetBypassed(selected.id, on))}
+                                 onChoose={(item) => (item === "duplicate" ? void sayRefusal(shownList.onDuplicate(selected.id)) : openDialog(item, selected))} />
           {headerProblem !== null && <p className="setting-error criterion-editor-problem" role="alert">{headerProblem}</p>}
           {panelFrame}
         </>

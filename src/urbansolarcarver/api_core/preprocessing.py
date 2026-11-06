@@ -32,7 +32,7 @@ from ..context_geometry import (
 from ..io import load_meshes, load_optional_mesh, validate_inputs
 from ..sun import sample_period
 from ..voxelization import voxelize
-from ..surface_sampling import sample_surface
+from ..surface_sampling import SkippedSurfaces, sample_surface
 from ..mode_registry import MODES, MODES_NEEDING_PERIOD
 
 log = logging.getLogger(__name__)
@@ -40,7 +40,7 @@ log = logging.getLogger(__name__)
 # Everything preprocessing writes into its folder, besides manifest.json.
 _PREPROCESSING_OUTPUTS = (
     "scores.npy", "voxel_grid.npy", "patch_weights.npy", "test_points.npy",
-    "test_normals.npy", "analysis_mesh.json", "footprint.json",
+    "test_normals.npy", "analysis_mesh.json", "footprint.json", "skipped_surfaces.json",
     "diagnostics/diagnostic.json", "diagnostics/config_snapshot.json",
     "diagnostics/score_histogram.png", "diagnostics/sky_patch_weights.png",
     "diagnostics/sky_patch_weights_intensity.png", "diagnostics/sky_patch_comparison.png",
@@ -448,7 +448,8 @@ def _run_preprocessing(settings: PreprocessingSettings, options: RunOptions, out
         if settings.mode != "tilted_plane" and settings.context_blocks_rays:
             blocking_mesh = build_blocking_mesh([context_mesh, terrain_mesh], resolved_device)
     _mark("voxelize")
-    pts, norms, analysis_mesh, sample_weights, taper_stats = sample_surface(mesh_insol, settings)
+    skipped_surfaces = SkippedSurfaces()
+    pts, norms, analysis_mesh, sample_weights, taper_stats = sample_surface(mesh_insol, settings, skipped_surfaces)
     _mark("sample_surface")
     if pts.shape[0] == 0:
         raise InputError(
@@ -531,6 +532,13 @@ def _run_preprocessing(settings: PreprocessingSettings, options: RunOptions, out
         analysis_mesh_path = None
     footprint_path = out_path / "footprint.json"
     footprint_path.write_text(json.dumps(floor_plates.footprint_to_dict(footprint)), encoding="utf-8")
+    skipped_surfaces_path = None
+    if skipped_surfaces.surfaces:
+        skipped_surfaces_path = out_path / "skipped_surfaces.json"
+        skipped_surfaces_path.write_text(json.dumps({
+            "surface_count": skipped_surfaces.surface_count,
+            "surfaces": [{"reason": surface["reason"], "vertices": (surface["triangles"].reshape(-1, 3) + frame).tolist()}
+                         for surface in skipped_surfaces.surfaces]}), encoding="utf-8")
     _mark("save_npy_and_mesh")
 
     run_id = new_run_id()
@@ -548,6 +556,7 @@ def _run_preprocessing(settings: PreprocessingSettings, options: RunOptions, out
         grid_step=float(settings.grid_step),
         score_unit=MODES[mode].score_unit,
         footprint_path=stored_path(footprint_path, out_path),
+        skipped_surfaces_path=stored_path(skipped_surfaces_path, out_path) if skipped_surfaces_path else None,
         max_volume_lowest_z=float(frame[2]),
         max_volume_highest_z=max_volume_highest_z,
         context_path=settings.context_path,

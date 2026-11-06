@@ -254,7 +254,7 @@ test("the selected criterion's carving locks only while its own analysis is out 
   expect(panel().textContent).toContain("Run the analysis for Spring sun on windows first");
   await select("Spring sun on windows");
   expect(thresholdField().disabled).toBe(true);
-  expect(panel().textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
+  expect(panel().textContent).toContain("The mode or the settings changed since the analysis. Run it again to update the carving.");
 });
 
 test("a run refused for criterion 2's settings, seen from criterion 1, names criterion 2; its link selects it, opens the section and focuses the field", async () => {
@@ -268,7 +268,7 @@ test("a run refused for criterion 2's settings, seen from criterion 1, names cri
   expect(pinnedBar().textContent).toContain("The run stopped on an error in the settings of Spring sun on windows.");
   togglePanelSection("Carving rule");                             // closed, so the link has to open it
   expect(panelSectionOpen("Carving rule")).toBe(false);
-  const link = buttonIn(pinnedBar(), "Go to steepest step between columns of Spring sun on windows");
+  const link = buttonIn(pinnedBar(), "Go to steepest slope of the envelope of Spring sun on windows");
   await act(async () => link.click());
   await settle();
   expect(panelSectionOpen("Carving rule")).toBe(true);
@@ -319,7 +319,7 @@ test("a shared setting refused by another criterion's settings is said in Site a
   typeAndLeave(voxelSizeField(), "3");
   await waitForTheSave();
   await settle();
-  expect(stepRow("Site and grid").textContent).toContain("Spring sun on windows: Steepest step between columns: Input should be less than 90");
+  expect(stepRow("Site and grid").textContent).toContain("Spring sun on windows: Steepest slope of the envelope: Input should be less than 90");
   openStep("Criteria");
   expect(container().querySelector('[data-setting="max_slope_deg"] .setting-error')).toBeNull();     // criterion 1's own field is fine
 });

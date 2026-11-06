@@ -193,7 +193,7 @@ class FakeService {
   projects: ProjectSummary[] = [
     { name: "Plot 7", created: "2026-10-17T09:00:00", modified: "2026-10-17T09:00:00", mode: "time-based", example: "perimeter_block" },
   ];
-  examples: ExampleInfo[] = [{ name: "perimeter_block", title: "Perimeter block", description: "A closed block.", project: null }];
+  examples: ExampleInfo[] = [{ name: "perimeter_block", title: "Perimeter block", mode: "time-based", description: "A closed block.", project: null }];
   folder: ProjectsFolderReply = { path: "D:\\USC projects", source: "default", can_change: true };
   /** Settings saves are refused with 409 (a run the page does not know of); false: they are stored. */
   refuseConfigSaves = false;

@@ -795,6 +795,8 @@ class PreprocessingManifest(BaseModel):
     score_unit: str
     # The max volume's plan projection in world xy; massing reads it.
     footprint_path: str
+    # The test surfaces the sampling left out, with the reason (world coordinates); None when none was.
+    skipped_surfaces_path: Optional[str] = None
     # The max volume's lowest and highest points (world z): massing starts the
     # ground floor at the lowest and ends the floors at or below the highest.
     max_volume_lowest_z: float

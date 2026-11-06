@@ -7,8 +7,8 @@
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import type * as THREE from "three";
 import {
-  ApiError, getCarvedByCriterion, getRunFileJson, getRunSummary, getScorePoints, getSkyPatches, reportServiceProblem, runFileUrl,
-  type RunSummary, type SkyDome,
+  ApiError, getCarvedByCriterion, getRunFileJson, getRunSummary, getScorePoints, getSkippedSurfaces, getSkyPatches, reportServiceProblem, runFileUrl,
+  type RunSummary, type SkippedSurfaces, type SkyDome,
 } from "../api_client/client";
 import { useProjectSession } from "../api_client/project_session";
 import { useLatest } from "../hooks/use_latest";
@@ -25,6 +25,8 @@ export interface RunResults {
   summary: RunSummary | null;
   scorePoints: ScorePoints | null;
   skyDome: SkyDome | null;
+  /** The test surfaces of the selected criterion the run left out; null when it left none out. */
+  skippedSurfaces: SkippedSurfaces | null;
   /** The results asked for that could not be read; not so for one the stage has not written (a 404), or a run with no sky dome (null). */
   unreadable: readonly ResultName[];
   envelope: THREE.BufferGeometry | null;
@@ -36,21 +38,21 @@ export interface RunResults {
 
 export type ResultName = Exclude<keyof RunResults, "unreadable">;
 
-const NO_RESULTS: RunResults = { summary: null, scorePoints: null, skyDome: null, unreadable: [], envelope: null, massing: null, platesFile: null, carvedByCriterion: null };
+const NO_RESULTS: RunResults = { summary: null, scorePoints: null, skyDome: null, skippedSurfaces: null, unreadable: [], envelope: null, massing: null, platesFile: null, carvedByCriterion: null };
 
 /**
  * What each stage writes. The score points need the carving's mask, so they follow thresholding, not the analysis; the run
  * summary holds the numbers of the carving, the envelope and the massing.
  */
 const RESULTS_OF_STAGE: Record<PipelineStage, ResultName[]> = {
-  preprocessing: ["skyDome"],
+  preprocessing: ["skyDome", "skippedSurfaces"],
   thresholding: ["summary", "scorePoints"],
   exporting: ["summary", "envelope"],
   massing: ["summary", "massing", "platesFile"],
 };
 const MESH_RESULTS: ResultName[] = ["envelope", "massing"];
 /** The results of one criterion (the summary holds every criterion's numbers). */
-const CRITERION_RESULTS: ResultName[] = ["scorePoints", "skyDome"];
+const CRITERION_RESULTS: ResultName[] = ["scorePoints", "skyDome", "skippedSurfaces"];
 const NOT_FOUND = 404;
 
 export function resultsOfStages(stages: readonly string[]): ResultName[] {
@@ -111,6 +113,8 @@ export function useRunResults({ origin, stagesWithResults, criterionId, criterio
         return getScorePoints(currentToken, project, currentCriterion).then(decodeScorePoints);
       case "skyDome":
         return getSkyPatches(currentToken, project, currentCriterion);
+      case "skippedSurfaces":
+        return getSkippedSurfaces(currentToken, project, currentCriterion);
       case "envelope":
         // The file exporting wrote, which the run summary names: a format chosen since without a build has no file yet.
         return summary().then((reply) => {
@@ -200,7 +204,7 @@ export function useRunResults({ origin, stagesWithResults, criterionId, criterio
   useEffect(() => {
     if (criterionId === firstCriterion.current) return;
     firstCriterion.current = criterionId;
-    setResults((current) => ({ ...current, scorePoints: null, skyDome: null, unreadable: current.unreadable.filter((name) => !CRITERION_RESULTS.includes(name)) }));
+    setResults((current) => ({ ...current, scorePoints: null, skyDome: null, skippedSurfaces: null, unreadable: current.unreadable.filter((name) => !CRITERION_RESULTS.includes(name)) }));
     // A request still out for the criterion before is not kept.
     for (const name of CRITERION_RESULTS) latestRequest.current[name] = (latestRequest.current[name] ?? 0) + 1;
     askedOfCriterion.current = new Set();

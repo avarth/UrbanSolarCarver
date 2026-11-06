@@ -272,7 +272,7 @@ def test_the_examples_are_listed_with_a_description(client):
     examples = client.get("/api/examples").json()
     assert [(example["name"], example["title"], example["description"]) for example in examples] == [
         (example.name, example.title, example.description) for example in read_examples()]
-    assert all(set(example) == {"name", "title", "description", "project"} and example["title"] and example["description"] for example in examples)
+    assert all(set(example) == {"name", "title", "description", "mode", "project"} and example["title"] and example["description"] for example in examples)
 
 
 def example_by_name(name):

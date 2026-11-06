@@ -1,14 +1,14 @@
 // A criterion's carving rule (UX 5.5, 11; once the Carving step, now in the criterion's panel, CriterionPanel): in the weighted
 // modes the carving rule at the top (Manual or Automatic), then the control of the
-// rule (Shadow tolerated in m²·h for Solar time-based, Carve amount in % under Manual, a line for Automatic; the angle rule's
-// message), the "Update when I change the threshold" switch, remembered per project, the histogram with its cutoff line, and the
+// rule (Shade allowed per voxel in m²·h for Solar time-based, Carve amount in % under Manual, a line for Automatic; the angle rule's
+// message), the "Update the carving as I change these settings" switch, remembered per project, the histogram with its cutoff line, and the
 // other carving settings folded last. What the carving removed is on the criterion's card (cardResultLine).
 // With the switch on, letting go of the slider, of the line on the histogram or leaving the number field reruns the carving, as
 // does a change of another carving setting (a switch or a choice at once, a number field when the user leaves it, a slider when it
 // is let go); off, Update carving does.
 // The line on the histogram can be dragged in every rule: it previews the share of the volume a cutoff keeps, worked out from the
 // score points, and sets the carve amount that cutoff stands for (Manual; Automatic turns into Manual, which the step says), or
-// the cutoff itself (Shadow tolerated). A cutoff a weighted mode's config holds (from the command line or an earlier version) is
+// the cutoff itself (Shade allowed per voxel). A cutoff a weighted mode's config holds (from the command line or an earlier version) is
 // shown as Manual, at the carve amount it stands for.
 // When the analysis is out of date the histogram of the last carving is shown dimmed, its controls disabled, with a
 // line that says so (Run analysis is in the bar pinned under the Criteria step).
@@ -83,7 +83,7 @@ export function useAutoUpdate(project: string): [boolean, (on: boolean) => void]
   return [autoUpdate, remember];
 }
 
-/** The setting the threshold control sets in *mode*: Shadow tolerated (threshold), Carve amount (carve_fraction), or none. */
+/** The setting the threshold control sets in *mode*: Shade allowed per voxel (threshold), Carve amount (carve_fraction), or none. */
 export function thresholdControlOf(mode: string): SettingView | null {
   return settingsForStep("carving", mode).find((group) => group.title === CARVING_GROUP)?.essential[0] ?? null;
 }
@@ -97,7 +97,7 @@ export function carvingRuleOf(form: FormState): CarvingRule {
 }
 
 /**
- * The control of the carving rule: Shadow tolerated (Solar time-based) or Carve amount (Manual); null for Automatic, which has no
+ * The control of the carving rule: Shade allowed per voxel (Solar time-based) or Carve amount (Manual); null for Automatic, which has no
  * setting, and for the angle rule.
  */
 export function ruleControlOf(form: FormState): SettingView | null {
@@ -138,13 +138,13 @@ export function thresholdControlNumber(form: FormState, view: SettingView, ranke
   return typeof shown === "number" ? shown : 0;
 }
 
-/** The settings a number of the threshold control stands for: the cutoff (Shadow tolerated), or Manual at that carve amount. */
+/** The settings a number of the threshold control stands for: the cutoff (Shade allowed per voxel), or Manual at that carve amount. */
 export function thresholdControlValues(view: SettingView, shownNumber: number): Record<string, unknown> {
   return view.name === "threshold" ? { threshold: { method: "cutoff", value: shownNumber } } : manualSettings(fromDisplayValue(view.name, shownNumber));
 }
 
 /**
- * The cutoff the form's threshold settings set: Shadow tolerated, or a cutoff the config holds, as given, and for Manual the cut
+ * The cutoff the form's threshold settings set: Shade allowed per voxel, or a cutoff the config holds, as given, and for Manual the cut
  * its carve amount makes among the score points. Null for Automatic, which only the run finds.
  */
 export function cutoffTheFormSets(form: FormState, isWeightedMode: boolean, ranked: RankedScorePoints): number | null {
@@ -342,7 +342,7 @@ export function CarvingStep(props: CarvingStepProps) {
   const ranked = useMemo(() => (scorePoints !== null && comparedScores !== null ? rankScorePoints(comparedScores, scorePoints.scores) : null),
                          [scorePoints, comparedScores]);
   const scoreUnit = scorePoints?.header.score_unit ?? "";
-  // The end of the Shadow tolerated slider: the highest score the cutoff is compared with, above which a cutoff carves nothing more;
+  // The end of the Shade allowed per voxel slider: the highest score the cutoff is compared with, above which a cutoff carves nothing more;
   // the highest raw score until a carving has run on this analysis.
   const highestScore = scorePoints?.header.compared_score_max ?? scorePoints?.header.score_max ?? null;
   const thresholdView = thresholdControlOf(form.mode);

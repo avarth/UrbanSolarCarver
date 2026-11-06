@@ -80,15 +80,17 @@ export function SettingTooltip({ settingLabel, help, configName, defaultText, ex
       setDismissed(true);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
+      if (event.key !== "Escape") return;
+      close();
+      event.stopPropagation();      // a dialog around the tooltip stays open: this Escape was for the tooltip
     };
     const closeOnPointerDownElsewhere = (event: Event) => {
       if (!(event.target instanceof Node && anchor.current?.contains(event.target))) close();
     };
-    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("keydown", closeOnEscape, true);    // before a dialog's own handler, which stops the event
     document.addEventListener("pointerdown", closeOnPointerDownElsewhere);
     return () => {
-      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("keydown", closeOnEscape, true);
       document.removeEventListener("pointerdown", closeOnPointerDownElsewhere);
     };
   }, [open]);

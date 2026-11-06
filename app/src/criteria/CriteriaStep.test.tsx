@@ -202,3 +202,10 @@ test("while the selected criterion's settings are on their way the panel waits a
   rendered.rerender(<CriteriaStep panel={PANEL} shows="editor" onShowsChange={() => {}} list={listProps(criteria, { selectedId: "2" })} load={{ state: "failed", problem: "Not found." }} />);
   expect(step().querySelector('.criterion-panel-frame [role="alert"]')!.textContent).toBe("Not found.");
 });
+
+test("an editor whose criterion is gone from the list shows the list, so there is a way back", () => {
+  rendered = renderForTest(<CriteriaStep panel={PANEL} shows="editor" onShowsChange={() => {}}
+                                         list={listProps([entry("1", "Daylight on windows"), entry("2", "Solar energy on roofs")], { selectedId: "gone" })} />);
+  expect(step().querySelectorAll(".criterion-card")).toHaveLength(2);
+  expect(step().querySelector(".criterion-panel-frame")).toBeNull();
+});

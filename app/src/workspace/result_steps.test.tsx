@@ -14,7 +14,7 @@ import type { PipelineStage, StageState } from "../stages";
 import { inProjectSession } from "../api_client/project_session_for_test";
 
 const ALL_CURRENT: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" };
-const NO_RESULTS: RunResults = { summary: null, scorePoints: null, skyDome: null, unreadable: [], envelope: null, massing: null, platesFile: null, carvedByCriterion: null };
+const NO_RESULTS: RunResults = { summary: null, scorePoints: null, skyDome: null, skippedSurfaces: null, unreadable: [], envelope: null, massing: null, platesFile: null, carvedByCriterion: null };
 
 /** The form of a Solar time-based criterion that cuts at 1.5, with the service's mode and threshold setting. */
 const timeBasedFormCuttingAt1point5 = () => initialFormState({ schema: serviceSchemaWith("mode", "threshold"), modes: serviceModes("time-based"),
@@ -74,14 +74,14 @@ test("a run that stopped early lists the layers its stages left without data; a 
 });
 
 test("each stage names the results it writes; the score points follow the carving, not the analysis", () => {
-  expect(resultsOfStages(["preprocessing"])).toEqual(["skyDome"]);
+  expect(resultsOfStages(["preprocessing"])).toEqual(["skyDome", "skippedSurfaces"]);
   expect(resultsOfStages(["thresholding", "exporting", "massing"])).toEqual(["summary", "scorePoints", "envelope", "massing", "platesFile"]);
   expect(resultsOfStages(["exporting"])).toEqual(["summary", "envelope"]);       // the envelope volume is in the run summary (R2 5)
 });
 
 test("at open the score points and sky dome are asked for only when the selected criterion's own stages wrote them", () => {
-  expect(resultsAtOpen(["preprocessing", "thresholding"])).toEqual(["skyDome", "summary", "scorePoints"]);
-  expect(resultsAtOpen(["exporting"], ["preprocessing", "thresholding"])).toEqual(["summary", "envelope", "skyDome", "scorePoints"]);
+  expect(resultsAtOpen(["preprocessing", "thresholding"])).toEqual(["skyDome", "skippedSurfaces", "summary", "scorePoints"]);
+  expect(resultsAtOpen(["exporting"], ["preprocessing", "thresholding"])).toEqual(["summary", "envelope", "skyDome", "skippedSurfaces", "scorePoints"]);
   expect(resultsAtOpen(["preprocessing", "thresholding"], [])).toEqual(["summary"]);
 });
 

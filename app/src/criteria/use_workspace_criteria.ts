@@ -243,7 +243,7 @@ export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): Workspace
   };
 
   // A start refused because criteria that are on protect nothing shows the first of them (the selected one when it is among them); its
-// editor opens and its panel asks for test surfaces.
+  // editor opens and its panel asks for test surfaces.
   const record = pipelineRecordOf(runs, project);
   const panelProblem = useRefusalSelection({
     record, criteria: criteria.criteria, selectedId: criteria.selectedId, shownCriterion: criterion, showCriterion: (id) => selection.showCriterion(id),

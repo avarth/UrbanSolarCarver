@@ -9,10 +9,10 @@
 // is reported, and a request to frame a box moves the camera. Simulate's sun tool draws the year's sun path with the chosen day and
 // the sun (the sun_study layer), the shadows at that time and the hours in shade over a range (the scene's setSunStudy).
 // Without WebGL (a remote desktop, a blocked graphics card) the scene cannot start: the view says so, and the steps go on working.
-// Framing leaves out the part of the view a panel lies over (leftInsetOf), so the model is never hidden behind it.
+// Framing leaves out the part of the view a panel lies over (leftInsetOf), so the model is never hidden behind it; the picture shifts and the camera still orbits about the model.
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from "react";
 import type * as THREE from "three";
-import type { RunSummary, SkyDome } from "../api_client/client";
+import type { RunSummary, SkippedSurfaces, SkyDome } from "../api_client/client";
 import { useChangedDuringRender } from "../hooks/use_changed_during_render";
 import { messages } from "../messages";
 import { carvedVoxelsByCriterion, type CarvedByCriterion } from "../viewer/carved_by_criterion_decoder";
@@ -21,7 +21,7 @@ import type { StudyView } from "../viewer/study_values";
 import { patchCorners } from "../viewer/study_values_decoder";
 import {
   buildingMassingLayer, carvedByCriterionLayer, carvedVoxelsLayer, contextLayer, envelopeLayer, inspectSurfacesLayer, keptColumnTops, keptVoxelsLayer, maxVolumeLayer,
-  skyDomeLayer, splitScorePoints, storeyOfPart, studyValuesLayer, sunPathLayer, sunStudyLayer, terrainLayer, testSurfacesLayer, volumeOutline, type InspectLayerFile, type MaxVolumeAppearance,
+  skippedSurfacesLayer, skyDomeLayer, splitScorePoints, storeyOfPart, studyValuesLayer, sunPathLayer, sunStudyLayer, terrainLayer, testSurfacesLayer, volumeOutline, type InspectLayerFile, type MaxVolumeAppearance,
   type VolumeOutline,
 } from "../viewer/layers";
 import { layerHooks } from "../viewer/layer_hooks";
@@ -79,18 +79,28 @@ function rememberSkyDomeHidden(hidden: boolean): void {
   }
 }
 
+/** The line under the skipped surfaces in the layers menu: how many, counted by reason. */
+export function skippedSurfacesLine({ surface_count, surfaces }: SkippedSurfaces): string {
+  const counts = new Map<string, number>();
+  for (const { reason } of surfaces) counts.set(reason, (counts.get(reason) ?? 0) + 1);
+  const why = [...counts].map(([reason, count]) => `${count} ${messages.skippedSurfaceReasons[reason] ?? reason}`).join(", ");
+  return messages.skippedSurfacesLine(surfaces.length, surface_count, why);
+}
+
 /** What the runs have produced for the view; each is null until its stage has written it. */
 export interface ViewerResults {
   scorePoints: ScorePoints | null;
   carving: RunSummary["carving"];
   skyDome: SkyDome | null;
+  /** The test surfaces of the criterion shown that the run left out; null when it left none out. */
+  skippedSurfaces: SkippedSurfaces | null;
   envelope: THREE.BufferGeometry | null;
   massing: THREE.BufferGeometry | null;
   /** Which criterion removed each voxel; null with fewer than two criteria on, or until every one has run. */
   carvedByCriterion: CarvedByCriterion | null;
 }
 
-export const NO_VIEWER_RESULTS: ViewerResults = { scorePoints: null, carving: null, skyDome: null, envelope: null, massing: null, carvedByCriterion: null };
+export const NO_VIEWER_RESULTS: ViewerResults = { scorePoints: null, carving: null, skyDome: null, skippedSurfaces: null, envelope: null, massing: null, carvedByCriterion: null };
 
 /** What the carved-by-criterion layer and its legend need of a criterion. */
 export interface CriterionSwatch {
@@ -186,7 +196,7 @@ const NO_SHIFT: Point3 = [0, 0, 0];
 const NO_LAYERS: readonly LayerName[] = [];
 const EMPTY_OUTLINE: VolumeOutline = { segments: new Float32Array(0), outwardNormals: new Float32Array(0) };
 const NO_CRITERIA: readonly CriterionSwatch[] = [];
-const RESULT_LAYERS: readonly LayerName[] = ["kept_voxels", "carved_voxels", "carved_by_criterion", "sky_dome", "envelope", "building_massing"];
+const RESULT_LAYERS: readonly LayerName[] = ["skipped_surfaces", "kept_voxels", "carved_voxels", "carved_by_criterion", "sky_dome", "envelope", "building_massing"];
 const WEBGL_CONTEXT = "webgl2";     // what three.js's WebGLRenderer asks the canvas for
 
 /**
@@ -228,7 +238,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   const [skyDomeOpacity, setSkyDomeOpacity] = useState(DEFAULT_SKY_DOME_OPACITY);
   // A change of step brings back its layers: the choices made in the menu are dropped.
   useChangedDuringRender(shownByDefault.join(","), () => setVisibleByChoice({}));
-  const { scorePoints, carving, skyDome, envelope, massing, carvedByCriterion } = results;
+  const { scorePoints, carving, skyDome, skippedSurfaces, envelope, massing, carvedByCriterion } = results;
   const origin = useKeyedValue(localOrigin, localOrigin.join(","));
 
   useEffect(() => {
@@ -298,6 +308,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
     && carvedByCriterionLayer({ voxels: carvedVoxelsOfCriteria, colours: criterionColours, voxelSize: carvedByCriterion.voxelSize }),
   [scene, carvedByCriterion, carvedVoxelsOfCriteria, criterionColours]);
   const skyDomeObject = useMemo(() => scene && skyDome && hemisphere && skyDomeLayer(skyDome, hemisphere), [scene, skyDome, hemisphere]);
+  const skippedSurfacesObject = useMemo(() => scene && skippedSurfaces && skippedSurfacesLayer(skippedSurfaces.surfaces, origin), [scene, skippedSurfaces, origin]);
   const envelopeObject = useMemo(() => scene && envelope && envelopeLayer(envelope.clone()), [scene, envelope]);
   const massingObject = useMemo(() => scene && massing && buildingMassingLayer(massing.clone()), [scene, massing]);
 
@@ -334,6 +345,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
     layer("max_volume", maxVolume !== null, maxVolumeObject),
     layer("test_surfaces", !inspecting && testSurfaces.some(({ geometry, shown }) => geometry !== null || !shown), testSurfacesObject,
           inspecting ? false : undefined),
+    layer("skipped_surfaces", skippedSurfaces !== null, skippedSurfacesObject),
     layer("context", context !== null, contextObject),
     layer("terrain", terrain !== null, terrainObject),
     layer("kept_voxels", voxels !== null, keptVoxelsObject),
@@ -367,11 +379,19 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
     return scene.onLayerClick("inspect_surfaces", (intersection) => surfaceClicked(intersection));
   }, [scene, inspecting]);
   const inspectFrame = inspect?.frame ?? null;
+  const orbitsAboutInspectedFile = useRef(false);
   const inspectFrameRequest = inspectFrame?.request;
   const frameInspected = useEffectEvent(() => {
-    if (inspectFrame) scene?.frameBox(inspectFrame.min, inspectFrame.max);
+    if (!inspectFrame) return;
+    scene?.frameBox(inspectFrame.min, inspectFrame.max);
+    orbitsAboutInspectedFile.current = true;
   });
   useEffect(() => frameInspected(), [scene, inspectFrameRequest]);
+  useEffect(() => {                                       // leaving Inspect takes the orbit back from the file it framed to the model
+    if (inspecting || !orbitsAboutInspectedFile.current) return;
+    orbitsAboutInspectedFile.current = false;
+    scene?.frameAll();
+  }, [scene, inspecting]);
   useEffect(() => scene?.setSunStudy(sunVector, sunShadows, shade), [scene, sunVector, sunShadows, shade]);
   useEffect(() => scene?.setEnvelopeSeeThrough(envelopeSeeThrough), [scene, envelopeSeeThrough]);
   useEffect(() => {
@@ -387,7 +407,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
     ...present.map((name) => (name === "test_surfaces" && testSurfaceParts
       ? { name, available: true, visible: testSurfaceParts.some((part) => part.visible), partlyVisible: testSurfaceParts.some((part) => part.visible)
           && !testSurfaceParts.every((part) => part.visible), parts: testSurfaceParts }
-      : { name, available: true, visible: isVisible(name) })),
+      : { name, available: true, visible: isVisible(name), note: name === "skipped_surfaces" && skippedSurfaces !== null ? skippedSurfacesLine(skippedSurfaces) : undefined })),
     ...missingLayers.filter((name) => !present.includes(name)).map((name) => ({ name, available: false, visible: false, note: missingLayerNotes?.[name] })),
   ];
   const changeVisible = (name: LayerName, visible: boolean) => {
@@ -411,7 +431,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   const legend: LegendContent = {
     sunPath: shown("sun_path") && sunPath ? sunPathLegend(sunPath.path) : undefined,
     keptVoxels: shown("kept_voxels") && scorePoints && carving
-      ? { title: messages.scoreOfModeWithUnit(scorePoints.header.mode, scorePoints.header.score_unit), cutoff: carving.threshold_value,
+      ? { title: messages.scoreOfModeWithUnit(scorePoints.header.mode, scorePoints.header.score_unit), mode: scorePoints.header.mode, cutoff: carving.threshold_value,
           unit: scorePoints.header.score_unit || undefined, thinningStep: scorePoints.header.thinning_step }
       : undefined,
     skyDome: shown("sky_dome") && skyDome

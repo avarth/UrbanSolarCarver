@@ -15,7 +15,7 @@ from ..mode_registry import canonical_mode_name
 from ..pydantic_schemas import ExportingManifest, MassingManifest, PreprocessingManifest, UserConfig
 from ..stage_settings import stage_folder
 from .api_models import (
-    CarvingSummary, ChainSummary, CriterionCarvingSummary, CriterionEntry, EnvelopeSummary, MassingSummary, RunSummary, SkyDome,
+    CarvingSummary, ChainSummary, CriterionCarvingSummary, CriterionEntry, EnvelopeSummary, MassingSummary, RunSummary, SkippedSurfaces, SkyDome,
     SunMarker, SunPath, SunPathDay,
 )
 from .project_names import ProjectError
@@ -143,6 +143,19 @@ def build_sky_dome(store: ProjectStore, name: str, criterion_id: str | None = No
         solid_angles=tregenza_solid_angles().tolist(),
         weights=patch_weights.ravel().tolist(),
     )
+
+
+def build_skipped_surfaces(store: ProjectStore, name: str, criterion_id: str | None = None) -> SkippedSurfaces | None:
+    """The test surfaces a criterion's preprocessing left out; the last criterion that is on unless *criterion_id* names one. None
+    when it left none out; ProjectError 404 without preprocessing output, or an unknown criterion."""
+    criterion_id = chosen_criterion_id(store, name, criterion_id)
+    preprocessing = read_stage_manifest(store.open(name) / RUN_FOLDER, "preprocessing", PreprocessingManifest, criterion_id)
+    if preprocessing is None:
+        raise ProjectError(NO_SCORES_MESSAGE, status_code=404)
+    manifest, manifest_folder = preprocessing
+    if manifest.skipped_surfaces_path is None:
+        return None
+    return SkippedSurfaces.model_validate_json(resolve_stored_path(manifest_folder, manifest.skipped_surfaces_path).read_text(encoding="utf-8"))
 
 
 def sun_marker_hours(start_hour: int, end_hour: int) -> list[int]:

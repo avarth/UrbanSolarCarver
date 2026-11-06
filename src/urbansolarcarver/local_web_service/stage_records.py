@@ -37,7 +37,7 @@ ANALYSIS_STAGES = ("preprocessing", "thresholding")     # the stages every crite
 LEAF_STAGES = ("exporting", "massing")                  # built once, from the last criterion's thresholding
 # The manifest fields that name the files each stage wrote; time-based and tilted plane runs have no patch weights.
 OUTPUT_FIELDS = {
-    "preprocessing": ("scores_path", "voxel_grid_path", "footprint_path", "patch_weights_path"),
+    "preprocessing": ("scores_path", "voxel_grid_path", "footprint_path", "patch_weights_path", "skipped_surfaces_path"),
     "thresholding": ("mask_path", "scores_compared_with_cutoff_path"),
     "exporting": ("mesh_path",),
     "massing": ("plates_path", "mesh_path", "export_mesh_path"),

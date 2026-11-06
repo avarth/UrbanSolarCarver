@@ -450,7 +450,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     carvingRule,
     pinnedAction: { criteria: criteriaRunBar },
     viewer: {
-      results: { scorePoints: viewerResults.scorePoints, carving: criterionCarving, skyDome: viewerResults.skyDome,
+      results: { scorePoints: viewerResults.scorePoints, carving: criterionCarving, skyDome: viewerResults.skyDome, skippedSurfaces: viewerResults.skippedSurfaces,
                  envelope: viewerResults.envelope, massing: viewerResults.massing, carvedByCriterion: viewerResults.carvedByCriterion },
       // The by-criterion layer follows every criterion that is on, not only the selected one: it is dimmed too when any of them is not current.
       dimmedLayers: [...new Set([...dimmedLayersOf(record, ownStages, stagesBeingFetched, context.criterionId),

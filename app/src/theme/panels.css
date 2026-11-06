@@ -282,6 +282,8 @@
 .step-heading { margin: 0; font: inherit; }
 
 .step-header {
+  position: relative;
+  z-index: 4;     /* over the top strip of the sticky editor header (3), which starts 12 px up behind this button */
   display: flex;
   align-items: flex-start;
   gap: calc(var(--space-unit) * 3);
@@ -503,6 +505,8 @@
 .mode-tile[aria-disabled="true"] { cursor: default; opacity: 0.6; }
 .mode-tile-symbol { margin-bottom: var(--space-unit); color: var(--colour-ink); }
 .mode-tile-name { font-size: var(--text-body); font-weight: 600; line-height: 1.25; }
+/* The one line under the name, drawn here so it stays out of the tile's accessible name: its description holds it. */
+.mode-tile::after { content: attr(data-line); color: var(--colour-muted); font-size: var(--text-secondary); line-height: 1.25; }
 
 .mode-tile-info { position: absolute; top: 6px; right: 6px; }
 /* The "i" whose tooltip is open, drawn as .setting-info[aria-expanded="true"] (this one carries no ARIA state: it is hidden). */
@@ -876,6 +880,7 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
   cursor: pointer;
 }
 /* At the first or the last criterion: waits, and keeps the focus (aria-disabled, not disabled). */
+.criterion-editor-step:not([aria-disabled="true"]):hover { background: var(--colour-line); }
 .criterion-editor-step[aria-disabled="true"] { opacity: 0.4; cursor: default; }
 /* Row 2: the colour, the mode symbol, then the switch and the menu at the right end; the name under them across the header. */
 .criterion-editor-identity {

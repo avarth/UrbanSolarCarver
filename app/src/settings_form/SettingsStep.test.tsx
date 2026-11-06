@@ -160,8 +160,8 @@ test("a step that cannot be used yet still shows its settings to fix, so they ca
 
 test("a setting to fix in another step is named with that step under the run button", () => {
   const slopeRefused = rejected([{ field: "max_slope_deg", message: "Input should be greater than 0" }]);
-  expect(runAnalysisBlocker(conditions({ form: slopeRefused }))).toBe("Fix the steepest step between columns in Criteria to run the analysis");
-  expect(runAnalysisBlocker(conditions({ form: slopeRefused, shownIn: "criteria" }))).toBe("Fix the steepest step between columns to run the analysis");
+  expect(runAnalysisBlocker(conditions({ form: slopeRefused }))).toBe("Fix the steepest slope of the envelope in Criteria to run the analysis");
+  expect(runAnalysisBlocker(conditions({ form: slopeRefused, shownIn: "criteria" }))).toBe("Fix the steepest slope of the envelope to run the analysis");
   const voxelSizeRefused = rejected([{ field: "voxel_size", message: "too many voxels" }], PLAN_OVER_BUDGET);
   expect(runAnalysisBlocker(conditions({ form: voxelSizeRefused, shownIn: "criteria" }))).toBe("Fix the voxel size in Site and grid to run the analysis");
   const marginRefused = rejected([{ field: "min_plate_dimension", message: "Input should be greater than 0" }]);
@@ -173,7 +173,7 @@ test("with several criteria the reasons Criteria gives about the shown criterion
   expect(runAnalysisBlocker(conditions({ ...named, testSurfaceFiles: 0 }))).toBe("Add test surfaces to Daylight on roofs to run the analysis");
   expect(runAnalysisBlocker(conditions({ ...named, hasWeatherFile: false }))).toBe("Add a weather file to run Daylight on roofs");
   const slopeRefused = rejected([{ field: "max_slope_deg", message: "Input should be greater than 0" }]);
-  expect(runAnalysisBlocker(conditions({ ...named, form: slopeRefused }))).toBe("Fix the steepest step between columns of Daylight on roofs to run the analysis");
+  expect(runAnalysisBlocker(conditions({ ...named, form: slopeRefused }))).toBe("Fix the steepest slope of the envelope of Daylight on roofs to run the analysis");
   const criterionMessage = { stepErrorsByStep: { site_and_grid: [], criteria: ["Value error, the settings do not fit together"] } };
   expect(runAnalysisBlocker(conditions({ ...named, ...criterionMessage }))).toBe("Fix the settings of Daylight on roofs to run the analysis");
   // A setting of another step is named with its step, as with one criterion; Site and grid names no criterion.
@@ -236,4 +236,15 @@ test("a project with surroundings shows Account for context blocking, on by defa
   rendered.unmount();
   rendered = renderForTest(<SettingsStep form={withSwitch} onChange={() => {}} disabledReason={null} />);
   expect(rendered.container.textContent).not.toContain("Account for context blocking");
+});
+
+test("an edge strip left from Night cooling is said in the other weighted modes, which read it", () => {
+  const withStrip = (mode: string, edge_taper: number) => initialFormState({ schema: SCHEMA, modes: [...MODES, ...["daylight", "radiative_cooling"].map((name) => ({ ...MODES[0], name, score_kind: "weighted_sum" as const }))],
+                                                                             settings: { mode, edge_taper }, gridPlan: null });
+  rendered = renderForTest(<SettingsStep form={withStrip("daylight", 2)} onChange={() => {}} disabledReason={null} />);
+  expect(rendered.container.textContent).toContain("The edge strip of 2 m set in Night cooling counts here too.");
+  rendered.rerender(<SettingsStep form={withStrip("daylight", 0)} onChange={() => {}} disabledReason={null} />);
+  expect(rendered.container.textContent).not.toContain("The edge strip");
+  rendered.rerender(<SettingsStep form={withStrip("radiative_cooling", 2)} onChange={() => {}} disabledReason={null} />);
+  expect(rendered.container.textContent).not.toContain("The edge strip");    // its own field shows it
 });

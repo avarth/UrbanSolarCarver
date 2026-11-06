@@ -7,7 +7,7 @@ import type { ScorePoints } from "../viewer/score_points_decoder";
 import { FakeViewerScene, pretendTheBrowserHasWebGl } from "../viewer/fake_scene_for_test";
 import { click, renderForTest, type RenderedOverlay } from "./render_for_test";
 import type { InspectLayerFile } from "../viewer/layers";
-import { leftInsetOf, NO_VIEWER_RESULTS, ViewerPane, type InspectView, type TestSurfaceGroup, type ViewerPaneProps } from "./ViewerPane";
+import { leftInsetOf, NO_VIEWER_RESULTS, skippedSurfacesLine, ViewerPane, type InspectView, type TestSurfaceGroup, type ViewerPaneProps } from "./ViewerPane";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../viewer/scene")>()), ViewerScene: (await import("../viewer/fake_scene_for_test")).FakeViewerScene,
@@ -446,6 +446,22 @@ test("a new frame request moves the camera to the box once; the same request, or
   expect(scene.framedBoxes).toHaveLength(2);
 });
 
+test("leaving Inspect after it framed a file frames the model again, so the orbit does not stay on that file; leaving without one moves nothing", () => {
+  const files = [inspectFile()];
+  const frame = { min: [0, 0, 0] as [number, number, number], max: [10, 5, 3] as [number, number, number], request: 1 };
+  const outside = { ...inspectingView(inspectView({ files, frame: null })), inspect: null };
+  rendered = renderForTest(<ViewerPane {...inspectingView(inspectView({ files, frame: null }))} />);
+  const scene = FakeViewerScene.latest!;
+  const frameAll = vi.spyOn(scene, "frameAll");
+  rendered.rerender(<ViewerPane {...outside} />);
+  expect(frameAll).not.toHaveBeenCalled();
+  rendered.rerender(<ViewerPane {...inspectingView(inspectView({ files, frame }))} />);
+  rendered.rerender(<ViewerPane {...outside} />);
+  expect(frameAll).toHaveBeenCalledTimes(1);
+  rendered.rerender(<ViewerPane {...outside} />);
+  expect(frameAll).toHaveBeenCalledTimes(1);
+});
+
 test("framing leaves out what a panel covers on the left of the view: a floating panel or the step panel over a narrow window", () => {
   const rect = (left: number, right: number, top = 0, bottom = 800) => ({ left, right, top, bottom, width: right - left, height: bottom - top, x: left, y: top, toJSON() {} }) as DOMRect;
   const view = document.createElement("div"), floating = document.createElement("div"), stepPanel = document.createElement("div");
@@ -488,4 +504,10 @@ test("the scene asks the view how much of its left a panel covers, each time it 
   } finally {
     floating.remove();
   }
+});
+
+test("the line under the skipped surfaces counts them by reason", () => {
+  const surface = (reason: "non-planar" | "no samples") => ({ reason, vertices: [] });
+  expect(skippedSurfacesLine({ surface_count: 43, surfaces: [surface("non-planar"), surface("non-planar"), surface("no samples")] }))
+    .toBe("3 of 43 surfaces not protected: 2 not flat, 1 too small for the grid.");
 });

@@ -38,7 +38,7 @@ from . import folder_picker, inspection, simulation, sun_study, typical_building
 from .api_models import (
     CancelRunReply, ColdPeriodReply, ConfigErrorReply, ConfigReply, ConfigValuesRequest, CreateCriterionRequest, CreateProjectRequest,
     CriterionEntry, CriterionOrderRequest, CriterionSettingsReply, ErrorDetailReply, ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, InspectedFile, InspectReply, MissingInputsReply, ModeInfo, ProjectDetail, RestoreOriginalRequest,
-    ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, StoredFileChangedReply, SunChart, SunPath, SunPositions, TurnSurfacesRequest,
+    ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkippedSurfaces, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, StoredFileChangedReply, SunChart, SunPath, SunPositions, TurnSurfacesRequest,
     UpdateCriterionRequest, AddStudyRequest, ReorderStudiesRequest, StudiesReply, StudyEntry, StudyWithState, UpdateStudyRequest,
     NewLibraryEntryRequest, TypicalBuildingLibraryEntry, TypicalBuildingReply, TypicalBuildingRequest, TypicalBuildingWeightsReply,
     TypicalBuildingProgressReply, UpdateLibraryEntryRequest,
@@ -51,7 +51,7 @@ from .projects import (
     CONFIG_FILE_NAME, MESH_ROLES, RUN_FOLDER, WEATHER_ROLE, CriterionConfigError, GridOverBudget, ProjectError, ProjectStore, example_of_project,
     validate_project_name,
 )
-from .run_summary import build_run_summary, build_sky_dome, sun_path_for_config
+from .run_summary import build_run_summary, build_skipped_surfaces, build_sky_dome, sun_path_for_config
 from .run_worker import MissingInputs, RunConflict, RunWorker
 from .score_points import build_carved_by_criterion, build_score_points
 from .stage_records import stage_status_reply
@@ -387,7 +387,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
     def examples() -> list[ExampleInfo]:
         examples_in_order = read_examples()
         project_of_example = folder_in_use.store.projects_of_examples({example.name: example.title for example in examples_in_order})
-        return [ExampleInfo(name=example.name, title=example.title, description=example.description,
+        return [ExampleInfo(name=example.name, title=example.title, description=example.description, mode=example.mode,
                             project=project_of_example[example.name]) for example in examples_in_order]
 
     @router.post("/projects/{name}/examples/{example}", responses={404: {"model": ErrorDetailReply, "description": "There is no such example."}, **_ERROR_RESPONSES})
@@ -860,6 +860,12 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         """The sky patches of a criterion's run (default: the last criterion that is on); null for a run without them (time-based and
         tilted plane runs). 404 for a criterion that has not run."""
         return build_sky_dome(folder_in_use.store, name, criterion)
+
+    @router.get("/projects/{name}/run/skipped-surfaces")
+    def run_skipped_surfaces(name: str, criterion: str | None = Query(None, description=RESULTS_CRITERION_QUERY_DESCRIPTION)) -> SkippedSurfaces | None:
+        """The test surfaces a criterion's run left out (default: the last criterion that is on), with the reason; null when it left
+        none out. 404 for a criterion that has not run."""
+        return build_skipped_surfaces(folder_in_use.store, name, criterion)
 
     @router.get("/projects/{name}/run/score-points", response_class=Response, responses={200: {"content": {"application/octet-stream": {}}}})
     def run_score_points(name: str, criterion: str | None = Query(None, description=RESULTS_CRITERION_QUERY_DESCRIPTION)) -> Response:

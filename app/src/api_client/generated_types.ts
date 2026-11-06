@@ -827,9 +827,8 @@ export interface paths {
         };
         /**
          * Study Sky Patches
-         * @description The sky patches of the study's last result with the value each carried for its metric; null for a result without them, a
-         *     sun hours study (its directions are sun positions) or one from before the values were kept; 404 for an unknown study or one
-         *     without a result.
+         * @description The sky patches of the study's last result with the value each carried for its metric; null for a result without them, or a
+         *     sun hours study (its directions are sun positions); 404 for an unknown study or one without a result.
          */
         get: operations["study_sky_patches"];
         put?: never;
@@ -1053,6 +1052,27 @@ export interface paths {
          *     tilted plane runs). 404 for a criterion that has not run.
          */
         get: operations["run_sky_patches"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/run/skipped-surfaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Run Skipped Surfaces
+         * @description The test surfaces a criterion's run left out (default: the last criterion that is on), with the reason; null when it left
+         *     none out. 404 for a criterion that has not run.
+         */
+        get: operations["run_skipped_surfaces"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1435,6 +1455,8 @@ export interface components {
             title: string;
             /** Description */
             description: string;
+            /** Mode */
+            mode: string;
             /** Project */
             project?: string | null;
         };
@@ -1776,6 +1798,29 @@ export interface components {
             /** Criteria */
             criteria?: components["schemas"]["CriterionCarvingSummary"][];
             chain?: components["schemas"]["ChainSummary"] | null;
+        };
+        /**
+         * SkippedSurface
+         * @description A test surface the sampling left out.
+         */
+        SkippedSurface: {
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "degenerate" | "non-planar" | "no samples";
+            /** Vertices */
+            vertices: number[][];
+        };
+        /**
+         * SkippedSurfaces
+         * @description The test surfaces of a criterion's run that protect nothing, and how many there were in all.
+         */
+        SkippedSurfaces: {
+            /** Surface Count */
+            surface_count: number;
+            /** Surfaces */
+            surfaces: components["schemas"]["SkippedSurface"][];
         };
         /**
          * SkyDome
@@ -4794,6 +4839,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SkyDome"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_skipped_surfaces: {
+        parameters: {
+            query?: {
+                /** @description The id of a criterion; the last criterion that is on when omitted. */
+                criterion?: string | null;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkippedSurfaces"] | null;
                 };
             };
             /** @description Validation Error */

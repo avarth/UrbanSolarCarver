@@ -19,12 +19,12 @@ import type { SunPathObjects } from "./sun_path";
 import type { SunStudyObjects } from "./sun_study";
 import { recolourTextSprite, textSprite, type TextSprite } from "./text_sprite";
 
-export type LayerName = "max_volume" | "test_surfaces" | "context" | "terrain" | "kept_voxels" | "carved_voxels" | "carved_by_criterion" | "sun_path" |
+export type LayerName = "max_volume" | "test_surfaces" | "skipped_surfaces" | "context" | "terrain" | "kept_voxels" | "carved_voxels" | "carved_by_criterion" | "sun_path" |
   "sky_dome" | "envelope" | "building_massing" | "study_values" | "inspect_surfaces" | "sun_study";
 
 /** The layers in the order of UX 8.2, which the layers menu and the accessible name follow; then the study of Simulate, the surface
  * orientation of Inspect and the sun path of Simulate's sun tool. */
-export const LAYER_NAMES: readonly LayerName[] = ["max_volume", "test_surfaces", "context", "terrain", "kept_voxels", "carved_voxels", "carved_by_criterion",
+export const LAYER_NAMES: readonly LayerName[] = ["max_volume", "test_surfaces", "skipped_surfaces", "context", "terrain", "kept_voxels", "carved_voxels", "carved_by_criterion",
   "sun_path", "sky_dome", "envelope", "building_massing", "study_values", "inspect_surfaces", "sun_study"];
 
 /** The layers that can reach far beyond the site (a city model, a terrain kilometres wide): the camera frames the rest. */
@@ -176,6 +176,21 @@ export function testSurfacesLayer(parts: readonly TestSurfacesPart[]): THREE.Obj
     layer.add(surfaces);
   }
   layerHooks(layer).applyTheme = (theme: ViewportTheme) => accentMaterials.forEach((material) => material.color.set(colourToken(theme === "dark" ? "test-surface-on-dark" : "accent")));
+  return layer;
+}
+
+/** The test surfaces a run left out: flat over the test surfaces (polygon offset), in the colour the app gives a problem. */
+export function skippedSurfacesLayer(surfaces: readonly { vertices: number[][] }[], origin: Point3): THREE.Object3D {
+  const positions = new Float32Array(surfaces.flatMap(({ vertices }) => vertices.flatMap(([x, y, z]) => [x - origin[0], y - origin[1], z - origin[2]])));
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.computeVertexNormals();
+  const material = solidMaterial(colourToken("error"), 1, THREE.DoubleSide, true);
+  material.polygonOffset = true;
+  material.polygonOffsetFactor = -2;
+  material.polygonOffsetUnits = -2;
+  const layer = new THREE.Mesh(geometry, material);
+  layerHooks(layer).summary = messages.skippedSurfaceCount(surfaces.length);
   return layer;
 }
 

@@ -16,14 +16,14 @@ test("a criterion without test surfaces says what to add", () => {
   rendered = renderForTest(<ProtectsBox files={[]} mode="daylight" onAddFiles={async () => []} onRemoveFile={async () => null} disabledReason={null} />);
   expect(box().getAttribute("aria-label")).toBe("Test surfaces");
   expect(box().classList.contains("input-box-empty")).toBe(true);
-  expect(box().querySelector(".input-box-hint")!.textContent).toBe("Windows or facades that need daylight.");
+  expect(box().querySelector(".input-box-hint")!.textContent).toBe("Windows or facades that need daylight. Flat panels; a curved or folded one is skipped.");
   expect(box().querySelector(".input-box-actions")!.textContent).toBe("Add test surfacesor drop them here");
   expect(box().querySelector(".input-box-required")!.textContent).toBe("Required");
 });
 
 test("the hint follows the criterion's mode", () => {
   rendered = renderForTest(<ProtectsBox files={[]} mode="irradiance" onAddFiles={async () => []} onRemoveFile={async () => null} disabledReason={null} />);
-  expect(box().querySelector(".input-box-hint")!.textContent).toBe("Roofs or facades that collect sun and sky energy, for example for solar panels.");
+  expect(box().querySelector(".input-box-hint")!.textContent).toBe("Roofs or facades that collect sun and sky energy, for example for solar panels. Flat panels; a curved or folded one is skipped.");
 });
 
 test("the criterion's files are listed with their triangle counts; dropped files are added to it and a remove button takes one out", async () => {

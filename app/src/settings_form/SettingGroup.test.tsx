@@ -1,3 +1,4 @@
+import { DialogFrame } from "../common/dialogs";
 import { readFileSync } from "node:fs";
 import { act, useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
@@ -100,7 +101,7 @@ test("the plane angle takes one value or one per compass direction", () => {
 test("the shadow tolerated number sets a cutoff, and the weighted modes choose a carving rule", () => {
   const onChange = vi.fn();
   rendered = renderForTest(<SettingField view={viewOf("carving", "time-based", "threshold")} form={formFor("time-based")} onChange={onChange} />);
-  expect(rendered.container.textContent).toContain("Shadow tolerated");
+  expect(rendered.container.textContent).toContain("Shade allowed per voxel");
   type(rendered.container.querySelector<HTMLInputElement>("input[type='number']")!, "5");
   expect(onChange).toHaveBeenLastCalledWith({ threshold: { method: "cutoff", value: 5 } });
   rendered.unmount();
@@ -373,4 +374,31 @@ test("the message of a refused number goes when the value changes from elsewhere
   expect(rendered.container.querySelector(".setting-error")).not.toBeNull();
   rendered.rerender(<SettingField view={view} form={formReducer(schemaForm, { type: "values_changed", values: { max_slope_deg: 30 } })} onChange={() => {}} />);
   expect(rendered.container.querySelector(".setting-error")).toBeNull();
+});
+
+test("Escape inside a dialog closes the tooltip and leaves the dialog open", () => {
+  const onClose = vi.fn();
+  rendered = renderForTest(
+    <DialogFrame title="Window" busy={false} onClose={onClose}>
+      <SettingField view={viewOf("settings", "daylight", "voxel_size")} form={formFor("daylight")} onChange={() => {}} />
+    </DialogFrame>);
+  const infoButton = rendered.container.querySelector<HTMLButtonElement>("button.setting-info")!;
+  act(() => { infoButton.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })); });
+  expect(rendered.container.querySelector("[role='tooltip']")).not.toBeNull();
+  press(infoButton, "Escape");
+  expect(rendered.container.querySelector("[role='tooltip']")).toBeNull();
+  expect(onClose).not.toHaveBeenCalled();
+  press(infoButton, "Escape");
+  expect(onClose).toHaveBeenCalledOnce();
+});
+
+test("a setting is not drawn while the switch it needs is off", () => {
+  const group = { title: "Envelope", essential: [viewOf("envelope_and_massing", "daylight", "apply_smoothing")],
+                  folded: [viewOf("envelope_and_massing", "daylight", "smooth_iters")], foldLabel: "More" };
+  const form = { ...formFor("daylight"), userValues: { apply_smoothing: false } };
+  rendered = renderForTest(<SettingGroup group={group} form={form} onChange={() => {}} disabled={false} />);
+  expect(rendered.container.querySelector(".setting-fold")).toBeNull();     // nothing to unfold
+  rendered.rerender(<SettingGroup group={group} form={{ ...form, userValues: { apply_smoothing: true } }} onChange={() => {}} disabled={false} />);
+  click(rendered.container.querySelector<HTMLButtonElement>(".setting-fold")!);
+  expect(rendered.container.querySelector('[data-setting="smooth_iters"]')).not.toBeNull();
 });

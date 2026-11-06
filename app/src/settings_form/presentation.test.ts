@@ -68,7 +68,7 @@ test("the analysis period is one setting labelled by its start month entry", () 
 test("time-based carving folds the cut-above and slope settings", () => {
   const [group] = settingsForStep("carving", "time-based");
   expect(names(group.essential)).toEqual(["threshold"]);
-  expect(group.essential[0]).toMatchObject({ label: "Shadow tolerated", unit: "m²·h" });
+  expect(group.essential[0]).toMatchObject({ label: "Shade allowed per voxel", unit: "m²·h" });
   expect(names(group.folded)).toEqual(["carve_above", "carve_above_min_consecutive", "max_slope_deg"]);
   expect(group.foldLabel).toBe("More carving settings");
 });
@@ -140,4 +140,10 @@ test("a setting with a singular unit says it for a value of 1: 1 voxel, 2 voxels
   expect(unitBesideValue(view, 1)).toBe("voxel");
   expect(unitBesideValue(view, 2)).toBe("voxels");
   expect(unitBesideValue(view)).toBe("voxels");
+});
+
+test("a setting that does nothing without a switch names that switch", () => {
+  expect(settingView("smooth_iters", "daylight").shownWhenOn).toBe("apply_smoothing");
+  expect(settingView("carve_above_min_consecutive", "daylight").shownWhenOn).toBe("carve_above");
+  expect(settingView("voxel_size", "daylight").shownWhenOn).toBeUndefined();
 });

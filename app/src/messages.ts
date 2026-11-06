@@ -165,7 +165,7 @@ export const messages = {
   newProject: "New project",
   newProjectLead: "Start empty and add your own files.",
   projectNameLabel: "Project name",
-  projectNameHint: "Up to 64 letters, numbers, spaces, hyphens or underscores.",
+  projectNameHint: "Up to 64 letters, numbers, spaces, hyphens or underscores. Start with a letter or number.",
   createProject: "Create project",
   openProject: "Open a project",
   noProjectsYet: "No projects yet.",
@@ -407,8 +407,8 @@ export const messages = {
   saveAgainAfterThatRun: "Save again once it has ended.",
   saveAgainOrRun: "Save again, or start a run: it saves the settings first.",
   saveAgain: "Save again",
-  modelMoreThan10Km: "This model is more than 10\u00a0km across. Is it in meters?",
-  modelLessThan1M: "This model is less than 1\u00a0m across. Is it in meters?",
+  modelMoreThan10Km: "This model is more than 10\u00a0km across. Is it in metres?",
+  modelLessThan1M: "This model is less than 1\u00a0m across. Is it in metres?",
 
   // Units written after the numbers of the run steps (UX 5.5 to 5.7, 9)
   units: { shadeHours: "m²·h", percent: "%", squareMetres: "m²", cubicMetres: "m³", seconds: "s" },
@@ -438,10 +438,10 @@ export const messages = {
 
   // Carving (5.5)
   angleRuleHasNoThreshold: "The angle rule has no threshold: everything above the planes is removed. Change the angle above.",
-  analysisOutOfDate: "Settings changed since the analysis. Run the analysis again to update the carving.",
+  analysisOutOfDate: "The mode or the settings changed since the analysis. Run it again to update the carving.",
   sliderLowestEnd: "0",
-  sliderHighestScore: (highestText: string) => `${highestText}, the highest score`,
-  updateWhenThresholdChanges: "Update when I change the threshold",
+  sliderHighestScore: (highestText: string) => `${highestText}, the highest of any voxel`,
+  updateWhenThresholdChanges: "Update the carving as I change these settings",
   updateCarving: "Update carving",
   // Under the pinned buttons once a carving update has finished, while its results are current.
   carvingUpdated: "Carving updated.",
@@ -555,7 +555,6 @@ export const messages = {
   // The grid line while the voxel size shown was refused: the grid is the one of the voxel size last saved.
   gridSizeAtSavedVoxelSize: (voxelSizeText: string, voxelsPerSide: number, totalVoxels: number) =>
     `Grid at the saved voxel size of ${voxelSizeText}: ${groupedDigits(voxelsPerSide)} voxels per side, ${groupedDigits(totalVoxels)} in total`,
-  // Under Voxel size when a voxel size below the sample spacing lowered it (R2 4.4).
   // Under Voxel size: the sample spacing the engine uses on the test surfaces, half the voxel size (resolve_grid_step).
   testSurfacesSampledEvery: (sampleSpacing: number) => `Test surfaces sampled every ${withUnit(formattedNumber(sampleSpacing), "m")}`,
   // Errors of the whole config, said under the settings they name (UX 11); the engine's own words are for the YAML.
@@ -656,6 +655,7 @@ export const messages = {
   layerNames: {
     max_volume: "Maximum volume",
     test_surfaces: "Test surfaces",
+    skipped_surfaces: "Skipped test surfaces",
     context: "Existing surroundings",
     terrain: "Terrain",
     kept_voxels: "Kept voxels, coloured by score",
@@ -674,6 +674,11 @@ export const messages = {
   carvedByCriterionMissing: "Shows once every criterion that is on has run.",
   noResultForStage: "No result for this stage: the last run stopped before it",
   skyDomeUnreadable: "The sky dome of this run could not be read: its file may be damaged. Change a value under Settings and run the analysis to write it again.",
+  skippedSurfaceCount: (count: number) => `${count} ${count === 1 ? "surface" : "surfaces"}`,
+  skippedSurfaceReasons: { "non-planar": "not flat", "no samples": "too small for the grid", degenerate: "no area" } as Record<string, string>,
+  /** The line under the layer: how many surfaces protect nothing; *why* counts them by reason. */
+  skippedSurfacesLine: (skipped: number, surfaceCount: number, why: string) => `${skipped} of ${surfaceCount} surfaces not protected: ${why}.`,
+  edgeStripCarriedOver: (metres: number) => `The edge strip of ${metres} m set in Night cooling counts here too. Switch to Night cooling to change it.`,
   resultUnreadable: "This result could not be read: its file may be damaged. Change a value under Settings and run again to write it.",
   viewerNeedsWebGl: "The 3D view cannot start because this browser cannot use WebGL here, for example over a remote desktop, or when " +
     "the graphics card is blocked. The steps on the left still work. To see the 3D view, open this page in another browser or at the computer itself.",
@@ -699,6 +704,10 @@ export const messages = {
   topView: "Top view with north up",
   // The ground aid button names the aid it switches to: off, ground grid and compass ring follow each other in a cycle
   groundAidSwitchTo: { grid: "Show the ground grid", compass_ring: "Show the compass ring", off: "Hide the compass ring" },
+  keptVoxelsPlain: "Kept voxels",
+  keptVoxelsCastNoShade: "Kept voxels cast no shade in the period.",
+  flatPanelsHint: "Flat panels; a curved or folded one is skipped.",
+  exampleDetail: (modeName: string, description: string) => `${modeName}. ${description}`,
   keptVoxelsNote: (cutoff: string) => `Kept voxels. Carved voxels score above ${cutoff}.`,
   keptVoxelsSingleValue: (valueWithUnit: string) => `All kept voxels: ${valueWithUnit}`,
   thinnedVoxels: (step: number) => `Showing 1 of every ${groupedDigits(step)} voxels`,

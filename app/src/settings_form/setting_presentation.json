@@ -52,7 +52,7 @@
       "step": "settings", "group": "When", "essential": false, "modes": ["time-based"], "widget": "sun_steps_per_hour"
     },
     "min_altitude": {
-      "label": "Lowest sun protected", "unit": "°",
+      "label": "Ignore sun below", "unit": "°",
       "help": "Sun positions lower than this above the horizon are not protected.",
       "step": "settings", "group": "When", "essential": false, "modes": ["time-based"], "slider": { "low": 0, "high": 90, "step": 1 }
     },
@@ -69,7 +69,7 @@
     },
     "include_harm": {
       "label": "Subtract summer overheating (experimental)", "unit": "on/off",
-      "help": "Also counts sun in hot hours against the volume. Results then depend on how much summer the period includes.",
+      "help": "Sun in hours above the upper end counts against it. The result then depends on how much summer the period holds.",
       "step": "settings", "group": "Mode specific", "essential": false, "modes": ["benefit"]
     },
     "tilted_plane_angle_deg": {
@@ -95,7 +95,7 @@
     },
     "voxel_size": {
       "label": "Voxel size", "unit": "m",
-      "help": "Edge of the cubes the volume is divided into. Smaller is finer and slower: halving it makes 8 times as many voxels.",
+      "help": "Edge of the cubes the volume is divided into. Smaller is finer and slower: halving it makes 8 times as many voxels and 4 times as many sample points.",
       "step": "settings", "group": "Detail", "essential": "all", "slider": { "low": 0.1, "high": 5, "step": 0.1 }
     },
     "edge_taper": {
@@ -128,7 +128,7 @@
     "threshold": {
       "label": "Carving rule", "unit": "choice",
       "help": "Manual, the rule to start with: you set the carve amount, a share of the total score, with the slider or by dragging the line on the histogram. Automatic: the cut is found from the spread of the scores; dragging the line switches to Manual.",
-      "label_for_modes": { "time-based": "Shadow tolerated" },
+      "label_for_modes": { "time-based": "Shade allowed per voxel" },
       "unit_for_modes": { "time-based": "m²·h" },
       "help_for_modes": {
         "time-based": "How much shade one voxel may cast on the protected surfaces over the period. 0 removes any voxel that casts any shade; 5 allows 5 m² for one hour."
@@ -144,7 +144,7 @@
     },
     "score_smoothing": {
       "label": "Score smoothing", "unit": "m",
-      "help": "Blurs the scores before cutting so the surface is cleaner. Empty means automatic (1.1 × voxel size).",
+      "help": "Smooths the result before the cut, for a cleaner surface. Empty: 1.1 × voxel size.",
       "step": "carving", "group": "How much to carve", "essential": false,
       "modes": ["irradiance", "benefit", "daylight", "radiative_cooling"], "slider": { "low": 0, "high": 5, "step": 0.1 }
     },
@@ -156,10 +156,11 @@
     "carve_above_min_consecutive": {
       "label": "Cut voxels needed to remove above", "unit": "voxels", "unit_one": "voxel",
       "help": "How many cut voxels in a row start the removal above. 2 or 3 ignores stray single voxels.",
+      "shown_when_on": "carve_above",
       "step": "carving", "group": "How much to carve", "essential": false
     },
     "max_slope_deg": {
-      "label": "Steepest step between columns", "unit": "°",
+      "label": "Steepest slope of the envelope", "unit": "°",
       "help": "Limits how steeply heights may jump between neighbours, turning spikes into ramps. 90 turns it off.",
       "step": "carving", "group": "How much to carve", "essential": false, "slider": { "low": 5, "high": 90, "step": 1 }
     },
@@ -171,6 +172,7 @@
     "smooth_iters": {
       "label": "Smoothing passes", "unit": "passes",
       "help": "How many polishing passes the smoothed surface gets, 0 to 6.",
+      "shown_when_on": "apply_smoothing",
       "step": "envelope_and_massing", "group": "Envelope", "essential": false
     },
     "min_voxels": {
@@ -199,7 +201,7 @@
       "step": "envelope_and_massing", "group": "Building massing", "essential": "all", "slider": { "low": 1, "high": 15, "step": 0.1 }
     },
     "plate_tolerance": {
-      "label": "Permitted volume exceedance", "unit": "%",
+      "label": "Part of a module allowed outside the envelope", "unit": "%",
       "help": "Share of a module on a storey that may lie outside the carved envelope. The massing never leaves the maximum volume.",
       "step": "envelope_and_massing", "group": "Building massing", "essential": false, "display": "percent", "slider": { "low": 0, "high": 1, "step": 0.01 }
     },
@@ -210,7 +212,7 @@
     },
     "final_mesh_format": {
       "label": "Mesh file format", "unit": "choice",
-      "help": "The file type of the carved envelope and the building massing.",
+      "help": "File type of the envelope and the massing. Changing it rebuilds them. OBJ keeps one part per floor plate.",
       "step": "export", "group": "Export", "essential": "all", "widget": "mesh_format"
     }
   }

@@ -7,7 +7,7 @@ import type { ViewportTheme } from "../viewer/scene";
 import "./overlays.css";
 
 export interface LegendContent {
-  keptVoxels?: { title: string; cutoff: number; unit?: string; thinningStep: number };
+  keptVoxels?: { title: string; mode?: string; cutoff: number; unit?: string; thinningStep: number };
   skyDome?: { title: string; lowestWeight: number; highestWeight: number };
   sunPath?: string;                               // sunPathLegend(sunPath)
   buildingMassing?: { storeyCount: number };
@@ -69,9 +69,18 @@ export function Legend({ content, theme }: LegendProps) {
     <div className="viewer-overlay viewer-legend" data-viewport-theme={theme} role="group" aria-label={messages.legend}>
       {keptVoxels && (
         <section>
-          <h3>{keptVoxels.title}</h3>
-          <KeptVoxelsRange cutoff={keptVoxels.cutoff} unit={keptVoxels.unit} />
-          <p className="viewer-muted">{messages.keptVoxelsNote(withUnit(formattedNumber(keptVoxels.cutoff), keptVoxels.unit))}</p>
+          {keptVoxels.mode === "tilted_plane" || (keptVoxels.mode === "time-based" && keptVoxels.cutoff === 0) ? (
+            <>
+              <h3>{messages.keptVoxelsPlain}</h3>
+              {keptVoxels.mode === "time-based" && <p className="viewer-muted">{messages.keptVoxelsCastNoShade}</p>}
+            </>
+          ) : (
+            <>
+              <h3>{keptVoxels.title}</h3>
+              <KeptVoxelsRange cutoff={keptVoxels.cutoff} unit={keptVoxels.unit} />
+              <p className="viewer-muted">{messages.keptVoxelsNote(withUnit(formattedNumber(keptVoxels.cutoff), keptVoxels.unit))}</p>
+            </>
+          )}
           {keptVoxels.thinningStep > 1 && <p className="viewer-muted">{messages.thinnedVoxels(keptVoxels.thinningStep)}</p>}
         </section>
       )}

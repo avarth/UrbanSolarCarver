@@ -131,3 +131,22 @@ def test_manifest_records_the_sample_spacing_used_when_unset(tmp_path, tmp_mesh_
     result = preprocessing(cfg, tmp_path / "out")
     assert PreprocessingManifest.model_validate_json(result.manifest_path.read_text()).grid_step == 1.0
 
+def test_a_skipped_surface_is_saved_in_world_coordinates(tmp_path):
+    import json
+    import trimesh
+    from urbansolarcarver import preprocessing
+    from urbansolarcarver.load_config import user_config
+    flat = trimesh.Trimesh([[500, 0, 0], [504, 0, 0], [504, 4, 0], [500, 4, 0]], [[0, 1, 2], [0, 2, 3]], process=False)
+    bent = trimesh.Trimesh([[510, 0, 0], [514, 0, 0], [514, 1, 3], [510, 0, 3]], [[0, 1, 2], [0, 2, 3]], process=False)
+    surfaces_path, volume_path = tmp_path / "surfaces.ply", tmp_path / "volume.ply"
+    trimesh.util.concatenate([flat, bent]).export(surfaces_path, vertex_normal=True)
+    trimesh.creation.box(bounds=[[498, -2, 8], [516, 6, 14]]).export(volume_path)
+    config = user_config(max_volume_path=str(volume_path), test_surface_path=str(surfaces_path), out_dir=str(tmp_path / "out"), mode="daylight",
+                         voxel_size=2.0, grid_step=1.0, ray_length=60.0, device="cpu")
+    with pytest.warns(UserWarning, match="non-planar"):
+        result = preprocessing(config, tmp_path / "out")
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    saved = json.loads((result.out_dir / manifest["skipped_surfaces_path"]).read_text(encoding="utf-8"))
+    assert saved["surface_count"] == 2 and [surface["reason"] for surface in saved["surfaces"]] == ["non-planar"]
+    corners = np.array(saved["surfaces"][0]["vertices"])
+    assert corners.shape == (6, 3) and corners[:, 0].min() == pytest.approx(510.0) and corners[:, 0].max() == pytest.approx(514.0)

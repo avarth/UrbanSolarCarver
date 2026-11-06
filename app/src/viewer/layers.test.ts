@@ -5,7 +5,9 @@ import {
   applyLayerAppearance, buildingMassingLayer, dimmedAppearance, carvedByCriterionLayer, carvedOutlineSegments, contextLayer, inspectSurfacesLayer, LAYER_NAMES, maxVolumeLayer,
   keptColumnTops, pointSizeForVoxel, splitScorePoints, type InspectLayerFile,
   storeyOfPart, studyValuesLayer, sunStudyLayer, testSurfacesLayer, volumeOutline,
+  skippedSurfacesLayer,
 } from "./layers";
+import { layerHooks } from "./layer_hooks";
 import { decodeStudyValues, patchCorners } from "./study_values_decoder";
 import { studyValuesOf } from "./study_values_for_test";
 import { changeRamp, colourToken } from "./colour_scales";
@@ -456,4 +458,10 @@ test("the surface orientation layer leaves the corners it is given as they are, 
   const { front, back } = meshesOf(inspectSurfacesLayer([file], { arrows: false }));
   expect(Array.from(file.corners)).toEqual(before);
   for (const mesh of [front, back]) expect((mesh.material as THREE.Material).polygonOffsetFactor).toBeLessThan(0);
+});
+
+test("the skipped surfaces are drawn relative to the local origin", () => {
+  const layer = skippedSurfacesLayer([{ vertices: [[10, 20, 3], [11, 20, 3], [10, 21, 3]] }], [10, 20, 0]) as THREE.Mesh;
+  expect([...layer.geometry.getAttribute("position").array]).toEqual([0, 0, 3, 1, 0, 3, 0, 1, 3]);
+  expect(layerHooks(layer).summary).toBe("1 surface");
 });
