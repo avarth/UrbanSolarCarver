@@ -169,6 +169,7 @@ export class FakeService {
       this.inputChanges = this.inputChanges.filter((change) => change.state !== "changed");
       return new Response(null, { status: 204 });
     }
+    if (method === "POST" && path === "/mode-chosen") return new Response(null, { status: 204 });
     if (method === "POST" && path === "/runs") {
       await holdReply(this.runStartsWaitFor);
       const { produce } = JSON.parse(String(init!.body)) as { produce: string[] };
@@ -276,7 +277,7 @@ export function project(stages: Record<PipelineStage, StageState>, settings: Rec
     inputs: { max_volume: [{ name: "volume.obj", triangle_count: 1 }], test_surfaces: [{ name: "surfaces.obj", triangle_count: 1 }],
               weather: [{ name: "weather.epw", triangle_count: 0 }] },
     joined_bounds: [[0, 0, 0], [1, 1, 0]], weather_location: "Golden, CO, USA", weather_latitude: 39.74, stage_status: { stages }, grid_plan: null,
-    criteria: [criterionEntry(criterionSettings)], criterion_status: { 1: stages },
+    criteria: [criterionEntry(criterionSettings)], criterion_status: { 1: stages }, mode_to_choose: false,
   };
 }
 

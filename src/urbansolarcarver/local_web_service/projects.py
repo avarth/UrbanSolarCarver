@@ -186,7 +186,7 @@ class ProjectStore:
             raise ProjectError("The project name does not name a folder of the projects folder.", status_code=422)
         return project_folder
 
-    def create(self, name: str, mode: str, example: str | None = None) -> Path:
+    def create(self, name: str, mode: str, example: str | None = None, mode_to_choose: bool = False) -> Path:
         """Make the project folder with its layout, project.json (recording the *example* it comes from) and the first config.yaml of the mode.
 
         The project starts with one criterion, "1", in that mode (see write_config_from_values).
@@ -202,13 +202,21 @@ class ProjectStore:
         for sub_folder in (*INPUT_ROLE_FOLDERS, RUN_FOLDER):
             (project_folder / sub_folder).mkdir(parents=True)
         created = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        self.write_project_json(project_name, ProjectJson(name=project_name, created=created, example=example))
+        self.write_project_json(project_name, ProjectJson(name=project_name, created=created, example=example, mode_to_choose=mode_to_choose))
         try:
             self.write_config_from_values(project_name, {"mode": mode})
         except BaseException:
             shutil.rmtree(project_folder, ignore_errors=True)   # the folder was made by this call, so no earlier project is lost
             raise
         return project_folder
+
+    def mode_chosen(self, name: str) -> None:
+        """The user chose the mode of a new project's first criterion (saved with its settings): the app stops asking."""
+        with self.project_lock(name):
+            self.open(name)
+            project_json = self.read_project_json(name)
+            project_json.mode_to_choose = False
+            self.write_project_json(name, project_json)
 
     def open(self, name: str) -> Path:
         """The folder of an existing project."""

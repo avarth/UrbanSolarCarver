@@ -577,7 +577,7 @@ export interface InspectLayerFile {
   surfaceOfTriangle: Uint32Array;      // the surface number of each triangle
   surfaces: { centre: Point3; normal: Point3; area: number }[];
   turned: ReadonlySet<number>;         // the surfaces drawn turned: the winding of their triangles swapped
-  selected: boolean;                   // the file the Files panel has selected; the others are drawn faint
+  selected: boolean;                   // the file the Geometries panel has selected; the others are drawn faint
 }
 
 const UNSELECTED_FILE_OPACITY = 0.35;

@@ -87,8 +87,7 @@ interface EndedRunContext {
 function RunFailure({ record, mode, onGoToSetting, shownCriterionId, criterionNames, criterionKeys }: EndedRunContext & { record: RunRecord }) {
   const failure = record.state.failure!;
   if (failure.error_type === STAGE_CHAIN_ERROR) return <p className="run-outcome run-outcome-error">{messages.resultsOutOfDate}</p>;
-  // The mode has no field but its tiles, which its link goes to.
-  const settingOf = (field: string | null) => (field === null ? null : field === "mode" ? field : presentedSettingOf(field));
+  const settingOf = (field: string | null) => (field === null ? null : presentedSettingOf(field));
   const namedSettings = [...new Set(failure.field_errors.map((fieldError) => settingOf(fieldError.field)).filter((name): name is string => name !== null))];
   // The settings of a criterion other than the one shown are said with its name, so they are not taken for the shown one's; a
   // shared setting (not a criterion key) is the project's, and is said without it.

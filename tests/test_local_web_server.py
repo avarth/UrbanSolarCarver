@@ -1623,3 +1623,11 @@ def test_a_rejected_criterion_change_names_the_criterion_in_the_reply(client_wit
     assert "criterion" in schema["ConfigErrorReply"]["properties"]
     assert {"criterion_id", "settings"} <= set(schema["CriterionSettingsReply"]["properties"])
     assert "volume_removed_m3" in schema["CriterionCarvingSummary"]["properties"]
+
+
+def test_a_project_created_without_a_mode_asks_for_one_until_it_is_chosen(client):
+    asks = client.post("/api/projects", json={"name": "asks"}).json()
+    assert asks["mode_to_choose"] is True and asks["settings"]["mode"] == "time-based"
+    assert client.post("/api/projects", json={"name": "given", "mode": "daylight"}).json()["mode_to_choose"] is False
+    assert client.post("/api/projects/asks/mode-chosen").status_code == 204
+    assert client.get("/api/projects/asks").json()["mode_to_choose"] is False

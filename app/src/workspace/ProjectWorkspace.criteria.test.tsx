@@ -129,8 +129,6 @@ test("during a run the criterion's controls are disabled and the pinned bar says
   expect(panel()!.textContent).not.toContain("A run is in progress");
   openPanelSection("Test surfaces");
   expect(protectsBox().querySelector<HTMLButtonElement>(".input-add")!.disabled).toBe(true);
-  openPanelSection("Mode");
-  expect(panel()!.querySelector('[role="radiogroup"]')!.getAttribute("aria-disabled")).toBe("true");
 });
 
 test("an earlier project shows its test surfaces in the criterion", async () => {

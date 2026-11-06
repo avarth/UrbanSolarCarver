@@ -1209,3 +1209,13 @@ def test_context_upload_leaves_a_config_with_a_yaml_error_untouched(project_with
     assert config_path.read_text(encoding="utf-8") == broken
     store.remove_input(name, "context", "ctx.ply")
     assert config_path.read_text(encoding="utf-8") == broken
+
+
+def test_only_a_project_created_without_a_mode_asks_for_one_until_it_is_chosen(tmp_path):
+    store = ProjectStore(tmp_path)
+    store.create("given", "daylight")
+    assert store.read_project_json("given").mode_to_choose is False
+    store.create("asks", "time-based", mode_to_choose=True)
+    assert store.read_project_json("asks").mode_to_choose is True
+    store.mode_chosen("asks")
+    assert store.read_project_json("asks").mode_to_choose is False

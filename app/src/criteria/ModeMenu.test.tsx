@@ -1,11 +1,10 @@
 // The short menu of the modes under Add criterion: one item per mode (symbol, name, one line), an item that waits with its reason, the
-// choice it reports and what it tells onClose. The keyboard and what closes a menu are useMenuPopup's (menu_popup.test.tsx). The
-// tooltip text stays on the tiles of the panel's Mode section.
+// choice it reports, what it tells onClose and the tooltip beside an item. The keyboard and what closes a menu are useMenuPopup's (menu_popup.test.tsx).
 import { act, useRef, useState } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { MODE_TILES } from "../modes";
 import { click, press, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
-import { ModeMenu } from "./ModeMenu";
+import { ModeMenu, placementBesideMenu } from "./ModeMenu";
 
 let rendered: RenderedOverlay | null = null;
 
@@ -48,7 +47,30 @@ test("the menu has one item per mode in the order of the tiles: symbol, name and
   expect(items().some((item) => item.getAttribute("aria-disabled") === "true")).toBe(false);
   // Each item is named by its mode and described by its one line.
   expect(items().map((item) => item.getAttribute("aria-label"))).toEqual(MODE_TILES.map((tile) => tile.plain_name));
-  expect(items().map((item) => document.getElementById(item.getAttribute("aria-describedby")!)!.textContent)).toEqual(MODE_TILES.map((tile) => tile.one_line));
+  const described = (item: Element) => item.getAttribute("aria-describedby")!.split(" ").map((id) => document.getElementById(id)!.textContent);
+  expect(items().map(described)).toEqual(MODE_TILES.map((tile) => [tile.one_line, `${tile.tooltip} ${tile.needs}`]));
+});
+
+test("pointing at an item shows its tooltip beside the menu, and leaving the menu takes it away", () => {
+  rendered = renderForTest(<Harness />);
+  click(openButton());
+  const tooltip = () => document.querySelector(".mode-menu-tooltip");
+  expect(tooltip()).toBeNull();
+  const item = items().find((each) => each.querySelector(".mode-menu-name")!.textContent === "Solar heating")!;
+  const tile = MODE_TILES.find((each) => each.plain_name === "Solar heating")!;
+  act(() => { item.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })); });
+  expect(tooltip()!.textContent).toContain(tile.tooltip);
+  expect(tooltip()!.textContent).toContain(tile.needs);
+  expect(tooltip()!.textContent).toContain("benefit");
+  act(() => { rendered!.container.querySelector('[role="menu"]')!.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body })); });
+  expect(tooltip()).toBeNull();
+});
+
+test("the tooltip stands right of the menu, level with the item; a narrow or short window keeps it inside", () => {
+  const rect = (left: number, top: number, right: number, bottom: number) => ({ left, top, right, bottom }) as DOMRect;
+  const size = { width: 300, height: 200 };
+  expect(placementBesideMenu(rect(10, 100, 370, 500), rect(10, 180, 370, 230), size, { width: 1400, height: 900 })).toEqual({ left: 378, top: 180 });
+  expect(placementBesideMenu(rect(10, 100, 370, 500), rect(10, 450, 370, 500), size, { width: 500, height: 600 })).toEqual({ left: 192, top: 392 });
 });
 
 test("choosing an item reports the engine name of its mode", () => {
@@ -65,7 +87,7 @@ test("with a reason the items wait: marked, the reason written under them, and c
   click(openButton());
   expect(items().every((item) => item.getAttribute("aria-disabled") === "true")).toBe(true);
   const described = items()[0].getAttribute("aria-describedby")!.split(" ").map((id) => document.getElementById(id)!.textContent);
-  expect(described).toEqual([MODE_TILES[0].one_line, "A run of this project is in progress."]);
+  expect(described).toEqual([MODE_TILES[0].one_line, `${MODE_TILES[0].tooltip} ${MODE_TILES[0].needs}`, "A run of this project is in progress."]);
   click(items()[1]);
   expect(onChoose).not.toHaveBeenCalled();
 });

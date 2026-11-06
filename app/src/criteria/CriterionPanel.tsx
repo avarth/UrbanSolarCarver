@@ -1,21 +1,21 @@
-// A criterion's panel (spec 7.1, 7.2), in four folded sections (PanelSection): Test surfaces (ProtectsBox), Mode (the tiles of
-// ModeStep, with the weather box and the values a mode change reset), Settings (the analysis settings that are criterion keys,
-// SettingsStep) and Carving rule (CarvingStep, put together in result_steps.tsx). Run analysis is in the bar pinned under the step list
+// A criterion's panel (spec 7.1, 7.2), in three folded sections (PanelSection): Test surfaces (ProtectsBox), Settings (the criterion's mode by name, a note on it,
+// the weather box and the values reset by the mode, then the analysis settings that are criterion keys, SettingsStep) and Carving rule
+// (CarvingStep, put together in result_steps.tsx). Run analysis is in the bar pinned under the steps
 // (CriteriaRunBar). The shared settings are in Site and grid. The open sections are the workspace's (usePanelSections); a section opens
-// when something it shows appears: no test surfaces or the weather box under the tiles (of a criterion that is on), a field with an
-// error of the criterion's save, or the values reset under the tiles. A criterion just selected shows them all as new. A criterion
+// when something it shows appears: no test surfaces or the weather box (of a criterion that is on), a field with an
+// error of the criterion's save, or the values reset. A criterion just selected shows them all as new. A criterion
 // that is off needs neither test surfaces nor a weather file, and its closed Carving rule reads Off. The notice of a new weather file
 // is under the Settings header, open or closed. In Solar heating, Settings starts with Which hours count: Cold hours (the balance
 // temperature rule) or Energy-weighted, which hides the balance temperature and shows the typical building's box, whose Edit
 // building opens its window (TypicalBuildingSheet).
 import { useEffectEvent, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { InputFileInfo } from "../api_client/client";
-import { messages } from "../messages";
+import { listedWithAnd, messages } from "../messages";
+import { plainModeName } from "../modes";
 import type { ColdPeriodState, Hemisphere } from "../settings_form/analysis_period";
 import { shownValue, type FormState } from "../settings_form/form_state";
-import { BALANCE_TEMPERATURE_FIELDS } from "../settings_form/presentation";
+import { BALANCE_TEMPERATURE_FIELDS, settingView } from "../settings_form/presentation";
 import { SettingTooltip } from "../settings_form/SettingTooltip";
-import { ModeStep } from "./ModeStep";
 import { useDialogRequest } from "../common/dialogs";
 import { SettingsStep, WeatherChangeRegion, type WeatherChangeNoticeContent } from "../settings_form/SettingsStep";
 import { PanelSection, type PanelSections } from "./PanelSection";
@@ -23,7 +23,7 @@ import { ProtectsBox } from "../common/ProtectsBox";
 import { TypicalBuildingBox, TypicalBuildingSheet } from "./TypicalBuildingSheet";
 import type { TypicalBuildingHook } from "./use_typical_building";
 import {
-  carvingRuleSummary, criterionSettingsSummary, modeSummary, PANEL_SECTIONS, settingsToFixBySection, testSurfacesSummary, type PanelSectionId,
+  carvingRuleSummary, criterionSettingsSummary, PANEL_SECTIONS, settingsToFixBySection, testSurfacesSummary, type PanelSectionId,
 } from "./section_summaries";
 import "../theme/panels.css";
 
@@ -45,7 +45,6 @@ export interface CriterionPanelProps extends PanelSections {
   stepErrors: readonly string[];
   criterionKeys: ReadonlySet<string>;
   onChange: (values: Record<string, unknown>) => void;
-  onChooseMode: (mode: string) => void;
   /** Why the criterion cannot be changed now (a run is in progress); null when it can. */
   disabledReason: string | null;
   /** The weather box under the tiles, when the criterion's mode needs a weather file the project lacks. */
@@ -110,6 +109,14 @@ function WhichHoursCount({ hoursCounted, disabled, sheetOpen, sheetId, onToggleS
   );
 }
 
+const EXPERIMENTAL_MODE = "radiative_cooling";
+
+/** "Steepest slope of the envelope and voxel size are back to their defaults: ..." */
+function valuesResetText({ settings, mode }: { settings: string[]; mode: string }): string {
+  const labels = settings.map((name, index) => (index === 0 ? settingView(name, mode).label : settingView(name, mode).label.toLowerCase()));
+  return messages.valuesResetForMode(listedWithAnd(labels), labels.length, plainModeName(mode));
+}
+
 export function CriterionPanel(props: CriterionPanelProps) {
   const { form, criterionKeys, onChange, disabledReason, openSections, onOpenSections } = props;
   // Which hours count, in Solar heating; energy-weighted, the balance temperature is not read, and is not shown, counted or summed up.
@@ -122,8 +129,7 @@ export function CriterionPanel(props: CriterionPanelProps) {
   // What a section has to fix: its summary is in the warning colour.
   const problems: Record<PanelSectionId, boolean> = {
     test_surfaces: criterionOn && props.testSurfaces.length === 0,
-    mode: needsWeatherFile || toFix.mode !== undefined,
-    settings: toFix.settings !== undefined,
+    settings: needsWeatherFile || toFix.settings !== undefined,
     carving: toFix.carving !== undefined,
   };
   const valuesReset = (form.valuesResetByModeChange?.settings.length ?? 0) > 0;
@@ -137,7 +143,7 @@ export function CriterionPanel(props: CriterionPanelProps) {
     editButton.current?.focus();
   };
   // A section opens when something it shows appears, before the page is drawn; the user may close it again.
-  const calling = PANEL_SECTIONS.filter((id) => problems[id] || (id === "mode" && valuesReset));
+  const calling = PANEL_SECTIONS.filter((id) => problems[id] || (id === "settings" && valuesReset));
   const calledBefore = useRef<ReadonlySet<PanelSectionId>>(new Set());
   const openAppeared = useEffectEvent(() => {
     const appeared = calling.filter((id) => !calledBefore.current.has(id));
@@ -149,8 +155,8 @@ export function CriterionPanel(props: CriterionPanelProps) {
 
   const summaries: Record<PanelSectionId, string> = {
     test_surfaces: testSurfacesSummary(props.testSurfaces.map((file) => file.name)),
-    mode: needsWeatherFile ? messages.modeNeedsWeatherFileSummary(modeSummary(form.mode)) : modeSummary(form.mode),
-    settings: energyWeighted ? messages.energyWeightedSummary(criterionSettingsSummary(form, readKeys)) : criterionSettingsSummary(form, readKeys),
+    settings: needsWeatherFile ? messages.needsWeatherFileSummary
+      : energyWeighted ? messages.energyWeightedSummary(criterionSettingsSummary(form, readKeys)) : criterionSettingsSummary(form, readKeys),
     carving: criterionOn ? carvingRuleSummary(form, props.scoreUnit) : messages.criterionOff,
   };
   // A closed section with settings to fix says how many, as a step row does.
@@ -171,15 +177,14 @@ export function CriterionPanel(props: CriterionPanelProps) {
                      disabledReason={disabledReason} drawingProblems={props.testSurfaceDrawingProblems} otherFiles={props.otherTestSurfaces}
                      onUseFile={props.onUseTestSurface} />
       ))}
-      {section("mode", (
-        // The field of the mode, which a link to the mode focuses: its chosen tile.
-        <div className="criterion-mode" data-setting="mode">
-          <ModeStep mode={form.mode} onChoose={props.onChooseMode} disabledReason={disabledReason} valuesReset={form.valuesResetByModeChange}
-                    weatherDropZone={props.weatherDropZone} showsDisabledReason={false} />
-        </div>
-      ))}
       {section("settings", (
         <>
+          <p className="mode-step-note">{messages.criterionModeLine(plainModeName(form.mode))}</p>
+          {form.mode === EXPERIMENTAL_MODE && <p className="mode-step-note">{messages.radiativeCoolingIsExperimental(plainModeName(form.mode))}</p>}
+          {form.valuesResetByModeChange !== null && valuesReset && (
+            <p className="step-reason mode-values-reset" role="status">{valuesResetText(form.valuesResetByModeChange)}</p>
+          )}
+          {props.weatherDropZone}
           {hoursCounted !== undefined && (
             <WhichHoursCount hoursCounted={hoursCounted} disabled={disabledReason !== null} sheetOpen={sheetOpen} sheetId={sheetId}
                              onToggleSheet={() => setSheetOpen((open) => !open)} editButton={editButton} />

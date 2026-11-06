@@ -3,7 +3,7 @@ import { initialFormState, type FormState } from "../settings_form/form_state";
 import { CRITERION_KEYS, MODES, SCHEMA } from "../workspace/project_workspace_for_test";
 import { settingsToFixByStep } from "../settings_form/SettingsStep";
 import {
-  carvingRuleSummary, criterionSettingsSummary, DEFAULT_OPEN_SECTIONS, modeSummary, sectionOfSetting, settingsToFixBySection, testSurfacesSummary,
+  carvingRuleSummary, criterionSettingsSummary, DEFAULT_OPEN_SECTIONS, sectionOfSetting, settingsToFixBySection, testSurfacesSummary,
 } from "./section_summaries";
 
 function formFor(settings: Record<string, unknown>): FormState {
@@ -15,11 +15,6 @@ test("the test surfaces in one line: the file's name, two names, a count, or non
   expect(testSurfacesSummary(["windows.ply"])).toBe("windows.ply");
   expect(testSurfacesSummary(["a.ply", "b.ply"])).toBe("a.ply, b.ply");
   expect(testSurfacesSummary(["a.ply", "b.ply", "c.ply"])).toBe("3 files");
-});
-
-test("the mode in one line is its plain name", () => {
-  expect(modeSummary("daylight")).toBe("Daylight");
-  expect(modeSummary("time-based")).toBe("Sun hours");
 });
 
 test("the settings in one line: the analysis period of a mode that reads one", () => {
@@ -49,8 +44,8 @@ test("the carving rule in one line: the carve amount, a fixed cutoff, Automatic,
   expect(carvingRuleSummary(formFor({ mode: "tilted_plane" }))).toBe("Everything above the planes");
 });
 
-test("the section that holds a setting: Mode for the mode, Carving rule for a carving setting, Settings for the others", () => {
-  expect(sectionOfSetting("mode")).toBe("mode");
+test("the section that holds a setting: Carving rule for a carving setting, Settings for the others", () => {
+  expect(sectionOfSetting("mode")).toBe("settings");
   expect(sectionOfSetting("max_slope_deg")).toBe("carving");
   expect(sectionOfSetting("threshold.value")).toBe("carving");
   expect(sectionOfSetting("start_month")).toBe("settings");
@@ -63,7 +58,7 @@ test("the settings to fix by section: the criterion's fields with an error, one 
   const form = { ...formFor({ mode: "time-based" }),
     fieldErrors: { start_month: "bad", end_hour: "bad", max_slope_deg: "too steep", mode: "unknown", voxel_size: "too small" },
     stepErrors: ["Add a weather file to run this mode"] };
-  expect(settingsToFixBySection(form, CRITERION_KEYS)).toEqual({ settings: 2, carving: 1, mode: 1 });
+  expect(settingsToFixBySection(form, CRITERION_KEYS)).toEqual({ settings: 3, carving: 1 });
   expect(settingsToFixBySection(formFor({ mode: "daylight" }), CRITERION_KEYS)).toEqual({});
   // Counted as the steps count them: the mode in Criteria, the shared voxel size in Site and grid.
   expect(settingsToFixByStep({ fieldErrors: {}, stepErrors: [] }, form, CRITERION_KEYS)).toEqual({ criteria: 4, site_and_grid: 1 });

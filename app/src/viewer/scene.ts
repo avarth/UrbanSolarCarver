@@ -471,8 +471,9 @@ export class ViewerScene {
   }
 
   /**
-   * What the camera frames, centred on the model so the orbit turns about it: the sphere reaches every visible layer, the surroundings
-   * only when nothing else is shown (they can reach far beyond the site).
+   * What the camera frames, centred on the compass ring at the model's middle height, so the orbit turns about the point the ring, the
+   * sun path and the sky dome are drawn around (the model's middle without a hemisphere): the sphere reaches every visible layer, the
+   * surroundings only when nothing else is shown (they can reach far beyond the site).
    */
   private contentSphere(): { centre: THREE.Vector3; radius: number } {
     const siteBox = this.boxOf(LAYER_NAMES.filter((name) => !SURROUNDING_LAYERS.includes(name)));
@@ -480,6 +481,7 @@ export class ViewerScene {
     if (box.isEmpty()) return { centre: new THREE.Vector3(), radius: EMPTY_SCENE_RADIUS_METRES };
     const modelBox = this.modelBox();
     const centre = (modelBox.isEmpty() ? box : modelBox).getCenter(new THREE.Vector3());
+    if (this.sceneHemisphere !== null) centre.setX(this.sceneHemisphere.centre[0]).setY(this.sceneHemisphere.centre[1]);
     const farthestCorner = new THREE.Vector3(Math.max(centre.x - box.min.x, box.max.x - centre.x), Math.max(centre.y - box.min.y, box.max.y - centre.y),
                                              Math.max(centre.z - box.min.z, box.max.z - centre.z));
     return { centre, radius: Math.max(farthestCorner.length(), 0.5) };

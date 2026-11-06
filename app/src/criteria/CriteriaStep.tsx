@@ -1,4 +1,4 @@
-// The Criteria step (spec 7.1, 7.2): the list of the criteria or the editor of one, never both. The list is the cards (CriterionList,
+// The Criteria step (spec 7.1, 7.2): the mode tiles while a new project has no mode chosen (*firstMode*), then the list of the criteria or the editor of one, never both. The list is the cards (CriterionList,
 // with Add criterion under the last one) and, with two or more criteria, what the chain kept (one line); a press on a card opens its
 // editor. The editor is the header of the criterion (CriterionEditorHeader: back to the list, its neighbours, name, switch and menu,
 // its line) over its panel. While a criterion just opened waits for its settings the panel says so (or why they could not be read)
@@ -32,9 +32,11 @@ interface CriteriaStepProps {
   panelProblem?: string | null;
   /** What the chain kept (chainSummaryLine), under the cards, of two or more criteria; absent or null: no line. */
   chainLine?: string | null;
+  /** What a new project shows in place of its criterion until a mode is chosen; absent or null: nothing, the mode is chosen. */
+  firstMode?: ReactNode;
 }
 
-export function CriteriaStep({ panel, list, shows, onShowsChange, load = { state: "ready" }, panelProblem = null, chainLine = null }: CriteriaStepProps) {
+export function CriteriaStep({ panel, list, shows, onShowsChange, load = { state: "ready" }, panelProblem = null, chainLine = null, firstMode = null }: CriteriaStepProps) {
   const step = useRef<HTMLDivElement>(null);
   // The card selected takes the focus once the list shows it, after All criteria or a delete; the editor's name once the editor shows,
   // after a press on a card, Add or Duplicate. A request is used once (the ref); the counter wakes the effect when the view already shows.
@@ -99,6 +101,7 @@ export function CriteriaStep({ panel, list, shows, onShowsChange, load = { state
         : <p className="setting-error criterion-panel-waits" role="alert">{load.problem}</p>}
     </div>
   );
+  if (firstMode !== null) return <div className="criteria-step">{firstMode}</div>;
   return (
     <div ref={step} className={showsList ? "criteria-step" : "criteria-step criteria-step-editor"}>
       {showsList ? (

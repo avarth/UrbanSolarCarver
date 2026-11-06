@@ -6,16 +6,16 @@
 // run conditions and cards are in use_workspace_criteria.ts. The parts that start runs and show their results (the criterion's
 // carving rule, Envelope and massing, Export) are put together in result_steps.tsx from these and the app's run loop. In Simulate the
 // steps are hidden and the studies (use_studies.ts) are shown over the view (SimulateView), the selected one's values drawn on the
-// geometry Simulate shows (use_study_view.ts). In Inspect the steps are hidden too and the Files panel (InspectView) is shown over the
+// geometry Simulate shows (use_study_view.ts). In Inspect the steps are hidden too and the Geometries panel (InspectView) is shown over the
 // view, which draws the orientation of the test surfaces (use_inspection.ts); turns not saved are reported to the app, which asks
 // before Inspect is left. The project's typical building (use_typical_building.ts) is read once the shown criterion counts its hours
 // by it (Energy-weighted, in Solar heating).
 import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  failureTextOf, putSharedSettings, reportServiceProblem, updateCriterion, type HealthReply, type ModeInfo, type ProjectDetail,
+  failureTextOf, putSharedSettings, reportServiceProblem, updateCriterion, type HealthReply, type ModeInfo, type ProjectDetail, markModeChosen,
 } from "../api_client/client";
 import { ProjectSessionContext } from "../api_client/project_session";
-import { filesOfOtherCriteria } from "../criteria/criteria_state";
+import { activeCriteria, filesOfOtherCriteria } from "../criteria/criteria_state";
 import { CriteriaStep, type CriteriaShows } from "../criteria/CriteriaStep";
 import { firstCriteriaShows } from "../criteria/criteria_shows";
 import { CriterionPanel } from "../criteria/CriterionPanel";
@@ -26,7 +26,7 @@ import { useCriteria } from "../criteria/use_criteria";
 import { useTypicalBuilding } from "../criteria/use_typical_building";
 import { useWorkspaceCriteria } from "../criteria/use_workspace_criteria";
 import { useChangedDuringRender } from "../hooks/use_changed_during_render";
-import { InspectView } from "../inspect/InspectView";
+import { AnalysisOutOfDateNotice, InspectView } from "../inspect/InspectView";
 import type { InspectTurns } from "../inspect/UnsavedTurnsDialog";
 import { useInspection, useInspectView } from "../inspect/use_inspection";
 import { listedWithAnd, messages } from "../messages";
@@ -57,6 +57,7 @@ import { plainModeName } from "../modes";
 import { STEP_NAMES, type StepName } from "../stages";
 import { analysisPeriodOf, useSunPathOfStoredPeriod } from "../steps/sun_path_request";
 import { useInputFiles } from "./use_input_files";
+import { ModeStep } from "../criteria/ModeStep";
 import { InputChangesNotice } from "./InputChangesNotice";
 import { useKeptScroll } from "./use_kept_scroll";
 import { useStageStatus } from "./use_stage_status";
@@ -117,6 +118,8 @@ interface ProjectWorkspaceProps {
   onInspectUnsavedChange?: (unsaved: boolean) => void;
   /** Given what saves, drops and waits for the turns not saved once the workspace is open, and null when it closes. */
   onInspectTurnsReady?: (turns: InspectTurns | null) => void;
+  /** Goes from Inspect to Carve, as the switch in the header does. */
+  onGoToCarve?: () => void;
 }
 
 /**
@@ -306,9 +309,13 @@ function OpenProject(props: ProjectWorkspaceProps) {
   // Inspect: the inspection of the input files, read when Inspect opens. A save or restore writes a stored test surface file, which
   // the stage status (the criteria and studies that list it go out of date) and the meshes Design draws follow.
   const inspecting = props.mode === "inspect";
+  // A save or restore in this visit to Inspect: the panel then says which analyses it left out of date.
+  const [surfacesChanged, setSurfacesChanged] = useState(false);
+  if (surfacesChanged && !inspecting) setSurfacesChanged(false);
   const inspection = useInspection({
     active: inspecting,
     onSaved: () => {
+      setSurfacesChanged(true);
       refreshStageStatus();
       void testSurfaceCalls.reloadStoredFiles();
     },
@@ -404,6 +411,14 @@ function OpenProject(props: ProjectWorkspaceProps) {
               onRemoveFile={removeFile} disabledReason={inputsDisabledReason} weatherNeeded showsDisabledReason={false} />
   );
   const changeSettings = (values: Record<string, unknown>) => dispatch({ type: "values_changed", values });
+  // A new project asks for the mode of its first criterion once: the mode goes with the criterion's settings, its editor opens.
+  const [modeToChoose, setModeToChoose] = useState(project.mode_to_choose);
+  const chooseFirstMode = (mode: string) => {
+    dispatch({ type: "mode_chosen", mode });
+    setModeToChoose(false);
+    setCriteriaShows("editor");
+    markModeChosen(token, project.name).catch(onServiceProblem);
+  };
   // A criterion that is off (the chain skips it) needs no test surfaces nor weather file: its panel asks for neither.
   const criterionOn = !(criterion?.bypassed ?? false);
   // Which hours count of a Solar heating criterion; the switch changes its config, so its stages are read again.
@@ -432,11 +447,17 @@ function OpenProject(props: ProjectWorkspaceProps) {
     ),
     criteria: (
       <CriteriaStep list={cards.list} load={selection.load} chainLine={cards.chainLine} shows={criteriaShows ?? firstCriteriaShows(criteriaCount)} onShowsChange={setCriteriaShows}
+                    firstMode={modeToChoose ? (
+                      <section className="first-mode" aria-labelledby="first-mode-title">
+                        <h3 id="first-mode-title" className="first-mode-title">{messages.firstModeTitle}</h3>
+                        <ModeStep mode={null} onChoose={chooseFirstMode} disabledReason={inputsDisabledReason} />
+                      </section>
+                    ) : null}
                     panelProblem={workspaceCriteria.panelProblem} panel={
         <CriterionPanel key={criterionId} {...panelSections} testSurfaces={criterionTestSurfaces} criterionOn={criterionOn} testSurfaceDrawingProblems={testSurfacesMesh.drawingProblems} onAddTestSurfaces={testSurfaceCalls.add}
                         onRemoveTestSurface={testSurfaceCalls.remove} otherTestSurfaces={filesOfOtherCriteria(criteria.criteria, criterionId)}
                         onUseTestSurface={testSurfaceCalls.use} form={form} stepErrors={criterionForm.form.stepErrors} criterionKeys={criterionKeys}
-                        onChange={changeSettings} onChooseMode={(mode) => dispatch({ type: "mode_chosen", mode })} disabledReason={inputsDisabledReason}
+                        onChange={changeSettings} disabledReason={inputsDisabledReason}
                         weatherDropZone={criterionOn && modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} inputRoles={inputRolesWithFiles}
                         coldPeriod={coldPeriod} hemisphere={hemisphereOfLatitude(weather.latitude)}
                         weatherChangeNotice={weatherChangeSuggestionNow === null ? null : { suggestion: weatherChangeSuggestionNow, onDismiss: endWeatherChangeNotice }}
@@ -448,7 +469,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
   };
   const summaryOf = (name: StepName) => {
     const warnings = resultSteps.warningsOfStep[name];
-    const summary = stepSummary(name, viewState);
+    const summary = name === "criteria" && modeToChoose ? messages.chooseModeSummary : stepSummary(name, viewState);
     return warnings === undefined ? summary : messages.summaryWithWarnings(summary, messages.warningCount(warnings));
   };
   const steps: AccordionStep[] = STEP_NAMES.map((name) => ({
@@ -524,9 +545,16 @@ function OpenProject(props: ProjectWorkspaceProps) {
                            dimmedLayers: studyView.studyOutOfDate ? ["sky_dome" as const] : [], sunStudy: sunStudy.view,
                            missingLayers: studyView.skyDomeMissing ? ["sky_dome" as const] : [],
                            missingLayerNotes: { sky_dome: messages.studySkyDomeNeedsRun } };
+  const criteriaOutOfDate = activeCriteria(criteria.criteria).filter((criterion) => criterionStages[criterion.id]?.preprocessing === "out_of_date").length;
+  const inspectNotice = (
+    <>
+      {inputChangesNotice}
+      {surfacesChanged && criteriaOutOfDate > 0 && <AnalysisOutOfDateNotice criteria={criteriaOutOfDate} onGoToCarve={props.onGoToCarve} />}
+    </>
+  );
   // Inspect draws the inputs as Design does, the orientation of the test surfaces in place of the test surfaces, and no results.
   const inspectViewer = {
-    overlayContent: <InspectView inspection={inspection} origin={origin} saveDisabledReason={inputsDisabledReason} notice={inputChangesNotice} />,
+    overlayContent: <InspectView inspection={inspection} origin={origin} saveDisabledReason={inputsDisabledReason} notice={inspectNotice} />,
     dimmedLayers: [],
   };
   const shownByDefault = simulating ? LAYERS_SHOWN_IN_SIMULATE[studyView.geometry] : inspecting ? LAYERS_SHOWN_IN_INSPECT : LAYERS_SHOWN_IN_STEP[viewStep];

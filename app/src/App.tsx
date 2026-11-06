@@ -33,7 +33,6 @@ const accessToken = readTokenFromLaunchUrl();
 const HEALTH_POLL_MILLISECONDS = 1000;
 const FAILED_POLLS_BEFORE_ENGINE_STOPPED = 3;
 const PROJECT_NAME_MAXIMUM_LENGTH = 64;
-const NEW_PROJECT_MODE = "time-based";      // Sun hours (UX 3, 5.1)
 
 type ServiceProblem = "access_lost" | "engine_stopped";
 
@@ -183,7 +182,7 @@ export function App() {
     setTimedRun(record);
     setLastRunSeconds((times) => lastRunSecondsWith(times, record));
   }
-  // Save in the dialog waits, as Save in the Files panel does, while a run of the open project goes on.
+  // Save in the dialog waits, as Save in the Geometries panel does, while a run of the open project goes on.
   const openProjectRunActive = openProject !== null && runs.activeRun !== null && sameProjectName(runs.activeRun.project, openProject.name);
   const leavingInspect = useLeavingInspect(workspaceMode, openProjectRunActive ? messages.runInProgress : null);
 
@@ -378,7 +377,7 @@ export function App() {
         {openProject === null && (
           <StartScreen health={health} projects={projects} examples={examplesCurrent ? examples : null} projectsFolder={projectsFolder}
                        activeRunProject={runs.activeRun?.project ?? null} projectActions={projectActions} headingTakesFocus={focusStartScreenHeading}
-                       onCreateProject={(name) => openFrom(createProject(accessToken, name, NEW_PROJECT_MODE))}
+                       onCreateProject={(name) => openFrom(createProject(accessToken, name))}
                        onOpenProject={(name) => openFrom(getProject(accessToken, name))}
                        onTryExample={(example) => openFrom(example.project
                          ? getProject(accessToken, example.project)       // made from this example before (R2 7.4)
@@ -390,7 +389,8 @@ export function App() {
                             mode={workspaceMode} warmUpState={health?.warm_up.state ?? null} runs={runs} onServiceProblem={handleServiceProblem}
                             onShowProjects={() => setOpenProject(null)} onSettingsSaverReady={(saver) => { openProjectSettings.current = saver; }}
                             startSteps={workspaceStartSteps} onStepsChange={(steps) => { openWorkspaceSteps.current = steps; }}
-                            onInspectUnsavedChange={leavingInspect.onUnsavedChange} onInspectTurnsReady={leavingInspect.onTurnsReady} />
+                            onInspectUnsavedChange={leavingInspect.onUnsavedChange} onInspectTurnsReady={leavingInspect.onTurnsReady}
+                            onGoToCarve={() => leavingInspect.leave(() => setWorkspaceMode("design"))} />
         )}
         {leavingInspect.dialog}
       </div>

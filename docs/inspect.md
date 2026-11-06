@@ -12,11 +12,11 @@ The switch **Carve | Simulate | Inspect** in the header, next to the project nam
 
 Inspect works while a run of the project is going. Only Save and Restore original wait for it to end, as uploads do.
 
-## The Files panel
+## The Geometries panel
 
-The **Files** panel floats over the top left of the 3D view and collapses to an icon. It lists the input mesh files by role: maximum volume, test surfaces, existing surroundings and terrain. The weather file has no geometry and is not listed. Each row gives the file name, its triangle count and its area. A file that cannot be read stays in the list with its problem, for example a broken export, and has nothing to select.
+The **Geometries** panel floats over the top left of the 3D view and collapses to an icon. It lists the input mesh files by role: maximum volume, test surfaces, existing surroundings and terrain. The weather file has no geometry and is not listed. Each row gives the file name, its triangle count and its area. A file that cannot be read stays in the list with its problem, for example a broken export, and has nothing to select.
 
-Pressing a row selects the file. The view frames it, in the part of the view the Files panel does not cover, and draws the other test surface files faint, so you see what the selected one faces. The selected row also opens the file's summary:
+Pressing a row selects the file. The view frames it, in the part of the view the Geometries panel does not cover, and draws the other test surface files faint, so you see what the selected one faces. The selected row also opens the file's summary:
 
 - **Bounds**: the minimum and maximum corner in the file's own coordinates. When a corner is more than 10 km from zero, a note says the coordinates look georeferenced and how far they are. The info "i" beside the panel's title says which point the view is drawn around, since the view uses a local origin: "The view is drawn around x -141, y -91.72, z 0 of the files' coordinates."
 - **Surfaces**, for a test surface file: how many surfaces it has (below).
@@ -65,7 +65,7 @@ The service then reads the written file back with the engine's loader and compar
 Save has the effects of uploading the file again through the app:
 
 - The joined files of the criteria and studies that list the file are built again.
-- Those criteria and studies go out of date, and the criteria after them have to carve again. A run traces the file again.
+- Those criteria and studies go out of date, and the criteria after them have to carve again. A run traces the file again. When a criterion that had been analysed goes out of date, the panel says how many and offers **Go to Carve**.
 - The file's record in `project.json` is renewed. There is no "changed in the project folder" notice, since you made the change in the app.
 
 Save and Restore original are not available while a run of the project is going. The panel says so beside the buttons.

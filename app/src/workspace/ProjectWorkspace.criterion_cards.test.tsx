@@ -67,19 +67,19 @@ test("the open sections stay as the user left them when another criterion is sel
   const bare = criterion("3", "Daylight on roofs", { mode: "daylight" }, []);
   await openChain([FACADES, WINDOWS, bare]);
   expect(openPanelSections()).toEqual(["Carving rule"]);
-  togglePanelSection("Mode");
+  togglePanelSection("Settings");
   togglePanelSection("Carving rule");
-  expect(openPanelSections()).toEqual(["Mode"]);
+  expect(openPanelSections()).toEqual(["Settings"]);
   await select("Spring sun on windows");
-  expect(openPanelSections()).toEqual(["Mode"]);
+  expect(openPanelSections()).toEqual(["Settings"]);
   await select("Daylight on roofs");                              // it protects nothing yet
-  expect(openPanelSections()).toEqual(["Test surfaces", "Mode"]);
+  expect(openPanelSections()).toEqual(["Test surfaces", "Settings"]);
   await select("Winter sun on facades");
-  expect(openPanelSections()).toEqual(["Test surfaces", "Mode"]);
+  expect(openPanelSections()).toEqual(["Test surfaces", "Settings"]);
   // The open sections are the workspace's: closing the step and opening it again keeps them.
   openStep("Inputs");
   openStep("Criteria");
-  expect(openPanelSections()).toEqual(["Test surfaces", "Mode"]);
+  expect(openPanelSections()).toEqual(["Test surfaces", "Settings"]);
 });
 
 test("a pending save goes to the criterion it was typed in", async () => {
@@ -214,8 +214,6 @@ test("Add criterion with one criterion opens a menu of the modes; choosing one a
   expect(cardLine("Daylight")).toBe("Add test surfaces");
   expect(protectedFiles()).toEqual([]);
   expect(openPanelSections()).toEqual(["Test surfaces", "Carving rule"]);
-  openPanelSection("Mode");
-  expect(panel().querySelector('[role="radio"][aria-checked="true"]')!.textContent).toBe("Daylight");
   // It has not run: its score points and sky dome are not asked for (the service has none).
   expect(service.requests.filter((request) => request.includes("criterion=2") && request.includes("/run/"))).toEqual([]);
 });
@@ -233,9 +231,9 @@ test("while a card's settings are on their way its panel waits, and a reply for 
   expect(selectedCardName()).toBe("Daylight on roofs");
   openPanelSection("Test surfaces");
   expect(protectedFiles()).toEqual(["roofs.obj"]);
-  openPanelSection("Mode");
-  expect(panel().querySelector('[role="radio"][aria-checked="true"]')!.textContent).toBe("Daylight");
-  act(() => panel().querySelector<HTMLElement>('[role="radio"][aria-checked="false"]')!.click());       // another mode for it
+  openPanelSection("Settings");
+  act(() => panel().querySelector<HTMLElement>(".settings-step .setting-fold")!.click());
+  type(panel().querySelector<HTMLSelectElement>('[data-setting="rays_per_patch"] select')!, "9");
   await waitForTheSave();
   await settle();
   expect(service.patches.map((patch) => patch.id)).toEqual(["3"]);

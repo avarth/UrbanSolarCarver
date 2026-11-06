@@ -50,8 +50,8 @@ export interface RunAnalysisConditions {
 }
 
 /**
- * The step that draws a setting's field: Site and grid for a shared analysis setting, Criteria for a criterion's, for the carving
- * and for the mode (its tiles), Envelope and massing and Export for theirs; null for a name the form does not show.
+ * The step that draws a setting's field: Site and grid for a shared analysis setting, Criteria for a criterion's, the mode and the carving,
+ * Envelope and massing and Export for theirs; null for a name the form does not show.
  */
 export function stepOfSetting(name: string, criterionKeys: ReadonlySet<string>): StepName | null {
   if (name === "mode") return "criteria";

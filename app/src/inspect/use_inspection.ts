@@ -1,5 +1,5 @@
 // The inspection of the open project's input files (Inspect, inspect design sections 3, 5 and 6): the summary of each mesh file, the
-// geometry of each test surface file with the surface of each triangle, the file the Files panel selects, flip mode and the arrows,
+// geometry of each test surface file with the surface of each triangle, the file the Geometries panel selects, flip mode and the arrows,
 // and the turns staged per file until Save. The inspection is read, with the geometries of every test surface file, when Inspect
 // opens and after each save or restore.
 // Save sends one request per file with all its staged turns, which then leave the staged ones: they are being written, no longer
@@ -42,7 +42,7 @@ export interface InspectionHook {
   reply: InspectReply | null;
   /** The geometry of each test surface file, by file name, in the order of the inspection. */
   geometries: ReadonlyMap<string, InspectGeometry>;
-  /** The file selected in the Files panel; null when none is. */
+  /** The file selected in the Geometries panel; null when none is. */
   selected: InspectedFile | null;
   select: (file: InspectedFile | null) => void;
   /** Each new selection from the panel asks the view to frame the file: the number of those asks. */

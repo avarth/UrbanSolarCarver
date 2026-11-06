@@ -238,6 +238,11 @@ export const getStageStatus = (token: string, project: string) =>
   requestJson<StageStatusReply>(token, `${projectPath(project)}/stage-status`);
 
 /** Forgets the notices of input files changed in the project folder; a missing file stays listed. */
+/** The user chose the mode of a new project: it is not asked again. */
+export async function markModeChosen(token: string, project: string): Promise<void> {
+  await send(token, `${projectPath(project)}/mode-chosen`, "POST");
+}
+
 export async function dismissInputChanges(token: string, project: string): Promise<void> {
   await send(token, `${projectPath(project)}/input-changes`, "DELETE");
 }

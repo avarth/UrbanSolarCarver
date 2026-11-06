@@ -1,4 +1,4 @@
-// Inspect (inspect design, sections 3, 5 and 6): the Files panel over the 3D view lists the input files by role; a row selects its
+// Inspect (inspect design, sections 3, 5 and 6): the Geometries panel over the 3D view lists the input files by role; a row selects its
 // file, frames it and opens its summary. In flip mode a click on a surface of the selected test surface file turns it, and a second
 // click turns it back; the turns are staged until Save, which sends one request for the file, or Discard. Leaving Inspect with turns
 // not saved, or while a save is under way, asks to save or discard them (UnsavedTurnsDialog, as the app's switch uses it). Turns are
@@ -11,7 +11,7 @@ import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
 import { click } from "../viewer_overlays/render_for_test";
 import {
-  FILE_CHANGED_SINCE_READ, FILE_CHANGED_SINCE_TURNED, NOTHING_RUN, FakeService, buttonIn, container, endWorkspaceTest, openStep, openWorkspace,
+  CARVED, FILE_CHANGED_SINCE_READ, FILE_CHANGED_SINCE_TURNED, NOTHING_RUN, FakeService, buttonIn, container, endWorkspaceTest, openStep, openWorkspace,
   packedInspectGeometry, pressRunAnalysis, project, reasonOf, settle, startWorkspaceTest, switchMode,
 } from "./project_workspace_for_test";
 
@@ -41,11 +41,11 @@ const facadesGeometry = () => packedInspectGeometry([0, 0, 0], [0, 0, 0, 1, 0, 0
 const boxGeometry = () => packedInspectGeometry([0, 0, 0], [0, 0, 0, 1, 0, 0, 0, 1, 0], [0], [{ centre: [0.3, 0.3, 0], normal: [0, 0, -1], area: 0.5 }]);
 
 /** Opens the project with *files* (FILES) as its input files, *beforeInspect* done in Design, then switches to Inspect. */
-async function openInspect(beforeInspect: () => Promise<void> = async () => {}, files: InspectedFile[] = FILES): Promise<FakeService> {
-  const service = new FakeService(NOTHING_RUN, null);
+async function openInspect(beforeInspect: () => Promise<void> = async () => {}, files: InspectedFile[] = FILES, stages = NOTHING_RUN): Promise<FakeService> {
+  const service = new FakeService(stages, null);
   service.inspection = files;
   service.inspectGeometries = { "facades.obj": facadesGeometry(), "box.obj": boxGeometry(), "roofs.obj": boxGeometry() };
-  const opened = project(NOTHING_RUN);
+  const opened = project(stages);
   opened.inputs = { ...opened.inputs, test_surfaces: [{ name: "facades.obj", triangle_count: 3 }, { name: "box.obj", triangle_count: 12 }] };
   await openWorkspace(service, opened);
   await beforeInspect();
@@ -168,6 +168,31 @@ test("Save sends the turned surfaces once, then asks for the stage status, the s
   expect(counts()).toEqual({ stages: saved.stages + 1, stored: saved.stored + 1, inspection: saved.inspection + 1, geometry: saved.geometry + 1 });
   expect(button("Restore original")).toBeUndefined();
   expect(service.turnRequests).toHaveLength(1);
+});
+
+test("a save that puts an analysis out of date says so, with the way to Carve; a new visit to Inspect does not", async () => {
+  const notice = () => filesPanel().querySelector(".input-changes-notice");
+  const service = await openInspect(async () => {}, FILES, CARVED);
+  expect(notice()).toBeNull();
+  service.stages = { ...CARVED, preprocessing: "out_of_date" };
+  await selectFile("facades.obj");
+  await clickAndSettle(button("Flip mode"));
+  clickTriangle("facades.obj", 2);
+  await clickAndSettle(button("Save"));
+  expect(plain(notice())).toContain("The surfaces changed, so 1 criterion is out of date. Run the analysis again in Carve.");
+  await switchMode("design");
+  await switchMode("inspect");
+  await settle();
+  expect(notice()).toBeNull();
+});
+
+test("a save in a project not run yet says nothing about the analysis", async () => {
+  await openInspect();
+  await selectFile("facades.obj");
+  await clickAndSettle(button("Flip mode"));
+  clickTriangle("facades.obj", 2);
+  await clickAndSettle(button("Save"));
+  expect(filesPanel().querySelector(".input-changes-notice")).toBeNull();
 });
 
 /** Holds the replies to turns until the returned function is called. */

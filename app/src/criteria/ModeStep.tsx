@@ -1,41 +1,27 @@
-// A criterion's mode, in its panel (UX 5.3, 12; R2 3; once the Mode step): six tiles in a 3 × 2 radio group, each with its symbol
-// and plain name only. Arrow keys move the focus, Space or Enter chooses. Hovering a tile, focusing it with the keyboard, or clicking its "i", shows the tile's tooltip
+// The mode of a new project's first criterion (UX 5.3, 12; R2 3), shown by the Criteria step until it is chosen: six tiles in a 3 x 2
+// radio group, each with its symbol and plain name only. Arrow keys move the focus, Space or Enter chooses. Hovering a tile, focusing it with the keyboard, or clicking its "i", shows the tile's tooltip
 // (plain name, one line, longer description, what the mode needs, engine name), which Escape closes. The same text, after the
 // name, is the tile's description for a screen reader at all times. The focus a mouse click gives a tile does not hold the
 // tooltip open: it goes when the pointer leaves. A tooltip pinned with the "i" goes when a press lands anywhere but on that
 // tile's "i", or another mode is chosen. The tooltip lets the pointer through, so it never takes a click meant for the tile under it.
 // The "i" is for the pointer and touch only: a screen reader has its text as the tile's description already.
-// While Night cooling is chosen, a line under the tiles says that it is experimental.
-// A mode that needs a weather file the project lacks gets the weather drop zone under the tiles.
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useChangedDuringRender } from "../hooks/use_changed_during_render";
-import { listedWithAnd, messages } from "../messages";
-import { settingView } from "../settings_form/presentation";
-import { MessageParts, placedTooltipStyle, placementUnder, type TooltipPlacement } from "../settings_form/SettingTooltip";
+import { messages } from "../messages";
+import { placedTooltipStyle, placementUnder, type TooltipPlacement } from "../settings_form/SettingTooltip";
 import { ModeTileSymbol } from "./ModeTileSymbols";
-import { MODE_TILES, plainModeName } from "../modes";
+import { ModeTooltipContent } from "./ModeTooltipContent";
+import { MODE_TILES } from "../modes";
 import "../theme/panels.css";
 
 const TILES_PER_ROW = 3;
-const EXPERIMENTAL_MODE = "radiative_cooling";
 
 interface ModeStepProps {
-  mode: string;
+  /** The mode shown as chosen; null while none is. */
+  mode: string | null;
   onChoose: (mode: string) => void;
-  /** Why the mode cannot be changed now (a run is in progress); null when it can. */
+  /** Why the mode cannot be chosen now (a run is in progress); null when it can. */
   disabledReason: string | null;
-  /** The weather box, given when the chosen mode needs a weather file that is not there. */
-  weatherDropZone: ReactNode;
-  /** The settings the last mode change set back to their defaults, as the new mode refused the user's values; null when none. */
-  valuesReset?: { settings: string[]; mode: string } | null;
-  /** Whether the reason things are disabled is written here; false where another part says it (a criterion's Run analysis). */
-  showsDisabledReason?: boolean;
-}
-
-/** "Steepest slope of the envelope and voxel size are back to their defaults: ..." */
-function valuesResetText({ settings, mode }: { settings: string[]; mode: string }): string {
-  const labels = settings.map((name, index) => (index === 0 ? settingView(name, mode).label : settingView(name, mode).label.toLowerCase()));
-  return messages.valuesResetForMode(listedWithAnd(labels), labels.length, plainModeName(mode));
 }
 
 /** The tile the focus moves to from *index* for an arrow key; null for another key or a move off the grid. */
@@ -47,9 +33,9 @@ export function tileAfterArrowKey(index: number, key: string, tileCount: number)
   return next >= 0 && next < tileCount ? next : null;                                          // stay in the column
 }
 
-const chosenIndexOf = (mode: string) => Math.max(0, MODE_TILES.findIndex((tile) => tile.engine_name === mode));
+const chosenIndexOf = (mode: string | null) => Math.max(0, MODE_TILES.findIndex((tile) => tile.engine_name === mode));
 
-export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone, valuesReset = null, showsDisabledReason = true }: ModeStepProps) {
+export function ModeStep({ mode, onChoose, disabledReason }: ModeStepProps) {
   const chosenIndex = chosenIndexOf(mode);
   const [focusIndex, setFocusIndex] = useState(chosenIndex);    // the tile in the tab order
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -186,18 +172,11 @@ export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone, valu
         // Seen, not read: a screen reader has the same text as the tile's description already.
         <div ref={tooltip} role="tooltip" aria-hidden="true" className="setting-tooltip mode-tooltip"
              style={placedTooltipStyle(placement)}>
-          <span className="mode-tooltip-name">{openTile.plain_name}</span>
-          <span className="mode-tooltip-line">{openTile.one_line}</span>
-          <span>{openTile.tooltip}</span>
-          <span>{openTile.needs}</span>
-          <span className="setting-tooltip-config"><MessageParts parts={messages.engineName(openTile.engine_name)} /></span>
+          <ModeTooltipContent tile={openTile} />
         </div>
       )}
       <p className="mode-step-note">{messages.modeFillsStartingValues}</p>
-      {mode === EXPERIMENTAL_MODE && <p className="mode-step-note">{messages.radiativeCoolingIsExperimental(plainModeName(mode))}</p>}
-      {valuesReset !== null && valuesReset.settings.length > 0 && <p className="step-reason mode-values-reset" role="status">{valuesResetText(valuesReset)}</p>}
-      {disabledReason !== null && showsDisabledReason && <p className="step-reason">{disabledReason}</p>}
-      {weatherDropZone}
+      {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
     </div>
   );
 }

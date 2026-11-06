@@ -268,3 +268,20 @@ test("framing orbits about the maximum volume, however far the other visible lay
   scene.frameAll(true);
   expect(camera.position.distanceTo(controls.target)).toBeLessThan(framed);     // the dome's reach counted in the distance
 });
+
+test("with a scene hemisphere the orbit turns about the centre of the compass ring, at the middle height of the model", () => {
+  const { scene } = viewerWithACube();
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(10, 10, 20));
+  mesh.position.set(5, 5, 10);
+  mesh.updateMatrixWorld();
+  scene.setLayer("max_volume", mesh);
+  scene.setSceneHemisphere({ centre: [40, 30, 0], radius: 60 });
+  const { controls } = scene as unknown as { controls: { target: THREE.Vector3 } };
+
+  scene.frameAll(true);
+  expect(controls.target.distanceTo(new THREE.Vector3(40, 30, 10))).toBeLessThan(1e-9);
+  scene.viewTop();
+  scene.setSceneHemisphere(null);
+  scene.frameAll(true);
+  expect(controls.target.toArray()).toEqual([5, 5, 10]);
+});

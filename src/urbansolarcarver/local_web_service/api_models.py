@@ -106,6 +106,7 @@ class ProjectJson(BaseModel):
     studies: list[StudyEntry] = Field(default_factory=list)     # the studies of the Simulate workspace, in the order shown
     next_study_id: int = 1      # the id the next study gets
     typical_building: TypicalBuildingEntry | None = None    # None: none chosen yet (typical_building.building_of)
+    mode_to_choose: bool = False    # a new project: its one criterion stands in NEW_PROJECT_MODE until the user chooses a mode
 
 
 StageState = Literal["current", "out_of_date", "missing"]
@@ -452,7 +453,7 @@ NEW_PROJECT_MODE = "time-based"
 class CreateProjectRequest(BaseModel):
     """The body of a request to create a project."""
     name: str
-    mode: str = NEW_PROJECT_MODE
+    mode: str | None = None     # None: starts in NEW_PROJECT_MODE, with the mode to choose (ProjectJson.mode_to_choose)
 
 
 class RenameProjectRequest(BaseModel):
@@ -560,6 +561,7 @@ class ProjectDetail(BaseModel):
     carving_chain: list[CarvingChainStep] = Field(default_factory=list)   # as in ProjectJson
     criteria: list[CriterionEntry] = Field(default_factory=list)          # the chain in carving order, bypassed criteria included
     criterion_status: dict[str, dict[str, StageState]] = Field(default_factory=dict)    # as stage_status.criteria
+    mode_to_choose: bool = False    # as in ProjectJson
 
 
 class CancelRunReply(BaseModel):

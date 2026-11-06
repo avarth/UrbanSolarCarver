@@ -8,20 +8,18 @@ import type { ThresholdSpec } from "../settings_form/widgets/ThresholdRule";
 import { carvingRuleOf, manualCarveAmountOf, thresholdControlOf } from "./CarvingStep";
 import { formattedNumber, withUnit } from "../format_numbers";
 import { fieldsWithErrors } from "../settings_form/SettingsStep";
-import { plainModeName } from "../modes";
 
-export type PanelSectionId = "test_surfaces" | "mode" | "settings" | "carving";
+export type PanelSectionId = "test_surfaces" | "settings" | "carving";
 
 /** The sections in the order of the panel. */
-export const PANEL_SECTIONS: readonly PanelSectionId[] = ["test_surfaces", "mode", "settings", "carving"];
+export const PANEL_SECTIONS: readonly PanelSectionId[] = ["test_surfaces", "settings", "carving"];
 
 export const DEFAULT_OPEN_SECTIONS: ReadonlySet<PanelSectionId> = new Set(["carving"]);
 
 const sameValue = (first: unknown, second: unknown) => JSON.stringify(first) === JSON.stringify(second);
 
-/** The section whose field shows a setting: Mode for the mode, Carving rule for a carving setting, Settings for the others. */
+/** The section whose field shows a setting: Carving rule for a carving setting, Settings for the others. */
 export function sectionOfSetting(name: string): PanelSectionId {
-  if (name === "mode") return "mode";
   const presented = presentedSettingOf(name);
   return presented !== null && SETTING_PRESENTATIONS[presented].step === "carving" ? "carving" : "settings";
 }
@@ -32,10 +30,6 @@ export function testSurfacesSummary(files: string[]): string {
   if (files.length === 1) return files[0];
   if (files.length === 2) return messages.twoFileNames(files[0], files[1]);
   return messages.fileCount(files.length);
-}
-
-export function modeSummary(mode: string): string {
-  return plainModeName(mode);
 }
 
 /**

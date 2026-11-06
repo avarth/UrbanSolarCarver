@@ -36,6 +36,7 @@ from ..pydantic_schemas import UserConfig
 from ..stage_settings import PIPELINE_STAGES
 from . import folder_picker, inspection, simulation, sun_study, typical_building, user_preferences
 from .api_models import (
+    NEW_PROJECT_MODE,
     CancelRunReply, ColdPeriodReply, ConfigErrorReply, ConfigReply, ConfigValuesRequest, CreateCriterionRequest, CreateProjectRequest,
     CriterionEntry, CriterionOrderRequest, CriterionSettingsReply, ErrorDetailReply, ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, InspectedFile, InspectReply, MissingInputsReply, ModeInfo, ProjectDetail, RestoreOriginalRequest,
     ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkippedSurfaces, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, StoredFileChangedReply, SunChart, SunPath, SunPositions, TurnSurfacesRequest,
@@ -332,7 +333,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
                 weather_latitude=store.weather_latitude(name),
                 stage_status=status, grid_plan=store.stored_grid_plan(name),
                 carving_chain=store.read_project_json(name).carving_chain, criteria=store.criteria(name),
-                criterion_status=status.criteria)
+                criterion_status=status.criteria, mode_to_choose=store.read_project_json(name).mode_to_choose)
 
     def run_folder_of(name: str) -> Path:
         return folder_in_use.store.open(name) / RUN_FOLDER
@@ -380,7 +381,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
     @router.post("/projects", responses={409: _ERROR_RESPONSES[409], 422: {"model": ConfigErrorReply}})
     def create_project(request: CreateProjectRequest) -> ProjectDetail:
         store = folder_in_use.store
-        store.create(request.name, request.mode)
+        store.create(request.name, request.mode or NEW_PROJECT_MODE, mode_to_choose=request.mode is None)
         return project_detail(store, request.name)
 
     @router.get("/examples")
@@ -558,6 +559,13 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
     def criterion_keys() -> list[str]:
         """The names of the settings that belong to a criterion; every other setting is shared by the criteria."""
         return sorted(CRITERION_KEYS)
+
+    @router.post("/projects/{name}/mode-chosen", status_code=204, response_class=Response, responses=_ERROR_RESPONSES)
+    def mode_chosen(name: str) -> Response:
+        """The user chose the mode of a new project; the mode itself is saved with the criterion's settings."""
+        with writable_project(name) as store:
+            store.mode_chosen(name)
+        return Response(status_code=204)
 
     @router.post("/projects/{name}/criteria", responses={409: _ERROR_RESPONSES[409], 422: _CONFIG_OR_MESSAGE_ERROR})
     def add_criterion(name: str, request: CreateCriterionRequest) -> CriterionEntry:

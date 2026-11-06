@@ -24,7 +24,7 @@ function panelProps(overrides: Partial<CriterionPanelProps> = {}): CriterionPane
   return {
     openSections: new Set(PANEL_SECTIONS), onToggleSection: () => {}, onOpenSections: () => {},
     testSurfaces: [{ name: "windows.ply", triangle_count: 12 }], onAddTestSurfaces: async () => [], onRemoveTestSurface: async () => null,
-    form: formFor("time-based"), stepErrors: [], criterionKeys: CRITERION_KEYS, onChange: () => {}, onChooseMode: () => {}, disabledReason: null,
+    form: formFor("time-based"), stepErrors: [], criterionKeys: CRITERION_KEYS, onChange: () => {}, disabledReason: null,
     weatherDropZone: null, carvingRule: <div className="carving-rule-for-test">carving rule</div>,
     ...overrides,
   };
@@ -33,9 +33,9 @@ function panelProps(overrides: Partial<CriterionPanelProps> = {}): CriterionPane
 const find = (selector: string) => rendered!.container.querySelector<HTMLElement>(selector);
 const follows = (earlier: Element, later: Element) => (earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
 
-test("the panel holds the test surfaces, the mode tiles, the criterion's settings and the carving rule, in that order, and no Run analysis", () => {
+test("the panel holds the test surfaces, the criterion's settings and the carving rule, in that order, and no Run analysis", () => {
   rendered = renderForTest(<CriterionPanel {...panelProps()} />);
-  const parts = [find(".input-box"), find('[role="radiogroup"]'), find('[data-setting="start_month"]'), find(".carving-rule-for-test")];
+  const parts = [find(".input-box"), find('[data-setting="start_month"]'), find(".carving-rule-for-test")];
   expect(parts.every((part) => part !== null)).toBe(true);
   expect([...rendered.container.querySelectorAll("button")].map((button) => button.textContent)).not.toContain("Run analysis");
   for (let index = 1; index < parts.length; index++) expect(follows(parts[index - 1]!, parts[index]!)).toBe(true);
@@ -53,15 +53,6 @@ test("a group with only folded settings in the panel is a fold that says it hold
   rendered = renderForTest(<CriterionPanel {...panelProps({ form: formFor("daylight") })} />);
   expect([...rendered.container.querySelectorAll(".setting-group-title")].map((title) => title.textContent)).toEqual([]);
   expect([...rendered.container.querySelectorAll(".settings-step .setting-fold")].map((fold) => fold.textContent)).toEqual(["Detail settings"]);
-});
-
-test("a tile chooses the criterion's mode; a message of the criterion's save that names no setting is shown in the panel", () => {
-  const onChooseMode = vi.fn();
-  rendered = renderForTest(<CriterionPanel {...panelProps({ onChooseMode, stepErrors: ["Add a weather file to run this mode"] })} />);
-  click([...rendered.container.querySelectorAll('[role="radio"]')][4]);
-  expect(onChooseMode).toHaveBeenCalledWith("daylight");
-  expect(find(".step-error")!.textContent).toBe("Add a weather file to run this mode");
-  expect(rendered.container.textContent).toContain("Choosing a mode fills its starting values in the settings below.");
 });
 
 type PanelWithoutSections = Omit<CriterionPanelProps, "openSections" | "onToggleSection" | "onOpenSections">;
@@ -84,20 +75,19 @@ test("a criterion opens with only Carving rule open; a criterion without test su
   expect(PANEL_SECTIONS.filter(sectionOpen)).toEqual(["test_surfaces", "carving"]);
 });
 
-test("the panel shows four sections with carving open", () => {
+test("the panel shows three sections with carving open", () => {
   rendered = renderForTest(<PanelInStep {...panelProps()} />);
   const headers = [...rendered.container.querySelectorAll<HTMLButtonElement>(".panel-section-header")];
-  expect(headers.map((header) => header.querySelector(".panel-section-title")!.textContent)).toEqual(["Test surfaces", "Mode", "Settings", "Carving rule"]);
-  expect(headers.map((header) => header.getAttribute("aria-expanded"))).toEqual(["false", "false", "false", "true"]);
+  expect(headers.map((header) => header.querySelector(".panel-section-title")!.textContent)).toEqual(["Test surfaces", "Settings", "Carving rule"]);
+  expect(headers.map((header) => header.getAttribute("aria-expanded"))).toEqual(["false", "false", "true"]);
   // An open section's header names its content; a closed section has none.
   expect(document.getElementById(sectionHeader("carving").getAttribute("aria-controls")!)!.querySelector(".carving-rule-for-test")).not.toBeNull();
-  expect(sectionHeader("mode").hasAttribute("aria-controls")).toBe(false);
-  expect(find('[role="radiogroup"]')).toBeNull();
+  expect(sectionHeader("settings").hasAttribute("aria-controls")).toBe(false);
   expect(find('[data-setting="start_month"]')).toBeNull();
   expect(find(".carving-rule-for-test")).not.toBeNull();
-  click(sectionHeader("mode"));
-  expect(sectionOpen("mode")).toBe(true);
-  expect(find('[role="radiogroup"]')).not.toBeNull();
+  click(sectionHeader("settings"));
+  expect(sectionOpen("settings")).toBe(true);
+  expect(find('[data-setting="start_month"]')).not.toBeNull();
   click(sectionHeader("carving"));
   expect(sectionOpen("carving")).toBe(false);
   expect(find(".carving-rule-for-test")).toBeNull();
@@ -107,12 +97,11 @@ test("a closed section shows its summary", () => {
   const daylight = { ...formFor("daylight"), userValues: { carve_fraction: 0.7 } };
   rendered = renderForTest(<PanelInStep {...panelProps({ form: daylight })} />);
   expect(sectionSummary("carving")).toBeNull();                       // open: no summary
-  expect(sectionSummary("mode")!.textContent).toBe("Daylight");
   expect(sectionSummary("settings")!.textContent).toBe("Starting values");
   click(sectionHeader("carving"));
   expect(sectionSummary("carving")!.textContent).toBe("Carve 70 %");
   expect(sectionSummary("test_surfaces")!.textContent).toBe("windows.ply");
-  expect(sectionHeader("mode").textContent).toBe("ModeDaylight");      // in the header, after the title
+  expect(sectionHeader("settings").textContent).toBe("SettingsStarting values");      // in the header, after the title
   rendered.unmount();
   const timeBased = { ...formFor("time-based"), userValues: { start_hour: 7, end_hour: 19 } };
   rendered = renderForTest(<PanelInStep {...panelProps({ form: timeBased })} />);
@@ -131,7 +120,7 @@ test("a criterion without test surfaces opens its test surfaces section; closed,
   expect(sectionSummary("test_surfaces")!.textContent).toBe("None yet");
   expect(isWarning(sectionSummary("test_surfaces")!)).toBe(true);
   expect(sectionSummary("test_surfaces")!.querySelector(".setting-error-icon")).not.toBeNull();       // a warning icon, not the colour alone
-  expect(sectionSummary("mode")!.querySelector(".setting-error-icon")).toBeNull();
+  expect(sectionSummary("settings")!.querySelector(".setting-error-icon")).toBeNull();
 });
 
 test("a criterion that is off needs no test surfaces: none is no problem, and the section stays as it is", () => {
@@ -142,12 +131,12 @@ test("a criterion that is off needs no test surfaces: none is no problem, and th
   expect(isWarning(sectionSummary("test_surfaces")!)).toBe(false);
 });
 
-test("a criterion that is off needs no weather file: the weather box is no problem, and Mode stays as it is", () => {
+test("a criterion that is off needs no weather file: the weather box is no problem, and Settings stays as it is", () => {
   rendered = renderForTest(<PanelInStep {...panelProps({ criterionOn: false })} />);
   rendered.rerender(<PanelInStep {...panelProps({ criterionOn: false, weatherDropZone: <div className="weather-box-for-test" /> })} />);
-  expect(sectionOpen("mode")).toBe(false);
-  expect(sectionSummary("mode")!.textContent).toBe("Sun hours");
-  expect(isWarning(sectionSummary("mode")!)).toBe(false);
+  expect(sectionOpen("settings")).toBe(false);
+  expect(sectionSummary("settings")!.textContent).toBe("21 Dec, 10 to 14\u00a0h");
+  expect(isWarning(sectionSummary("settings")!)).toBe(false);
 });
 
 test("closed, the carving rule of a criterion that is off reads Off", () => {
@@ -162,7 +151,7 @@ test("a closed section with a problem says so to screen readers in its header; o
   expect(sectionOpen("test_surfaces")).toBe(true);                               // it opens for the problem
   click(sectionHeader("test_surfaces"));
   expect(sectionHeader("test_surfaces").querySelector(".visually-hidden")!.textContent).toBe("Needs attention");
-  expect(sectionHeader("mode").querySelector(".visually-hidden")).toBeNull();
+  expect(sectionHeader("settings").querySelector(".visually-hidden")).toBeNull();
   click(sectionHeader("test_surfaces"));                                         // open: the content shows what to fix
   expect(sectionHeader("test_surfaces").querySelector(".visually-hidden")).toBeNull();
 });
@@ -181,26 +170,27 @@ test("inside the sections the test surfaces box is named by an aria-label, not a
   expect(groupTitles.every((title) => title.tagName === "H4")).toBe(true);
 });
 
-test("a field error of the criterion's save opens the section that holds the field; the weather box and the values reset open Mode", () => {
+test("a field error of the criterion's save opens the section that holds the field; the weather box and the values reset open Settings", () => {
   rendered = renderForTest(<PanelInStep {...panelProps()} />);
   expect(sectionOpen("settings")).toBe(false);
   rendered.rerender(<PanelInStep {...panelProps({ form: { ...formFor("time-based"), fieldErrors: { end_hour: "Input should be less than 24" } } })} />);
   expect(sectionOpen("settings")).toBe(true);
-  expect(sectionOpen("mode")).toBe(false);
   click(sectionHeader("settings"));
   expect(sectionSummary("settings")!.textContent).toBe("1 setting to fix");
   expect(isWarning(sectionSummary("settings")!)).toBe(true);
+  rendered.unmount();
+  rendered = renderForTest(<PanelInStep {...panelProps()} />);
   rendered.rerender(<PanelInStep {...panelProps({ weatherDropZone: <div className="weather-box-for-test" /> })} />);
-  expect(sectionOpen("mode")).toBe(true);
-  expect(find('.panel-section[data-section="mode"] .weather-box-for-test')).not.toBeNull();
-  click(sectionHeader("mode"));
-  expect(isWarning(sectionSummary("mode")!)).toBe(true);
-  expect(sectionSummary("mode")!.textContent).toBe("Sun hours, needs a weather file");
+  expect(sectionOpen("settings")).toBe(true);
+  expect(find('.panel-section[data-section="settings"] .weather-box-for-test')).not.toBeNull();
+  click(sectionHeader("settings"));
+  expect(isWarning(sectionSummary("settings")!)).toBe(true);
+  expect(sectionSummary("settings")!.textContent).toBe("Needs a weather file");
   rendered.unmount();
   rendered = renderForTest(<PanelInStep {...panelProps()} />);
   rendered.rerender(<PanelInStep {...panelProps({ form: { ...formFor("time-based"), valuesResetByModeChange: { settings: ["max_slope_deg"], mode: "time-based" } } })} />);
-  expect(sectionOpen("mode")).toBe(true);
-  expect(find('.panel-section[data-section="mode"] .mode-values-reset')).not.toBeNull();
+  expect(sectionOpen("settings")).toBe(true);
+  expect(find('.panel-section[data-section="settings"] .mode-values-reset')).not.toBeNull();
 });
 
 test("a request to open a section (a link to a setting) opens it, once per request", () => {
@@ -308,4 +298,13 @@ test("energy-weighted, the Settings summary says so, and the hidden balance temp
   expect(isWarning(sectionSummary("settings")!)).toBe(false);
   rendered.rerender(<CriterionPanel {...panelProps({ form, openSections: new Set(), hoursCounted: hoursCounted({ energyWeighted: false }) })} />);
   expect(sectionSummary("settings")!.textContent).toBe("1 setting to fix");
+});
+
+test("Settings names the mode and says when it is experimental; the values a mode set back are named there", () => {
+  rendered = renderForTest(<PanelInStep {...panelProps({ form: { ...formFor("time-based"), valuesResetByModeChange: { settings: ["max_slope_deg"], mode: "time-based" } } })} />);
+  expect(find('.panel-section[data-section="settings"]')!.textContent).toContain("Mode: Sun hours");
+  expect(find(".mode-values-reset")!.textContent).toBe("Steepest slope of the envelope is back to its default: Sun hours cannot use the value you had set.");
+  expect(rendered.container.textContent).not.toContain("is experimental");
+  rendered.rerender(<PanelInStep {...panelProps({ form: formFor("radiative_cooling") })} />);
+  expect(rendered.container.textContent).toContain("Night cooling is experimental and assumes horizontal test surfaces.");
 });

@@ -9,7 +9,7 @@
 // is reported, and a request to frame a box moves the camera. Simulate's sun tool draws the year's sun path with the chosen day and
 // the sun (the sun_study layer), the shadows at that time and the hours in shade over a range (the scene's setSunStudy).
 // Without WebGL (a remote desktop, a blocked graphics card) the scene cannot start: the view says so, and the steps go on working.
-// Framing leaves out the part of the view a panel lies over (leftInsetOf), so the model is never hidden behind it; the picture shifts and the camera still orbits about the model.
+// Framing leaves out the part of the view a panel lies over (leftInsetOf), so the model is never hidden behind it; the picture shifts and the camera still orbits about the centre of the compass ring.
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from "react";
 import type * as THREE from "three";
 import type { RunSummary, SkippedSurfaces, SkyDome } from "../api_client/client";

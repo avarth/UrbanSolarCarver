@@ -9,7 +9,7 @@ import { packScorePoints } from "../viewer/packed_results_for_test";
 import { byRole } from "../viewer_overlays/render_for_test";
 import type { OpenProjectSettingsSaver } from "./ProjectWorkspace";
 import type { PipelineStage, StageState } from "../stages";
-import { FACADES, ROOFS, WINDOWS, card, openChain, periodFieldText, select } from "./chain_service_for_test";
+import { FACADES, ROOFS, WINDOWS, card, openChain, select } from "./chain_service_for_test";
 import {
   CARVED, CARVING, ENVELOPE, FakeService, MASSING, NOTHING_RUN, TRIANGLE_OBJ, buildPart, buttonIn, container,
   dimmedCarvingLayers, endWorkspaceTest, openPanelSection, openStep, openWorkspace, panelSectionOpen, pinnedBar, pressRunAnalysis, project, reasonOf, reportedServiceProblems, settle,
@@ -127,32 +127,38 @@ test("a rejected criterion setting marks its field", async () => {
   expect(service.count("POST /runs")).toBe(0);
 });
 
-test("a mode change starts the criterion from the new mode's values", async () => {
+test("a new project shows the mode tiles in place of its criterion; a tile sets the mode, says so to the service and opens the editor", async () => {
   service = new FakeService(NOTHING_RUN, null);
-  await openWorkspace(service, project(NOTHING_RUN, { voxel_size: 2, start_month: 3 }));
+  await openWorkspace(service, { ...project(NOTHING_RUN, { voxel_size: 2 }), mode_to_choose: true });
+  expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Choose a mode");
   openStep("Criteria");
-  expect(periodFieldText()).toContain("21 Mar");
-  openPanelSection("Mode");
+  expect(container().querySelector(".first-mode-title")!.textContent).toBe("Choose a mode for the first criterion");
+  expect(container().querySelector(".criterion-panel")).toBeNull();
   act(() => modeTile("Daylight").click());
   await waitForTheSave();
   await settle();
   expect(settingsSaves()).toEqual(["PATCH /criteria/1"]);
-  expect(service.savedValues).toEqual([{ mode: "daylight" }]);         // not the period of Sun hours, nor the shared voxel size
-  act(() => modeTile("Sun hours").click());                    // again: its own period, not the one set before
-  await waitForTheSave();
-  await settle();
-  expect(settingsSaves()).toEqual(["PATCH /criteria/1", "PATCH /criteria/1"]);
-  expect(service.savedValues.at(-1)).toEqual({ mode: "time-based" });
-  expect(periodFieldText()).toContain("21 Dec");
-  expect(siteAndGridSummaryText()).toContain("2\u00a0m");          // the shared voxel size stays
+  expect(service.savedValues).toEqual([{ mode: "daylight" }]);         // not the shared voxel size
+  expect(service.count("POST /mode-chosen")).toBe(1);
+  expect(container().querySelector(".first-mode")).toBeNull();
+  expect(container().querySelector(".criterion-panel")).not.toBeNull();
+  expect(siteAndGridSummaryText()).toContain("2\u00a0m");
 });
 
-test("a shared change refused for the criterion's mode is saved again once a mode change makes it storable, and Run analysis starts", async () => {
+test("a project whose mode is chosen goes straight to its criterion", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  await openWorkspace(service, project(NOTHING_RUN));
+  openStep("Criteria");
+  expect(container().querySelector(".first-mode")).toBeNull();
+  expect(container().querySelector(".criterion-panel")).not.toBeNull();
+});
+
+test("a shared change refused for the criterion's mode is saved again once the first mode makes it storable, and Run analysis starts", async () => {
   service = new FakeService(NOTHING_RUN, null);
   // The service checks the shared settings with the criterion: Sun hours needs the weather file the project lacks.
   service.configErrorsOf = (values) => ("voxel_size" in values && service.criterionSettings.mode === "time-based"
     ? [{ field: null, message: "Value error, mode 'time-based' requires epw_path" }] : null);
-  await openWorkspace(service, { ...project(NOTHING_RUN), inputs: { ...project(NOTHING_RUN).inputs, weather: [] }, weather_location: null, weather_latitude: null });
+  await openWorkspace(service, { ...project(NOTHING_RUN), inputs: { ...project(NOTHING_RUN).inputs, weather: [] }, weather_location: null, weather_latitude: null, mode_to_choose: true });
   openStep("Site and grid");
   type(voxelSizeField(), "2");
   await waitForTheSave();
@@ -271,41 +277,6 @@ test("threshold values given during a carving run: one more run follows with the
   expect(service.runsStarted).toHaveLength(2);
 });
 
-test("a refused mode change locks the carving: the old mode's carving is not shown as current, and fixing the setting starts no analysis", async () => {
-  service = new FakeService(CARVED, CARVING);
-  // Daylight is refused for a carving setting until the user sets it, as a stored config.yaml or a run could leave it.
-  service.configErrorsOf = (values) => (values.mode === "daylight" && values.max_slope_deg === undefined
-    ? [{ field: "max_slope_deg", message: "Input should be greater than 0" }] : null);
-  await openWorkspace(service, project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
-  openStep("Criteria");
-  openPanelSection("Mode");
-  act(() => modeTile("Daylight").click());
-  // Locked at once, before the save is sent: the stored settings, which the stage status describes, are still Sun hours.
-  expect(stepRow("Criteria").textContent).toContain("The mode or the settings changed since the analysis. Run it again to update the carving.");
-  await waitForTheSave();
-  await settle();
-  expect(service.count("PATCH /criteria/1")).toBe(1);
-  expect(service.savedValues).toEqual([]);                     // refused: config.yaml still says Sun hours
-  expect(stepRow("Criteria").textContent).toContain("The mode or the settings changed since the analysis. Run it again to update the carving.");
-  expect(thresholdField().disabled).toBe(true);
-  expect(dimmedCarvingLayers()).toEqual(["carved_voxels", "kept_voxels", "sky_dome"]);
-  expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("1 setting to fix");
-
-  // The setting with the error stays editable in the locked carving rule; fixing it stores Daylight, and must not start a carving run,
-  // which would run the whole analysis.
-  const slope = container().querySelector<HTMLInputElement>('[data-setting="max_slope_deg"] input[type="number"]')!;
-  expect(slope.disabled).toBe(false);
-  // Once Daylight is stored, the service finds the analysis out of date.
-  service.stages = { ...CARVED, preprocessing: "out_of_date", thresholding: "out_of_date" };
-  typeAndLeave(slope, "45");
-  await waitForTheSave();
-  await settle();
-  expect(service.savedValues).toEqual([{ mode: "daylight", max_slope_deg: 45 }]);
-  expect(service.count("POST /runs")).toBe(0);
-  expect(FakeWebSocket.opened).toHaveLength(0);
-  expect(stepRow("Criteria").textContent).toContain("The mode or the settings changed since the analysis. Run it again to update the carving.");
-});
-
 test("a failed run's link to a setting opens its step and focuses the input its label names: a slider's number field", async () => {
   service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, project(NOTHING_RUN));
@@ -365,20 +336,6 @@ test("go to a carving setting opens the Carving rule, closed before, and focuses
   act(() => buttonIn(container(), "Go to steepest slope of the envelope").click());
   expect(panelSectionOpen("Carving rule")).toBe(true);
   expect(container().querySelector('[data-setting="max_slope_deg"]')!.contains(document.activeElement)).toBe(true);
-});
-
-test("go to the mode opens the Mode section and focuses the chosen tile", async () => {
-  service = new FakeService(NOTHING_RUN, null);
-  await openWorkspace(service, project(NOTHING_RUN));
-  openStep("Criteria");
-  await pressRunAnalysis();
-  FakeWebSocket.opened[0].send({ type: "run_failed", error_type: "ConfigError", message: "invalid",
-                                 field_errors: [{ field: "mode", message: "Input should be a valid mode" }] });
-  await settle();
-  expect(panelSectionOpen("Mode")).toBe(false);
-  act(() => buttonIn(container(), "Go to mode").click());
-  expect(panelSectionOpen("Mode")).toBe(true);
-  expect(document.activeElement).toBe(container().querySelector('[role="radio"][aria-checked="true"]'));
 });
 
 test("closing the Carving rule while a threshold value waits for the carving run still starts the run that follows", async () => {

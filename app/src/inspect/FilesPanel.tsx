@@ -1,4 +1,4 @@
-// The Files panel of Inspect (inspect design, sections 3, 5 and 6): small, floating over the top left of the 3D view as Simulate's
+// The Geometries panel of Inspect (inspect design, sections 3, 5 and 6): small, floating over the top left of the 3D view as Simulate's
 // studies panel, collapsible to an icon button. The input mesh files by role (maximum volume, test surfaces, existing surroundings,
 // terrain), each row with its triangle count and area; a file that cannot be read shows why, with nothing to select. A press on a row
 // selects the file (the view frames it) and opens its summary: its bounds, a note when they are far from zero and,

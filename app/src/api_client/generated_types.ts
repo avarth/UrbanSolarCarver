@@ -452,6 +452,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/mode-chosen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mode Chosen
+         * @description The user chose the mode of a new project; the mode itself is saved with the criterion's settings.
+         */
+        post: operations["mode_chosen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}/criteria": {
         parameters: {
             query?: never;
@@ -1344,11 +1364,8 @@ export interface components {
         CreateProjectRequest: {
             /** Name */
             name: string;
-            /**
-             * Mode
-             * @default time-based
-             */
-            mode: string;
+            /** Mode */
+            mode?: string | null;
         };
         /**
          * CriterionCarvingSummary
@@ -1714,6 +1731,11 @@ export interface components {
                     [key: string]: "current" | "out_of_date" | "missing";
                 };
             };
+            /**
+             * Mode To Choose
+             * @default false
+             */
+            mode_to_choose: boolean;
         };
         /**
          * ProjectSummary
@@ -3213,6 +3235,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": string[];
+                };
+            };
+        };
+    };
+    mode_chosen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
                 };
             };
         };
