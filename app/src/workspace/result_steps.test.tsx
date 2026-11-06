@@ -16,7 +16,7 @@ import { inProjectSession } from "../api_client/project_session_for_test";
 const ALL_CURRENT: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" };
 const NO_RESULTS: RunResults = { summary: null, scorePoints: null, skyDome: null, skippedSurfaces: null, unreadable: [], envelope: null, massing: null, platesFile: null, carvedByCriterion: null };
 
-/** The form of a Solar time-based criterion that cuts at 1.5, with the service's mode and threshold setting. */
+/** The form of a Sun hours criterion that cuts at 1.5, with the service's mode and threshold setting. */
 const timeBasedFormCuttingAt1point5 = () => initialFormState({ schema: serviceSchemaWith("mode", "threshold"), modes: serviceModes("time-based"),
                                                                settings: { mode: "time-based", threshold: { method: "cutoff", value: 1.5 } }, gridPlan: null });
 

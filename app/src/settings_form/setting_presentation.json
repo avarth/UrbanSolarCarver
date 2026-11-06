@@ -88,11 +88,6 @@
       "help": "Sky lower than this angle is not protected. 0 protects the whole sky.",
       "step": "settings", "group": "Mode specific", "essential": false, "modes": ["radiative_cooling"], "slider": { "low": 0, "high": 85, "step": 1 }
     },
-    "bliss_k": {
-      "label": "Bliss constant", "unit": "",
-      "help": "A physical constant of the sky model. Leave at 1.8 unless you know why.",
-      "step": "settings", "group": "Mode specific", "essential": false, "modes": ["radiative_cooling"], "slider": { "low": 1, "high": 3, "step": 0.1 }
-    },
     "voxel_size": {
       "label": "Voxel size", "unit": "m",
       "help": "Edge of the cubes the volume is divided into. Smaller is finer and slower: halving it makes 8 times as many voxels and 4 times as many sample points.",
@@ -112,11 +107,6 @@
     "ray_batch_size": {
       "label": "Rays per batch", "unit": "rays",
       "help": "0 sizes batches from free GPU memory. Lower it if the computer runs out of memory.",
-      "step": "settings", "group": "Detail", "essential": false
-    },
-    "diagnostics": {
-      "label": "Detailed statistics", "unit": "on/off",
-      "help": "Adds median, spread and percentiles to the run report. They change only the run report, not the carving.",
       "step": "settings", "group": "Detail", "essential": false
     },
     "context_blocks_rays": {
@@ -179,11 +169,6 @@
       "label": "Drop pieces smaller than", "unit": "m³",
       "help": "Loose pieces of the kept volume smaller than this are removed before meshing. The engine counts it in voxels: the volume shown is that count at the voxel size in Site and grid, and follows it when the voxel size changes.",
       "step": "envelope_and_massing", "group": "Envelope", "essential": false, "display": "voxel_volume"
-    },
-    "min_face_count": {
-      "label": "Drop mesh fragments under", "unit": "faces",
-      "help": "Mesh pieces with fewer faces than this are removed.",
-      "step": "envelope_and_massing", "group": "Envelope", "essential": false
     },
     "ground_floor_height": {
       "label": "Ground floor height", "unit": "m",

@@ -47,9 +47,9 @@ BALANCE_POINT_KEYS = ("balance_temperature", "balance_offset")
 # the user did not name is named after them.
 MODE_LABELS = {
     "tilted_plane": "Angle rule",
-    "time-based": "Solar time-based",
+    "time-based": "Sun hours",
     "irradiance": "Solar energy",
-    "benefit": "Solar usefulness",
+    "benefit": "Solar heating",
     "daylight": "Daylight",
     "radiative_cooling": "Night cooling",
 }
@@ -84,7 +84,7 @@ def reads_weather_file(mode) -> bool:
 
 
 def uses_typical_building(entry: CriterionEntry) -> bool:
-    """Whether a criterion counts its hours by the typical building: energy-weighted and of the mode benefit (Solar usefulness)."""
+    """Whether a criterion counts its hours by the typical building: energy-weighted and of the mode benefit (Solar heating)."""
     return entry.energy_weighted and canonical_mode_name(entry.settings.get("mode")) == "benefit"
 
 

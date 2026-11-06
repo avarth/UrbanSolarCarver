@@ -474,7 +474,7 @@ class ProjectStore:
         """Change a criterion of the project *project*; what is not given stays.
 
         *name* names it (it then keeps the name when its mode changes), *colour* is "#RRGGBB", *bypassed* leaves it out of the
-        chain, *energy_weighted* makes a Solar usefulness criterion count its hours by the typical building (criteria.engine_settings;
+        chain, *energy_weighted* makes a Solar heating criterion count its hours by the typical building (criteria.engine_settings;
         other modes keep the flag and ignore it), *values* are its settings from the browser, validated as write_config_from_values
         does: they replace its settings, on top of the starting values of their mode (the current mode when they name none). Shared settings in
         *values* are ignored. A criterion that is not named by the user is named after its new mode when the mode changes.

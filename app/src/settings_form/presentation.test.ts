@@ -22,7 +22,7 @@ test("the Settings step groups, their folds and their fold labels", () => {
   expect(when.foldLabel).toBe("More sun settings");
   // R2 4.5: the computer's settings come last in the detail fold. The sample spacing is the engine's (half the voxel size),
   // the grid margin is hidden for now, and the edge strip is shown in Night cooling only.
-  expect(names(detail.folded)).toEqual(["ray_batch_size", "diagnostics"]);
+  expect(names(detail.folded)).toEqual(["ray_batch_size"]);
   expect(detail.foldLabel).toBe("More detail settings");
   const benefitModeGroup = settingsForStep("settings", "benefit")[2];
   expect(benefitModeGroup.title).toBe("Mode specific");
@@ -31,11 +31,11 @@ test("the Settings step groups, their folds and their fold labels", () => {
   expect(benefitModeGroup.foldLabel).toBe("More mode settings");
   // The sky-patch modes add the rays per sky patch; time-based traces sun positions and has none.
   const irradianceDetail = settingsForStep("settings", "irradiance").find((group) => group.title === "Detail")!;
-  expect(names(irradianceDetail.folded)).toEqual(["rays_per_patch", "ray_batch_size", "diagnostics"]);
+  expect(names(irradianceDetail.folded)).toEqual(["rays_per_patch", "ray_batch_size"]);
   // Night cooling: the edge strip is a setting of its own, in its fold, so a cooling street or courtyard does not clear the mass
   // right beside it.
   const coolingModeGroup = settingsForStep("settings", "radiative_cooling").find((group) => group.title === "Mode specific")!;
-  expect(names(coolingModeGroup.folded)).toEqual(["min_sky_elevation_deg", "bliss_k", "edge_taper"]);
+  expect(names(coolingModeGroup.folded)).toEqual(["min_sky_elevation_deg", "edge_taper"]);
   expect(coolingModeGroup.folded.at(-1)!.help).toBe("Sample points closer than this to the edge of a test surface count less (from 0 at "
     + "the edge to full at this distance), so a cooling street or courtyard does not clear the mass right beside it. 0 = off.");
   for (const mode of ["time-based", "irradiance", "benefit", "daylight", "tilted_plane"]) expect(settingIsShownIn("edge_taper", mode), mode).toBe(false);
@@ -104,9 +104,9 @@ test("a field the engine names finds its setting by the name or the part before 
   expect(presentedSettingOf("toString.value")).toBeNull();
 });
 
-test("every setting shows a unit beside its value but the Bliss constant, a number without one", () => {
+test("every setting shows a unit beside its value", () => {
   const withoutUnit = Object.entries(SETTING_PRESENTATIONS).filter(([, presentation]) => presentation.unit === "").map(([name]) => name);
-  expect(withoutUnit).toEqual(["bliss_k"]);
+  expect(withoutUnit).toEqual([]);
   expect(settingView("smooth_iters", "daylight").unit).toBe("passes");
   expect(settingView("ray_batch_size", "daylight").unit).toBe("rays");
   expect(settingView("min_voxels", "daylight").unit).toBe("m³");

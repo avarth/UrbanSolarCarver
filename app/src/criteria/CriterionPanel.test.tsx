@@ -146,7 +146,7 @@ test("a criterion that is off needs no weather file: the weather box is no probl
   rendered = renderForTest(<PanelInStep {...panelProps({ criterionOn: false })} />);
   rendered.rerender(<PanelInStep {...panelProps({ criterionOn: false, weatherDropZone: <div className="weather-box-for-test" /> })} />);
   expect(sectionOpen("mode")).toBe(false);
-  expect(sectionSummary("mode")!.textContent).toBe("Solar time-based");
+  expect(sectionSummary("mode")!.textContent).toBe("Sun hours");
   expect(isWarning(sectionSummary("mode")!)).toBe(false);
 });
 
@@ -195,7 +195,7 @@ test("a field error of the criterion's save opens the section that holds the fie
   expect(find('.panel-section[data-section="mode"] .weather-box-for-test')).not.toBeNull();
   click(sectionHeader("mode"));
   expect(isWarning(sectionSummary("mode")!)).toBe(true);
-  expect(sectionSummary("mode")!.textContent).toBe("Solar time-based, needs a weather file");
+  expect(sectionSummary("mode")!.textContent).toBe("Sun hours, needs a weather file");
   rendered.unmount();
   rendered = renderForTest(<PanelInStep {...panelProps()} />);
   rendered.rerender(<PanelInStep {...panelProps({ form: { ...formFor("time-based"), valuesResetByModeChange: { settings: ["max_slope_deg"], mode: "time-based" } } })} />);
@@ -246,7 +246,7 @@ test("the cold period preset belongs to the cold hours rule: Cold hours offers i
   expect(rendered.container.textContent).not.toContain("not the typical building");
 });
 
-test("in Solar usefulness, Settings starts with Which hours count: Cold hours shows the balance temperature, Energy-weighted the typical building", async () => {
+test("in Solar heating, Settings starts with Which hours count: Cold hours shows the balance temperature, Energy-weighted the typical building", async () => {
   const onChange = vi.fn(async () => null);
   rendered = renderForTest(<CriterionPanel {...panelProps({ form: formFor("benefit"), hoursCounted: hoursCounted({ onChange }) })} />);
   const settings = find('.panel-section[data-section="settings"]')!;

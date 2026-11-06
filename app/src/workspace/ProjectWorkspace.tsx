@@ -9,7 +9,7 @@
 // geometry Simulate shows (use_study_view.ts). In Inspect the steps are hidden too and the Files panel (InspectView) is shown over the
 // view, which draws the orientation of the test surfaces (use_inspection.ts); turns not saved are reported to the app, which asks
 // before Inspect is left. The project's typical building (use_typical_building.ts) is read once the shown criterion counts its hours
-// by it (Energy-weighted, in Solar usefulness).
+// by it (Energy-weighted, in Solar heating).
 import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   failureTextOf, putSharedSettings, reportServiceProblem, updateCriterion, type HealthReply, type ModeInfo, type ProjectDetail,
@@ -406,7 +406,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
   const changeSettings = (values: Record<string, unknown>) => dispatch({ type: "values_changed", values });
   // A criterion that is off (the chain skips it) needs no test surfaces nor weather file: its panel asks for neither.
   const criterionOn = !(criterion?.bypassed ?? false);
-  // Which hours count of a Solar usefulness criterion; the switch changes its config, so its stages are read again.
+  // Which hours count of a Solar heating criterion; the switch changes its config, so its stages are read again.
   const energyWeighted = criterion?.energy_weighted ?? false;
   const typicalBuilding = useTypicalBuilding({
     active: form.mode === "benefit" && energyWeighted, runActive, weatherRevision: weather.fileRevision,

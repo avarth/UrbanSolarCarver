@@ -15,7 +15,7 @@ function entry(id: string, name: string, mode: string): CriterionEntry {
   return { id, name, named_by_user: false, colour: "#336699", bypassed: false, energy_weighted: false, test_surface_files: ["roofs.obj"], settings: { mode } };
 }
 
-const THREE_CRITERIA = [entry("1", "Daylight on windows", "daylight"), entry("4", "Solar usefulness on facades", "benefit"), entry("2", "Night cooling", "radiative_cooling")];
+const THREE_CRITERIA = [entry("1", "Daylight on windows", "daylight"), entry("4", "Solar heating on facades", "benefit"), entry("2", "Night cooling", "radiative_cooling")];
 
 function listProps(overrides: Partial<CriterionListProps> = {}): CriterionListProps {
   return {
@@ -46,7 +46,7 @@ test("two criteria show cards in order, the selected one marked, and a press sel
   rendered = renderForTest(<CriterionList {...listProps({ onSelect })} />);
   expect(rendered.container.querySelector("ol.criterion-list")).not.toBeNull();
   expect(cards().map((each) => each.querySelector(".criterion-card-name")!.textContent))
-    .toEqual(["Daylight on windows", "Solar usefulness on facades", "Night cooling"]);
+    .toEqual(["Daylight on windows", "Solar heating on facades", "Night cooling"]);
   expect(cards().map((each) => each.querySelector(".criterion-card-line")!.textContent)).toEqual(["line of 1", "line of 4", "line of 2"]);
   expect(cards().map((each) => each.getAttribute("aria-current"))).toEqual(["true", null, null]);
   click(card("Night cooling").querySelector(".criterion-card-select")!);
@@ -56,7 +56,7 @@ test("two criteria show cards in order, the selected one marked, and a press sel
 test("reordering with the keyboard sends the new order", async () => {
   const onReorder = vi.fn(async (_ids: string[]) => null as string | null);
   rendered = renderForTest(<CriterionList {...listProps({ onReorder })} />);
-  const handle = card("Solar usefulness on facades").querySelector<HTMLElement>(".criterion-card-handle")!;
+  const handle = card("Solar heating on facades").querySelector<HTMLElement>(".criterion-card-handle")!;
   await act(async () => press(handle, "ArrowUp"));
   expect(onReorder).toHaveBeenLastCalledWith(["4", "1", "2"]);
   await act(async () => press(card("Daylight on windows").querySelector(".criterion-card-handle")!, "ArrowUp"));     // the first card goes no higher
@@ -114,9 +114,9 @@ test("Delete asks first, then deletes; Rename opens its dialog with the name; Du
   await act(async () => click(buttonNamed(dialog()!, "Delete")));
   expect(onDelete).toHaveBeenCalledExactlyOnceWith("2");
   expect(dialog()).toBeNull();
-  chooseFromMenu("Solar usefulness on facades", "Rename");
+  chooseFromMenu("Solar heating on facades", "Rename");
   const field = dialog()!.querySelector<HTMLInputElement>("input")!;
-  expect(field.value).toBe("Solar usefulness on facades");
+  expect(field.value).toBe("Solar heating on facades");
   type(field, "Winter sun");
   await act(async () => dialog()!.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
   expect(onRename).toHaveBeenCalledExactlyOnceWith("4", "Winter sun");

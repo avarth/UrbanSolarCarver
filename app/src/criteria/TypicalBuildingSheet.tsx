@@ -1,4 +1,4 @@
-// The typical building of the project (one per project, shared by its energy-weighted Solar usefulness criteria): the box in a
+// The typical building of the project (one per project, shared by its energy-weighted Solar heating criteria): the box in a
 // criterion's Settings that names the library entry it came from and the state of its weights, and the window over the page where it
 // is edited and calculated (a modal dialog, the frame of the project dialogs). The window has, in a left column, the library at the
 // top (the examples by the groups the service names, then the user's own entries; choosing one replaces the project's copy; Save to

@@ -12,7 +12,7 @@ const MONTH_ABBREVIATIONS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "A
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 // What the sky patch weights of each weighted mode measure, for the sky dome legend (UX 8.2), with their unit: the energy from a
-// patch per square metre facing it (Solar energy, Solar usefulness), or the patch's share of its sky (Daylight, Night cooling).
+// patch per square metre facing it (Solar energy, Solar heating), or the patch's share of its sky (Daylight, Night cooling).
 const SKY_PATCH_WEIGHT_OF_MODE: Record<string, string> = {
   irradiance: "Solar energy from each sky patch, kWh/m²",
   benefit: "Useful solar heat from each sky patch, kWh/m²",
@@ -226,7 +226,7 @@ export const messages = {
   maxVolumeMissing: "Maximum volume missing",
   // Site and grid: "North 10°, 0.5 m voxels"
   siteAndGridSummary: (northText: string, voxelsText: string) => `North ${northText}°, ${voxelsText}`,
-  // Criteria with one criterion: its mode and its carving, "Solar usefulness, 56 % kept"
+  // Criteria with one criterion: its mode and its carving, "Solar heating, 56 % kept"
   criterionSummary: (modeName: string, carvingText: string) => `${modeName}, ${carvingText}`,
   // The analysis period in words (R2 4.3), in the step summary and in the period's tooltip: "21 Dec, 10 to 14 h", "21 to 22 Dec,
   // 22 to 2 h" (one month written once), "1 Oct to 30 Apr, 0 to 23 h", "22 Dec to 21 Dec, 10 to 14 h" (across the new year within
@@ -255,7 +255,7 @@ export const messages = {
   criterionNeedsTestSurfaces: "Add test surfaces",
   criterionNotRunYet: "Not run yet",
   // Criteria with several criteria: the ones that are on in order, each with the share it kept, "Daylight on windows 70 %, then
-  // Solar usefulness 80 %"
+  // Solar heating 80 %"
   criterionKeptInChain: (criterionName: string, percentText: string) => `${criterionName} ${percentText}`,
   criteriaThen: (earlierText: string, laterText: string) => `${earlierText}, then ${laterText}`,
   // The cards of the criteria (7.2), their menu and dialogs
@@ -593,7 +593,7 @@ export const messages = {
   periodHourSpoken: (hour: number) => `${hour}\u00a0h`,
   periodDateOnBubble: (month: number, day: number) => `${day} ${MONTH_ABBREVIATIONS[month - 1]}`,
   periodPresets: "Presets",
-  // The cold period of the weather file (round 2, section 8), a preset of Solar usefulness: the longest run of days whose
+  // The cold period of the weather file (round 2, section 8), a preset of Solar heating: the longest run of days whose
   // month-around mean temperature is below the balance temperature minus the dead band.
   coldPeriodPreset: "Cold period from the weather file",
   coldPeriodNeedsWeatherFile: "Add a weather file to find its cold period.",
@@ -741,7 +741,7 @@ export const messages = {
   sunToolDays: (first: string, last: string, dayStep: number) => (dayStep > 1 ? `mean of ${first} to ${last}, every ${dayStep} days` : `mean of ${first} to ${last}`),
   shadeHoursLegend: (start: string, end: string, days: string) => `Hours in shade per day, ${start} to ${end}, ${days}`,
 
-  // Which hours count in Solar usefulness, and the typical building an energy-weighted criterion counts them by: the switch and
+  // Which hours count in Solar heating, and the typical building an energy-weighted criterion counts them by: the switch and
   // the box in the criterion's Settings, and the window where the building is edited and calculated.
   whichHoursCount: "Which hours count",
   whichHoursCountChoices: { cold_hours: "Cold hours", energy_weighted: "Energy-weighted" },

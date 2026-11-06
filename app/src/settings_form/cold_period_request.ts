@@ -1,4 +1,4 @@
-// The cold period of the weather file (round 2, section 8), the preset "Cold period from the weather file" of Solar usefulness. It
+// The cold period of the weather file (round 2, section 8), the preset "Cold period from the weather file" of Solar heating. It
 // is asked for as soon as the weather file is there, for the balance temperature minus the dead band the form shows (a change is
 // asked for once the values stop changing), so the preset is ready, and shows as chosen, before it is pressed.
 //
@@ -34,7 +34,7 @@ interface ColdPeriodSource {
 }
 
 export interface ColdPeriodShown {
-  /** The cold period for the preset; null when the form's mode has none (only Solar usefulness has a balance temperature). */
+  /** The cold period for the preset; null when the form's mode has none (only Solar heating has a balance temperature). */
   coldPeriod: ColdPeriodState | null;
   /** The weather file revision a "found" or "none" shown is the answer for; null while none is shown. */
   answeredWeatherFileRevision: number | null;

@@ -104,7 +104,7 @@ test("while a run is in progress the notice's buttons are disabled, as the setti
   for (const name of ["Shift by six months", "Keep"]) expect(buttonIn(weatherNotice()!, name).disabled).toBe(true);
 });
 
-test("Solar usefulness: the notice waits for the cold period of the new file and offers it, keeping the hours", async () => {
+test("Solar heating: the notice waits for the cold period of the new file and offers it, keeping the hours", async () => {
   service = new FakeService(NOTHING_RUN, null);
   service.uploadedWeather = BRISBANE;
   await openWorkspace(service, project(NOTHING_RUN, { mode: "benefit" }));
@@ -121,7 +121,7 @@ test("Solar usefulness: the notice waits for the cold period of the new file and
   expect(service.savedValues).toEqual([{ mode: "benefit", start_month: 5, start_day: 3, end_month: 9, end_day: 20 }]);           // the hours kept
 });
 
-test("Solar usefulness, energy-weighted: a new file's cold period is not offered, as it belongs to the cold hours rule", async () => {
+test("Solar heating, energy-weighted: a new file's cold period is not offered, as it belongs to the cold hours rule", async () => {
   service = new FakeService(NOTHING_RUN, null);
   service.uploadedWeather = BRISBANE;
   const energyWeighted = project(NOTHING_RUN, { mode: "benefit" });

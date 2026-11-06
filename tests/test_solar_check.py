@@ -253,7 +253,7 @@ def test_check_settings_take_the_modes_metric_and_period_from_a_config():
     assert energy.time_basis == "standard" and energy.start_month == 12
     daylight = user_config(**common, mode="daylight", epw_path="w.epw")
     assert CheckSettings.for_config(daylight).metric == "sky_component"
-    # A daylight project checked for sun hours takes Solar time-based's starting period.
+    # A daylight project checked for sun hours takes Sun hours' starting period.
     sun = CheckSettings.for_config(daylight, "sun_hours")
     assert (sun.start_month, sun.start_day, sun.start_hour, sun.end_hour) == (12, 21, 10, 14)
     benefit = user_config(**common, mode="benefit", epw_path="w.epw", start_month=10, start_day=15,

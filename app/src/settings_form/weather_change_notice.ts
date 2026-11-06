@@ -1,7 +1,7 @@
 // The notice of a new weather file over the criterion's settings (Criteria): a weather file added or replaced in this session (not one the project
 // opened with) may call for another analysis period, and the notice offers it, with Keep beside it.
 //
-// In Solar usefulness the offer is the cold period of the new file (settings_form/cold_period_request.ts), once the answer for that file
+// In Solar heating the offer is the cold period of the new file (settings_form/cold_period_request.ts), once the answer for that file
 // is in, where its dates differ from the period's; the hours are kept. In the other modes that read a period it is the period
 // six months on, where the new file is in the other hemisphere from the one before (a project without one counts as northern:
 // the starting values of the modes are northern), unless that covers the same days (a whole year). A file within the tropics, or

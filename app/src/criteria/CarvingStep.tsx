@@ -1,6 +1,6 @@
 // A criterion's carving rule (UX 5.5, 11; once the Carving step, now in the criterion's panel, CriterionPanel): in the weighted
 // modes the carving rule at the top (Manual or Automatic), then the control of the
-// rule (Shade allowed per voxel in m²·h for Solar time-based, Carve amount in % under Manual, a line for Automatic; the angle rule's
+// rule (Shade allowed per voxel in m²·h for Sun hours, Carve amount in % under Manual, a line for Automatic; the angle rule's
 // message), the "Update the carving as I change these settings" switch, remembered per project, the histogram with its cutoff line, and the
 // other carving settings folded last. What the carving removed is on the criterion's card (cardResultLine).
 // With the switch on, letting go of the slider, of the line on the histogram or leaving the number field reruns the carving, as
@@ -97,7 +97,7 @@ export function carvingRuleOf(form: FormState): CarvingRule {
 }
 
 /**
- * The control of the carving rule: Shade allowed per voxel (Solar time-based) or Carve amount (Manual); null for Automatic, which has no
+ * The control of the carving rule: Shade allowed per voxel (Sun hours) or Carve amount (Manual); null for Automatic, which has no
  * setting, and for the angle rule.
  */
 export function ruleControlOf(form: FormState): SettingView | null {
@@ -165,7 +165,7 @@ function cutoffSettings(cutoff: number, highestScore: number): Record<string, un
 
 /**
  * The settings a cutoff let go on the histogram sets: in a weighted mode Manual at the carve amount it stands for (which takes
- * Automatic to Manual), in Solar time-based the cutoff itself.
+ * Automatic to Manual), in Sun hours the cutoff itself.
  */
 export function settingsForCutoff(isWeightedMode: boolean, ranked: RankedScorePoints, cutoff: number, highestScore: number): Record<string, unknown> {
   return isWeightedMode ? manualSettings(carveAmountSetting(ranked, cutoff)) : cutoffSettings(cutoff, highestScore);

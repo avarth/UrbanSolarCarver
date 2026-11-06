@@ -53,7 +53,7 @@ function carvingProps(overrides: Partial<CarvingStepProps> = {}): CarvingStepPro
   };
 }
 
-test("Solar time-based: Shade allowed per voxel with its slider ends and the histogram, with no number tiles under it", () => {
+test("Sun hours: Shade allowed per voxel with its slider ends and the histogram, with no number tiles under it", () => {
   rendered = renderForTest(<CarvingStep {...carvingProps()} />);
   const text = rendered.container.textContent!;
   expect(rendered.container.querySelector(".threshold-control label")!.textContent).toBe("Shade allowed per voxel");
@@ -592,7 +592,7 @@ test("under Manual, moving the cutoff line previews what it keeps, shows the amo
   expect(container.querySelector(".histogram-cutoff-label")!.textContent).toBe("2.46");
 });
 
-test("the line sets Manual's carve amount, also over a cutoff the config holds; under Automatic it switches to Manual and says so; in Solar time-based it sets the cutoff", () => {
+test("the line sets Manual's carve amount, also over a cutoff the config holds; under Automatic it switches to Manual and says so; in Sun hours it sets the cutoff", () => {
   const onThresholdCommit = vi.fn();
   rendered = renderForTest(<CarvingStep {...weightedCarvingProps({ threshold: { method: "cutoff", value: 1.5 } }, { onThresholdCommit })} />);
   pressHandleKey(rendered.container, "PageUp");
@@ -610,7 +610,7 @@ test("the line sets Manual's carve amount, also over a cutoff the config holds; 
   expect(rendered.container.textContent).toContain("Dragging the line switched the carving rule from Automatic to Manual.");
   rendered.unmount();
 
-  rendered = renderForTest(<CarvingStep {...carvingProps({ onThresholdCommit })} />);         // Solar time-based, cut at 1.5 m²·h
+  rendered = renderForTest(<CarvingStep {...carvingProps({ onThresholdCommit })} />);         // Sun hours, cut at 1.5 m²·h
   pressHandleKey(rendered.container, "ArrowRight");
   releaseHandleKey(rendered.container, "ArrowRight");
   expect(onThresholdCommit).toHaveBeenLastCalledWith({ threshold: { method: "cutoff", value: 1.6 }, carve_fraction: null });
@@ -619,7 +619,7 @@ test("the line sets Manual's carve amount, also over a cutoff the config holds; 
 
 test("the line follows the pointer while it is dragged and is set when the pointer lets go", () => {
   const onThresholdCommit = vi.fn();
-  rendered = renderForTest(<CarvingStep {...carvingProps({ onThresholdCommit })} />);         // Solar time-based, cut at 1.5 m²·h
+  rendered = renderForTest(<CarvingStep {...carvingProps({ onThresholdCommit })} />);         // Sun hours, cut at 1.5 m²·h
   const handle = cutoffHandle(rendered.container);
   // The chart is 300 px wide, as its view box: the plot runs from 50 to 292 px, scores 0 to 9.6.
   vi.spyOn(handle.parentElement!, "getBoundingClientRect").mockReturnValue(DOMRect.fromRect({ x: 0, y: 0, width: 300, height: 170 }));

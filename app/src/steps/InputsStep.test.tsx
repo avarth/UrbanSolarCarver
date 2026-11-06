@@ -11,7 +11,7 @@ afterEach(() => {
   rendered = null;
 });
 
-const WEATHER_HINT = "Needed for Solar time-based, Solar energy and Solar usefulness.";
+const WEATHER_HINT = "Needed for Sun hours, Solar energy and Solar heating.";
 const NO_FILES = { max_volume: [], context: [], weather: [] };
 const SOME_FILES = {
   max_volume: [{ name: "max_volume.ply", triangle_count: 1152 }],
@@ -124,7 +124,7 @@ test("the optional boxes for the existing surroundings and the terrain follow th
 
 test("a project carved further with an earlier version keeps its note on the maximum volume", () => {
   const chain = [{ mode: "daylight" }, { mode: "time-based" }];
-  const note = "Carved by Daylight, then Solar time-based. The earlier maximum volumes are kept in the project folder, in inputs/earlier_max_volumes.";
+  const note = "Carved by Daylight, then Sun hours. The earlier maximum volumes are kept in the project folder, in inputs/earlier_max_volumes.";
   expect(carvedByNote([])).toBeNull();
   expect(carvedByNote(chain)).toBe(note);
   rendered = renderForTest(

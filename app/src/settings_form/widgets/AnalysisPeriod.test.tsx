@@ -10,7 +10,7 @@ import { SettingField } from "../SettingField";
 
 // The engine's period settings, as GET schema gives them: whole numbers in their ranges, unset by default.
 const SCHEMA = serviceSchemaWith("mode", "start_month", "start_day", "start_hour", "end_month", "end_day", "end_hour");
-// Solar time-based, which starts on the winter day.
+// Sun hours, which starts on the winter day.
 const MODES = serviceModes("time-based");
 const WINTER_DAY = { start_month: 12, start_day: 21, start_hour: 10, end_month: 12, end_day: 21, end_hour: 14 };
 const NBSP = " ";

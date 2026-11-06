@@ -48,7 +48,7 @@ test("once the period is not the one the weather file found, by the button or by
   expect(weatherChangeSuggestion(toBrisbane(), situation({ period: period(12, 21, 9, 12, 21, 14) }))).toBeNull();
 });
 
-test("Solar usefulness: the cold period of the new file, once its answer is in, with the hours kept", () => {
+test("Solar heating: the cold period of the new file, once its answer is in, with the hours kept", () => {
   const benefit = { mode: "benefit", period: COLD_SEASON, coldPeriod: BRISBANE_COLD };
   expect(weatherChangeSuggestion(toBrisbane(COLD_SEASON), situation({ ...benefit, answeredWeatherFileRevision: 1 }))).toEqual({
     kind: "cold_period", location: "Brisbane, AUS", coldDates: BRISBANE_COLD_DATES,
@@ -59,7 +59,7 @@ test("Solar usefulness: the cold period of the new file, once its answer is in, 
   expect(weatherChangeSuggestion(toBrisbane(COLD_SEASON), situation({ ...benefit, coldPeriod: { kind: "finding" } }))).toBeNull();
 });
 
-test("Solar usefulness: no cold period, or one the analysis period already has: no suggestion, whatever the hemisphere", () => {
+test("Solar heating: no cold period, or one the analysis period already has: no suggestion, whatever the hemisphere", () => {
   const benefit = { mode: "benefit", period: COLD_SEASON, answeredWeatherFileRevision: 1 };
   expect(weatherChangeSuggestion(toBrisbane(COLD_SEASON), situation({ ...benefit, coldPeriod: { kind: "none", baseTemperature: 13 } }))).toBeNull();
   const sameDates: ColdPeriodState = { kind: "found", dates: { startMonth: 9, startDay: 30, endMonth: 5, endDay: 15 }, baseTemperature: 13 };

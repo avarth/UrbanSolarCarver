@@ -305,7 +305,7 @@ test("a criterion that is off is not flagged for a missing weather file", async 
   await openChain([{ ...ROOFS, id: "1" }, { ...FACADES, id: "2", bypassed: true }], undefined, undefined, [], withoutWeatherFile);
   await select("Winter sun on facades");
   expect(panelSectionOpen("Mode")).toBe(false);
-  expect(panel().querySelector('.panel-section[data-section="mode"] .panel-section-summary')!.textContent).toBe("Solar time-based");
+  expect(panel().querySelector('.panel-section[data-section="mode"] .panel-section-summary')!.textContent).toBe("Sun hours");
   expect(panel().querySelector(".panel-section-summary-problem")).toBeNull();
   expect(pinnedBar().textContent).not.toContain("weather file");
 });

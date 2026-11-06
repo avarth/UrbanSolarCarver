@@ -45,7 +45,7 @@ class CriterionEntry(BaseModel):
     bypassed: bool = False              # left out of config.yaml, and so of every run, but kept in the list
     test_surface_files: list[str] = Field(default_factory=list)     # file names in inputs/test_surfaces/
     settings: dict = Field(default_factory=dict)    # the criterion's own settings as stored, without the paths the service owns
-    # Solar usefulness only (other modes ignore it): the hours count by the typical building's weights, not by the cold hours rule.
+    # Solar heating only (other modes ignore it): the hours count by the typical building's weights, not by the cold hours rule.
     # config.yaml then names the weights file and leaves out the balance temperature, which settings keep (criteria.engine_settings).
     energy_weighted: bool = False
 
@@ -477,7 +477,7 @@ class UpdateCriterionRequest(BaseModel):
     colour: str | None = None           # "#RRGGBB"
     bypassed: bool | None = None
     values: dict | None = None          # the criterion's settings as the browser holds them
-    energy_weighted: bool | None = None     # Solar usefulness: count the hours by the typical building (CriterionEntry.energy_weighted)
+    energy_weighted: bool | None = None     # Solar heating: count the hours by the typical building (CriterionEntry.energy_weighted)
 
 
 class CriterionOrderRequest(BaseModel):

@@ -210,9 +210,8 @@ export function formReducer(state: FormState, action: FormAction): FormState {
   }
 }
 
-// The settings of the Settings step that change how the computer runs the analysis (how rays are batched) or what its report
-// holds (the statistics), not its results (R2 4.5).
-const SETTINGS_OF_THE_COMPUTER = new Set(["ray_batch_size", "diagnostics"]);
+// The setting of the Settings step that changes how the computer runs the analysis (how rays are batched), not its results (R2 4.5).
+const SETTINGS_OF_THE_COMPUTER = new Set(["ray_batch_size"]);
 
 // The settings preprocessing reads: those of the Settings step but the computer's.
 const ANALYSIS_SETTINGS = Object.keys(SETTING_PRESENTATIONS).filter((name) =>

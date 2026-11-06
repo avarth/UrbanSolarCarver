@@ -325,7 +325,7 @@ test("a setting whose empty value is automatic shows 'automatic' in the empty fi
     return rendered.container.querySelector("[role='tooltip']")!.textContent;
   };
   expect(tooltipOf("daylight")).toContain("Left empty, it is 60 ° in Daylight.");
-  expect(tooltipOf("time-based")).toContain("Left empty, it is off in Solar time-based.");
+  expect(tooltipOf("time-based")).toContain("Left empty, it is off in Sun hours.");
   expect(tooltipOf("tilted_plane")).toContain("Left empty, it is off in Angle rule.");
   // A setting with a value of its own shows no placeholder.
   rendered?.unmount();

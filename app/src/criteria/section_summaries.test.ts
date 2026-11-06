@@ -19,7 +19,7 @@ test("the test surfaces in one line: the file's name, two names, a count, or non
 
 test("the mode in one line is its plain name", () => {
   expect(modeSummary("daylight")).toBe("Daylight");
-  expect(modeSummary("time-based")).toBe("Solar time-based");
+  expect(modeSummary("time-based")).toBe("Sun hours");
 });
 
 test("the settings in one line: the analysis period of a mode that reads one", () => {
@@ -35,7 +35,7 @@ test("the settings in one line of a mode without a period: its starting values, 
   expect(criterionSettingsSummary(formFor({ mode: "daylight", max_slope_deg: 45 }), CRITERION_KEYS)).toBe("Starting values");
   expect(criterionSettingsSummary(formFor({ mode: "daylight", rays_per_patch: 4 }), CRITERION_KEYS)).toBe("Starting values");     // the default
   expect(criterionSettingsSummary(formFor({ mode: "daylight", rays_per_patch: 1 }), CRITERION_KEYS)).toBe("1 setting changed");
-  expect(criterionSettingsSummary(formFor({ mode: "radiative_cooling", dew_point_celsius: 12, bliss_k: 0.2 }), CRITERION_KEYS)).toBe("2 settings changed");
+  expect(criterionSettingsSummary(formFor({ mode: "radiative_cooling", dew_point_celsius: 12, min_sky_elevation_deg: 10 }), CRITERION_KEYS)).toBe("2 settings changed");
 });
 
 test("the carving rule in one line: the carve amount, a fixed cutoff, Automatic, or the angle rule", () => {

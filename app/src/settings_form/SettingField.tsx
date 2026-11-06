@@ -26,7 +26,7 @@ import "./settings_form.css";
 export interface SettingFieldExtras {
   notes?: ReactNode[];
   errorContent?: ReactNode;
-  /** The cold period of the weather file, for the period control's preset in Solar usefulness; null or absent in the other modes. */
+  /** The cold period of the weather file, for the period control's preset in Solar heating; null or absent in the other modes. */
   coldPeriod?: ColdPeriodState | null;
   /** The hemisphere of the weather file, for the period control's heating season preset; northern when absent. */
   hemisphere?: Hemisphere;
@@ -80,7 +80,7 @@ const AUTOMATIC_SLOPE_LIMIT_IN_DESCRIPTION = /None \(default\): (\d+(?:\.\d+)?) 
 
 /**
  * What an empty setting does in the form's mode, for a setting whose empty value the engine fills by mode, or null. The slope
- * limit is the one: the engine's number in the weighted modes, off in Solar time-based and the angle rule (score smoothing says
+ * limit is the one: the engine's number in the weighted modes, off in Sun hours and the angle rule (score smoothing says
  * it in its help). Null in a weighted mode when the schema does not give the number.
  */
 export function emptyMeaningOf(view: SettingView, form: Pick<FormState, "mode" | "scoreKindByMode" | "schemaProperties">): string | null {
@@ -98,7 +98,7 @@ const AUTOMATIC_SMOOTHING_IN_DESCRIPTION = /auto: (\d+(?:\.\d+)?) × voxel_size/
 /**
  * What the engine does with an empty setting in the form's mode, where the schema says it, else null: the number (where an empty
  * slider starts its handle, so a first key step moves from the value in use) and how it is said ("75 °", or "off" for the slope
- * limit of Solar time-based and the angle rule, which 90 switches off, as the tooltip says). The slope limit of the weighted modes;
+ * limit of Sun hours and the angle rule, which 90 switches off, as the tooltip says). The slope limit of the weighted modes;
  * the score smoothing, a multiple of the voxel size.
  */
 export function automaticValueOf(view: SettingView, form: FormState): AutomaticValue | null {

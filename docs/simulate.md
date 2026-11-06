@@ -48,15 +48,15 @@ Each carving mode has a metric of the same quantity, which "Like *criterion*" ta
 
 | Metric | Unit | Carving mode it matches | Weather file |
 |---|---|---|---|
-| Sun hours | h | Solar time-based | needed |
+| Sun hours | h | Sun hours | needed |
 | Solar energy | kWh/m² | Solar energy | needed |
-| Useful solar gains | kWh/m² | Solar usefulness | needed |
+| Useful solar gains | kWh/m² | Solar heating | needed |
 | Overcast sky component | % | Daylight | not needed |
 | Cooling sky | % | Night cooling | not needed |
 | Sky view factor | % | Angle rule | not needed |
 
 - **Sun hours**: hours of direct sun in the period. Each hour counts the sun position of that hour, and a position counts 1 h when it is above 5° altitude and in front of the test surface (no cosine of incidence). The 5° is the same for every study: "Like *criterion*" does not copy the minimum altitude of a time-based criterion, so a study counts the sun above 5° whatever the criterion's minimum altitude. The time basis says which clock the hours are read in; it is a setting of sun hours only. A new study starts at 21 December, 10 to 14 h.
-- **Solar energy** and **Useful solar gains**: direct and diffuse energy that reaches the surface in the period, from the weather file's Perez sky and the cosine of incidence. Useful solar gains count only the hours that need heating (the gains that heat the building; it was called useful solar energy before), with the balance temperature, dead band and weights of Solar usefulness. Ground reflection is left out. A new study starts with the whole year (solar energy) or 15 October to 15 April, 7 to 19 h (useful solar gains).
+- **Solar energy** and **Useful solar gains**: direct and diffuse energy that reaches the surface in the period, from the weather file's Perez sky and the cosine of incidence. Useful solar gains count only the hours that need heating (the gains that heat the building; it was called useful solar energy before), with the balance temperature, dead band and weights of Solar heating. Ground reflection is left out. A new study starts with the whole year (solar energy) or 15 October to 15 April, 7 to 19 h (useful solar gains).
 - **Overcast sky component**: light from a CIE overcast sky. On a vertical facade this is the vertical sky component, at most 39.6 %.
 - **Cooling sky**: the long-wave cooling potential toward the clear night sky that the surface sees, from the dew point and the Bliss coefficient.
 - **Sky view factor**: the cosine-weighted share of the view taken by the sky. An unobstructed horizontal surface has 100 %, an unobstructed wall 50 %.

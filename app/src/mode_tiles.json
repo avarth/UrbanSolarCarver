@@ -10,7 +10,7 @@
   },
   {
     "engine_name": "time-based",
-    "plain_name": "Solar time-based",
+    "plain_name": "Sun hours",
     "one_line": "Direct sun in a chosen period",
     "tooltip": "Keeps direct sun on the test surfaces during the hours you choose, for example 21 December, 10 to 14 h.",
     "needs": "Needs a weather file and an analysis period.",
@@ -28,7 +28,7 @@
   },
   {
     "engine_name": "benefit",
-    "plain_name": "Solar usefulness",
+    "plain_name": "Solar heating",
     "one_line": "Sun in hours that need heating",
     "tooltip": "Like solar energy, counting only hours cold enough to need heating.",
     "needs": "Needs a weather file and an analysis period.",

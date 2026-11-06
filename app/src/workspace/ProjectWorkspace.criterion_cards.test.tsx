@@ -36,9 +36,9 @@ test("two criteria show cards in order, each with its result, and the first is s
 });
 
 test("the step summary names a criterion the user did not name by its mode, without its test surface file", async () => {
-  await openChain([{ ...FACADES, name: "Solar time-based on facades", named_by_user: false }, WINDOWS]);
+  await openChain([{ ...FACADES, name: "Sun hours on facades", named_by_user: false }, WINDOWS]);
   openStep("Inputs");
-  expect(criteriaSummary()).toBe("Solar time-based 61 %, then Spring sun on windows 80 %");
+  expect(criteriaSummary()).toBe("Sun hours 61 %, then Spring sun on windows 80 %");
 });
 
 test("selecting a card shows its settings, its test surfaces and its results", async () => {
@@ -170,7 +170,7 @@ test("turning the only criterion off and on again: Run analysis waits while it i
   expect(panel().textContent).toContain("Off: the chain skips this criterion");
   expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toContain("Turn on a criterion to run");
   openStep("Inputs");
-  expect(criteriaSummary()).toBe("Solar time-based, Off");
+  expect(criteriaSummary()).toBe("Sun hours, Off");
   openStep("Criteria");
   await act(async () => card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.click());
   await settle();
@@ -201,7 +201,7 @@ test("Add criterion with one criterion opens a menu of the modes; choosing one a
   act(() => buttonIn(stepRow("Criteria"), "Add criterion").click());
   expect(container().querySelector('.add-criterion [role="radio"]')).toBeNull();
   expect([...container().querySelectorAll('.add-criterion [role="menuitem"] .mode-menu-name')].map((name) => name.textContent))
-    .toEqual(["Angle rule", "Solar time-based", "Solar energy", "Solar usefulness", "Daylight", "Night cooling"]);
+    .toEqual(["Angle rule", "Sun hours", "Solar energy", "Solar heating", "Daylight", "Night cooling"]);
   await act(async () => [...container().querySelectorAll<HTMLElement>('.add-criterion [role="menuitem"]')]
     .find((item) => item.querySelector(".mode-menu-name")!.textContent === "Daylight")!.click());
   await settle();

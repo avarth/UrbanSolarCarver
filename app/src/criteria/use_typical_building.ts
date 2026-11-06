@@ -1,4 +1,4 @@
-// The project's typical building, which an energy-weighted Solar usefulness criterion counts its hours by: its values, the library
+// The project's typical building, which an energy-weighted Solar heating criterion counts its hours by: its values, the library
 // it is chosen from, the state of its weights and the weights themselves. One building per project, a copy of a library entry (none
 // in a new project, state not_chosen, until one is chosen), read
 // once something shows it (*active*: the shown criterion is energy-weighted) and read again when a run of the project ends (the run

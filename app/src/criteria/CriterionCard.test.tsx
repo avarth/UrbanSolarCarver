@@ -44,7 +44,7 @@ function nameFromContent(element: Element): string {
     : node instanceof Element && node.getAttribute("aria-hidden") !== "true" ? nameFromContent(node) : "")).join("");
 }
 
-const EIGHTY_CHARACTERS = "Solar usefulness on alatini_testSrfs_solargains_with_a_long_tail_of_eighty_chars";
+const EIGHTY_CHARACTERS = "Solar heating on my alatini_testSrfs_solargains_with_a_long_tail_of_eighty_chars";
 
 test("a card shows its whole name on up to two lines in a row of its own, its line under it, and a chevron that says it opens", () => {
   expect(EIGHTY_CHARACTERS).toHaveLength(80);

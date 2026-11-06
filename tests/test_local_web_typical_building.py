@@ -1,4 +1,4 @@
-"""The typical building of an energy-weighted Solar usefulness criterion (local_web_service.typical_building): its values, the
+"""The typical building of an energy-weighted Solar heating criterion (local_web_service.typical_building): its values, the
 library, routes, the generated config.yaml, stage status and the run that calculates its weights first.
 
 The engine is the fake of local_web_test_support.py. The fast tests replace the weights generator (about 7 s on the bundled

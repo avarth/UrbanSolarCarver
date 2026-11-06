@@ -55,7 +55,7 @@ test("choosing an item reports the engine name of its mode", () => {
   const onChoose = vi.fn();
   rendered = renderForTest(<Harness onChoose={onChoose} />);
   click(openButton());
-  click(items().find((item) => item.querySelector(".mode-menu-name")!.textContent === "Solar usefulness")!);
+  click(items().find((item) => item.querySelector(".mode-menu-name")!.textContent === "Solar heating")!);
   expect(onChoose).toHaveBeenCalledExactlyOnceWith("benefit");
 });
 

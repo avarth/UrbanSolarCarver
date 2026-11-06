@@ -1,4 +1,4 @@
-// The balance temperature of Solar usefulness: one strip from 10 to 30 °C, drawn as the strips of the analysis period are
+// The balance temperature of Solar heating: one strip from 10 to 30 °C, drawn as the strips of the analysis period are
 // (ScaleStrip), with two handles that set the two ends of the dead band, as the engine reads them, and the band between them
 // filled. Each handle shows its exact value in a bubble over it ("14.5 °C"). Hours colder than the lower end count (sun then saves
 // heating); hours warmer than the upper end are the warm hours that count against the sun when harm is counted (include_harm; the

@@ -62,10 +62,10 @@ test("the site and grid summary gives the north and the voxel size, or the count
 });
 
 test("the criteria summary of one criterion joins its mode and its carving", () => {
-  expect(stepSummary("criteria", stateWith({ mode: "benefit", keptPercent: 56.2, stages: { thresholding: "current" } }))).toBe(`Solar usefulness, 56${NBSP}% kept`);
+  expect(stepSummary("criteria", stateWith({ mode: "benefit", keptPercent: 56.2, stages: { thresholding: "current" } }))).toBe(`Solar heating, 56${NBSP}% kept`);
   expect(stepSummary("criteria", stateWith({ mode: "daylight", keptPercent: 56.2, stages: { thresholding: "out_of_date" } }))).toBe("Daylight, Out of date");
   expect(stepSummary("criteria", stateWith({ mode: "radiative_cooling" }))).toBe("Night cooling, Not run yet");
-  expect(stepSummary("criteria", stateWith({ stages: { thresholding: "out_of_date" } }))).toBe("Solar time-based, Out of date");     // no run summary read
+  expect(stepSummary("criteria", stateWith({ stages: { thresholding: "out_of_date" } }))).toBe("Sun hours, Out of date");     // no run summary read
   expect(stepSummary("criteria", stateWith({ settingsToFix: { criteria: 2 } }))).toBe("2 settings to fix");
 });
 
@@ -75,9 +75,9 @@ test("the criteria summary says Off for the only criterion when it is off, and A
 });
 
 test("the criteria summary of several criteria reads as the sequence of the active ones, with the share each kept", () => {
-  const chain: { name: string; keptPercent: number | null }[] = [{ name: "Daylight on windows", keptPercent: 70.2 }, { name: "Solar usefulness", keptPercent: 80 }];
+  const chain: { name: string; keptPercent: number | null }[] = [{ name: "Daylight on windows", keptPercent: 70.2 }, { name: "Solar heating", keptPercent: 80 }];
   const withChain = (stages: Partial<Record<PipelineStage, StageState>>, criteriaInChain = chain) => ({ ...stateWith({ stages }), criteriaInChain });
-  expect(stepSummary("criteria", withChain({ thresholding: "current" }))).toBe(`Daylight on windows 70${NBSP}%, then Solar usefulness 80${NBSP}%`);
+  expect(stepSummary("criteria", withChain({ thresholding: "current" }))).toBe(`Daylight on windows 70${NBSP}%, then Solar heating 80${NBSP}%`);
   expect(stepSummary("criteria", withChain({ thresholding: "current" }, [chain[0], { name: "Night cooling", keptPercent: null }])))
     .toBe(`Daylight on windows 70${NBSP}%, then Night cooling`);
   expect(stepSummary("criteria", withChain({ thresholding: "out_of_date" }))).toBe("Out of date");

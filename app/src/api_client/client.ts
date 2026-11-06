@@ -299,7 +299,7 @@ export const reuseTestSurface = (token: string, project: string, criterionId: st
 export const removeCriterionTestSurface = (token: string, project: string, criterionId: string, fileName: string) =>
   requestJson<CriterionEntry>(token, `${criterionPath(project, criterionId)}/test-surfaces/${encodeURIComponent(fileName)}`, "DELETE");
 
-// The typical building of the project, which an energy-weighted Solar usefulness criterion counts its hours by -----------------
+// The typical building of the project, which an energy-weighted Solar heating criterion counts its hours by -----------------
 
 /** The library of typical buildings, apart from projects: the examples (read-only) in their order, then the user's own by name. */
 export const getTypicalBuildingLibrary = (token: string) => requestJson<TypicalBuildingLibraryEntry[]>(token, "/api/typical-building-library");

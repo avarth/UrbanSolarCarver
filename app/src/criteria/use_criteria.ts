@@ -19,7 +19,7 @@ export interface CriteriaHook {
   add: (mode: string) => Promise<CriterionEntry>;
   rename: (id: string, name: string) => Promise<CriterionEntry>;
   setBypassed: (id: string, on: boolean) => Promise<CriterionEntry>;
-  /** Which hours count of a Solar usefulness criterion: by the typical building (true) or by the cold hours rule. */
+  /** Which hours count of a Solar heating criterion: by the typical building (true) or by the cold hours rule. */
   setEnergyWeighted: (id: string, on: boolean) => Promise<CriterionEntry>;
   /** Adds a copy at the end and selects it. */
   duplicate: (id: string) => Promise<CriterionEntry>;

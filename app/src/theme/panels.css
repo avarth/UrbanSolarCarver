@@ -623,7 +623,7 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 /* The notice of a new weather file, under the Settings header open or closed. */
 .panel-section > .weather-change-region:not(:empty) { padding-bottom: calc(var(--space-unit) * 3); }
 
-/* Which hours count, at the top of a Solar usefulness criterion's Settings, and under it, energy-weighted, the typical building's
+/* Which hours count, at the top of a Solar heating criterion's Settings, and under it, energy-weighted, the typical building's
    box: its type, the state of its weights and Edit building. */
 .hours-counted .segmented-switch { align-self: flex-start; }
 .typical-building-box {

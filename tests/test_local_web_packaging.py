@@ -106,8 +106,8 @@ STEP_STAGES = {"settings": {*PreprocessingSettings.model_fields, *RunOptions.mod
 # Set by the service (every file path, the context and terrain ones included, and the device), chosen in the Mode step, replaced by
 # the in-app charts, or left for milestone 2: never in the form. The sample spacing is the engine's (half the voxel size, which the
 # service leaves to it), the grid margin is hidden for now, and the ray length is the engine's (rays stop at the edge of the grid,
-# so its 3000 m default costs nothing).
-NOT_IN_THE_FORM = {*SERVICE_OWNED_SETTINGS, "mode", "diagnostic_plots", "grid_step", "margin_frac", "ray_length"}
+# so its 3000 m default costs nothing). The Bliss constant, the detailed statistics and the fragment size keep their defaults: configuration files set them.
+NOT_IN_THE_FORM = {*SERVICE_OWNED_SETTINGS, "mode", "diagnostic_plots", "grid_step", "margin_frac", "ray_length", "bliss_k", "diagnostics", "min_face_count"}
 
 
 def presented_settings() -> dict:
@@ -188,17 +188,17 @@ def test_mode_tiles_have_the_names_and_order_of_round_2():
     tiles = json.loads(MODE_TILES_PATH.read_text(encoding="utf-8"))
     assert [(t["plain_name"], t["engine_name"]) for t in tiles] == [
         ("Angle rule", "tilted_plane"),
-        ("Solar time-based", "time-based"),
+        ("Sun hours", "time-based"),
         ("Solar energy", "irradiance"),
-        ("Solar usefulness", "benefit"),
+        ("Solar heating", "benefit"),
         ("Daylight", "daylight"),
         ("Night cooling", "radiative_cooling"),
     ]
 
 
-@pytest.mark.parametrize("retired_name", ["Sun at set hours", "Solar heat when cold", "Bay width", "Allowed overhang"])
+@pytest.mark.parametrize("retired_name", ["Sun at set hours", "Solar heat when cold", "Solar time-based", "Solar usefulness", "Bay width", "Allowed overhang"])
 def test_retired_names_are_gone_from_the_app_sources(retired_name):
-    """R2 3, 6: "Solar time-based", "Solar usefulness", "Grid module" and "Permitted volume exceedance" replace the names of
+    """R2 3, 6: "Sun hours", "Solar heating", "Grid module" and "Permitted volume exceedance" replace the names of
     milestone 1 everywhere in the interface."""
     sources = [path for path in (APP_FOLDER / "src").rglob("*") if path.is_file() and path.suffix in {".ts", ".tsx", ".json", ".css"}]
     assert APP_FOLDER / "src" / "messages.ts" in sources and MODE_TILES_PATH in sources

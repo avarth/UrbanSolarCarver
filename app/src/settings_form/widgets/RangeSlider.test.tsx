@@ -115,6 +115,6 @@ test("counts and switches keep their controls: no slider", () => {
   expect(sliders("envelope_and_massing", "smooth_iters")).toBe(0);
   expect(sliders("carving", "carve_above_min_consecutive")).toBe(0);
   expect(sliders("settings", "ray_batch_size")).toBe(0);
-  expect(sliders("settings", "diagnostics")).toBe(0);
+  expect(sliders("settings", "ray_batch_size")).toBe(0);
 });
 

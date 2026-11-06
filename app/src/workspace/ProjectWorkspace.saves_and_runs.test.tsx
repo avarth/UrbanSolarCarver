@@ -57,7 +57,7 @@ test("a settings change saves; Run analysis starts a run; its events finish it; 
   expect(stepRow("Criteria").textContent).not.toContain("Run the analysis to see the carving");
   expect(dimmedCarvingLayers()).toEqual([]);
   openStep("Site and grid");
-  expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Solar time-based, 61\u00a0% kept");
+  expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Sun hours, 61\u00a0% kept");
 });
 
 test("a save the service refuses keeps Run analysis from starting a run, and says why", async () => {
@@ -137,8 +137,8 @@ test("a mode change starts the criterion from the new mode's values", async () =
   await waitForTheSave();
   await settle();
   expect(settingsSaves()).toEqual(["PATCH /criteria/1"]);
-  expect(service.savedValues).toEqual([{ mode: "daylight" }]);         // not the period of Solar time-based, nor the shared voxel size
-  act(() => modeTile("Solar time-based").click());                    // again: its own period, not the one set before
+  expect(service.savedValues).toEqual([{ mode: "daylight" }]);         // not the period of Sun hours, nor the shared voxel size
+  act(() => modeTile("Sun hours").click());                    // again: its own period, not the one set before
   await waitForTheSave();
   await settle();
   expect(settingsSaves()).toEqual(["PATCH /criteria/1", "PATCH /criteria/1"]);
@@ -149,7 +149,7 @@ test("a mode change starts the criterion from the new mode's values", async () =
 
 test("a shared change refused for the criterion's mode is saved again once a mode change makes it storable, and Run analysis starts", async () => {
   service = new FakeService(NOTHING_RUN, null);
-  // The service checks the shared settings with the criterion: Solar time-based needs the weather file the project lacks.
+  // The service checks the shared settings with the criterion: Sun hours needs the weather file the project lacks.
   service.configErrorsOf = (values) => ("voxel_size" in values && service.criterionSettings.mode === "time-based"
     ? [{ field: null, message: "Value error, mode 'time-based' requires epw_path" }] : null);
   await openWorkspace(service, { ...project(NOTHING_RUN), inputs: { ...project(NOTHING_RUN).inputs, weather: [] }, weather_location: null, weather_latitude: null });
@@ -214,7 +214,7 @@ test("a page opened during a run it does not follow: Run analysis answered with 
   // Opened while the run had removed the records of the stages it rewrote: the envelope and the massing were still current.
   await openWorkspace(service, project({ ...built, preprocessing: "missing", thresholding: "missing" }));
   openStep("Site and grid");
-  expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Solar time-based, Not run yet");
+  expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Sun hours, Not run yet");
 
   const requestsBefore = service.requests.length;
   await pressRunAnalysis();
@@ -224,7 +224,7 @@ test("a page opened during a run it does not follow: Run analysis answered with 
   expect(service.requests.slice(requestsBefore).filter((request) => request.startsWith("GET /run/"))
     .map((request) => request.split("?")[0]).sort())
     .toEqual(["GET /run/score-points", "GET /run/skipped-surfaces", "GET /run/sky-patches", "GET /run/summary"]);
-  expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Solar time-based, 61\u00a0% kept");
+  expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Sun hours, 61\u00a0% kept");
   openStep("Criteria");
   expect(stepRow("Criteria").textContent).not.toContain("Run the analysis to see the carving");
   expect(dimmedCarvingLayers()).toEqual([]);
@@ -280,12 +280,12 @@ test("a refused mode change locks the carving: the old mode's carving is not sho
   openStep("Criteria");
   openPanelSection("Mode");
   act(() => modeTile("Daylight").click());
-  // Locked at once, before the save is sent: the stored settings, which the stage status describes, are still Solar time-based.
+  // Locked at once, before the save is sent: the stored settings, which the stage status describes, are still Sun hours.
   expect(stepRow("Criteria").textContent).toContain("The mode or the settings changed since the analysis. Run it again to update the carving.");
   await waitForTheSave();
   await settle();
   expect(service.count("PATCH /criteria/1")).toBe(1);
-  expect(service.savedValues).toEqual([]);                     // refused: config.yaml still says Solar time-based
+  expect(service.savedValues).toEqual([]);                     // refused: config.yaml still says Sun hours
   expect(stepRow("Criteria").textContent).toContain("The mode or the settings changed since the analysis. Run it again to update the carving.");
   expect(thresholdField().disabled).toBe(true);
   expect(dimmedCarvingLayers()).toEqual(["carved_voxels", "kept_voxels", "sky_dome"]);

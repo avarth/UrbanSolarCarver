@@ -43,7 +43,7 @@ def test_a_new_project_has_one_criterion_and_a_chain_config(tmp_path):
     chain = load_chain(str(config_path))
     assert [(criterion.id, criterion.config.mode) for criterion in chain.criteria] == [("1", "time-based")]
     [entry] = store.criteria("p")
-    assert (entry.id, entry.name, entry.named_by_user, entry.bypassed) == ("1", "Solar time-based", False, False)
+    assert (entry.id, entry.name, entry.named_by_user, entry.bypassed) == ("1", "Sun hours", False, False)
     assert entry.colour == CRITERION_COLOURS[0] and entry.test_surface_files == []
     assert entry.settings["mode"] == "time-based" and "test_surface_path" not in entry.settings
     assert store.read_project_json("p").next_criterion_id == 2
@@ -89,7 +89,7 @@ def test_criteria_can_be_added_renamed_reordered_bypassed_duplicated_and_deleted
     second = store.add_criterion("p", "time-based")
     third = store.add_criterion("p", "irradiance", criterion_name="Roofs")
     assert [(c.id, c.name, c.named_by_user) for c in store.criteria("p")] == [
-        ("1", "Daylight", False), ("2", "Solar time-based", False), ("3", "Roofs", True)]
+        ("1", "Daylight", False), ("2", "Sun hours", False), ("3", "Roofs", True)]
     assert (second.colour, third.colour) == CRITERION_COLOURS[1:3]
     assert second.settings["mode"] == "time-based" and second.settings["start_month"] == 12
     assert set(second.settings) <= CRITERION_KEYS - {"name", "id", "test_surface_path"}
@@ -145,7 +145,7 @@ def test_the_mode_labels_are_the_names_the_app_shows():
 
 
 def test_a_default_name_is_the_mode_label_and_the_first_file():
-    assert default_criterion_name("benefit", []) == "Solar usefulness"
+    assert default_criterion_name("benefit", []) == "Solar heating"
     assert default_criterion_name("radiative_cooling", ["roof.ply", "b.ply"]) == "Night cooling on roof"
     assert default_criterion_name("no_such_mode", []) == "no_such_mode"      # a mode the engine does not know keeps its name
 

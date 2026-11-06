@@ -50,7 +50,7 @@ function carvingSummary(state: ProjectViewState): string {
 }
 
 /**
- * One criterion: its mode and its carving, "Solar usefulness, 56 % kept", "Daylight, Out of date", or "Daylight, Off" while it is off.
+ * One criterion: its mode and its carving, "Solar heating, 56 % kept", "Daylight, Out of date", or "Daylight, Off" while it is off.
  * Several: the ones that are on in order, each with the share it kept, "Daylight 70 %, then Winter sun on facades 80 %", once the
  * carving is current; "All off" when none is on. A criterion the user did not name is called by its mode.
  */
@@ -93,7 +93,7 @@ function exportSummary(state: ProjectViewState): string {
   return hasMassing ? messages.massingReady : messages.notBuiltYet;
 }
 
-/** The summary of a step's row: "1 volume, weather", "North 0°, 1 m voxels", "Solar time-based, 61 % kept" ... */
+/** The summary of a step's row: "1 volume, weather", "North 0°, 1 m voxels", "Sun hours, 61 % kept" ... */
 export function stepSummary(step: StepName, state: ProjectViewState): string {
   if (settingsToFixIn(step, state) > 0) return messages.settingsToFix(settingsToFixIn(step, state));
   switch (step) {

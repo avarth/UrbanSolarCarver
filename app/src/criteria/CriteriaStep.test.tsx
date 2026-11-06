@@ -144,7 +144,7 @@ test("Add criterion and Duplicate open the new criterion's editor", async () => 
   const criteria = [entry("1", "A"), entry("2", "B")];
   rendered = renderForTest(<CriteriaStep panel={PANEL} shows="list" onShowsChange={onShowsChange} list={listProps(criteria, { onAdd })} />);
   click(buttonNamed("Add criterion")!);
-  await act(async () => menuItem("Solar usefulness").click());
+  await act(async () => menuItem("Solar heating").click());
   expect(onAdd).toHaveBeenCalledExactlyOnceWith("benefit");
   expect(onShowsChange).toHaveBeenLastCalledWith("editor");
 

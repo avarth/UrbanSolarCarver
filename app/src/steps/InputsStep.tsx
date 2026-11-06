@@ -16,7 +16,7 @@ import "../theme/panels.css";
 /** The roles of the Inputs step: the site's (the test surfaces are each criterion's). */
 export const INPUT_ROLES: readonly InputRole[] = ["max_volume", "context", "terrain", "weather"];
 /**
- * "Carved by Daylight, then Solar time-based. ..." for a project that was carved further with an earlier version of the app (its
+ * "Carved by Daylight, then Sun hours. ..." for a project that was carved further with an earlier version of the app (its
  * record stays, spec 9); null for one that was not.
  */
 export function carvedByNote(chain: readonly { mode: string }[]): string | null {

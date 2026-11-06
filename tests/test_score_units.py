@@ -1,5 +1,5 @@
 """The units of the voxel scores: each sample point stands for grid_step² of protected surface, so a weighted score is the
-sky-patch weight a voxel blocks times that area (kWh for Solar energy and Solar usefulness, m² of weighted sky for Daylight and
+sky-patch weight a voxel blocks times that area (kWh for Solar energy and Solar heating, m² of weighted sky for Daylight and
 Night cooling), as the time-based score is shaded area times duration (m²·h).
 
 The scene: a horizontal test square of side grid_step, or of a side given (at most 0.5 m), at z = 0, centred under a max

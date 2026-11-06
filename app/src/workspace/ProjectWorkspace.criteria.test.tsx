@@ -69,7 +69,7 @@ test("one criterion shows its row in the list, with the switch on and no drag ha
   expect(buttonIn(pinnedBar(), "Build envelope and massing")).toBeDefined();
   expect(stepRow("Criteria").querySelector(".step-summary")).toBeNull();               // open, no setting to fix
   openStep("Inputs");
-  expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Solar time-based, 61 % kept");
+  expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Sun hours, 61 % kept");
 });
 
 test("the criteria step pins the build, and Run analysis while the analysis is out of date; Inputs has neither", async () => {

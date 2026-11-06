@@ -72,7 +72,7 @@ test("the first criterion's previous and the last one's next wait without leavin
 });
 
 test("the name is whole, on a row of its own after the colour, symbol, switch and menu, with the whole name as its title", () => {
-  const name = "Solar usefulness on alatini_testSrfs_solargains_with_a_long_tail_of_eighty_chars";
+  const name = "Solar heating on alatini_testSrfs_solargains_with_a_long_tail_of_eighty_chars";
   renderHeader({ entry: { ...DAYLIGHT, name } });
   const nameElement = header().querySelector<HTMLElement>(".criterion-editor-name")!;
   expect(nameElement.textContent).toBe(name);

@@ -45,7 +45,7 @@ test("a project carved further with an earlier version keeps its note on the max
   service = new FakeService(CARVED, CARVING);
   await openWorkspace(service, { ...project(CARVED), carving_chain: [{ mode: "daylight" }, { mode: "time-based" }] } as ProjectDetail);
   expect(container().querySelector(".inputs-step .input-box-hint")!.textContent).toContain(
-    "Carved by Daylight, then Solar time-based. The earlier maximum volumes are kept in the project folder, in inputs/earlier_max_volumes.");
+    "Carved by Daylight, then Sun hours. The earlier maximum volumes are kept in the project folder, in inputs/earlier_max_volumes.");
 });
 
 test("the 3D view draws no envelope while its stage is not recorded: a run that wrote it and then failed", async () => {

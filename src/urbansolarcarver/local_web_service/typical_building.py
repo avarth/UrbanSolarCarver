@@ -1,6 +1,6 @@
 """The typical building of a project: the values of its form, the library it is chosen from, and its hourly weights.
 
-A Solar usefulness criterion that is energy-weighted (``CriterionEntry.energy_weighted``) counts each hour by what its sun
+A Solar heating criterion that is energy-weighted (``CriterionEntry.energy_weighted``) counts each hour by what its sun
 saves this building in heating over the year, instead of the cold hours rule. project.json keeps one building per project
 (``TypicalBuildingEntry``): a copy of the values and the library entry they came from. A new project has none until one is chosen
 from the library, and a run of an energy-weighted criterion is refused without it (stage_records.missing_inputs). The engine's generator

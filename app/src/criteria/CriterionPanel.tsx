@@ -5,7 +5,7 @@
 // when something it shows appears: no test surfaces or the weather box under the tiles (of a criterion that is on), a field with an
 // error of the criterion's save, or the values reset under the tiles. A criterion just selected shows them all as new. A criterion
 // that is off needs neither test surfaces nor a weather file, and its closed Carving rule reads Off. The notice of a new weather file
-// is under the Settings header, open or closed. In Solar usefulness, Settings starts with Which hours count: Cold hours (the balance
+// is under the Settings header, open or closed. In Solar heating, Settings starts with Which hours count: Cold hours (the balance
 // temperature rule) or Energy-weighted, which hides the balance temperature and shows the typical building's box, whose Edit
 // building opens its window (TypicalBuildingSheet).
 import { useEffectEvent, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
@@ -58,7 +58,7 @@ export interface CriterionPanelProps extends PanelSections {
   carvingRule: ReactNode;
   /** The unit of the mode's scores, for a cutoff in the carving rule's summary; absent: none. */
   scoreUnit?: string;
-  /** Which hours count and the typical building, shown in Solar usefulness; absent: neither is shown. */
+  /** Which hours count and the typical building, shown in Solar heating; absent: neither is shown. */
   hoursCounted?: HoursCountedProps;
 }
 
@@ -83,7 +83,7 @@ interface WhichHoursCountProps {
   editButton: RefObject<HTMLButtonElement | null>;
 }
 
-/** The two-way switch of Solar usefulness, Cold hours or Energy-weighted, and under it, energy-weighted, the typical building's box. */
+/** The two-way switch of Solar heating, Cold hours or Energy-weighted, and under it, energy-weighted, the typical building's box. */
 function WhichHoursCount({ hoursCounted, disabled, sheetOpen, sheetId, onToggleSheet, editButton }: WhichHoursCountProps) {
   const labelId = useId();
   const { problem, send } = useDialogRequest(() => {});
@@ -112,7 +112,7 @@ function WhichHoursCount({ hoursCounted, disabled, sheetOpen, sheetId, onToggleS
 
 export function CriterionPanel(props: CriterionPanelProps) {
   const { form, criterionKeys, onChange, disabledReason, openSections, onOpenSections } = props;
-  // Which hours count, in Solar usefulness; energy-weighted, the balance temperature is not read, and is not shown, counted or summed up.
+  // Which hours count, in Solar heating; energy-weighted, the balance temperature is not read, and is not shown, counted or summed up.
   const hoursCounted = form.mode === "benefit" ? props.hoursCounted : undefined;
   const energyWeighted = hoursCounted?.energyWeighted ?? false;
   const readKeys = energyWeighted ? new Set([...criterionKeys].filter((name) => !BALANCE_TEMPERATURE.includes(name))) : criterionKeys;
