@@ -95,7 +95,6 @@ _CONFIG_OR_MESSAGE_ERROR = {
     "model": Union[ConfigErrorReply, ErrorDetailReply],
     "description": "Settings that do not validate (the fields), or a request that cannot be served as sent (a message).",
 }
-CRITERION_QUERY_DESCRIPTION = "The id of a criterion; the first one when omitted."
 TIME_BASIS_QUERY_DESCRIPTION = ("The clock the times are read in: standard (the weather file's local standard time), daylight_saving "
                                 "(an hour ahead) or solar (true solar time, noon when the sun crosses the meridian).")
 SUN_PATH_CRITERION_QUERY_DESCRIPTION = "The id of a criterion; the first criterion that is on when omitted (the first one when none is)."
@@ -320,14 +319,14 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
             refuse_while_running(name)
             yield store
 
-    def project_detail(store: ProjectStore, name: str, criterion_id: str | None = None) -> ProjectDetail:
-        """The project as the browser opens it, with the settings of the criterion *criterion_id* (default: the first); 404 for an unknown one."""
+    def project_detail(store: ProjectStore, name: str) -> ProjectDetail:
+        """The project as the browser opens it, with the settings of its first criterion."""
         with store.project_lock(name):
             summary = store.summary(name)
             status = stage_status_reply(store, name)
             return ProjectDetail(
                 name=summary.name, created=summary.created, modified=summary.modified, example=summary.example,
-                settings=store.read_settings(name, criterion_id),
+                settings=store.read_settings(name),
                 inputs={role: store.input_files(name, role) for role in (*MESH_ROLES, WEATHER_ROLE)},
                 joined_bounds=store.joined_bounds(name), weather_location=store.weather_location(name),
                 weather_latitude=store.weather_latitude(name),
@@ -450,8 +449,8 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         return Response(status_code=204)
 
     @router.get("/projects/{name}", responses={404: _CRITERION_RESPONSES[404]})
-    def open_project(name: str, criterion: str | None = Query(None, description=CRITERION_QUERY_DESCRIPTION)) -> ProjectDetail:
-        """The project with the shared settings and those of one criterion; 404 for an unknown project or criterion."""
+    def open_project(name: str) -> ProjectDetail:
+        """The project with the shared settings and those of its first criterion; 404 for an unknown project."""
         store = folder_in_use.store
         store.open(name)    # 404 for an unknown project, before the repairs
         try:
@@ -466,7 +465,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         except ProjectError:
             pass    # an uploaded file that cannot be read: the project still opens, so it can be removed; a run reports it
         refresh_changed_inputs(name)
-        return project_detail(store, name, criterion)
+        return project_detail(store, name)
 
     @router.get("/projects/{name}/stage-status")
     def project_stage_status(name: str) -> StageStatusReply:

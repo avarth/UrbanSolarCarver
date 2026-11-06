@@ -246,9 +246,6 @@ def save_sky_patch_weights(
     hemisphere the low southern sky usually dominates.  Saved as
     ``<fname stem>_intensity.<ext>``.
 
-    For a patch count other than 145, only a line plot of weight against
-    patch index is saved.
-
     Parameters
     ----------
     weight_unit : str
@@ -268,41 +265,27 @@ def save_sky_patch_weights(
     except ImportError:
         return None
 
-    n = int(patch_weights.size)
     w = np.asarray(patch_weights, dtype=float).reshape(-1)
-
-    if n == 145:
-        paths: List[Path] = []
-        # Plot 1: patch weight (what the tracer uses)
-        weight_path = d / fname
-        _plot_tregenza_hemisphere(
-            w, title="Patch weight (radiance \u00d7 solid angle)",
-            cbar_label=f"Weight [{weight_unit}]", path=weight_path,
-        )
-        paths.append(weight_path)
-        # Plot 2: intensity (weight / solid angle)
-        omega = _get_tregenza_solid_angles()
-        intensity = np.where(omega > 0, w / omega, 0.0)
-        base, ext = fname.rsplit(".", 1)
-        intensity_path = d / f"{base}_intensity.{ext}"
-        _plot_tregenza_hemisphere(
-            intensity, title="Patch intensity (per steradian)",
-            cbar_label=f"Intensity [{weight_unit}/sr]",
-            path=intensity_path,
-        )
-        paths.append(intensity_path)
-        return paths
-
-    # Fallback: simple line plot for non-Tregenza
-    path = d / fname
-    fig = _new_figure(figsize=(6, 3))
-    ax = fig.subplots()
-    ax.plot(np.arange(n), w)
-    ax.set_title("Sky patch weights")
-    ax.set_xlabel("Patch index")
-    ax.set_ylabel(f"Weight [{weight_unit}]")
-    fig.savefig(str(path), bbox_inches="tight", dpi=120)
-    return [path]
+    paths: List[Path] = []
+    # Plot 1: patch weight (what the tracer uses)
+    weight_path = d / fname
+    _plot_tregenza_hemisphere(
+        w, title="Patch weight (radiance \u00d7 solid angle)",
+        cbar_label=f"Weight [{weight_unit}]", path=weight_path,
+    )
+    paths.append(weight_path)
+    # Plot 2: intensity (weight / solid angle)
+    omega = _get_tregenza_solid_angles()
+    intensity = np.where(omega > 0, w / omega, 0.0)
+    base, ext = fname.rsplit(".", 1)
+    intensity_path = d / f"{base}_intensity.{ext}"
+    _plot_tregenza_hemisphere(
+        intensity, title="Patch intensity (per steradian)",
+        cbar_label=f"Intensity [{weight_unit}/sr]",
+        path=intensity_path,
+    )
+    paths.append(intensity_path)
+    return paths
 
 
 def save_sky_patch_comparison(

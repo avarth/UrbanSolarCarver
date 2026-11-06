@@ -176,7 +176,7 @@ export interface paths {
         };
         /**
          * Open Project
-         * @description The project with the shared settings and those of one criterion; 404 for an unknown project or criterion.
+         * @description The project with the shared settings and those of its first criterion; 404 for an unknown project.
          */
         get: operations["open_project"];
         put?: never;
@@ -2489,10 +2489,7 @@ export interface operations {
     };
     open_project: {
         parameters: {
-            query?: {
-                /** @description The id of a criterion; the first one when omitted. */
-                criterion?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
                 name: string;

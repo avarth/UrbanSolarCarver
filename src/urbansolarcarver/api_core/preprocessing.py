@@ -186,19 +186,6 @@ def _ray_drop_report(ray_drop) -> dict:
     }
 
 
-def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms,
-                        settings: PreprocessingSettings, options: RunOptions,
-                        point_weights=None):
-    """Run the carver for ``settings.mode`` and return the per-voxel scores.
-
-    The first three values of :func:`_compute_raw_scores_and_ray_drop`,
-    without context or terrain.
-    """
-    raw_scores, scores_kind, patch_weights, _ray_drop = _compute_raw_scores_and_ray_drop(
-        voxel_grid, origin, extent, resolution, pts, norms, settings, options, point_weights=point_weights)
-    return raw_scores, scores_kind, patch_weights
-
-
 def _compute_raw_scores_and_ray_drop(voxel_grid, origin, extent, resolution, pts, norms,
                                      settings: PreprocessingSettings, options: RunOptions,
                                      point_weights=None, blocking_mesh=None, skin_occupancy=None):
@@ -272,7 +259,7 @@ def _compute_raw_scores_and_ray_drop(voxel_grid, origin, extent, resolution, pts
         else:
             raise NotImplementedError(
                 f"mode '{mode}' declares score_kind='violation_count' but has "
-                f"no carver wired in _compute_raw_scores"
+                f"no carver wired in _compute_raw_scores_and_ray_drop"
             )
         return counts.astype(np.float32), spec.score_kind, None, ray_drop
 

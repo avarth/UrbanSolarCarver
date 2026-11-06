@@ -101,6 +101,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- The `criterion` query of `GET /projects/{name}`: the reply lists every criterion with its settings.
 - **The service route `POST /projects/{name}/carve-further`** and the code behind it (`carve_further.py`,
   `ProjectStore.replace_max_volume_with_envelope`). The app dropped Carve further on 2026-10-26 for chained criteria, and
   no other client called the route. A project carved further before still opens: it keeps its `carving_chain` and

@@ -5,7 +5,7 @@ diagnostics read their mode-specific decisions from this registry instead
 of hardcoding mode names.  Two places still name modes directly: a new
 weighted-sum mode needs a branch in ``scoring.get_weights``, and a new
 violation-count mode needs a carver in
-``api_core.preprocessing._compute_raw_scores``.
+``api_core.preprocessing._compute_raw_scores_and_ray_drop``.
 
 To add a mode, define its ModeSpec in ``MODES``; the derived sets at the
 bottom of this file update automatically.

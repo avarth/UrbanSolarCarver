@@ -52,7 +52,6 @@ from .run_context import active_context, report_issue, report_progress
 if TYPE_CHECKING:
     import trimesh
 
-CHECK_FOLDER = "check"
 # The geometry the other columns are compared with in the summary.
 BASELINE = "max_volume"
 # The column traced with none of the geometries (the blocking meshes still block).

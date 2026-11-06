@@ -1447,16 +1447,14 @@ def test_test_surface_names_are_cleaned_and_a_name_with_a_path_part_reaches_no_o
     assert (projects_folder / "p" / "project.json").read_text(encoding="utf-8") == project_json
 
 
-def test_the_settings_of_a_criterion_are_opened_by_the_criterion_parameter(client_with_two_criteria):
+def test_a_project_opens_with_the_settings_of_its_first_criterion_and_every_criterion_listed(client_with_two_criteria):
     client = client_with_two_criteria
     assert client.patch("/api/projects/p/criteria/2", json={"values": {"mode": "time-based"}}).status_code == 200
     assert client.put("/api/projects/p/shared-settings", json={"values": {"voxel_size": 3.0}}).status_code == 200
-    second = client.get("/api/projects/p", params={"criterion": "2"}).json()
-    first = client.get("/api/projects/p", params={"criterion": "1"}).json()
-    assert second["settings"]["mode"] == "time-based" and first["settings"]["mode"] == "daylight"
-    assert second["settings"]["voxel_size"] == first["settings"]["voxel_size"] == 3.0     # voxel_size is shared
-    assert client.get("/api/projects/p").json()["settings"] == first["settings"]        # no parameter: the first criterion
-    assert [entry["id"] for entry in second["criteria"]] == ["1", "2"]
+    project = client.get("/api/projects/p").json()
+    assert project["settings"]["mode"] == "daylight" and project["settings"]["voxel_size"] == 3.0
+    assert [entry["id"] for entry in project["criteria"]] == ["1", "2"]
+    assert project["criteria"][1]["settings"]["mode"] == "time-based"
 
 
 def test_an_unknown_criterion_is_404_with_its_id_in_every_route(client_with_two_criteria):
@@ -1468,7 +1466,6 @@ def test_an_unknown_criterion_is_404_with_its_id_in_every_route(client_with_two_
         ("post", "/api/projects/p/criteria/9/test-surfaces", {"files": {"file": (*OTHER_SURFACE, "application/octet-stream")}}),
         ("put", "/api/projects/p/criteria/9/test-surfaces/surface.ply", {}),
         ("delete", "/api/projects/p/criteria/9/test-surfaces/surface.ply", {}),
-        ("get", "/api/projects/p", {"params": {"criterion": "9"}}),
         ("get", "/api/projects/p/run/score-points", {"params": {"criterion": "9"}}),
         ("get", "/api/projects/p/run/sky-patches", {"params": {"criterion": "9"}}),
     ]
@@ -1555,7 +1552,7 @@ def test_shared_settings_are_saved_without_a_mode_and_refused_with_a_criterion_k
     assert saved.json()["settings"]["voxel_size"] == 2.0 and "mode" not in saved.json()["settings"]
     assert saved.json()["grid_plan"]["voxel_size"] == 2.0
     assert criteria_of(client) == criteria_before
-    assert client.get("/api/projects/p", params={"criterion": "2"}).json()["settings"]["voxel_size"] == 2.0
+    assert client.get("/api/projects/p").json()["settings"]["voxel_size"] == 2.0
     refused = client.put("/api/projects/p/shared-settings", json={"values": {"voxel_size": 3.0, "threshold": "carve_fraction"}})
     assert refused.status_code == 422
     assert [error["field"] for error in refused.json()["field_errors"]] == ["threshold"] and refused.json()["criterion"] is None

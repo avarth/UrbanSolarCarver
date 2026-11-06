@@ -78,7 +78,6 @@ class CarverSession(contextlib.AbstractContextManager["CarverSession"]):
         self.tensors: "OrderedDict[str, Any]" = OrderedDict()  # oldest use first
         self._sizes: Dict[str, int] = {}
         self.cache_bytes = 0
-        self._gen = 0  # number of bump() calls, for diagnostics
         CarverSession._sessions[_device_key(self.device)] = self
 
     def bump(self, flush: bool = False) -> None:
@@ -88,7 +87,6 @@ class CarverSession(contextlib.AbstractContextManager["CarverSession"]):
         self.cache_bytes = 0
         if flush:
             self.release_memory()
-        self._gen += 1
 
     def release_memory(self) -> None:
         """Return CUDA memory not held by live tensors (including cached ones) to the driver."""
