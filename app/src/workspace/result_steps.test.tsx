@@ -6,14 +6,15 @@ import { serviceModes, serviceSchemaWith } from "../api_client/service_data_for_
 import { initialFormState, type SaveOutcome } from "../settings_form/form_state";
 import { holdReply, renderForTest, settle, typeAndLeave, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import type { ScorePoints } from "../viewer/score_points_decoder";
-import { dimmedLayersOf, isStageDimmed, missingLayersOf, useResultSteps, type ResultSteps } from "./result_steps";
+import { messages } from "../messages";
+import { dimmedLayersOf, isStageDimmed, missingLayersOf, unreadableLayerNotes, useResultSteps, type ResultSteps } from "./result_steps";
 import { resultsAtOpen, resultsOfStages, useResultsFollowingRun, type RunResults } from "../steps/run_results";
 import { initialRunState, runReducer, useRunLoop, type RunRecord, type RunState } from "../common/run_state";
 import type { PipelineStage, StageState } from "../stages";
 import { inProjectSession } from "../api_client/project_session_for_test";
 
 const ALL_CURRENT: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" };
-const NO_RESULTS: RunResults = { summary: null, scorePoints: null, skyDome: null, skyDomeUnreadable: false, envelope: null, massing: null, platesFile: null, carvedByCriterion: null };
+const NO_RESULTS: RunResults = { summary: null, scorePoints: null, skyDome: null, unreadable: [], envelope: null, massing: null, platesFile: null, carvedByCriterion: null };
 
 /** The form of a Solar time-based criterion that cuts at 1.5, with the service's mode and threshold setting. */
 const timeBasedFormCuttingAt1point5 = () => initialFormState({ schema: serviceSchemaWith("mode", "threshold"), modes: serviceModes("time-based"),
@@ -280,3 +281,10 @@ test("a threshold change whose save stores a mode or an analysis setting a refus
   expect(FakeWebSocket.opened).toHaveLength(0);
 });
 
+test("an unreadable result names its layers, and one that draws no layer names none", () => {
+  const notes = unreadableLayerNotes({ ...NO_RESULTS, unreadable: ["scorePoints", "skyDome", "massing", "summary"] });
+  expect(Object.keys(notes).sort()).toEqual(["building_massing", "carved_voxels", "kept_voxels", "sky_dome"]);
+  expect(notes.sky_dome).toBe(messages.skyDomeUnreadable);
+  expect(notes.kept_voxels).toBe(messages.resultUnreadable);
+  expect(unreadableLayerNotes(NO_RESULTS)).toEqual({});
+});

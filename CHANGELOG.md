@@ -122,6 +122,8 @@ versioning follows [Semantic Versioning](https://semver.org/).
   the whole surface count as not planar, so it was skipped and not protected: 8 of the 43 roofs of the New building example. A face
   now counts against a surface only when it leaves the surface's plane by more than 0.1 mm.
 - **A cancelled or failed run keeps what it finished.** The next run no longer traces the criteria before the one that stopped.
+- **A result file that is gone makes its stage missing** for every stage, not only preprocessing, so the next run writes it again.
+- **A result that cannot be read says so.** Score points, envelope and massing now show in the Layers menu with a note, as the sky dome did, in place of an empty layer without a word.
 - **`carve_above_applied` is false** in the diagnostics of a criterion with no voxel left to decide about.
 - **A sky dome that cannot be read is no longer silent.** After a finished run it disappeared without a word, and in Simulate any
   failure reading it was ignored, a stopped engine or lost access included. **Layers** now lists it as missing and says how to write

@@ -165,7 +165,7 @@ def _warn_raised_parts(polygons, cells_ij, xy, occ, z0, origin_z, voxel_size):
             report_issue(
                 "raised_part",
                 f"massing: part {k} starts {base - z0:.2f} m above the lowest point; "
-                f"floors count from the lowest point (sloped ground is not supported yet)",
+                f"floors count from the lowest point",
             )
 
 

@@ -221,6 +221,21 @@ def test_a_stage_without_its_manifest_is_missing_and_its_dependants_out_of_date(
         "preprocessing": "current", "thresholding": "missing", "exporting": "out_of_date", "massing": "out_of_date"}
 
 
+@pytest.mark.parametrize("stage, field_name", [
+    ("thresholding", "mask_path"), ("exporting", "mesh_path"), ("massing", "plates_path"), ("massing", "mesh_path")])
+def test_a_stage_with_an_output_file_gone_is_missing_so_a_run_writes_it_again(built_project, stage, field_name):
+    store, name, worker = built_project
+    run_folder = store.open(name) / "run"
+    folder = run_folder / "criteria" / "1" / stage if stage == "thresholding" else run_folder / stage
+    manifest_path = folder / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest[field_name] = "a_file_that_is_gone.dat"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    assert stage_status(store, name)[stage] == "missing"
+    run_and_wait(worker, name, ["exporting", "massing"])
+    assert stage_status(store, name) == ALL_CURRENT
+
+
 @pytest.mark.parametrize("field_name", ["scores_path", "voxel_grid_path", "footprint_path", "patch_weights_path"])
 def test_preprocessing_with_an_output_file_gone_is_missing_so_a_run_writes_it_again(built_project, field_name):
     store, name, _worker = built_project

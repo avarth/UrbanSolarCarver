@@ -166,6 +166,8 @@ A refused run points at the criterion that caused it, in the pinned bar and in t
 
 A run that is cancelled or fails keeps what it finished: the next run starts with the first stage that did not finish, so the criteria before it are not traced again.
 
+A result file that is gone from the project folder makes its stage missing, so the next run writes it again. A voxel, sky dome, envelope or massing result that is there and cannot be read shows greyed in the Layers menu, with a note that its file may be damaged.
+
 **Build envelope and massing** waits until every criterion that is on is carved, and builds once, from the last criterion.
 
 ### The 3D view with several criteria

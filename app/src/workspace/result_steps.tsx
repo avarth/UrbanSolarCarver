@@ -27,7 +27,7 @@ import {
   activeRunReason, criteriaCarvedBy, criterionProgressOf, pipelineRecordOf, runProgressShare, runStages, stageRunState, type RunLoop, type RunOrigin, type RunOutcome,
   type RunRecord,
 } from "../common/run_state";
-import { useResultsFollowingRun, useRunResults, type RunResults } from "../steps/run_results";
+import { useResultsFollowingRun, useRunResults, type ResultName, type RunResults } from "../steps/run_results";
 import type { PipelineStage, StageState, StepName } from "../stages";
 import { createThresholdUpdateQueue, type ThresholdUpdateQueue } from "./threshold_queue";
 
@@ -104,6 +104,17 @@ export function dimmedLayersOf(record: RunRecord | null, stages: Record<Pipeline
   return (Object.keys(LAYERS_OF_STAGE) as PipelineStage[])
     .filter((stage) => isStageDimmed(stage, record, stages, stagesBeingFetched, ANALYSIS_OF_CRITERION.includes(stage) ? criterion : undefined))
     .flatMap((stage) => LAYERS_OF_STAGE[stage]);
+}
+
+/** The layers each result draws; a result without one shows nowhere in the view. */
+const LAYERS_OF_RESULT: Partial<Record<ResultName, LayerName[]>> = {
+  scorePoints: ["kept_voxels", "carved_voxels"], skyDome: ["sky_dome"], envelope: ["envelope"], massing: ["building_massing"],
+};
+
+/** The layers whose result could not be read, with the note the layers menu shows for each. */
+export function unreadableLayerNotes(results: RunResults): Partial<Record<LayerName, string>> {
+  return Object.fromEntries(results.unreadable.flatMap((name) => (LAYERS_OF_RESULT[name] ?? []).map(
+    (layer) => [layer, name === "skyDome" ? messages.skyDomeUnreadable : messages.resultUnreadable]))) as Partial<Record<LayerName, string>>;
 }
 
 /** The layers of a run that was cancelled or failed whose stage left no data: listed with the missing-result note (UX 8.2). */
@@ -428,6 +439,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
 
   // The 3D view follows the step: a part written by a run that then failed is not drawn, as its stage is not recorded.
   const viewerResults: RunResults = { ...results, envelope: envelopeBuilt ? results.envelope : null, massing: massingBuilt ? results.massing : null };
+  const unreadableNotes = unreadableLayerNotes(viewerResults);
   const warningsOfStep: Partial<Record<StepName, number>> = {};
   if (record !== null && record.origin !== "simulate" && record.state.final !== null && record.state.issues.length > 0) {
     warningsOfStep[STEP_OF_ORIGIN[record.origin]] = record.state.issues.length;
@@ -444,9 +456,9 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
       dimmedLayers: [...new Set([...dimmedLayersOf(record, ownStages, stagesBeingFetched, context.criterionId),
                                  ...(context.carvedByCriterionOutOfDate === true ? ["carved_by_criterion" as const] : [])])],
       missingLayers: [...new Set([...missingLayersOf(record, viewerResults, context.isWeightedMode),
-                                  ...(viewerResults.skyDomeUnreadable ? ["sky_dome" as const] : []),
+                                  ...(Object.keys(unreadableNotes) as LayerName[]),
                                   ...(context.carvedByCriterionWanted === true && viewerResults.carvedByCriterion === null ? ["carved_by_criterion" as const] : [])])],
-      missingLayerNotes: viewerResults.skyDomeUnreadable ? { sky_dome: messages.skyDomeUnreadable } : undefined,
+      missingLayerNotes: unreadableNotes,
       runProgress: running ? runProgressShare(record.state) : null,
       overlayContent: runReportOpen
         ? <RunReportPanel onClose={() => setRunReportOpen(false)} />

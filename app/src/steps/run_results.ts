@@ -12,7 +12,7 @@ import {
 } from "../api_client/client";
 import { useProjectSession } from "../api_client/project_session";
 import { useLatest } from "../hooks/use_latest";
-import { loadMesh } from "../viewer/loaders";
+import { loadMesh, MeshNotReadableError } from "../viewer/loaders";
 import type { Point3 } from "../viewer/local_origin";
 import { decodeCarvedByCriterion, type CarvedByCriterion } from "../viewer/carved_by_criterion_decoder";
 import { decodeScorePoints, type ScorePoints } from "../viewer/score_points_decoder";
@@ -25,8 +25,8 @@ export interface RunResults {
   summary: RunSummary | null;
   scorePoints: ScorePoints | null;
   skyDome: SkyDome | null;
-  /** The sky dome was asked for and could not be read; not so for a run that has none, which the service answers with null. */
-  skyDomeUnreadable: boolean;
+  /** The results asked for that could not be read; not so for one the stage has not written (a 404), or a run with no sky dome (null). */
+  unreadable: readonly ResultName[];
   envelope: THREE.BufferGeometry | null;
   massing: THREE.BufferGeometry | null;
   platesFile: PlatesFile | null;
@@ -34,9 +34,9 @@ export interface RunResults {
   carvedByCriterion: CarvedByCriterion | null;
 }
 
-type ResultName = Exclude<keyof RunResults, "skyDomeUnreadable">;
+export type ResultName = Exclude<keyof RunResults, "unreadable">;
 
-const NO_RESULTS: RunResults = { summary: null, scorePoints: null, skyDome: null, skyDomeUnreadable: false, envelope: null, massing: null, platesFile: null, carvedByCriterion: null };
+const NO_RESULTS: RunResults = { summary: null, scorePoints: null, skyDome: null, unreadable: [], envelope: null, massing: null, platesFile: null, carvedByCriterion: null };
 
 /**
  * What each stage writes. The score points need the carving's mask, so they follow thresholding, not the analysis; the run
@@ -139,14 +139,18 @@ export function useRunResults({ origin, stagesWithResults, criterionId, criterio
       latestRequest.current[name] = request;
       const keep = (value: RunResults[ResultName], unreadable = false) => {
         if (latestRequest.current[name] !== request) return;
-        setResults((current) => ({ ...current, [name]: value, ...(name === "skyDome" ? { skyDomeUnreadable: unreadable } : {}) }));
+        setResults((current) => {
+          const others = current.unreadable.filter((other) => other !== name);
+          return { ...current, [name]: value, unreadable: unreadable ? [...others, name] : others };
+        });
       };
       return fetchResult(name, summary).then((value) => keep(value)).catch((error) => {
         // A result the stage has not written is a 404 and stays null. Any other failure that is not a refusal may be a lost
-        // engine: the app asks GET health before it says so, so a mesh the view cannot read only costs that check.
+        // engine: the app asks GET health before it says so, so a mesh the view cannot read only costs that check. Such a mesh is
+        // unreadable as well, since that check finds the engine there and says nothing.
         const isMissingResult = error instanceof ApiError && error.status === NOT_FOUND;
         const reported = !isMissingResult && reportServiceProblem(error, source.current.onServiceProblem);
-        keep(null, !isMissingResult && !reported);
+        keep(null, !isMissingResult && (!reported || error instanceof MeshNotReadableError));
       });
     });
     return Promise.all(fetches).then(() => undefined);     // each fetch handles its own failure, so none rejects
@@ -196,7 +200,7 @@ export function useRunResults({ origin, stagesWithResults, criterionId, criterio
   useEffect(() => {
     if (criterionId === firstCriterion.current) return;
     firstCriterion.current = criterionId;
-    setResults((current) => ({ ...current, scorePoints: null, skyDome: null, skyDomeUnreadable: false }));
+    setResults((current) => ({ ...current, scorePoints: null, skyDome: null, unreadable: current.unreadable.filter((name) => !CRITERION_RESULTS.includes(name)) }));
     // A request still out for the criterion before is not kept.
     for (const name of CRITERION_RESULTS) latestRequest.current[name] = (latestRequest.current[name] ?? 0) + 1;
     askedOfCriterion.current = new Set();

@@ -56,6 +56,9 @@ NO_SCORES_MESSAGE = "This project has no scores yet: run the analysis first."
 StageManifest = TypeVar("StageManifest", bound=BaseModel)
 
 
+UNREADABLE_RESULTS_MESSAGE = "The results of this run cannot be read: run the analysis again."
+
+
 def chosen_criterion_id(store: ProjectStore, name: str, criterion_id: str | None) -> str:
     """*criterion_id* (ProjectError 404 when the project has no such criterion), or the last criterion that is on for None
     (ProjectError 404 when none is on)."""
@@ -206,8 +209,11 @@ def _kept_mask(run_folder: Path, criterion: CriterionEntry) -> np.ndarray:
 
 
 def _load_array(path: Path) -> np.ndarray:
-    """An array a stage saved; ProjectError 404 when the file is missing or cannot be read (a run that was cut off, a damaged file)."""
+    """An array a stage saved; ProjectError 404 when the file is missing (a run that was cut off), 500 when it is there and cannot
+    be read (a damaged file), which the app shows as a result that could not be read."""
     try:
         return np.load(path, allow_pickle=False)
+    except FileNotFoundError:
+        raise ProjectError(UNREADABLE_RESULTS_MESSAGE, status_code=404) from None
     except (OSError, ValueError):
-        raise ProjectError("The results of this run cannot be read: run the analysis again.", status_code=404) from None
+        raise ProjectError(UNREADABLE_RESULTS_MESSAGE, status_code=500) from None

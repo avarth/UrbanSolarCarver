@@ -5,8 +5,8 @@ manifest. Preprocessing and thresholding run once per criterion, so each criteri
 (``criterion_records``), with the fingerprint of its joined test surfaces; exporting and massing are built once, from the
 last criterion that is on, and their records (``stage_records``) hold that criterion's settings. A stage is ``current``
 when its record still matches the project, ``out_of_date`` when it completed but its settings, its inputs or the stage it
-read changed since, and ``missing`` when it never completed (or a run that was cut off removed its record, or a file its
-preprocessing wrote is gone from the project folder). The engine compares settings only and does not know whether a stage
+read changed since, and ``missing`` when it never completed (or a run that was cut off removed its record, or a file it
+wrote is gone from the project folder). The engine compares settings only and does not know whether a stage
 ever ran, so this module is where the service decides that.
 
 What goes out of date: the maximum volume, context, terrain, weather file or a shared setting change every criterion's
@@ -49,8 +49,13 @@ GRID_STEP_DEFAULT_BEFORE_IT_FOLLOWED_THE_VOXEL_SIZE = 1.0
 # A preprocessing manifest without this field is from before preprocessing recorded the unit of its scores, when the weighted
 # modes summed patch weights without the area each sample point stands for: a score cutoff on those scores means another thing.
 SCORE_UNIT_FIELD = "score_unit"
-# The preprocessing manifest fields that name the files it wrote; time-based and tilted plane runs have no patch weights.
-PREPROCESSING_OUTPUT_FIELDS = ("scores_path", "voxel_grid_path", "footprint_path", "patch_weights_path")
+# The manifest fields that name the files each stage wrote; time-based and tilted plane runs have no patch weights.
+OUTPUT_FIELDS = {
+    "preprocessing": ("scores_path", "voxel_grid_path", "footprint_path", "patch_weights_path"),
+    "thresholding": ("mask_path", "scores_compared_with_cutoff_path"),
+    "exporting": ("mesh_path",),
+    "massing": ("plates_path", "mesh_path", "export_mesh_path"),
+}
 
 
 @dataclass(frozen=True)
@@ -105,14 +110,17 @@ def _read_criterion_manifest(run_folder: Path, criterion_id: str, stage: str) ->
     return _read_manifest_file(criterion_run_folder(run_folder, criterion_id, stage) / MANIFEST_FILE_NAME)
 
 
-def _read_preprocessing_manifest(run_folder: Path, criterion_id: str) -> dict | None:
-    """As _read_criterion_manifest; also None when a file the manifest names is gone, so the stage is missing and a run writes it again."""
-    manifest = _read_criterion_manifest(run_folder, criterion_id, "preprocessing")
+def _with_its_files(manifest: dict | None, folder: Path, stage: str) -> dict | None:
+    """*manifest*, or None when a file it names is gone, so the stage is missing and a run writes it again."""
     if manifest is None:
         return None
-    folder = criterion_run_folder(run_folder, criterion_id, "preprocessing")
-    stored_paths = [manifest[field_name] for field_name in PREPROCESSING_OUTPUT_FIELDS if manifest.get(field_name)]
+    stored_paths = [manifest[field_name] for field_name in OUTPUT_FIELDS[stage] if manifest.get(field_name)]
     return manifest if all(resolve_stored_path(folder, path).is_file() for path in stored_paths) else None
+
+
+def _output_of_criterion_stage(run_folder: Path, criterion_id: str, stage: str) -> dict | None:
+    """The manifest of a criterion's preprocessing or thresholding, when the files it names are there."""
+    return _with_its_files(_read_criterion_manifest(run_folder, criterion_id, stage), criterion_run_folder(run_folder, criterion_id, stage), stage)
 
 
 def criterion_status(store: ProjectStore, name: str) -> dict[str, dict[str, StageState]]:
@@ -161,16 +169,16 @@ def _project_status(store: ProjectStore, name: str) -> _ProjectStatus:
         last_config = _criterion_config(store, name, criterion_id)
         records = project_json.criterion_records.get(criterion_id, {})
         preprocessing = _preprocessing_state(
-            store, name, project_json, records.get("preprocessing"), _read_preprocessing_manifest(run_folder, criterion_id),
+            store, name, project_json, records.get("preprocessing"), _output_of_criterion_stage(run_folder, criterion_id, "preprocessing"),
             last_config, test_surfaces.fingerprint(project_folder, criterion_id), building_key if uses_typical_building(criterion) else None)
         thresholding = _thresholding_state(
-            store, name, project_json, records.get("thresholding"), _read_criterion_manifest(run_folder, criterion_id, "thresholding"),
+            store, name, project_json, records.get("thresholding"), _output_of_criterion_stage(run_folder, criterion_id, "thresholding"),
             last_config, (preprocessing, records.get("preprocessing")), previous_thresholding)
         criteria[criterion_id] = {"preprocessing": preprocessing, "thresholding": thresholding}
         previous_thresholding = (thresholding, records.get("thresholding"))
     stages: dict[str, StageState] = {stage: _sum_of([states[stage] for states in criteria.values()]) for stage in ANALYSIS_STAGES}
     for stage in LEAF_STAGES:
-        stages[stage] = _leaf_state(store, name, project_json, stage, _read_manifest(run_folder, stage), last_config,
+        stages[stage] = _leaf_state(store, name, project_json, stage, _with_its_files(_read_manifest(run_folder, stage), stage_folder(run_folder, stage), stage), last_config,
                                     previous_thresholding or ("missing", None))
     return _ProjectStatus(criteria=criteria, stages=stages)
 
