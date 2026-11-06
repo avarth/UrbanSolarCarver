@@ -162,17 +162,6 @@ def remove_the_export_mesh_from_the_massing_manifest(store, name):
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
 
-def test_a_massing_run_from_before_massing_wrote_the_chosen_format_is_out_of_date_for_a_format_other_than_obj(built_project):
-    store, name, worker = built_project
-    remove_the_export_mesh_from_the_massing_manifest(store, name)
-    assert stage_status(store, name) == {**ALL_CURRENT, "massing": "out_of_date"}
-    assert choose_stages(store, name, ["exporting", "massing"]).stages == ["massing"]
-    change_settings(store, name, final_mesh_format="obj")
-    run_and_wait(worker, name, ["exporting", "massing"])
-    remove_the_export_mesh_from_the_massing_manifest(store, name)
-    assert stage_status(store, name) == ALL_CURRENT                 # its OBJ is the format chosen
-
-
 def test_upload_after_a_run_starts_again_at_preprocessing(built_project):
     store, name, worker = built_project
     store.add_input(name, "max_volume", "second.ply", box_bytes([30, 0, 5]))
@@ -266,72 +255,6 @@ def test_a_stage_whose_manifest_is_not_json_is_missing(built_project):
     store, name, _worker = built_project
     (store.open(name) / "run" / "massing" / "manifest.json").write_text("{not json", encoding="utf-8")
     assert stage_status(store, name)["massing"] == "missing"
-
-
-@pytest.mark.parametrize("field_name", ["max_volume_lowest_z", "max_volume_highest_z"])
-def test_a_preprocessing_run_from_before_the_manifest_recorded_the_max_volume_heights_is_out_of_date(built_project, field_name):
-    """Massing of such a run starts and ends the floors at the voxel layers, up to a voxel outside the max volume."""
-    store, name, _worker = built_project
-    manifest_path = store.open(name) / "run" / "criteria" / "1" / "preprocessing" / "manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    del manifest[field_name]
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-    assert stage_status(store, name) == {stage: "out_of_date" for stage in PIPELINE_STAGES}
-    assert choose_stages(store, name, ["massing"]).stages == ["preprocessing", "thresholding", "massing"]
-
-
-def _write_preprocessing_manifest_from_before_it_recorded_the_sample_spacing(store, name):
-    """Replaces the preprocessing manifest with one as an earlier version wrote it: every field but grid_step, same run_id.
-
-    It keeps the score unit of today, so that only the sample spacing is compared (a manifest really that old also lacks
-    score_unit, which makes a weighted run out of date on its own: see the score unit tests below)."""
-    manifest_path = store.open(name) / "run" / "criteria" / "1" / "preprocessing" / "manifest.json"
-    run_id = json.loads(manifest_path.read_text(encoding="utf-8"))["run_id"]
-    old_manifest = {"run_id": run_id, "scores_path": "scores.npy", "scores_kind": "weighted_sum", "shape": [12, 12, 12],
-                    "origin": [-6.0, -6.0, -1.0], "voxel_size": 1.0, "mode": "daylight", "voxel_grid_path": "voxel_grid.npy",
-                    "patch_weights_path": "patch_weights.npy", "sample_point_count": 36, "footprint_path": "footprint.npy",
-                    "max_volume_lowest_z": 0.0, "max_volume_highest_z": 10.0, "score_unit": "m²"}
-    manifest_path.write_text(json.dumps(old_manifest), encoding="utf-8")
-    for file_name in ("scores.npy", "voxel_grid.npy", "patch_weights.npy", "footprint.npy"):
-        (manifest_path.parent / file_name).touch()
-
-
-def _built_at_voxel_size(project_with_inputs, voxel_size):
-    store, name = project_with_inputs
-    change_settings(store, name, voxel_size=voxel_size)
-    worker = make_worker(store)
-    run_and_wait(worker, name, ["exporting", "massing"])
-    assert stage_status(store, name) == ALL_CURRENT
-    return store, name, worker
-
-
-def test_a_run_from_before_the_manifest_recorded_the_sample_spacing_used_the_old_1_m_default(project_with_inputs):
-    """Without grid_step in its config, such a run sampled every 1 m; the next run samples at half the 1 m voxel size, so the
-    analysis and everything built on it are out of date once, and the run after brings them back."""
-    store, name, worker = _built_at_voxel_size(project_with_inputs, 1.0)
-    assert "grid_step" not in store.read_project_json(name).criterion_records["1"]["preprocessing"].config
-    _write_preprocessing_manifest_from_before_it_recorded_the_sample_spacing(store, name)
-    assert stage_status(store, name) == {stage: "out_of_date" for stage in PIPELINE_STAGES}
-    assert choose_stages(store, name, ["thresholding"]).stages == ["preprocessing", "thresholding"]
-    run_and_wait(worker, name, ["exporting", "massing"])
-    assert stage_status(store, name) == ALL_CURRENT
-
-
-def test_a_run_from_before_the_manifest_recorded_the_sample_spacing_stays_current_when_it_used_the_spacing_the_next_run_uses(
-        project_with_inputs):
-    # At 2 m voxels, half the voxel size is the old 1 m default.
-    store, name, _worker = _built_at_voxel_size(project_with_inputs, 2.0)
-    _write_preprocessing_manifest_from_before_it_recorded_the_sample_spacing(store, name)
-    assert stage_status(store, name) == ALL_CURRENT
-
-
-def test_a_run_from_before_the_manifest_recorded_the_sample_spacing_with_a_stored_grid_step_compares_that_value(project_with_inputs):
-    store, name, _worker = _built_at_voxel_size(project_with_inputs, 1.0)
-    _write_preprocessing_manifest_from_before_it_recorded_the_sample_spacing(store, name)
-    _record_runs_with_grid_step(store, name, 0.5)          # half the voxel size: what the next run uses
-    assert stage_status(store, name) == ALL_CURRENT
-    _record_runs_with_grid_step(store, name, 1.0)
-    assert stage_status(store, name)["preprocessing"] == "out_of_date"
 
 
 def test_forgetting_stages_removes_only_their_records(built_project):
@@ -584,46 +507,6 @@ def test_missing_inputs_names_the_weather_file_for_a_mode_that_reads_one(tmp_pat
     assert missing_inputs(store, "p") == ["max_volume", "test_surfaces:1", "weather"]
     store.add_input("p", "weather", "weather.epw", BUNDLED_EPW.read_bytes())
     assert missing_inputs(store, "p") == ["max_volume", "test_surfaces:1"]
-
-
-def _rewrite_preprocessing_manifest(store, name, **changes):
-    """Changes fields of the preprocessing manifest on disk; a value of None removes the field, as an earlier version wrote it."""
-    manifest_path = store.open(name) / "run" / "criteria" / "1" / "preprocessing" / "manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    for field, value in changes.items():
-        if value is None:
-            manifest.pop(field, None)
-        else:
-            manifest[field] = value
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-
-
-def test_a_weighted_run_from_before_the_scores_were_scaled_by_the_sample_area_is_out_of_date(built_project):
-    """Its scores are sums of patch weights without the area each sample point stands for: a score cutoff on them means another
-    thing. Every stage is out of date once; the next run brings them back."""
-    store, name, worker = built_project
-    _rewrite_preprocessing_manifest(store, name, score_unit=None)
-    assert stage_status(store, name) == {stage: "out_of_date" for stage in PIPELINE_STAGES}
-    assert choose_stages(store, name, ["thresholding"]).stages == ["preprocessing", "thresholding"]
-    run_and_wait(worker, name, ["exporting", "massing"])
-    assert stage_status(store, name) == ALL_CURRENT
-
-
-def test_a_run_whose_scores_are_in_another_unit_than_the_mode_now_writes_is_out_of_date(built_project):
-    store, name, _worker = built_project
-    _rewrite_preprocessing_manifest(store, name, score_unit="relative")
-    assert stage_status(store, name)["preprocessing"] == "out_of_date"
-
-
-def test_a_time_based_run_from_before_the_score_unit_was_recorded_stays_current(built_project):
-    """Time-based scores were in m²·h already."""
-    store, name, worker = built_project
-    store.add_input(name, "weather", "weather.epw", BUNDLED_EPW.read_bytes())
-    change_settings(store, name, mode="time-based", start_month=12, start_day=21, start_hour=10, end_month=12, end_day=21, end_hour=14)
-    run_and_wait(worker, name, ["exporting", "massing"])
-    assert stage_status(store, name) == ALL_CURRENT
-    _rewrite_preprocessing_manifest(store, name, score_unit=None)
-    assert stage_status(store, name) == ALL_CURRENT
 
 
 # ---- The optional context and terrain inputs ----

@@ -24,8 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..errors import ConfigError
-from ..mode_registry import MODES
-from ..pydantic_schemas import UserConfig, resolve_grid_step
+from ..pydantic_schemas import UserConfig
 from ..stage_settings import PIPELINE_STAGES, stage_folder, stages_needed_for, stages_to_rerun
 from . import stored_files, test_surfaces, typical_building
 from .api_models import ProjectJson, StageRecord, StageState, StageStatusReply
@@ -36,19 +35,6 @@ from .score_points import resolve_stored_path
 MANIFEST_FILE_NAME = "manifest.json"
 ANALYSIS_STAGES = ("preprocessing", "thresholding")     # the stages every criterion runs, and every result is built on
 LEAF_STAGES = ("exporting", "massing")                  # built once, from the last criterion's thresholding
-# Preprocessing manifest fields that massing reads; a manifest without them is from before preprocessing recorded
-# them, and massing of that run would start and end its floors up to a voxel outside the maximum volume.
-MAX_VOLUME_HEIGHT_FIELDS = ("max_volume_lowest_z", "max_volume_highest_z")
-# A massing manifest without this field is from before massing wrote its plates in the chosen format: its only mesh
-# is plates.obj, so it is out of date for any other format.
-MASSING_EXPORT_MESH_FIELD = "export_mesh_path"
-# A preprocessing manifest without this field is from before preprocessing recorded its sample spacing, when an unset grid_step
-# sampled every GRID_STEP_DEFAULT_BEFORE_IT_FOLLOWED_THE_VOXEL_SIZE meters; now it samples at half the voxel size.
-SAMPLE_SPACING_FIELD = "grid_step"
-GRID_STEP_DEFAULT_BEFORE_IT_FOLLOWED_THE_VOXEL_SIZE = 1.0
-# A preprocessing manifest without this field is from before preprocessing recorded the unit of its scores, when the weighted
-# modes summed patch weights without the area each sample point stands for: a score cutoff on those scores means another thing.
-SCORE_UNIT_FIELD = "score_unit"
 # The manifest fields that name the files each stage wrote; time-based and tilted plane runs have no patch weights.
 OUTPUT_FIELDS = {
     "preprocessing": ("scores_path", "voxel_grid_path", "footprint_path", "patch_weights_path"),
@@ -222,12 +208,6 @@ def _preprocessing_state(store: ProjectStore, name: str, project_json: ProjectJs
         return "out_of_date"
     if weights_key is not None and record.weights_key != weights_key:
         return "out_of_date"
-    if any(manifest.get(field) is None for field in MAX_VOLUME_HEIGHT_FIELDS):
-        return "out_of_date"
-    if _sampled_at_another_spacing_before_it_was_recorded(record, manifest, current_config):
-        return "out_of_date"
-    if _scores_in_another_unit_than_the_next_run_writes(manifest, current_config):
-        return "out_of_date"
     return "current"
 
 
@@ -252,8 +232,6 @@ def _leaf_state(store: ProjectStore, name: str, project_json: ProjectJson, stage
     state = _state_from_record(store, name, project_json, stage, project_json.stage_records.get(stage), manifest, current_config)
     if state is not None:
         return state
-    if stage == "massing" and manifest.get(MASSING_EXPORT_MESH_FIELD) is None and current_config.final_mesh_format != "obj":
-        return "out_of_date"
     return "current" if _reads_current_run(*last_thresholding, manifest.get("upstream_run_id")) else "out_of_date"
 
 
@@ -264,33 +242,6 @@ def _settings_changed(store: ProjectStore, name: str, stage: str, record: StageR
     except ConfigError:     # e.g. an engine update since the run removed or newly validates a setting
         return True
     return stage in stages_to_rerun(recorded_config, current_config, [stage])
-
-
-def _sampled_at_another_spacing_before_it_was_recorded(record: StageRecord, manifest: dict, current_config: UserConfig) -> bool:
-    """Whether a preprocessing run whose manifest does not record its sample spacing used another spacing than the next run will.
-
-    Such a run sampled at the grid_step of its config, or at the old default of 1 m without one; the settings comparison cannot
-    tell, as it reads an unset grid_step as half the voxel size. A manifest that records its spacing is left to that comparison.
-    """
-    if manifest.get(SAMPLE_SPACING_FIELD) is not None:
-        return False
-    stored_spacing = record.config.get("grid_step")
-    spacing_used = GRID_STEP_DEFAULT_BEFORE_IT_FOLLOWED_THE_VOXEL_SIZE if stored_spacing is None else float(stored_spacing)
-    return spacing_used != resolve_grid_step(current_config.grid_step, current_config.voxel_size)
-
-
-def _scores_in_another_unit_than_the_next_run_writes(manifest: dict, current_config: UserConfig) -> bool:
-    """Whether the scores of a preprocessing run are in another unit than a run of the current mode writes.
-
-    A manifest that does not record the unit is from before the weighted modes' scores were scaled by the area of the sample
-    points; its time-based and angle rule scores are in the units of today (m²·h, rays). The mode is the current one: a run
-    of another mode is already out of date for its settings.
-    """
-    mode = MODES[current_config.mode]
-    recorded_unit = manifest.get(SCORE_UNIT_FIELD)
-    if recorded_unit is None:
-        return mode.score_kind == "weighted_sum"
-    return recorded_unit != mode.score_unit
 
 
 def _reads_current_run(state: StageState, record: StageRecord | None, run_id_read: str | None) -> bool:

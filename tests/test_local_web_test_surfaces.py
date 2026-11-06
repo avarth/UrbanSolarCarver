@@ -244,22 +244,6 @@ def test_test_surfaces_are_refused_as_a_project_input(tmp_path):
     assert [file.name for file in store.input_files("p", "test_surfaces")] == ["facade.ply"]     # listing them stays
 
 
-def test_a_joined_file_without_normals_is_rebuilt_for_each_criterion(tmp_path):
-    store = _store_with_criteria(tmp_path)
-    store.add_criterion_test_surface("p", "1", "facade.ply", _panel(0))
-    store.add_criterion_test_surface("p", "2", "roof.ply", _panel(50))
-    folder = store.open("p")
-    for criterion_id in ("1", "2"):
-        mesh = trimesh.load(test_surfaces.joined_path(folder, criterion_id), force="mesh")
-        mesh.export(test_surfaces.joined_path(folder, criterion_id), file_type="ply", include_attributes=False)
-        assert not has_vertex_normals(test_surfaces.joined_path(folder, criterion_id))
-    revision = store.read_project_json("p").inputs_revision
-    assert store.rebuild_joined_test_surfaces_without_normals("p") is True
-    assert all(has_vertex_normals(test_surfaces.joined_path(folder, criterion_id)) for criterion_id in ("1", "2"))
-    assert store.read_project_json("p").inputs_revision == revision + 1
-    assert store.rebuild_joined_test_surfaces_without_normals("p") is False
-
-
 def test_the_same_file_uploaded_twice_to_one_criterion_is_listed_once(tmp_path):
     store = _store_with_criteria(tmp_path, count=1)
     store.add_criterion_test_surface("p", "1", "facade.ply", _panel(0))

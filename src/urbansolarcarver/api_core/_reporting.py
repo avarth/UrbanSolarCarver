@@ -201,9 +201,8 @@ def generate_run_report(
         lines.append("| Parameter | Value |")
         lines.append("|-----------|-------|")
         mode = run_cfg.get("mode")
-        # The sample spacing the run used: the manifest records it (an unset grid_step is half the voxel size); a
-        # manifest written before it did leaves the config's value.
-        grid_step = _load(pre_dir, "manifest.json").get("grid_step", run_cfg.get("grid_step"))
+        # The sample spacing the run used: the manifest records it (an unset grid_step is half the voxel size).
+        grid_step = _load(pre_dir, "manifest.json").get("grid_step")
         cfg_items = [
             ("Mode", mode),
             ("Voxel size", f"{run_cfg.get('voxel_size')} m"),

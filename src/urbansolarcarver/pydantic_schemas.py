@@ -789,21 +789,17 @@ class PreprocessingManifest(BaseModel):
     # Absent in the violation-count modes, which have no sky patches.
     patch_weights_path: Optional[str] = None
     sample_point_count: int
-    # The sample spacing on the test surfaces the run used (resolve_grid_step); None in manifests written before
-    # preprocessing recorded it.
-    grid_step: Optional[float] = None
-    # The unit of the scores (mode_registry score_unit: "kWh", "m²", "m²·h"); None in manifests written before preprocessing
-    # recorded it, when the weighted modes' scores were sums of patch weights without the area of the sample points.
-    score_unit: Optional[str] = None
+    # The sample spacing on the test surfaces the run used (resolve_grid_step).
+    grid_step: float
+    # The unit of the scores (mode_registry score_unit: "kWh", "m²", "m²·h").
+    score_unit: str
     # The max volume's plan projection in world xy; massing reads it.
     footprint_path: str
     # The max volume's lowest and highest points (world z): massing starts the
     # ground floor at the lowest and ends the floors at or below the highest.
-    # None in manifests written before preprocessing recorded them.
-    max_volume_lowest_z: Optional[float] = None
-    max_volume_highest_z: Optional[float] = None
-    # The optional context and terrain meshes the run used; None when absent (and in manifests written before
-    # preprocessing recorded them).
+    max_volume_lowest_z: float
+    max_volume_highest_z: float
+    # The optional context and terrain meshes the run used; None when absent.
     context_path: Optional[str] = None
     terrain_path: Optional[str] = None
 
@@ -812,9 +808,8 @@ class ThresholdingManifest(BaseModel):
 
     run_id: str
     mask_path: str
-    # The values the cutoff is applied to (float32, the grid shape); None in
-    # manifests written before thresholding saved them.
-    scores_compared_with_cutoff_path: Optional[str] = None
+    # The values the cutoff is applied to (float32, the grid shape).
+    scores_compared_with_cutoff_path: str
     upstream_manifest: str
     upstream_run_id: str
     # The settings this run applied after resolving the config's "None =
@@ -845,8 +840,6 @@ class MassingManifest(BaseModel):
     # The plates as OBJ with one named part per plate, written in every run.
     mesh_path: str
     # The plates in final_mesh_format; the same file as mesh_path for OBJ.
-    # None in manifests written before massing wrote that format (their only
-    # mesh is mesh_path).
-    export_mesh_path: Optional[str] = None
+    export_mesh_path: str
     upstream_manifest: str
     upstream_run_id: str

@@ -74,11 +74,7 @@ simulation input (one closed prism per floor and plate).
    where rays hit the base or the roof, which they miss in columns along
    facades that are not aligned with the grid, so it does not count: a floor's
    height and its share outside the envelope are measured over the layers
-   whose centre lies between the lowest and the highest point. A preprocessing
-   run from before the manifest recorded these points starts the ground floor
-   at the bottom of the lowest occupied layer and lets the top floor reach the
-   top of the highest occupied layer, up to one voxel outside the maximum
-   volume at each end; running preprocessing again gives the floors above.
+   whose centre lies between the lowest and the highest point.
 5. **Plates.** The connected built modules of a floor form a plate. A module on a
    straight facade is drawn as a rectangle in its facade's frame: cuts lie
    on the cut lines (along the facade and in depth), the back of the last

@@ -452,18 +452,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
     def open_project(name: str) -> ProjectDetail:
         """The project with the shared settings and those of its first criterion; 404 for an unknown project."""
         store = folder_in_use.store
-        store.open(name)    # 404 for an unknown project, before the repairs
-        try:
-            store.migrate_to_criteria(name)
-        except Exception as error:      # the project is as it was, and opens so; a run tries again and reports the error
-            if isinstance(error, ProjectError) and error.status_code == 409:    # a file of the new layout is in the way, named
-                _log.warning("Project '%s' opens as it was: %s", name, error)
-            else:
-                _log.exception("Project '%s' could not be made a chain of one criterion, so it opens as it was", name)
-        try:
-            store.rebuild_joined_test_surfaces_without_normals(name)
-        except ProjectError:
-            pass    # an uploaded file that cannot be read: the project still opens, so it can be removed; a run reports it
+        store.open(name)    # 404 for an unknown project, before the refresh
         refresh_changed_inputs(name)
         return project_detail(store, name)
 
@@ -757,9 +746,8 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
 
     @router.get("/projects/{name}/studies/{study_id}/sky-patches", responses={404: _STUDY_RESPONSES[404]})
     def study_sky_patches(name: str, study_id: str) -> SkyDome | None:
-        """The sky patches of the study's last result with the value each carried for its metric; null for a result without them, a
-        sun hours study (its directions are sun positions) or one from before the values were kept; 404 for an unknown study or one
-        without a result."""
+        """The sky patches of the study's last result with the value each carried for its metric; null for a result without them, or a
+        sun hours study (its directions are sun positions); 404 for an unknown study or one without a result."""
         store = folder_in_use.store
         with store.project_lock(name):
             find_study(store.read_project_json(name), study_id)

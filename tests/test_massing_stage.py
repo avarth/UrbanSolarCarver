@@ -123,14 +123,6 @@ def test_nothing_buildable_gives_an_empty_mesh_in_the_chosen_format(tmp_path, me
     assert len(trimesh.load(res.export_mesh_path, force="mesh").faces) == 0
 
 
-def test_a_massing_manifest_from_before_the_export_mesh_reads_without_it():
-    from urbansolarcarver.pydantic_schemas import MassingManifest
-    manifest = MassingManifest.model_validate({
-        "run_id": "r", "plates_path": "plates.json", "mesh_path": "plates.obj",
-        "upstream_manifest": "../thresholding/manifest.json", "upstream_run_id": "t"})
-    assert manifest.export_mesh_path is None
-
-
 def test_georeferenced_outlines_land_on_the_footprint(tmp_path):
     cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20], center_xy=(500000.0, 4200000.0)))
     _set_mask(thr, lambda occ: occ)
@@ -320,30 +312,6 @@ def _remove_from_preprocessing_manifest(tmp_path, *field_names):
         del manifest[field_name]
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     return manifest
-
-
-def test_a_preprocessing_manifest_without_the_highest_point_keeps_the_top_of_the_highest_layer(tmp_path):
-    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 19.5]))
-    _set_mask(thr, lambda occ: occ)
-    manifest = json.loads((tmp_path / "out" / "preprocessing" / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["max_volume_highest_z"] == 19.5
-    _remove_from_preprocessing_manifest(tmp_path, "max_volume_highest_z")
-    res = _massing(cfg, thr, tmp_path / "m")
-    plates = json.loads(res.plates_path.read_text())["plates"]
-    assert len(res.floor_areas) == 6 and max(p["z_top"] for p in plates) == pytest.approx(20.0)
-
-
-def test_a_preprocessing_manifest_without_the_lowest_point_starts_the_ground_floor_at_the_lowest_layer(tmp_path):
-    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20]))
-    _set_mask(thr, lambda occ: occ)
-    preprocessing_folder = tmp_path / "out" / "preprocessing"
-    assert json.loads((preprocessing_folder / "manifest.json").read_text(encoding="utf-8"))["max_volume_lowest_z"] == 0.0
-    manifest = _remove_from_preprocessing_manifest(tmp_path, "max_volume_lowest_z", "max_volume_highest_z")
-    occupancy = np.load(preprocessing_folder / manifest["voxel_grid_path"]).astype(bool)
-    lowest_layer_bottom = manifest["origin"][2] + np.flatnonzero(occupancy.any(axis=(0, 1))).min() * manifest["voxel_size"]
-    res = _massing(cfg, thr, tmp_path / "m")
-    ground_floor_plates = [p for p in json.loads(res.plates_path.read_text())["plates"] if p["floor"] == 0]
-    assert ground_floor_plates and all(p["z_bottom"] == pytest.approx(lowest_layer_bottom) for p in ground_floor_plates)
 
 
 def _join_keeping_panels(mesh_paths, joined_path):

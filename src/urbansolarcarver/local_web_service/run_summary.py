@@ -65,13 +65,7 @@ def _criterion_results(run_folder: Path, criterion: CriterionEntry) -> tuple[Cri
     carving = None if diagnostic is None else _carving_summary(diagnostic)
     preprocessing = read_stage_manifest(run_folder, "preprocessing", PreprocessingManifest, criterion.id)
     voxel_size = None if preprocessing is None else preprocessing[0].voxel_size
-    # A diagnostic from before thresholding named them does not give the voxels it decided about; for the first criterion those are the occupied ones.
-    if diagnostic is None:
-        voxels_at_start = None
-    elif "voxels_at_start" in diagnostic:
-        voxels_at_start = diagnostic["voxels_at_start"]
-    else:
-        voxels_at_start = diagnostic["voxels_occupied"]
+    voxels_at_start = None if diagnostic is None else diagnostic["voxels_at_start"]
     volume_kept = None if carving is None or voxel_size is None else carving.voxels_kept * voxel_size ** 3
     volume_removed = (None if carving is None or voxel_size is None or voxels_at_start is None
                       else (voxels_at_start - carving.voxels_kept) * voxel_size ** 3)
@@ -123,7 +117,7 @@ def _massing_summary(run_folder: Path) -> MassingSummary | None:
     if manifest is None or plates is None or diagnostic is None:
         return None
     return MassingSummary(
-        export_mesh_file=Path(manifest[0].export_mesh_path or manifest[0].mesh_path).name,
+        export_mesh_file=Path(manifest[0].export_mesh_path).name,
         floor_area_m2_per_storey=plates["floor_area_m2_per_floor"],
         total_floor_area_m2=plates["total_floor_area_m2"],
         storeys_built=diagnostic["floors_built"],

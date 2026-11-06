@@ -398,14 +398,10 @@ class ProjectStore:
         project's own are put in. When the joined max volume exists, the voxel grid it and the
         voxel size give is planned, and a grid over the engine's budget raises GridOverBudget.
         Nothing is stored unless the settings are valid, and the chain they make with the other criteria is. ConfigError propagates.
-        A project of an earlier version is made a chain of one first (migrate_to_criteria), so its first criterion keeps its run
-        folders and test surfaces; an error of that migration propagates, and nothing is stored.
         """
         with self.project_lock(name):
             project_folder = self.open(name)
             project_json = self.read_project_json(name)
-            if not project_json.criteria and self.migrate_to_criteria(name):
-                project_json = self.read_project_json(name)
             entry = self._criterion_for_settings(project_json, criterion_id)
             target_id = entry.id if entry is not None else str(project_json.next_criterion_id)
             config, service_paths = self._config_from_browser_values(project_folder, values, target_id)
@@ -430,13 +426,10 @@ class ProjectStore:
         the new shared settings (a criterion that refuses them raises a CriterionConfigError naming it), and the chain they make
         must load; the grid of the joined max volume is planned and a grid over the
         engine's budget raises GridOverBudget. Nothing is stored then. The reply holds the shared settings as stored.
-        A project of an earlier version is made a chain of one first (migrate_to_criteria).
         """
         with self.project_lock(name):
             project_folder = self.open(name)
             project_json = self.read_project_json(name)
-            if not project_json.criteria and self.migrate_to_criteria(name):
-                project_json = self.read_project_json(name)
             browser_values = {key: value for key, value in values.items()
                               if key not in SERVICE_OWNED_SETTINGS and key not in SETTINGS_LEFT_TO_THE_ENGINE}
             criterion_keys = sorted(key for key in browser_values if key in CRITERION_KEYS)
@@ -467,13 +460,10 @@ class ProjectStore:
 
         It is named after its mode unless *criterion_name* is given (see default_criterion_name), and gets the next colour of
         the palette. ConfigError, and nothing changes, when the mode is not one the engine knows or the chain becomes invalid.
-        A project of an earlier version is made a chain of one first (migrate_to_criteria), so its settings stay criterion 1's.
         """
         with self.project_lock(name):
             project_folder = self.open(name)
             project_json = self.read_project_json(name)
-            if not project_json.criteria and self.migrate_to_criteria(name):
-                project_json = self.read_project_json(name)
             settings = self._validated_criterion_settings(project_folder, name, {"mode": mode}, str(project_json.next_criterion_id))
             entry = append_criterion(project_json, settings, criterion_name)
             self._rewrite_chain(name, project_folder, project_json)
@@ -835,7 +825,7 @@ class ProjectStore:
 
         It is the shared settings at the top of config.yaml plus the criterion's settings from project.json and its own
         test_surface_path; *criterion_id* defaults to the first criterion (404 for an unknown one). A config.yaml that is not
-        a chain file (an earlier version's, or a hand edit that is not valid) is returned as it is, with no criterion.
+        a chain file (a hand edit that is not valid) is returned as it is, with no criterion.
         The criterion's settings are those config.yaml gives the engine (an energy-weighted criterion's weights file in place of
         its balance temperature, criteria.engine_settings), or with *for_engine* false those project.json stores.
         """
@@ -1014,12 +1004,6 @@ class ProjectStore:
             config_text = self._chain_config_text(project_folder, self.read_project_json(name), self._shared_settings_of(stored_config))
             if config_text.encode("utf-8") != config_path.read_bytes():
                 self._write_bytes_atomically(config_path, config_text.encode("utf-8"))
-            return
-        updated = {key: value for key, value in stored_config.items()
-                   if key not in {key for key, _path in OPTIONAL_SERVICE_PATHS.values()}}
-        updated.update(self._optional_service_paths(project_folder))
-        if updated != stored_config:
-            self._write_bytes_atomically(config_path, yaml.safe_dump(updated, sort_keys=False).encode("utf-8"))
 
     @staticmethod
     def _grid_plan_reply(plan: VoxelGridPlan) -> GridPlanReply:
@@ -1094,40 +1078,6 @@ class ProjectStore:
             project_json.inputs_revision += 1
             self.write_project_json(name, project_json)
             return self._reply(name, role, project_json)
-
-    def migrate_to_criteria(self, name: str) -> bool:
-        """Make a project of an earlier version a chain of one criterion, its results kept current (migration.py); whether it was
-        one. A project that has criteria is left as it is (False). Called when a project is opened, when a run starts and before
-        a settings save; on an error the project is as it was."""
-        from .migration import migrate_to_criteria     # migration.py builds on this module
-        return migrate_to_criteria(self, name)
-
-    def rebuild_joined_test_surfaces_without_normals(self, name: str) -> bool:
-        """Rebuild the joined test surface files that have no vertex normals and raise inputs_revision; whether any was rebuilt.
-
-        The service wrote that file with positions only before it kept the vertex normals, so the engine welded
-        panels that share corners (see test_surfaces.write_joined_ply). Rebuilt from the criterion's files, with
-        inputs_revision raised, every stage built on the old file is out of date. Called when a project is opened
-        and when a run starts; raises ProjectError when a stored file cannot be read.
-        """
-        with self.project_lock(name):
-            project_folder = self.open(name)
-            project_json = self.read_project_json(name)
-            stale_file_names = {}
-            for criterion in project_json.criteria:
-                joined_path = test_surfaces.joined_path(project_folder, criterion.id)
-                if joined_path.is_file() and not test_surfaces.has_vertex_normals(joined_path):
-                    stale_file_names[criterion.id] = sorted(criterion.test_surface_files)
-            if not stale_file_names:
-                return False
-            joined_files = test_surfaces.build_joined_files(project_folder, stale_file_names)
-            try:
-                test_surfaces.install_joined_files(project_folder, joined_files)
-            finally:
-                test_surfaces.remove_temporary_files(joined_files)
-            project_json.inputs_revision += 1
-            self.write_project_json(name, project_json)
-            return True
 
     def refresh_changed_inputs(self, name: str) -> bool:
         """Build the stored files changed in the project folder from outside the app into the joined files, with a notice for each
@@ -1353,7 +1303,7 @@ class ProjectStore:
         if "criteria" in stored_config:
             first = (active_criteria(project_json.criteria) or project_json.criteria)[:1]
             return str(first[0].settings.get("mode", "")) if first else ""
-        return str(stored_config.get("mode", ""))
+        return ""
 
     @staticmethod
     def _parse_config_file(config_path: Path, name: str) -> dict:

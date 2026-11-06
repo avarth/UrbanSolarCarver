@@ -15,7 +15,7 @@ import trimesh
 from _epw import BUNDLED_EPW
 from local_web_test_support import (
     WaitsForCancel, box_bytes, build_client, change_settings, create_project_with_inputs, read_events, start_run, upload,
-    wait_until_finished, write_envelope_as_exported, write_fake_chain_run, write_earlier_version_project, write_fake_stage_output,
+    wait_until_finished, write_envelope_as_exported, write_fake_chain_run, write_fake_stage_output,
 )
 from urbansolarcarver import solar_check
 from urbansolarcarver.engine_requests import handle_engine_request
@@ -242,15 +242,6 @@ def test_a_study_takes_its_time_basis_from_its_own_settings(service):
         project_json.studies[0].settings.pop("time_basis")
         store.write_project_json("p", project_json)
     assert simulation.study_settings(store, "p", store.studies("p")[0]).time_basis == "standard"
-
-
-def test_a_project_of_an_earlier_version_is_migrated_before_a_simulation(tmp_path):
-    client, worker = build_client(tmp_path / "projects", handle_request=CheckEngine())
-    write_earlier_version_project(worker.store, "old", stages=())
-    assert worker.store.read_project_json("old").criteria == []
-    reply = client.post("/api/projects/old/simulate")
-    assert reply.status_code == 422 and reply.json()["detail"] == "Add a study to run."
-    assert [criterion.id for criterion in worker.store.criteria("old")] == ["1"]
 
 
 def test_an_unreadable_envelope_manifest_leaves_the_envelope_out_with_an_issue(service):

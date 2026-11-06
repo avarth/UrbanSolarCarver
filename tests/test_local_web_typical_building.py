@@ -458,15 +458,6 @@ def test_calculate_writes_the_weights_and_answers_the_numbers(client, fake_gener
     assert saved["state"] == "out_of_date" and saved["counted_hours"] == 500 and saved["changed"] is True
 
 
-def test_a_weights_file_without_sun_up_counts_every_hour(tmp_path):
-    store, name = with_building(*benefit_project(tmp_path))
-    path = typical_building.weights_file(store.open(name))
-    benefit = np.where(np.arange(8760) < 1000, 0.5, 0.0)
-    simulated_weights.write_simulated_weights(path, benefit, np.zeros(8760), {})
-    assert typical_building.reply(store, name).counted_hours == 1000
-    assert typical_building.weights_reply(store, name).sun_up == [1] * 8760
-
-
 def test_progress_tells_the_share_done_while_the_weights_are_calculated(client, fake_generator):
     create_project(client, "p", "benefit")
     choose_building(client)

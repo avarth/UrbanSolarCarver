@@ -310,17 +310,6 @@ def test_a_chain_with_every_criterion_bypassed_is_still_written(tmp_path):
     assert _ids_in_config(store, "p") == ["1"]
 
 
-def test_a_flat_config_yaml_from_an_earlier_version_reads_as_one_criterion(tmp_path):
-    store = ProjectStore(tmp_path)
-    store.create("p", "daylight")
-    flat = {"max_volume_path": "inputs/joined/max_volume.ply", "test_surface_path": "inputs/joined/test_surfaces.ply",
-            "out_dir": "run", "mode": "daylight", "voxel_size": 2.0, "device": "cpu"}
-    _config_path(store, "p").write_text(yaml.safe_dump(flat), encoding="utf-8")
-    assert store.read_settings("p") == {"mode": "daylight", "voxel_size": 2.0}
-    assert store.read_stored_config("p") == flat
-    assert store.load_project_config("p").voxel_size == 2.0
-
-
 def test_split_settings_keeps_shared_and_criterion_keys_apart_and_never_takes_a_name_or_id():
     shared, criterion = split_settings({"voxel_size": 2.0, "mode": "daylight", "carve_fraction": 0.3, "north_deg": 5,
                                         "name": "typed in the browser", "id": "9"})

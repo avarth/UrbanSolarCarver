@@ -13,8 +13,7 @@ import trimesh
 import yaml
 from _epw import BUNDLED_EPW
 from local_web_test_support import (
-    FakeRecycleBin, box_bytes, has_vertex_normals, make_link_to_folder, pretend_to_be_on_windows_volume, wait_until_finished,
-    write_joined_test_surfaces_without_normals,
+    FakeRecycleBin, box_bytes, make_link_to_folder, pretend_to_be_on_windows_volume, wait_until_finished,
 )
 
 from urbansolarcarver.errors import ConfigError
@@ -462,26 +461,6 @@ def test_the_joined_test_surfaces_of_an_example_sample_as_its_uploaded_files(exa
         assert cKDTree(uploaded_rows).query(joined_rows)[0].max() < 1.0     # the grid step
     else:
         np.testing.assert_allclose(joined_rows, uploaded_rows, atol=1e-4)
-
-
-def test_a_joined_test_surface_file_written_without_normals_is_rebuilt_once_and_raises_the_inputs_revision(tmp_path, example_project_templates):
-    store = ProjectStore(tmp_path)
-    example_project_templates.copy_example_project(store, "p", "basic_perimeter_block")
-    joined_path = write_joined_test_surfaces_without_normals(store, "p")
-    assert len(_sampled_panels([joined_path])) == 4             # the courtyard walls welded into one ring
-    inputs_revision = store.read_project_json("p").inputs_revision
-    assert store.rebuild_joined_test_surfaces_without_normals("p") is True
-    assert has_vertex_normals(joined_path) and len(_sampled_panels([joined_path])) == 8
-    assert store.read_project_json("p").inputs_revision == inputs_revision + 1
-    assert store.rebuild_joined_test_surfaces_without_normals("p") is False
-    assert store.read_project_json("p").inputs_revision == inputs_revision + 1
-
-
-def test_a_project_without_test_surfaces_has_no_joined_test_surface_file_to_rebuild(tmp_path):
-    store = ProjectStore(tmp_path); store.create("p", "daylight")
-    inputs_revision = store.read_project_json("p").inputs_revision
-    assert store.rebuild_joined_test_surfaces_without_normals("p") is False
-    assert store.read_project_json("p").inputs_revision == inputs_revision
 
 
 @pytest.mark.slow

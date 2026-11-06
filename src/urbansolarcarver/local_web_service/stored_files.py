@@ -16,8 +16,6 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-import numpy as np
-import trimesh
 
 from . import test_surfaces
 from .api_models import ChangedFileNotice, InputFileChange, ProjectJson, StoredFileRecord
@@ -174,14 +172,13 @@ def _join_mesh_role_again(store, name: str, project_folder: Path, project_json: 
     revision, not by the joined file, so a failure after the replacement must not leave them current on the new file. The
     records are written later; until then the next look builds the file again and finds it in place.
     """
-    from .projects import JOINED_FOLDER, OPTIONAL_MESH_ROLES
+    from .projects import JOINED_FOLDER
     meshes = store._load_stored_meshes(project_folder, role, list(project_json.input_files[role]))
     for file_name in file_names:
         project_json.input_files[role][file_name] = len(meshes[file_name].faces)
     joined_temporary_path = store._write_joined_temporary_file(project_folder, role, [meshes[file_name] for file_name in sorted(meshes)])
     try:
-        # Nothing reads the orientation of the context and terrain, and an earlier version turned their faces when it joined them.
-        if _same_joined_content(joined_temporary_path, project_folder / JOINED_FOLDER / f"{role}.ply", ignore_winding=role in OPTIONAL_MESH_ROLES):
+        if _same_joined_content(joined_temporary_path, project_folder / JOINED_FOLDER / f"{role}.ply"):
             return []
         project_json.inputs_revision += 1
         store.write_project_json(name, project_json)
@@ -192,23 +189,13 @@ def _join_mesh_role_again(store, name: str, project_folder: Path, project_json: 
     return file_names
 
 
-def _same_joined_content(new_path: Path | None, old_path: Path, ignore_winding: bool = False) -> bool:
-    """Whether a joined file built now holds what the one in place holds: the same bytes, or the same faces and vertices (an
-    earlier version of the service may have laid the same mesh out otherwise); with *ignore_winding*, a face turned the other
-    way is the same face. None is a joined file to be removed."""
+def _same_joined_content(new_path: Path | None, old_path: Path) -> bool:
+    """Whether a joined file built now holds what the one in place holds: the same bytes. None is a joined file to be removed."""
     if new_path is None:
         return not old_path.is_file()
     if not old_path.is_file():
         return False
-    if os.path.getsize(new_path) == os.path.getsize(old_path) and test_surfaces.content_digest(new_path) == test_surfaces.content_digest(old_path):
-        return True
-    try:
-        new_mesh, old_mesh = (trimesh.load(str(path), force="mesh", process=False) for path in (new_path, old_path))
-    except Exception:       # trimesh fails with ValueError, KeyError or others, by what is wrong with the file
-        return False
-    new_faces, old_faces = ((np.sort(mesh.faces, axis=1) if ignore_winding else mesh.faces) for mesh in (new_mesh, old_mesh))
-    return (new_mesh.vertices.shape == old_mesh.vertices.shape and new_faces.shape == old_faces.shape
-            and np.array_equal(new_faces, old_faces) and np.allclose(new_mesh.vertices, old_mesh.vertices, rtol=0, atol=1e-9))
+    return os.path.getsize(new_path) == os.path.getsize(old_path) and test_surfaces.content_digest(new_path) == test_surfaces.content_digest(old_path)
 
 
 def input_changes(store, name: str) -> list[InputFileChange]:

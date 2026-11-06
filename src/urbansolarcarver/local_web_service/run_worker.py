@@ -176,8 +176,6 @@ class RunWorker:
         with self._store.project_lock(name), self._start_lock:
             if self._active is not None:
                 raise RunConflict(self._active.state.project)
-            self._store.migrate_to_criteria(name)
-            self._store.rebuild_joined_test_surfaces_without_normals(name)
             self._store.refresh_changed_inputs(name)      # a file changed in the folder is run with, and dates what was built on the old one
             stored_files.refuse_missing_files(self._store, name, "run")
             settings = run_settings(self._store, name)
@@ -212,7 +210,6 @@ class RunWorker:
         with self._store.project_lock(name), self._start_lock:
             if self._active is not None:
                 raise RunConflict(self._active.state.project)
-            self._store.migrate_to_criteria(name)      # a project of an earlier version becomes a chain first, as before a pipeline run
             self._store.refresh_changed_inputs(name)
             stored_files.refuse_missing_files(self._store, name, "simulation")
             requests, refusals = [], []

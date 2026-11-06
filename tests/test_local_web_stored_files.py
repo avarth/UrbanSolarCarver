@@ -9,7 +9,6 @@ from _epw import BUNDLED_EPW
 from local_web_test_support import (
     ALL_CURRENT, FakeEngine, box_bytes, make_worker, run_and_wait, write_fake_chain_run,
 )
-from urbansolarcarver.io import load_mesh, save_mesh
 from urbansolarcarver.local_web_service import stored_files, test_surfaces
 from urbansolarcarver.local_web_service.projects import ProjectError, ProjectStore
 from urbansolarcarver.local_web_service.stage_records import criterion_status, stage_status, stage_status_reply
@@ -234,25 +233,6 @@ def test_an_example_project_copied_with_new_file_times_is_not_noticed(tmp_path, 
     store.refresh_changed_inputs("q")
     assert stored_files.input_changes(store, "q") == []
     assert stage_status(store, "q") == ALL_CURRENT
-
-
-def test_a_context_joined_with_turned_faces_by_an_earlier_version_is_not_a_change(chain_of_two):
-    store = chain_of_two
-    town = trimesh.creation.box(extents=(10, 10, 10))
-    town.apply_translation([40, 0, 5])
-    town.faces[0] = town.faces[0][::-1]         # one face wound the other way, as exports often have
-    store.add_input("p", "context", "town.ply", town.export(file_type="ply"))
-    write_fake_chain_run(store, "p", ["1", "2"])
-    folder = store.open("p")
-    earlier = load_mesh(str(folder / "inputs" / "context" / "town.ply"), fix_normals=True)    # an earlier version joined it so
-    earlier.merge_vertices()
-    save_mesh(earlier, str(folder / "inputs" / "joined" / "context.ply"))
-    with store.project_lock("p"):
-        project_json = store.read_project_json("p")
-        project_json.stored_files = {}
-        store.write_project_json("p", project_json)
-    store.refresh_changed_inputs("p")
-    assert stage_status(store, "p") == ALL_CURRENT and _changes(store) == []
 
 
 def test_a_file_being_copied_or_locked_is_tried_again(chain_of_two, monkeypatch):

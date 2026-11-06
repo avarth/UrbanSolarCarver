@@ -256,7 +256,7 @@ def study_values(folder: Path) -> bytes | None:
 
 def study_sky_patches(folder: Path) -> SkyDome | None:
     """The 145 Tregenza patches with the value each carried in the result in *folder* (its check_sky.json), drawn as Design's
-    sky dome is; None for a sun hours study, or for a result written before the patch values were kept."""
+    sky dome is; None for a sun hours study."""
     try:
         weights = json.loads((folder / SKY_FILE).read_text(encoding="utf-8"))["weights"]
     except (OSError, ValueError, KeyError, TypeError):

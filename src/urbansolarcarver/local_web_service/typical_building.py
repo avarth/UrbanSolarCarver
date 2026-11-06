@@ -583,9 +583,8 @@ def needs_calculation(store, name: str, key: str) -> bool:
 
 
 def _sun_up(meta: dict) -> np.ndarray:
-    """The meta's hours with the sun up as a bool array; every hour for a file written before the meta held them."""
-    sun_up = np.asarray(meta.get("sun_up", ()), dtype=bool)
-    return sun_up if sun_up.shape == (HOURS,) else np.ones(HOURS, dtype=bool)
+    """The meta's hours with the sun up as a bool array."""
+    return np.asarray(meta["sun_up"], dtype=bool)
 
 
 # The free-running room's numbers that the weights file's meta holds and the reply passes on.

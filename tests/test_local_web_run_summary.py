@@ -203,13 +203,8 @@ def test_summary_massing_needs_its_files_and_its_manifest(project_with_inputs):
 
 def test_summary_massing_names_the_mesh_file_in_the_chosen_format_its_manifest_names(project_with_inputs):
     store, name = project_with_inputs
-    run = write_fake_finished_run(store.open(name))
+    write_fake_finished_run(store.open(name))
     assert build_run_summary(store, name).massing.export_mesh_file == "plates.stl"
-    manifest_path = run / "massing" / "manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    del manifest["export_mesh_path"]                # a massing run from before massing wrote the chosen format
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-    assert build_run_summary(store, name).massing.export_mesh_file == "plates.obj"
 
 
 def test_sky_dome_has_145_patches_or_is_none_for_a_run_without_them(project_with_inputs):

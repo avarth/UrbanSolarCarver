@@ -127,18 +127,6 @@ def write_joined_ply(meshes: list[trimesh.Trimesh], path: Path) -> None:
         ply_file.write(face_rows.tobytes())
 
 
-def has_vertex_normals(path: Path) -> bool:
-    """Whether the header of a PLY file declares the vertex property nx (a PLY header is ASCII in every format)."""
-    with open(path, "rb") as ply_file:
-        for line in ply_file:
-            words = line.split()
-            if words == [b"end_header"]:
-                return False
-            if words[:1] == [b"property"] and words[-1:] == [b"nx"]:
-                return True
-    return False
-
-
 def load_stored_meshes(project_folder: Path, file_names: list[str]) -> dict[str, trimesh.Trimesh]:
     """The meshes of stored files by file name, in name order, or ProjectError(422) when one cannot be read."""
     meshes = {}

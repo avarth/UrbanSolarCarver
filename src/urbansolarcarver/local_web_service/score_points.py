@@ -162,7 +162,7 @@ def _thresholding_arrays(run_folder: Path, criterion_id: str,
         return None, None       # thresholding ran on an earlier preprocessing run
     kept_mask = _load_array(resolve_stored_path(thresholding_folder, thresholding_manifest.mask_path)).ravel()
     compared_path = thresholding_manifest.scores_compared_with_cutoff_path
-    compared_scores = None if compared_path is None else _load_array(resolve_stored_path(thresholding_folder, compared_path)).ravel()
+    compared_scores = _load_array(resolve_stored_path(thresholding_folder, compared_path)).ravel()
     return kept_mask, compared_scores
 
 

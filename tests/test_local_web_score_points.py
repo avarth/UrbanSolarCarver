@@ -60,29 +60,22 @@ def test_without_preprocessing_there_is_no_data(project_with_inputs):
 
 def test_compared_scores_follow_the_same_indices(project_with_inputs):
     store, name = project_with_inputs
-    write_fake_run(store.open(name), with_compared_scores=True)   # compared = raw scores + 100
+    write_fake_run(store.open(name))   # compared = raw scores + 100
     header, _, scores, _, compared = decode_score_points(build_score_points(store, name, cap=5))
     assert header["has_compared_scores"] is True and np.allclose(compared, scores + 100)
 
 
 def test_the_highest_compared_score_is_that_of_all_occupied_voxels_not_only_the_points(project_with_inputs):
     store, name = project_with_inputs
-    write_fake_run(store.open(name), with_compared_scores=True)   # compared = raw scores + 100
+    write_fake_run(store.open(name))   # compared = raw scores + 100
     header, _, _, _, compared = decode_score_points(build_score_points(store, name, cap=5))
     assert header["compared_score_max"] == header["score_max"] + 100 == 117.0
     assert compared.max() < 117.0                               # the thinned points miss the highest voxel
 
 
-def test_without_compared_scores_there_is_no_highest_compared_score(project_with_inputs):
-    store, name = project_with_inputs
-    write_fake_run(store.open(name))
-    header = decode_score_points(build_score_points(store, name))[0]
-    assert header["has_compared_scores"] is False and header["compared_score_max"] is None
-
-
 def test_a_thresholding_run_that_was_built_on_an_earlier_preprocessing_run_is_left_out(project_with_inputs):
     store, name = project_with_inputs
-    write_fake_run(store.open(name), with_compared_scores=True, thresholding_upstream_run_id="an-earlier-run")
+    write_fake_run(store.open(name), thresholding_upstream_run_id="an-earlier-run")
     header, _, _, kept, compared = decode_score_points(build_score_points(store, name))
     assert header["has_mask"] is False and header["has_compared_scores"] is False and kept is None and compared is None
     assert header["compared_score_max"] is None

@@ -292,19 +292,13 @@ def _run_massing(settings: MassingSettings, options: RunOptions, upstream: Thres
 
     layers = np.flatnonzero(occ.any(axis=(0, 1)))
     lowest_layer_bottom = origin[2] + layers.min() * vs
-    highest_layer_top = origin[2] + (layers.max() + 1) * vs
     ground = _ground_cells(chain, occ.shape)
     if ground is None:      # with a terrain a part starts higher where the ground does, which the floors follow
         _warn_raised_parts(polygons, cells_ij, xy, occ, lowest_layer_bottom, origin[2], vs)
     # Floors stand between the maximum volume's lowest and highest points,
     # which the occupied voxel layers can overrun by up to one voxel at each
-    # end.  A preprocessing run from before the manifest recorded them gives
-    # the bottom of the lowest and the top of the highest occupied layer.
+    # end.
     z0, z_top = chain.pre.manifest.max_volume_lowest_z, chain.pre.manifest.max_volume_highest_z
-    if z0 is None:
-        z0 = lowest_layer_bottom
-    if z_top is None:
-        z_top = highest_layer_top
     levels = mg.floor_levels(z0, z_top, settings.ground_floor_height, settings.floor_height)
     counted_layers = mg.layers_centred_within(origin[2], vs, occ.shape[2], z0, z_top)
     floors = mg.build_floors(cells_ij, bay, occ, kept, origin[2], vs, levels,

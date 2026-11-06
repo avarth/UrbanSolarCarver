@@ -101,6 +101,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **Support for projects of development builds before 0.10.0**: the migration to a chain of one criterion, the rebuild of joined test
+  surface files without normals, and the checks for manifests without `grid_step`, `score_unit`, the maximum volume heights,
+  `scores_compared_with_cutoff_path` or `export_mesh_path`, which are now required. Such a project no longer opens as a chain or runs from its old stages.
 - The `criterion` query of `GET /projects/{name}`: the reply lists every criterion with its settings.
 - **The service route `POST /projects/{name}/carve-further`** and the code behind it (`carve_further.py`,
   `ProjectStore.replace_max_volume_with_envelope`). The app dropped Carve further on 2026-10-26 for chained criteria, and

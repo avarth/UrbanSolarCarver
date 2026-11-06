@@ -92,7 +92,7 @@ class TestStageBoundaryValidation:
         pre_dir.mkdir(parents=True, exist_ok=True)
         scores_path = pre_dir / "scores.npy"
         np.save(scores_path, scores, allow_pickle=False)
-        pm = PreprocessingManifest(
+        pm = PreprocessingManifest(grid_step=1.0, score_unit="m²", max_volume_lowest_z=0.0, max_volume_highest_z=10.0,
             run_id="t", scores_path=str(scores_path), scores_kind="weighted_sum",
             shape=manifest_shape, origin=(0.0, 0.0, 0.0), voxel_size=1.0,
             mode="irradiance", voxel_grid_path="voxel_grid.npy", sample_point_count=1,
@@ -266,7 +266,7 @@ class TestDefaultThresholdReporting:
         vg_path = pre_dir / "voxel_grid.npy"
         np.save(vg_path, np.ones(scores.shape, dtype=bool), allow_pickle=False)
         from urbansolarcarver.pydantic_schemas import PreprocessingManifest, schema_to_json
-        pm = PreprocessingManifest(
+        pm = PreprocessingManifest(grid_step=1.0, score_unit="m²", max_volume_lowest_z=0.0, max_volume_highest_z=10.0,
             run_id="test1234",
             scores_path=str(scores_path),
             scores_kind="weighted_sum",
@@ -377,7 +377,7 @@ class TestScoreSmoothing:
         vg_path = pre_dir / "voxel_grid.npy"
         np.save(vg_path, np.ones(scores.shape, dtype=bool), allow_pickle=False)
         from urbansolarcarver.pydantic_schemas import PreprocessingManifest, schema_to_json
-        pm = PreprocessingManifest(
+        pm = PreprocessingManifest(grid_step=1.0, score_unit="m²", max_volume_lowest_z=0.0, max_volume_highest_z=10.0,
             run_id="test1234",
             scores_path=str(scores_path),
             scores_kind=kind,

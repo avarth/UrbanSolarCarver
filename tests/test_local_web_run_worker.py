@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 
 from local_web_test_support import (
-    ALL_CURRENT, ALL_MISSING, FakeEngine, WaitsForCancel, box_bytes, change_settings, has_vertex_normals, make_worker, run_and_wait,
-    run_id_in, wait_until_finished, write_joined_test_surfaces_without_normals,
+    ALL_CURRENT, ALL_MISSING, FakeEngine, WaitsForCancel, box_bytes, change_settings, make_worker, run_and_wait,
+    run_id_in, wait_until_finished,
 )
 from urbansolarcarver.errors import ConfigError, ConfigFieldError, InputError, StageChainError
 from urbansolarcarver.local_web_service import run_worker as run_worker_module
@@ -38,15 +38,6 @@ def test_interrupted_run_makes_the_next_run_complete(project_with_inputs):
     assert blocked_worker.cancel(reply.run_id)
     wait_until_finished(blocked_worker, reply.run_id)
     assert choose_stages(store, name, ["thresholding"]).stages == ["preprocessing", "thresholding"]
-
-
-def test_a_run_rebuilds_a_joined_test_surface_file_written_without_normals_and_runs_the_analysis_again(project_with_inputs):
-    store, name = project_with_inputs
-    worker = make_worker(store)
-    run_and_wait(worker, name, ["thresholding"])
-    joined_path = write_joined_test_surfaces_without_normals(store, name)
-    assert worker.start(name, ["thresholding"]).stages == ["preprocessing", "thresholding"]
-    assert has_vertex_normals(joined_path)
 
 
 def test_second_start_while_running_is_a_conflict(project_with_inputs):
