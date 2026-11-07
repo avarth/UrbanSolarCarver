@@ -2,7 +2,6 @@
 import { messages } from "../messages";
 import { formattedNumber, withUnit } from "../format_numbers";
 import { cividis, colourToken, keptScoreRange, storeyColour, sunRamp } from "../viewer/colour_scales";
-import { shadeColour, type ShadePalette } from "../viewer/sun_study";
 import type { ViewportTheme } from "../viewer/scene";
 import "./overlays.css";
 
@@ -12,8 +11,6 @@ export interface LegendContent {
   sunPath?: string;                               // sunPathLegend(sunPath)
   buildingMassing?: { storeyCount: number };
   carvedByCriterion?: { criteria: { name: string; colour: string }[]; thinningStep: number };     // one swatch and name per criterion that was on
-  /** Simulate's hours in shade: from light (no shade) to dark (the whole range in shade), in viridis or grey. */
-  shadeHours?: { title: string; maxHours: number; palette: ShadePalette };
 }
 
 interface LegendProps {
@@ -63,8 +60,8 @@ function KeptVoxelsRange({ cutoff, unit }: { cutoff: number; unit?: string }) {
 }
 
 export function Legend({ content, theme }: LegendProps) {
-  const { keptVoxels, skyDome, sunPath, buildingMassing, carvedByCriterion, shadeHours } = content;
-  if (!keptVoxels && !skyDome && !sunPath && !buildingMassing && !carvedByCriterion && !shadeHours) return null;
+  const { keptVoxels, skyDome, sunPath, buildingMassing, carvedByCriterion } = content;
+  if (!keptVoxels && !skyDome && !sunPath && !buildingMassing && !carvedByCriterion) return null;
   return (
     <div className="viewer-overlay viewer-legend" data-viewport-theme={theme} role="group" aria-label={messages.legend}>
       {keptVoxels && (
@@ -102,12 +99,6 @@ export function Legend({ content, theme }: LegendProps) {
         <section>
           <h3>{skyDome.title}</h3>
           <Ramp colourAt={(t) => sunRamp(t, theme)} low={formattedNumber(skyDome.lowestWeight)} high={formattedNumber(skyDome.highestWeight)} />
-        </section>
-      )}
-      {shadeHours && (
-        <section>
-          <h3>{shadeHours.title}</h3>
-          <Ramp colourAt={(t) => shadeColour(shadeHours.palette, t)} low={withUnit(formattedNumber(0), "h")} high={withUnit(formattedNumber(shadeHours.maxHours), "h")} />
         </section>
       )}
       {sunPath && (

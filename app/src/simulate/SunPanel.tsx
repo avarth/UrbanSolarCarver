@@ -1,18 +1,14 @@
-// The Sun panel of Simulate, under the studies panel and collapsible as it is (user, 2026-10-28). Open, it shows the year's sun path
-// on the view, collapsed nothing of the sun tool; then one of two views, never both, chosen on a switch, each with its own controls:
-// - Shadows at a time: a moment, one day on a year strip (with the equinox and the solstices as presets) and one time on a day strip,
-//   each strip with a single handle, and where the sun stands then;
-// - Hours in shade: a period, the analysis period's control (a date range and an hour range, with its presets), and the colours of
-//   the count, viridis or grey.
-// and at the end the clock the times are read in. The strips are the criteria panel's (ScaleStrip, AnalysisPeriod). Without a weather
-// file the panel says one is needed. The 3D view draws what it sets (use_sun_study, the sun_study layer, sun_shading).
+// The panel of the sun tool, under the view's toolbar in every workspace (user, 2026-11-07), opened and closed by the toolbar's sun
+// button. Open, the view shows the year's sun path; a switch chooses Sun path only or Shadows at a time: a moment, one day on a year
+// strip (with the equinoxes and the solstices as presets) and one time on a day strip, each strip with a single handle, and where the
+// sun stands then; and at the end the clock the times are read in. The strips are the criteria panel's (ScaleStrip). Without a
+// weather file the panel says one is needed. The 3D view draws what it sets (use_sun_study, the sun_study layer, sun_shading). The
+// hours of sun over a period are a Sun hours study in Simulate.
 import { useId, useRef, useState } from "react";
 import { messages } from "../messages";
 import { formattedNumber } from "../format_numbers";
-import { dateHandleValueAfterKey, dayOfYear, dayOfYearAt, DAYS_IN_YEAR, daysInMonth, monthDayOf, type AnalysisPeriodField } from "../settings_form/analysis_period";
-import { AnalysisPeriod } from "../settings_form/widgets/AnalysisPeriod";
+import { dateHandleValueAfterKey, dayOfYear, dayOfYearAt, DAYS_IN_YEAR, daysInMonth, monthDayOf } from "../settings_form/analysis_period";
 import { ScaleStrip, type ScaleStripCell } from "../settings_form/widgets/ScaleStrip";
-import { SHADE_PALETTES } from "../viewer/sun_study";
 import { clockText, MINUTES_PER_DAY, SUN_VIEWS, TIME_BASES, TIME_STEP_MINUTES, type MonthDay, type SunStudyHook } from "./use_sun_study";
 import "../settings_form/settings_form.css";
 import "./simulate.css";
@@ -22,15 +18,6 @@ const MONTH_CELLS: ScaleStripCell[] = messages.monthInitials.map((initial, index
 const HOUR_CELLS: ScaleStripCell[] = Array.from({ length: 24 }, (_, hour) => ({ label: hour % 6 === 0 ? String(hour) : "", length: 1 }));
 const LAST_MINUTE = MINUTES_PER_DAY - TIME_STEP_MINUTES;
 const holdTo = (value: number, lowest: number, highest: number) => Math.min(Math.max(value, lowest), highest);
-
-function SunIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-      <circle cx="9" cy="9" r="3.2" />
-      <path d="M9 1.5v2M9 14.5v2M1.5 9h2M14.5 9h2M3.7 3.7l1.4 1.4M12.9 12.9l1.4 1.4M3.7 14.3l1.4-1.4M12.9 5.1l1.4-1.4" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 /** Where a key moves the time: arrows 5 minutes, Page Up and Page Down an hour, Home and End the day's ends. */
 export function minuteAfterKey(minute: number, key: string): number | null {
@@ -83,25 +70,20 @@ function SingleStrip({ name, label, value, position, bubble, spoken, cells, valu
 }
 
 export function SunPanel({ sunStudy }: { sunStudy: SunStudyHook }) {
-  const { open } = sunStudy.settings;
-  const bodyId = useId();
   const titleId = useId();
-  const periodLabelId = useId();
-  const periodInputId = useId();
   const { settings, change, sunNow } = sunStudy;
   const day = dayOfYear(settings.date.month, settings.date.day);
   return (
-    <section className={`sun-panel ${open ? "sun-panel-open" : "sun-panel-collapsed"}`} aria-labelledby={open ? titleId : undefined}
-             aria-label={open ? undefined : messages.sunToolTitle}>
+    <section className="viewer-overlay sun-panel" aria-labelledby={titleId}>
       <div className="sun-panel-header">
-        <button type="button" className="sun-panel-toggle" aria-label={messages.sunToolTitle} aria-expanded={open}
-                aria-controls={open ? bodyId : undefined} title={messages.sunToolTitle} onClick={() => sunStudy.change({ open: !open })}>
-          <SunIcon />
+        <h2 id={titleId} className="sun-panel-title">{messages.sunToolTitle}</h2>
+        <button type="button" className="sun-panel-close" aria-label={messages.sunToolClose} title={messages.sunToolClose}
+                onClick={() => change({ open: false })}>
+          <span aria-hidden="true">×</span>
         </button>
-        {open && <h2 id={titleId} className="sun-panel-title">{messages.sunToolTitle}</h2>}
       </div>
-      {open && (
-        <div id={bodyId} className="sun-panel-body">
+      {(
+        <div className="sun-panel-body">
           {!sunStudy.available ? <p className="sun-panel-note">{messages.sunToolNoWeatherFile}</p> : (
             <>
               <div className="segmented-switch sun-panel-views" role="group" aria-label={messages.sunToolShow}>
@@ -109,7 +91,7 @@ export function SunPanel({ sunStudy }: { sunStudy: SunStudyHook }) {
                   <button key={view} type="button" aria-pressed={settings.view === view} onClick={() => change({ view })}>{messages.sunToolViews[view]}</button>
                 ))}
               </div>
-              {settings.view !== "shade" ? (
+              {(
                 <div className="sun-panel-moment" role="group" aria-label={messages.sunToolMoment}>
                   <span className="sun-panel-label">{messages.sunToolDay}</span>
                   <SingleStrip name="day" label={messages.sunToolDay} value={day} position={(value) => (value - 0.5) / DAYS_IN_YEAR}
@@ -133,23 +115,6 @@ export function SunPanel({ sunStudy }: { sunStudy: SunStudyHook }) {
                     {sunNow === null ? messages.sunToolBelowHorizon
                       : messages.sunToolSunAt(formattedNumber(Math.round(sunNow.altitude)), formattedNumber(Math.round(sunNow.azimuth)))}
                   </p>
-                </div>
-              ) : (
-                <div className="sun-panel-period">
-                  <span id={periodLabelId} className="sun-panel-label">{messages.sunToolPeriod}</span>
-                  <AnalysisPeriod values={settings.period} inputId={periodInputId} labelId={periodLabelId} invalid={false} describedBy={undefined} disabled={false}
-                                  onChange={(changes) => change({ period: { ...settings.period, ...(changes as Partial<Record<AnalysisPeriodField, number>>) } })} />
-                  <div className="sun-panel-row">
-                    <span className="sun-panel-label">{messages.sunToolColours}</span>
-                    <div className="segmented-switch" role="group" aria-label={messages.sunToolColours}>
-                      {SHADE_PALETTES.map((palette) => (
-                        <button key={palette} type="button" aria-pressed={settings.palette === palette} onClick={() => change({ palette })}>
-                          {messages.shadePaletteNames[palette]}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <p className="sun-panel-note">{messages.sunToolShadeNote}</p>
                 </div>
               )}
               <label className="sun-panel-row sun-panel-clock">

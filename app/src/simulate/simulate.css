@@ -25,14 +25,14 @@
   border-radius: var(--radius-large);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-shadow) 12%, transparent);
 }
-.studies-panel-collapsed, .sun-panel-collapsed { width: auto; padding: var(--space-unit); }
+.studies-panel-collapsed { width: auto; padding: var(--space-unit); }
 
 .studies-panel-header, .sun-panel-header { display: flex; align-items: center; gap: calc(var(--space-unit) * 2); }
 .studies-panel-title, .sun-panel-title { margin: 0; font-size: var(--text-body); font-weight: 600; }
 .studies-panel-shown { display: inline-flex; align-items: center; gap: var(--space-unit); margin-left: auto; color: var(--colour-muted);
   font-size: var(--text-secondary); }
 
-.studies-panel-toggle, .sun-panel-toggle,
+.studies-panel-toggle,
 .study-row-settings,
 .study-popover-close {
   display: inline-grid;
@@ -47,7 +47,7 @@
   color: var(--colour-ink);
   cursor: pointer;
 }
-.studies-panel-toggle:hover, .sun-panel-toggle:hover, .study-row-settings:hover, .study-popover-close:hover,
+.studies-panel-toggle:hover, .study-row-settings:hover, .study-popover-close:hover,
 .study-row-settings[aria-expanded="true"] { background: var(--colour-accent-soft); }
 
 .studies-panel-body { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); margin-top: calc(var(--space-unit) * 2); }
@@ -116,9 +116,8 @@
 .study-files-title { font-weight: 600; }
 /* A study's surfaces: what it accounts for (one of four, as one bar), switches for what it simulates, then its additional files. */
 .study-subtitle { margin: calc(var(--space-unit) * 3) 0 var(--space-unit); color: var(--colour-muted); font-size: var(--text-secondary); }
-.study-account-for { display: flex; width: 100%; }
-.study-account-for button { flex: 1; padding-left: 0; padding-right: 0; }
-.study-account-for button[aria-disabled="true"] { color: var(--colour-muted); cursor: not-allowed; }
+.study-note { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
+.study-file-switches .study-switch-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .study-switches { display: flex; flex-direction: column; gap: var(--space-unit); }
 .study-field.study-switch-row { flex-direction: row; align-items: center; justify-content: space-between; gap: calc(var(--space-unit) * 2); cursor: pointer; }
 .study-switch-row .setting-switch { flex: none; margin: 0; }
@@ -137,6 +136,8 @@
 .result-card h3 { margin: 0 0 4px; font-size: var(--text-secondary); font-weight: 600; }
 .result-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
 .result-card-title { color: var(--colour-muted); font-size: var(--text-secondary); }
+.result-card-note { margin: 0 0 6px; color: var(--colour-muted); font-size: var(--text-secondary); }
+.study-quick { margin: calc(var(--space-unit) * 2) 0; }
 .result-card-toggle { width: 22px; height: 22px; padding: 0; border: 0; background: none; color: var(--colour-ink); cursor: pointer; font: inherit; }
 .result-card-toggle:focus-visible { outline: 2px solid var(--colour-accent); }
 .result-card-minimised { width: auto; padding: 4px 8px; }
@@ -175,5 +176,11 @@
 .sun-panel-clock { margin-top: var(--space-unit); }
 .sun-panel-views { align-self: flex-start; }
 .sun-panel-views button { padding: 2px var(--space-unit); font-size: var(--text-secondary); }
-.sun-panel-moment, .sun-panel-period { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-unit); }
+.sun-panel-moment { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-unit); }
 .sun-panel-note { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
+
+/* The sun tool's panel under the view's toolbar, top right, in every workspace. */
+.viewer-sun-tool { position: absolute; top: 60px; right: 12px; z-index: 5; width: 300px; max-height: calc(100% - 140px); overflow: auto; }
+.viewer-sun-tool .sun-panel { position: static; width: auto; }
+.sun-panel-header { display: flex; align-items: center; justify-content: space-between; }
+.sun-panel-close { width: 24px; height: 24px; padding: 0; border: 0; background: none; color: var(--colour-ink); cursor: pointer; font-size: 18px; }

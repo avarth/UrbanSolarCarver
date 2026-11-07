@@ -11,7 +11,6 @@ import { TARGET_SAVE_DELAY_MILLISECONDS } from "../simulate/use_study_view";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
 import { studyPaletteColour } from "../viewer/study_palettes";
 import { press } from "../viewer_overlays/render_for_test";
-import { cardLine } from "./chain_service_for_test";
 import {
   CARVING, ENVELOPE, NOTHING_RUN, FakeService, buttonIn, container, endWorkspaceTest, openStep, openWorkspace, pinnedBar, pressRunAnalysis, project, reasonOf,
   settle, startWorkspaceTest, stepRow, switchMode, reportedServiceProblems,
@@ -127,7 +126,7 @@ test("Like Winter sun on facades adds a study with the criterion's files and sel
   expect(studyLine("Sun hours, 21 Dec")).toBe("Not run yet");
   // Its settings open beside it, with the criterion's files.
   expect(studyPopover()).not.toBeNull();
-  expect([...studyPopover()!.querySelectorAll(".input-file-name")].map((name) => name.textContent)).toEqual(["facades.obj"]);
+  expect(fileSwitches()).toEqual([{ label: "facades.obj", checked: true, disabled: false }]);
 });
 
 test("Run posts /simulate, shows progress, and refreshes the studies when it finishes", async () => {
@@ -197,10 +196,10 @@ test("a study's settings take the focus, use a stored file, and Escape gives the
   expect(settingsButton.getAttribute("aria-controls")).toBe(studyPopover()!.id);
   expect(document.activeElement).toBe(studyPopover()!.querySelector('input[type="text"]'));
   expect(selectedStudyName()).toBe("Sky view factor");
-  await act(async () => buttonIn(studyPopover()!, "Use").click());
+  await act(async () => fileSwitch("facades.obj").click());
   await settle();
   expect(simulateService.requests).toContain("PUT /studies/1/test-surfaces/facades.obj");
-  expect([...studyPopover()!.querySelectorAll(".input-file-name")].map((name) => name.textContent)).toEqual(["facades.obj"]);
+  expect(fileSwitches()[0].checked).toBe(true);
   expect(studyLine("Sky view factor")).toBe("Not run yet");
 
   press(studyPopover()!, "Escape");
@@ -209,15 +208,27 @@ test("a study's settings take the focus, use a stored file, and Escape gives the
   expect(settingsButton.getAttribute("aria-expanded")).toBe("false");
 });
 
-/** The switches of what a study simulates: its geometry first, then the project's surfaces. */
-const simulateSwitches = () => [...studyPopover()!.querySelectorAll<HTMLLabelElement>(".study-switches label")]
+/** Switch rows as label, checked and disabled. */
+const switchesIn = (selector: string) => [...studyPopover()!.querySelectorAll<HTMLLabelElement>(`${selector} label`)]
   .map((label) => ({ label: label.textContent, checked: label.querySelector("input")!.checked, disabled: label.querySelector("input")!.disabled }));
-const surfacesFromBoxes = () => simulateSwitches().slice(1);
-const simulateSwitch = (label: string) => [...studyPopover()!.querySelectorAll<HTMLLabelElement>(".study-switches label")]
+const switchIn = (selector: string, label: string) => [...studyPopover()!.querySelectorAll<HTMLLabelElement>(`${selector} label`)]
   .find((each) => each.textContent === label)!.querySelector("input")!;
+/** The switches of what a study simulates: its geometry first, then the project's surfaces; and those of the test surface files. */
+const simulateSwitches = () => switchesIn(".study-switches:not(.study-file-switches)");
+const surfacesFromBoxes = () => simulateSwitches().slice(1);
+const simulateSwitch = (label: string) => switchIn(".study-switches:not(.study-file-switches)", label);
 const surfacesFromBox = simulateSwitch;
-const accountFor = (label: string) => [...studyPopover()!.querySelectorAll<HTMLButtonElement>(".study-account-for button")]
-  .find((button) => button.textContent === label)!;
+const fileSwitches = () => switchesIn(".study-file-switches");
+const fileSwitch = (label: string) => switchIn(".study-file-switches", label);
+/** The Account for select and its options as shown. */
+const accountForSelect = () => studyPopover()!.querySelector<HTMLSelectElement>("select.study-account-for")!;
+const chooseAccountFor = async (value: string) => {
+  await act(async () => {
+    accountForSelect().value = value;
+    accountForSelect().dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await settle();
+};
 
 test("the study surfaces offer the surroundings, greyed without their files, and the ground without a terrain", async () => {
   await openSimulate(undefined, (service) => { service.studies = [study("1", "sky_view", ["facades.obj"], "current")]; });
@@ -241,26 +252,19 @@ test("a study accounts for one geometry, waits for one Carve has not built, and 
     service.studies = [study("1", "sky_view", ["facades.obj"], "current")];
   }, { exporting: "current" });
   await openStudySettings("Sky view factor");
-  expect([...studyPopover()!.querySelectorAll(".study-account-for button")].map((button) => button.textContent))
-    .toEqual(["Nothing", "Max volume", "Envelope", "Massing"]);
-  expect(accountFor("Max volume").getAttribute("aria-pressed")).toBe("true");       // until another is chosen
-  expect(accountFor("Massing").getAttribute("aria-disabled")).toBe("true");
-  expect(accountFor("Massing").title).toBe("Build the massing in Carve");
-  await act(async () => accountFor("Massing").click());
-  await settle();
-  expect(simulateService.studyPatches).toEqual([]);                                  // a geometry not built is not chosen
+  expect([...accountForSelect().options].map((option) => [option.textContent, option.disabled]))
+    .toEqual([["Nothing", false], ["Max volume", false], ["Envelope", false], ["Massing (build the massing in Carve)", true]]);
+  expect(accountForSelect().value).toBe("max_volume");                               // until another is chosen
   expect(simulateSwitches()[0]).toEqual({ label: "Max volume", checked: false, disabled: false });
-  await act(async () => accountFor("Envelope").click());
-  await settle();
+  await chooseAccountFor("envelope");
   expect(simulateService.studyPatches).toEqual([{ id: "1", body: { values: { geometry: "envelope" } } }]);
   expect(simulateSwitches()[0].label).toBe("Envelope");
   await act(async () => simulateSwitch("Envelope").click());
   await settle();
   expect(simulateService.studyPatches.at(-1)).toEqual({ id: "1", body: { values: { sample_geometry: true } } });
-  await act(async () => accountFor("Nothing").click());
-  await settle();
+  await chooseAccountFor("none");
   expect(simulateSwitches()[0]).toEqual({ label: "Nothing stands on the plot", checked: false, disabled: true });
-  expect(studyPopover()!.querySelector(".study-subtitle:last-of-type")!.textContent).toBe("Additional surfaces to simulate");
+  expect([...studyPopover()!.querySelectorAll(".study-subtitle")].map((title) => title.textContent)).toEqual(["Simulate", "Test surface files"]);
 });
 
 test("a study's spacing follows Carve until typed, and Follow Carve takes it back", async () => {
@@ -280,6 +284,24 @@ test("a study's spacing follows Carve until typed, and Follow Carve takes it bac
   await act(async () => studyPopover()!.querySelector<HTMLButtonElement>(".study-spacing-reset")!.click());
   await settle();
   expect(simulateService.studyPatches.at(-1)).toEqual({ id: "1", body: { values: { sample_spacing: null } } });
+});
+
+test("a sun hours study has a Quick count switch, and a quick result says on how many days the sun was counted", async () => {
+  await openSimulate(undefined, (service) => {
+    service.studies = [study("1", "sun_hours", ["facades.obj"], "current"), study("2", "sky_view", ["facades.obj"], "current")];
+    service.valuesOf = { 1: studyValuesOf({ open: [4, 4], max_volume: [1, 2] }, "h", 0, undefined, 22) };
+  });
+  await selectStudy("Sun hours, 21 Dec");
+  expect(container().querySelector(".result-card-note")!.textContent).toBe("Quick count: the sun on every 22nd day");
+  await openStudySettings("Sun hours, 21 Dec");
+  const quick = studyPopover()!.querySelector<HTMLInputElement>(".study-quick input")!;
+  expect(quick.checked).toBe(false);
+  await act(async () => quick.click());
+  await settle();
+  expect(simulateService.studyPatches.at(-1)).toEqual({ id: "1", body: { values: { quick: true } } });
+  press(studyPopover()!, "Escape");
+  await openStudySettings("Sky view factor");
+  expect(studyPopover()!.querySelector(".study-quick")).toBeNull();          // sun hours only
 });
 
 test("Duplicate study adds a copy, selects it and opens its settings", async () => {
@@ -312,57 +334,19 @@ test("with surroundings and a terrain, the study can sample both, and its line n
   expect([...studyPopover()!.querySelectorAll(".study-more-settings .study-field")].map((field) => field.className)).toEqual(["study-field study-spacing"]);
 });
 
-/** Chooses the files in the popover's file input, as the user does with the add button. */
-async function chooseStudyFiles(...files: File[]) {
-  const picker = studyPopover()!.querySelector<HTMLInputElement>('input[type="file"]')!;
-  Object.defineProperty(picker, "files", { value: files, configurable: true });
-  act(() => picker.dispatchEvent(new Event("change", { bubbles: true })));
-  await settle();
-}
-const popoverFiles = () => [...studyPopover()!.querySelectorAll(".input-file-name")].map((name) => name.textContent);
-
-test("the popover's files box takes a new file and lists it on the study", async () => {
+test("the study's files are switches over the project's test surface files: on uses a file, off takes it out", async () => {
   await openSimulate(undefined, (service) => { service.studies = [study("1", "sky_view", [], "refused", "Add study surfaces")]; });
   await openStudySettings("Sky view factor");
-  expect(buttonIn(studyPopover()!, "Add study surfaces")).toBeDefined();
-  await chooseStudyFiles(new File(["v 0 0 0"], "roof.obj"));
-  expect(simulateService.requests).toContain("POST /studies/1/test-surfaces");
-  expect(simulateService.requests.some((request) => request.startsWith("POST /inputs/") || request.startsWith("POST /criteria/"))).toBe(false);
-  expect(popoverFiles()).toEqual(["roof.obj"]);
-  expect(studyLine("Sky view factor")).toBe("Not run yet");
-  expect(simulateService.requests).toContain("GET /inputs/test_surfaces");           // the stored files are asked for again
-  expect(studyPopover()!.querySelector(".input-box-problem")).toBeNull();
-});
-
-test("a new file with a stored name replaces it: the criteria and studies that list it follow the new content", async () => {
-  // Study 2 (another metric, so its row has its own name) and criterion 1 (FACADES) list facades.obj and are current.
-  await openSimulate(undefined, (service) => {
-    service.studies = [study("1", "sky_view", [], "refused", "Add study surfaces"), study("2", "sky_component", ["facades.obj"], "current")];
-  });
-  expect(studyLine("Overcast sky component")).not.toBe("Out of date");
-  await openStudySettings("Sky view factor");
-  await chooseStudyFiles(new File(["v 0 0 1"], "facades.obj"));
-  // The file goes to study 1 under its own name, so the service replaces the stored facades.obj rather than adding another file.
-  const upload = vi.mocked(fetch).mock.calls.find(([address, init]) => String(address).endsWith("/studies/1/test-surfaces") && init?.method === "POST")!;
-  expect(((upload[1]!.body as FormData).get("file") as File).name).toBe("facades.obj");
-  expect(popoverFiles()).toEqual(["facades.obj"]);
-  expect(studyLine("Sky view factor")).toBe("Not run yet");
-  // The app reads the studies and the criteria again: what else lists the file is shown out of date.
-  expect(studyLine("Overcast sky component")).toBe("Out of date");
-  await switchMode("design");                                                         // back to the Criteria step, open as it was
-  expect(cardLine("Winter sun on facades")).toBe("Out of date");
-});
-
-test("a file the service refuses is named with its reason, and the study keeps what it had", async () => {
-  await openSimulate(undefined, (service) => {
-    service.studies = [study("1", "sky_view", [], "refused", "Add study surfaces")];
-    service.uploadRefusal = "It is not a readable mesh.";
-  });
-  await openStudySettings("Sky view factor");
-  await chooseStudyFiles(new File(["x"], "broken.obj"));
-  expect(studyPopover()!.querySelector(".input-box-problem")!.textContent).toContain("broken.obj");
-  expect(studyPopover()!.querySelector(".input-box-problem")!.textContent).toContain("It is not a readable mesh.");
-  expect(popoverFiles()).toEqual([]);
+  expect(fileSwitches()).toEqual([{ label: "facades.obj", checked: false, disabled: false }]);
+  expect(studyPopover()!.querySelector('input[type="file"]')).toBeNull();              // no upload in a study
+  await act(async () => fileSwitch("facades.obj").click());
+  await settle();
+  expect(simulateService.requests).toContain("PUT /studies/1/test-surfaces/facades.obj");
+  expect(fileSwitches()).toEqual([{ label: "facades.obj", checked: true, disabled: false }]);
+  await act(async () => fileSwitch("facades.obj").click());
+  await settle();
+  expect(simulateService.requests).toContain("DELETE /studies/1/test-surfaces/facades.obj");
+  expect(fileSwitches()[0].checked).toBe(false);
 });
 
 // Results on the view: the selected study's values with its geometry standing, the target legend and the result card.
@@ -530,9 +514,10 @@ test("dragging the target mark or pressing arrow keys moves the target and saves
   const layer = scene().layers.get("study_values")!;
   const colours = (layer as THREE.Mesh).geometry.getAttribute("color") as THREE.BufferAttribute;
   const coloursVersion = colours.version, redraws = scene().redraws;
-  // jsdom lays nothing out: the bar is 200 px wide, 0 to 8 h, 25 px an hour.
+  // jsdom lays nothing out: the bar is 200 px wide, 0 to 8 h, 25 px an hour. The press at 3 h is nearer the low end (0) than the
+  // high end (7.94, the 99th percentile), so it moves the low end.
   targetBar().getBoundingClientRect = () => ({ left: 0, width: 200, top: 0, height: 12, right: 200, bottom: 12, x: 0, y: 0, toJSON: () => ({}) });
-  pointerOnTargetBar("pointerdown", 100);
+  pointerOnTargetBar("pointerdown", 75);
   pointerOnTargetBar("pointermove", 120);
   pointerOnTargetBar("pointermove", 125);
   expect(simulateService.studyPatches).toEqual([]);         // nothing saved while dragging
@@ -568,7 +553,7 @@ test("dragging the target mark or pressing arrow keys moves the target and saves
   expect(cardLines()).toHaveLength(3);
 });
 
-test("a saved high end at or below the target counts as none: the colours run from the target to the highest value", async () => {
+test("a saved high end at or below the target counts as none: the colours run from the target to the 99th percentile", async () => {
   await openSimulate(undefined, (service) => {
     service.studies = [{ ...study("1", "sun_hours", ["facades.obj"], "current"), entry: { ...study("1", "sun_hours", ["facades.obj"]).entry, target: 0, target_max: 0 } }];
     service.valuesOf = { 1: studyValuesOf({ open: [8, 8, 8, 8], max_volume: [0, 2, 6, 8] }) };
@@ -576,8 +561,21 @@ test("a saved high end at or below the target counts as none: the colours run fr
   await selectStudy("Sun hours, 21 Dec");
   colourByValue();
   const highMark = container().querySelector<HTMLElement>('.target-legend [role="slider"][data-end="high"]')!;
-  expect(highMark.getAttribute("aria-valuenow")).toBe("8");
-  expect(highMark.style.left).toBe("100%");
+  expect(highMark.getAttribute("aria-valuenow")).toBe("7.94");        // 6 + 0.97 x (8 - 6), interpolated as numpy does
+  expect(highMark.style.left).toBe("99.25%");
+});
+
+test("by default the colours end at the 99th percentile, so a few high values do not leave the rest in the middle of the palette", async () => {
+  // 199 points from 0 to 198 h and one of 1000 h (a roof turned to the sun, say): the colours end at 197.01 h, the bar runs to 1000 h.
+  const values = [...Array.from({ length: 199 }, (_, point) => point), 1000];
+  await openSimulate(undefined, (service) => {
+    service.studies = [study("1", "sun_hours", ["facades.obj"], "current")];
+    service.valuesOf = { 1: studyValuesOf({ open: values.map(() => 1000), max_volume: values }) };
+  });
+  await selectStudy("Sun hours, 21 Dec");
+  const highMark = container().querySelector<HTMLElement>('.target-legend [role="slider"][data-end="high"]')!;
+  expect(highMark.getAttribute("aria-valuenow")).toBe("197.01");
+  expect(container().querySelector(".target-legend-ends")!.textContent).toContain("1 000");
 });
 
 test("by share the two ends are percentages kept for the study while the app is open, not saved; the value button names the unit", async () => {
@@ -658,22 +656,27 @@ async function clickAndSettle(target: HTMLElement) {
   await act(async () => target.click());
   await settle();
 }
-/** Opens the project in Simulate with the sun's disc drawable (a 2D canvas, which jsdom does not have), and opens the Sun panel. */
+const sunButton = () => container().querySelector<HTMLButtonElement>(".viewer-toolbar .viewer-sun-button")!;
+/** Opens the project in Simulate with the sun's disc drawable (a 2D canvas, which jsdom does not have), and opens the sun tool from
+ *  the toolbar. */
 async function openSunPanel(prepare?: Parameters<typeof openSimulate>[1]) {
   const drawing = { fillStyle: "", beginPath() {}, arc() {}, fill() {} };
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(((kind: string) => (kind === "2d" ? drawing : kind === "webgl2" ? {} : null)) as never);
   await openSimulate(undefined, prepare);
-  expect(sunPanel().querySelector(".sun-panel-toggle")!.getAttribute("aria-expanded")).toBe("false");
-  await clickAndSettle(sunPanel().querySelector<HTMLButtonElement>(".sun-panel-toggle")!);
+  expect(container().querySelector(".sun-panel")).toBeNull();
+  expect(sunButton().getAttribute("aria-pressed")).toBe("false");
+  await clickAndSettle(sunButton());
 }
 
-test("the open Sun panel shows the sun path, and either the shadows at a moment or the hours in shade over a period, never both", async () => {
+test("the sun tool opens from the toolbar: the sun path, the sun at a moment and its shadows; no hours in shade", async () => {
   await openSunPanel();
+  expect(sunButton().getAttribute("aria-pressed")).toBe("true");
   expect(simulateService.requests).toContain("GET /sun-positions?from=12-21&to=12-21&start=0&end=1440&step=5&time_basis=standard");
   expect(sunStatus()).toBe("Sun 53° above the horizon, 180° from north");
-  expect(FakeViewerScene.latest!.sunStudy).toEqual({ sun: [0, -0.6, 0.8], shadows: false, shade: null });
-  expect(simulateService.requests).toContain("GET /sun-chart?date=12-21&time_basis=standard");      // opening the panel shows the sun path
+  expect(FakeViewerScene.latest!.sunStudy).toEqual({ sun: [0, -0.6, 0.8], shadows: false });
+  expect(simulateService.requests).toContain("GET /sun-chart?date=12-21&time_basis=standard");      // opening the tool shows the sun path
   expect(FakeViewerScene.latest!.layers.get("sun_study")).toBeTruthy();
+  expect([...sunPanel().querySelectorAll(".sun-panel-views button")].map((button) => button.textContent)).toEqual(["Sun path only", "Shadows at a time"]);
 
   // The moment: a day strip and a time strip, one handle each.
   await clickAndSettle(sunView("Shadows at a time"));
@@ -685,25 +688,22 @@ test("the open Sun panel shows the sun path, and either the shadows at a moment 
   await settle();
   expect(sunStatus()).toBe("The sun is below the horizon.");
   expect(FakeViewerScene.latest!.sunStudy.sun).toBeNull();
-
-  // The period: the analysis period's control. The shadows of the moment go; the hours in shade come.
-  await clickAndSettle(sunView("Hours in shade"));
-  expect(sunPanel().querySelector(".period-control")).not.toBeNull();
-  expect(sunPanel().querySelector('[role="slider"][aria-label="Time"]')).toBeNull();
-  // 08:00 to 16:00 every 10 minutes, each time the middle of its step: 48 times of 10 minutes, the whole range in sun.
-  expect(simulateService.requests).toContain("GET /sun-positions?from=12-21&to=12-21&start=485&end=955&step=10&time_basis=standard");
-  const study = FakeViewerScene.latest!.sunStudy;
-  expect([study.sun, study.shadows]).toEqual([null, false]);
-  expect(study.shade!.directions).toHaveLength(48);
-  expect(study.shade!.hoursEach * study.shade!.directions.length).toBeCloseTo(8);
-  expect(study.shade!.palette).toBe("viridis");
-  expect([...container().querySelectorAll(".viewer-legend h3")].map((title) => title.textContent)).toContain("Hours in shade per day, 08:00 to 16:00, 21 Dec");
-  await clickAndSettle(buttonIn(sunPanel(), "Grey"));
-  expect(FakeViewerScene.latest!.sunStudy.shade!.palette).toBe("grey");
-  // Collapsed, the panel draws nothing of the sun.
-  await clickAndSettle(sunPanel().querySelector<HTMLButtonElement>(".sun-panel-toggle")!);
-  expect(FakeViewerScene.latest!.sunStudy).toEqual({ sun: null, shadows: false, shade: null });
+  // Closed (the panel's close button, or the toolbar's sun button), the view draws nothing of the sun.
+  await clickAndSettle(sunPanel().querySelector<HTMLButtonElement>(".sun-panel-close")!);
+  expect(container().querySelector(".sun-panel")).toBeNull();
+  expect(FakeViewerScene.latest!.sunStudy).toEqual({ sun: null, shadows: false });
   expect(FakeViewerScene.latest!.layers.get("sun_study") ?? null).toBeNull();
+});
+
+test("the sun tool is in Carve too, and stays open across the workspaces", async () => {
+  await openSunPanel();
+  await switchMode("design");
+  await settle();
+  expect(sunButton().getAttribute("aria-pressed")).toBe("true");
+  expect(container().querySelector(".sun-panel")).not.toBeNull();
+  expect(FakeViewerScene.latest!.layers.get("sun_study")).toBeTruthy();
+  await clickAndSettle(sunButton());
+  expect(container().querySelector(".sun-panel")).toBeNull();
 });
 
 test("the clock of the Sun panel is local standard, local solar or local daylight saving time", async () => {

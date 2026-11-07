@@ -65,6 +65,8 @@ MAX_CHECK_POINTS = 2_000_000
 _RAYS_PER_LAUNCH = 1 << 25
 # Hits closer than this to a ray's origin are ignored (m).
 _MIN_HIT = 1e-3
+# A quick sun hours study samples the sun on every n-th day, n chosen so that the period gives at most about this many positions.
+QUICK_SUN_POSITIONS = 240
 # The fewest segments of the ground disc's polygon (ground_disc).
 GROUND_DISC_MIN_SEGMENTS = 64
 # A face of the surroundings whose normal points this far down (z component) is a bottom, left out of a study's surfaces.
@@ -84,6 +86,7 @@ class CheckDirections(NamedTuple):
     unit: str
     patch_ids: Optional[np.ndarray] = None   # (D,) int32 sky patch of each direction; None for the sun
     sub_side: int = 1                        # sub-rays per patch = sub_side**2; 1 traces `directions`
+    day_step: int = 1                        # sun hours: the sun sampled on every day_step-th day (quick), 1 for every day
 
 
 def check_directions(settings: CheckSettings) -> CheckDirections:
@@ -116,17 +119,31 @@ def check_directions(settings: CheckSettings) -> CheckDirections:
     if settings.metric == "sun_hours":
         from .sun import get_sun_vectors, sample_period
         datetimes, _hoys = sample_period(settings, steps_per_hour=settings.sun_steps_per_hour)
-        suns = get_sun_vectors(settings.epw_path, datetimes, settings.min_altitude,
-                               north_deg=settings.north_deg, time_basis=settings.time_basis)
-        suns = np.asarray(suns.cpu().numpy() if hasattr(suns, "cpu") else suns, dtype=np.float64).reshape(-1, 3)
+        # Quick: every day_step-th day of the period, each kept day counting for the days it stands for (the last group may be
+        # shorter). The weights go by group, since get_sun_vectors drops the positions below the lowest altitude.
+        days = list(dict.fromkeys((moment.month, moment.day) for moment in datetimes))
+        day_step = max(1, math.ceil(len(datetimes) / QUICK_SUN_POSITIONS)) if settings.quick else 1
+        groups: Dict[int, list] = {}
+        for moment in datetimes:
+            index = days.index((moment.month, moment.day)) if day_step > 1 else 0
+            if index % day_step == 0:
+                groups.setdefault(min(day_step, len(days) - index), []).append(moment)
+        parts, weights = [], []
+        for counted_days, moments in groups.items():
+            found = get_sun_vectors(settings.epw_path, moments, settings.min_altitude,
+                                    north_deg=settings.north_deg, time_basis=settings.time_basis)
+            found = np.asarray(found.cpu().numpy() if hasattr(found, "cpu") else found, dtype=np.float64).reshape(-1, 3)
+            parts.append(found)
+            weights.append(np.full(len(found), counted_days / settings.sun_steps_per_hour))
+        suns = np.concatenate(parts) if parts else np.zeros((0, 3))
+        values = np.concatenate(weights) if weights else np.zeros(0)
         if len(suns):
             suns /= np.linalg.norm(suns, axis=1, keepdims=True)
         else:
             report_issue("no_sun_positions",
                          f"No sun position of the check period is above {settings.min_altitude:g}°, "
                          f"so every test point has 0 sun hours.")
-        values = np.full(len(suns), 1.0 / settings.sun_steps_per_hour)
-        return CheckDirections(suns.astype(np.float32), values, False, 1.0, spec.unit)
+        return CheckDirections(suns.astype(np.float32), values, False, 1.0, spec.unit, day_step=day_step)
 
     from ladybug.viewsphere import view_sphere
     from .sky_patches import tregenza_patch_cells
@@ -466,7 +483,8 @@ def _keep(points: CheckPoints, keep: np.ndarray) -> CheckPoints:
     return CheckPoints(points.points[keep], points.normals[keep], points.quads[keep])
 
 
-def sample_geometry_faces(mesh, spacing: float, frame, clip=None, origin_offset: float = 0.01, device=None) -> CheckPoints:
+def sample_geometry_faces(mesh, spacing: float, frame, clip=None, origin_offset: float = 0.01, device=None,
+                          clip_depth: Optional[float] = None) -> CheckPoints:
     """The test points on the faces of a study's geometry (*mesh*, closed, facing out), in *frame* (see
     :func:`sample_test_surfaces`).
 
@@ -475,8 +493,10 @@ def sample_geometry_faces(mesh, spacing: float, frame, clip=None, origin_offset:
     pieces of at least ``spacing**2``, else triangle by triangle (:func:`sample_triangles`; a smoothed envelope).  A point
     whose position moved *origin_offset* along its normal lies inside *mesh*, or within half that of its surface, is on a
     face covered by another (the top of a floor under the next floor of a massing, or the foot of the wall above it) and is
-    dropped; with *clip* (the maximum volume, for the envelope and the massing), so is a point whose position moved
-    *origin_offset* against its normal lies outside *clip* and not within half that of its surface (a face past it)."""
+    dropped; with *clip* (the maximum volume, for the envelope and the massing), so is a point whose position moved *clip_depth*
+    (default *origin_offset*) against its normal lies outside *clip* and not within half *origin_offset* of its surface: a face
+    further past the maximum volume than that.  A study gives the geometry's surface tolerance (the voxel size), since a voxel
+    envelope stands up to a voxel outside the maximum volume along its facades and roofs."""
     faces = without_downward_faces(mesh)
     if not len(faces.faces):
         return _no_points()
@@ -495,8 +515,8 @@ def sample_geometry_faces(mesh, spacing: float, frame, clip=None, origin_offset:
     margin = origin_offset / 2.0
     keep = ~points_inside(points.points + points.normals * origin_offset, mesh, on_surface=margin, frame=frame, device=device)
     if clip is not None:
-        keep &= points_inside(points.points - points.normals * origin_offset, clip, on_surface=margin, frame=frame,
-                              device=device)
+        depth = origin_offset if clip_depth is None else max(float(clip_depth), origin_offset)
+        keep &= points_inside(points.points - points.normals * depth, clip, on_surface=margin, frame=frame, device=device)
     return _keep(points, keep)
 
 
@@ -552,13 +572,15 @@ def solar_check(
     device=None,
     summary_extra: Optional[dict] = None,
     geometry_points: Optional[CheckPoints] = None,
+    reuse_points: Optional[tuple] = None,
 ) -> SolarCheckResult:
     """The check's metric per test point for each of *geometries*, and with none of them ("open").
 
     Samples *test_surfaces* (a mesh or a mesh file) every
     ``settings.sample_spacing`` meters (:func:`sample_test_surfaces`, in
     *sampling_frame*; None for none) and appends *geometry_points* (the points on a geometry's faces,
-    :func:`sample_geometry_faces`) after them, then
+    :func:`sample_geometry_faces`) after them (or takes *reuse_points*, ``(points, geometry point count)`` read back from an
+    earlier run whose surfaces and spacing were the same, and keeps its points file), then
     traces each geometry with :func:`evaluate_test_points`, clipped by its
     ``clip`` mesh and with its own surface tolerance.  *blocking* (meshes or
     mesh files, or None: the context and terrain), joined into one mesh,
@@ -595,10 +617,14 @@ def solar_check(
     test_surface_path = str(test_surfaces) if isinstance(test_surfaces, (str, Path)) else None
     blocking_mesh, blocking_paths = join_blocking(blocking)
     device = resolve_compute_device(device or "auto")
-    geometry_points = geometry_points if geometry_points is not None else _no_points()
-    surface_points = (sample_test_surfaces(test_surfaces, settings.sample_spacing, sampling_frame)
-                      if test_surfaces is not None else _no_points())
-    check_points = _joined_points([surface_points, geometry_points])
+    if reuse_points is not None:
+        check_points, geometry_count = reuse_points
+    else:
+        geometry_points = geometry_points if geometry_points is not None else _no_points()
+        surface_points = (sample_test_surfaces(test_surfaces, settings.sample_spacing, sampling_frame)
+                          if test_surfaces is not None else _no_points())
+        check_points = _joined_points([surface_points, geometry_points])
+        geometry_count = len(geometry_points.points)
     if not len(check_points.points):
         from .errors import InputError
         raise InputError(f"No test points were sampled at a spacing of {settings.sample_spacing:g} m.")
@@ -644,7 +670,9 @@ def solar_check(
         "settings": settings.model_dump(),
         "baseline": BASELINE,
         "point_count": int(len(check_points.points)),
-        "geometry_point_count": int(len(geometry_points.points)),
+        "geometry_point_count": int(geometry_count),
+        "points_reused": reuse_points is not None,
+        "sun_day_step": int(directions.day_step),
         "sample_spacing_m": float(settings.sample_spacing),
         "direction_count": int(len(directions.directions)),
         "device": str(device),
@@ -664,13 +692,15 @@ def solar_check(
         folder.mkdir(parents=True, exist_ok=True)
         summary_path = folder / SUMMARY_FILE
         summary_path.unlink(missing_ok=True)    # written last: a failed check leaves no summary
-        np.savez_compressed(
-            folder / POINTS_FILE, frame=frame,
-            points=(check_points.points - frame).astype(np.float32),
-            normals=check_points.normals.astype(np.float32),
-            quads=(check_points.quads - frame).astype(np.float32),
-            geometry_point_count=np.int64(len(geometry_points.points)))
-        np.savez_compressed(folder / VALUES_FILE, **{name: array.astype(np.float32) for name, array in values.items()})
+        if reuse_points is None:        # kept points are in the file already
+            np.savez_compressed(
+                folder / POINTS_FILE, frame=frame,
+                points=(check_points.points - frame).astype(np.float32),
+                normals=check_points.normals.astype(np.float32),
+                quads=(check_points.quads - frame).astype(np.float32),
+                geometry_point_count=np.int64(geometry_count))
+        # Uncompressed: two float32 columns write in a fraction of the time compressing them takes (1.3 s on 1.5 million points).
+        np.savez(folder / VALUES_FILE, **{name: array.astype(np.float32) for name, array in values.items()})
         patch_values = sky_patch_values(directions)
         if patch_values is None:
             (folder / SKY_FILE).unlink(missing_ok=True)
@@ -874,6 +904,8 @@ def simulate_study(
         raise InputError(f"The study traces the {settings.geometry}, but Carve has not built the {settings.geometry}.")
     frame = np.round(max_volume.mesh.bounds[0], 6)
     sampled = geometries[0] if settings.sample_geometry and geometries else None
+    points_key = _points_key(settings, test_surface_path, max_volume_path, context_path, terrain_path, ground_disc, sampled)
+    reuse = _kept_points(out_dir, points_key)
     has_other = test_surface_path is not None or bool(settings.surfaces_from)
     test_surfaces = (study_surfaces(test_surface_path, settings.surfaces_from, max_volume.mesh, context_path=context_path,
                                     terrain_path=terrain_path, disc=ground_disc, spacing=settings.sample_spacing)
@@ -882,8 +914,9 @@ def simulate_study(
     _refuse_too_many_points(test_surfaces, settings.sample_spacing,
                             extra_area=float(without_downward_faces(sampled.mesh).area) if sampled is not None else 0.0)
     geometry_points = (sample_geometry_faces(sampled.mesh, settings.sample_spacing, frame, clip=sampled.clip,
-                                             origin_offset=settings.origin_offset, device=device)
-                       if sampled is not None else None)
+                                             origin_offset=settings.origin_offset, device=device,
+                                             clip_depth=sampled.surface_tolerance)
+                       if sampled is not None and reuse is None else None)
     loaded = [(path, load_optional_mesh(path, name)) for path, name in ((context_path, "context"), (terrain_path, "terrain"))]
     blocking = [mesh for _path, mesh in loaded if mesh is not None]
     digest = settings_digest(settings)
@@ -905,5 +938,50 @@ def simulate_study(
     return solar_check(test_surfaces, geometries, settings, blocking=blocking, sampling_frame=frame, out_dir=out_dir,
                        device=device, summary_extra={"inputs": inputs, "fingerprints": fingerprints,
                                                      "surfaces_from": list(settings.surfaces_from),
-                                                     "geometry": settings.geometry},
-                       geometry_points=geometry_points)
+                                                     "geometry": settings.geometry, "points_key": points_key},
+                       geometry_points=geometry_points, reuse_points=reuse)
+
+
+def _points_key(settings: CheckSettings, test_surface_path, max_volume_path, context_path, terrain_path, ground_disc, sampled) -> str:
+    """A digest of what a study's test points are sampled from: the files (size and time, not path), the sources and the ground
+    disc, the geometry whose faces are sampled with its clip and tolerance, the spacing and the origin offset. Equal keys give
+    equal points, so a run can read them back (_kept_points) rather than sample again."""
+    import hashlib
+
+    def state(path):
+        found = file_fingerprint(path) if path is not None else None
+        return None if found is None else [found["size"], found["modified_ns"]]
+
+    sources = list(settings.surfaces_from)
+    key = {
+        "test_surface": state(test_surface_path),
+        "max_volume": state(max_volume_path),
+        "sources": sources,
+        "context": [state(path) for path in _paths_of(context_path)] if "context" in sources else None,
+        "terrain": state(terrain_path) if "terrain" in sources else None,
+        "ground_disc": [round(float(value), 3) for value in ground_disc] if "ground" in sources and ground_disc is not None else None,
+        "geometry": None if sampled is None else [sampled.name, state(sampled.path), float(sampled.surface_tolerance)],
+        "spacing": float(settings.sample_spacing),
+        "origin_offset": float(settings.origin_offset),
+    }
+    return hashlib.sha256(json.dumps(key, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def _kept_points(out_dir, points_key: str):
+    """The points of the last run in *out_dir*, ``(CheckPoints, geometry point count)``, when its summary records *points_key*;
+    None otherwise (no run, other surfaces or spacing, or a file that cannot be read)."""
+    if out_dir is None:
+        return None
+    folder = Path(out_dir)
+    try:
+        summary = json.loads((folder / SUMMARY_FILE).read_text(encoding="utf-8"))
+        if summary.get("points_key") != points_key:
+            return None
+        with np.load(folder / POINTS_FILE) as stored:
+            frame = stored["frame"]
+            points = CheckPoints(stored["points"].astype(np.float64) + frame, stored["normals"].astype(np.float64),
+                                 stored["quads"].astype(np.float64) + frame)
+            count = int(stored["geometry_point_count"]) if "geometry_point_count" in stored.files else 0
+    except (OSError, ValueError, KeyError):
+        return None
+    return points, count

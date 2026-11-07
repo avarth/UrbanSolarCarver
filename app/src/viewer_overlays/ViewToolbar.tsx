@@ -32,6 +32,8 @@ interface ViewToolbarProps {
   onFrameAll: () => void;
   onTopView: () => void;
   onGroundAidChange: (aid: GroundAid) => void;
+  /** The sun tool's toggle, in every workspace: open shows the sun path and the tool's panel; null: no button. */
+  sunTool?: { open: boolean; onToggle: () => void } | null;
 }
 
 const ICON_PROPS = { width: 20, height: 20, viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", strokeWidth: 1.6,
@@ -65,7 +67,17 @@ function NoGroundAidIcon() {
 
 const GROUND_AID_ICONS: Record<GroundAid, () => ReactElement> = { off: NoGroundAidIcon, grid: GroundGridIcon, compass_ring: CompassRingIcon };
 
-export function ViewToolbar({ theme, groundAid, onFrameAll, onTopView, onGroundAidChange }: ViewToolbarProps) {
+/** The sun: a disc with rays. */
+function SunIcon() {
+  return (
+    <svg {...ICON_PROPS}>
+      <circle cx="10" cy="10" r="3.4" />
+      <path d="M10 2v2.2M10 15.8V18M2 10h2.2M15.8 10H18M4.3 4.3l1.6 1.6M14.1 14.1l1.6 1.6M4.3 15.7l1.6-1.6M14.1 5.9l1.6-1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function ViewToolbar({ theme, groundAid, onFrameAll, onTopView, onGroundAidChange, sunTool = null }: ViewToolbarProps) {
   const followingGroundAid = nextGroundAid(groundAid);
   const FollowingGroundAidIcon = GROUND_AID_ICONS[followingGroundAid];
   const switchGroundAid = () => {
@@ -80,6 +92,12 @@ export function ViewToolbar({ theme, groundAid, onFrameAll, onTopView, onGroundA
               title={messages.groundAidSwitchTo[followingGroundAid]} onClick={switchGroundAid}>
         <FollowingGroundAidIcon />
       </button>
+      {sunTool !== null && (
+        <button type="button" className="viewer-sun-button" aria-label={messages.sunToolTitle} title={messages.sunToolHint} aria-pressed={sunTool.open}
+                onClick={sunTool.onToggle}>
+          <SunIcon />
+        </button>
+      )}
     </div>
   );
 }

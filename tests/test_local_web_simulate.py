@@ -543,7 +543,7 @@ def test_values_route_packs_the_header_quads_and_columns(service):
     stored = solar_check.load_solar_check(store.open("p") / "simulate" / study)
     point_count = len(stored.points.points)
     assert header["point_count"] == point_count and header["columns"] == ["open", "max_volume"]
-    assert header["geometry_point_count"] == 0 and header["geometry"] == "max_volume"
+    assert header["geometry_point_count"] == 0 and header["geometry"] == "max_volume" and header["sun_day_step"] == 1
     assert header["unit"] == "%" and np.allclose(header["frame"], stored.points.points.min(axis=0), atol=1e-4)
     offset = 4 + header_length
     quads = np.frombuffer(data, "<f4", point_count * 12, offset).reshape(point_count, 4, 3)

@@ -1,10 +1,9 @@
-// Simulate's sun tool on the 3D view: what the sun_study layer draws of the year's sun path (GET sun-chart) and of the sun at the
-// chosen time, placed on the hemisphere around the scene, and the numbers the shadows and the hours in shade are worked out from.
+// The sun tool on the 3D view: what the sun_study layer draws of the year's sun path (GET sun-chart) and of the sun at the chosen time,
+// placed on the hemisphere around the scene, and the sun the shadows are cast from.
 import type { SunChart } from "../api_client/client";
 import { messages } from "../messages";
 import type { Point3 } from "./local_origin";
 import type { Hemisphere } from "./sky_dome";
-import { studyPaletteColour } from "./study_palettes";
 
 export interface SunHourLineObject {
   hour: number;
@@ -20,30 +19,6 @@ export interface SunStudyObjects {
   day: Point3[][];
   /** The sun at the chosen time; null below the horizon. */
   sun: Point3 | null;
-}
-
-/** The colours of the hours in shade: viridis (yellow in sun to dark in shade) or grey (light in sun to dark in shade). */
-export type ShadePalette = "viridis" | "grey";
-export const SHADE_PALETTES: readonly ShadePalette[] = ["viridis", "grey"];
-
-/** The colour of *share* (0: never in shade, 1: in shade the whole range) in *palette*. */
-export function shadeColour(palette: ShadePalette, share: number): string {
-  const t = Math.min(1, Math.max(0, share));
-  if (palette === "viridis") return studyPaletteColour("viridis", 1 - t);
-  const level = Math.round(242 - t * (242 - 38));
-  const hex = level.toString(16).padStart(2, "0");
-  return `#${hex}${hex}${hex}`;
-}
-
-/** The hours in shade over a range, as Simulate's sun tool asks for them. */
-export interface ShadeHours {
-  /** Unit vectors toward the sun at the times of the range (above the horizon). */
-  directions: Point3[];
-  /** The hours each direction stands for, divided by the number of days sampled: the sum over the shaded ones is hours per day. */
-  hoursEach: number;
-  /** The length of the daily range in hours, the top of the colour scale. */
-  maxHours: number;
-  palette: ShadePalette;
 }
 
 export function onHemisphere(vector: ArrayLike<number>, sphere: Hemisphere): Point3 {
@@ -80,5 +55,4 @@ export interface SunStudyView {
   chart: SunChart | null;
   sun: Point3 | null;
   shadows: boolean;
-  shade: (ShadeHours & { title: string }) | null;
 }

@@ -34,11 +34,14 @@ SURFACES_FROM = "surfaces_from"
 # spacing (m). Stored once set, like surfaces_from: without them a study stands the maximum volume, samples none of its faces and
 # follows the carving's spacing. A spacing of None removes it, so the study follows the carving again.
 GEOMETRY, SAMPLE_GEOMETRY, SAMPLE_SPACING = "geometry", "sample_geometry", "sample_spacing"
+# Sun hours only: the quick count (the sun on every n-th day, solar_check.QUICK_SUN_POSITIONS), stored once set; a new metric drops it.
+QUICK = "quick"
+QUICK_METRICS = ("sun_hours",)
 # The settings of any metric that say what the study samples and what stands; a new metric keeps them.
 SAMPLING_SETTING_KEYS = (SURFACES_FROM, GEOMETRY, SAMPLE_GEOMETRY, SAMPLE_SPACING)
 # Every key a study's settings can hold.
 STUDY_SETTING_KEYS = (*PERIOD_SETTING_KEYS, "balance_temperature", "balance_offset", "include_harm", "dew_point_celsius", "bliss_k",
-                      *SAMPLING_SETTING_KEYS)
+                      *SAMPLING_SETTING_KEYS, QUICK)
 MONTH_ABBREVIATIONS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 NOT_SENT = object()     # an update that does not mention the target (None means: no target)
 # A weather file name for the validation of settings, which does not read the file.
@@ -74,7 +77,8 @@ def settings_keys_of(metric: str) -> tuple[str, ...]:
     mode settings, the surfaces it samples besides its files, what stands on the plot, whether its faces are sampled, and the
     spacing."""
     spec = CHECK_METRICS[metric]
-    return (*(PERIOD_SETTING_KEYS if spec.needs_period else ()), *METRIC_MODE_SETTING_KEYS.get(metric, ()), *SAMPLING_SETTING_KEYS)
+    return (*(PERIOD_SETTING_KEYS if spec.needs_period else ()), *METRIC_MODE_SETTING_KEYS.get(metric, ()), *SAMPLING_SETTING_KEYS,
+            *((QUICK,) if metric in QUICK_METRICS else ()))
 
 
 def default_study_settings(metric: str) -> dict:

@@ -7,7 +7,6 @@ import { vi } from "vitest";
 import type { Point3 } from "./local_origin";
 import type { CameraState, GroundAid, LayerName, ViewerScene, ViewportTheme } from "./scene";
 import type { Hemisphere } from "./sky_dome";
-import type { ShadeHours } from "./sun_study";
 
 /** Makes the canvas give a WebGL context, as a browser with WebGL does (jsdom gives none); vi.restoreAllMocks undoes it. */
 export function pretendTheBrowserHasWebGl(): void {
@@ -83,11 +82,11 @@ export class FakeViewerScene implements Pick<ViewerScene, keyof ViewerScene> {
     this.skyDomeOpacity = opacity;
   }
 
-  /** The last call of setSunStudy: the sun, whether it casts shadows, the hours in shade. */
-  sunStudy: { sun: Point3 | null; shadows: boolean; shade: ShadeHours | null } = { sun: null, shadows: false, shade: null };
+  /** The last call of setSunStudy: the sun and whether it casts shadows. */
+  sunStudy: { sun: Point3 | null; shadows: boolean } = { sun: null, shadows: false };
 
-  setSunStudy(sun: Point3 | null, shadows: boolean, shade: ShadeHours | null): void {
-    this.sunStudy = { sun, shadows, shade };
+  setSunStudy(sun: Point3 | null, shadows: boolean): void {
+    this.sunStudy = { sun, shadows };
   }
 
   /** How many times the pane asked for the frame to be drawn again (a layer changed in place). */

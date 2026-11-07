@@ -285,3 +285,18 @@ test("with a scene hemisphere the orbit turns about the centre of the compass ri
   scene.frameAll(true);
   expect(controls.target.toArray()).toEqual([5, 5, 10]);
 });
+
+test("a compass ring that moves after the first framing (the test surfaces load later) takes the orbit point with it, the view not turned", () => {
+  const { scene } = viewerWithACube();
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(10, 10, 20));
+  mesh.position.set(5, 5, 10);
+  mesh.updateMatrixWorld();
+  scene.setLayer("max_volume", mesh);
+  scene.setSceneHemisphere({ centre: [5, 5, 0], radius: 20 });
+  const { camera, controls } = scene as unknown as { camera: THREE.PerspectiveCamera; controls: { target: THREE.Vector3 } };
+  scene.frameAll(true);
+  const offset = camera.position.clone().sub(controls.target);
+  scene.setSceneHemisphere({ centre: [40, 30, 0], radius: 60 });          // a test surface far out widens the ring
+  expect(controls.target.distanceTo(new THREE.Vector3(40, 30, 10))).toBeLessThan(1e-9);
+  expect(camera.position.clone().sub(controls.target).distanceTo(offset)).toBeLessThan(1e-9);
+});

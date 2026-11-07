@@ -305,8 +305,8 @@ def study_values(folder: Path) -> bytes | None:
     * ``uint32`` length n of the header in bytes;
     * the header as UTF-8 JSON (``frame``: world coordinates the corners are relative to, ``point_count``, ``columns``: the column
       names in the order of the value arrays, ``unit``, ``geometry``: the geometry the result accounts for ("none" for nothing),
-      ``geometry_point_count``: how many of the points, the last ones, are on the faces of that geometry), padded with spaces to a
-      multiple of 4;
+      ``geometry_point_count``: how many of the points, the last ones, are on the faces of that geometry, ``sun_day_step``: a quick
+      sun hours result sampled the sun on every that many days, 1 otherwise), padded with spaces to a multiple of 4;
     * ``float32`` the four corners of each point's patch, x y z each, relative to ``frame``;
     * ``float32`` one value per point for each column.
     """
@@ -323,7 +323,8 @@ def study_values(folder: Path) -> bytes | None:
     except (OSError, ValueError, KeyError):
         return None
     header = {"frame": frame, "point_count": int(len(quads)), "columns": columns, "unit": summary.get("unit"),
-              "geometry": summary.get("geometry", "max_volume"), "geometry_point_count": geometry_point_count}
+              "geometry": summary.get("geometry", "max_volume"), "geometry_point_count": geometry_point_count,
+              "sun_day_step": int(summary.get("sun_day_step", 1))}
     header_bytes = json.dumps(header).encode("utf-8")
     header_bytes += b" " * (-len(header_bytes) % HEADER_ALIGNMENT_BYTES)
     return b"".join([struct.pack("<I", len(header_bytes)), header_bytes, quads.tobytes(), *(array.tobytes() for array in arrays)])

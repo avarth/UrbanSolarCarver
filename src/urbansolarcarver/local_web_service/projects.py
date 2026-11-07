@@ -610,21 +610,17 @@ class ProjectStore:
 
     def delete_study(self, name: str, study_id: str) -> None:
         """Remove a study, its joined test surface file and its results folder (simulate/<id>, to the recycle bin); 404 for an unknown
-        one. Its id is not used again. The stored test surface files that no criterion and no other study uses go to the recycle bin
-        too. A folder or file that cannot be moved (a program has it open) stays, and the study is gone from the list all the same."""
+        one. Its id is not used again. Its test surface files stay in the project: a study owns none (user, 2026-11-07). A folder that
+        cannot be moved (a program has it open) stays, and the study is gone from the list all the same."""
         with self.project_lock(name):
             project_folder = self.open(name)
             project_json = self.read_project_json(name)
             removed = find_study(project_json, study_id)
             project_json.studies = [study for study in project_json.studies if study.id != removed.id]
-            unused_files = [file_name for file_name in removed.test_surface_files if not test_surfaces.users_of(project_json, file_name)]
-            for file_name in unused_files:
-                project_json.input_files.get(test_surfaces.ROLE, {}).pop(file_name, None)
             self.write_project_json(name, project_json)
             (project_folder / joined_study_surfaces_path(removed.id)).unlink(missing_ok=True)
             with contextlib.suppress(OSError):
                 discard_folder(study_folder(project_folder, removed.id))
-            self._discard_test_surface_files(project_folder, unused_files)
 
     def duplicate_study(self, name: str, study_id: str) -> StudyEntry:
         """Add a copy of a study at the end of the list: its metric, settings, test surface files and target, named "<name> copy"
@@ -674,9 +670,9 @@ class ProjectStore:
     def remove_study_test_surface(self, name: str, study_id: str, file_name: str) -> StudyEntry:
         """Take a test surface file out of the study *study_id* and build its joined file again (none when no file is left).
 
-        The stored file stays for the criteria and studies that list it and goes to the recycle bin when none does (discard_file).
-        ProjectError 404 for an unknown study or a file the study does not list. Nothing is removed unless the joined file could
-        be built.
+        The stored file stays in the project even when no criterion or other study lists it: a study picks among the project's test
+        surface files and owns none (user, 2026-11-07). ProjectError 404 for an unknown study or a file the study does not list.
+        Nothing is removed unless the joined file could be built.
         """
         with self.project_lock(name):
             project_folder = self.open(name)
@@ -685,14 +681,9 @@ class ProjectStore:
             if file_name not in entry.test_surface_files:
                 raise ProjectError(f"There is no {test_surfaces.ROLE} file named '{file_name}' in the study '{entry.name}'.", status_code=404)
             remaining_names = [other for other in entry.test_surface_files if other != file_name]
-            unused = test_surfaces.users_of(project_json, file_name) == [f"study:{entry.id}"]
             self._join_test_surfaces(project_folder, {test_surfaces.study_key(entry.id): sorted(remaining_names)})
-            if unused:
-                project_json.input_files[test_surfaces.ROLE].pop(file_name, None)
             entry.test_surface_files = remaining_names
             self.write_project_json(name, project_json)
-            if unused:
-                self._discard_test_surface_files(project_folder, [file_name])
             return entry
 
     @staticmethod

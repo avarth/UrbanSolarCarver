@@ -3,8 +3,7 @@
 // Orbit with the left mouse button, pan with the right, zoom with the wheel. A click (a press and release within 5 px and 400 ms)
 // goes to the listeners of onLayerClick, unless an opaque surrounding (context, terrain) is nearer along the ray. Camera moves of frameAll, frameBox and viewTop take 400 ms, and are instant under
 // prefers-reduced-motion. No React here: the overlays (viewer_overlays/) read the camera through
-// onCameraChange and call the methods below. Simulate's sun tool adds a sun that casts shadows and a count of the hours in shade
-// (sun_shading.ts).
+// onCameraChange and call the methods below. The sun tool adds a sun that casts shadows (sun_shading.ts).
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
@@ -18,7 +17,6 @@ import { LAYER_NAMES, SURROUNDING_LAYERS, applyLayerAppearance, dimmedAppearance
 import type { Hemisphere } from "./sky_dome";
 import { layerHooks } from "./layer_hooks";
 import { isSolidMesh, SunShading } from "./sun_shading";
-import type { ShadeHours } from "./sun_study";
 import { fitTextSpritesToView } from "./text_sprite";
 
 export type { LayerName } from "./layers";
@@ -63,8 +61,6 @@ const EMPTY_SCENE_RADIUS_METRES = 60;
 const EMPTY_SCENE_HEMISPHERE: Hemisphere = { centre: [0, 0, 0], radius: EMPTY_SCENE_RADIUS_METRES };
 // The layers drawn after the hours in shade, over them: the sun path and the sky dome, and the compass ring (three.js layer 1; the
 // rest is layer 0).
-const OVER_THE_COUNT_LAYERS: readonly LayerName[] = ["sun_path", "sky_dome", "sun_study"];
-const OVER_THE_COUNT = 1;
 // The layers whose meshes cast and catch the sun's shadows, and those that make up the site the shadow camera covers.
 const SHADOW_LAYERS: readonly LayerName[] = ["max_volume", "test_surfaces", "context", "terrain", "envelope", "building_massing", "inspect_surfaces"];
 const SITE_LAYERS: readonly LayerName[] = ["max_volume", "test_surfaces", "envelope", "building_massing", "inspect_surfaces"];
@@ -179,7 +175,7 @@ export class ViewerScene {
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.shadowMap.enabled = true;          // only Simulate's sun casts shadows, and only while asked to
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    this.renderer.shadowMap.autoUpdate = false;      // drawn again when the sun casts (SunShading.prepare, count)
+    this.renderer.shadowMap.autoUpdate = false;      // drawn again when the sun casts (SunShading.prepare)
     const canvas = this.renderer.domElement;
     canvas.style.display = "block";
     canvas.style.width = "100%";
@@ -199,13 +195,10 @@ export class ViewerScene {
     fixedLight.position.set(-0.45, -0.7, 1);
     this.scene.add(skyLight, fixedLight);
     this.sunShading = new SunShading({
-      scene: this.scene, renderer: this.renderer, camera: this.camera, skyLight, fixedLight,
+      scene: this.scene, renderer: this.renderer, skyLight, fixedLight,
       shadowMeshes: () => this.shadowMeshes(),
       siteBox: () => this.boxOf(SITE_LAYERS, false),
       terrainShown: () => { const terrain = this.slots.get("terrain")!; return terrain.object !== null && terrain.visible; },
-      clipCircle: () => (this.sceneHemisphere === null ? null
-        : { centre: [this.sceneHemisphere.centre[0], this.sceneHemisphere.centre[1]], radius: this.sceneHemisphere.radius }),
-      requestRender: () => this.requestRender(),
     });
 
     this.hoverLabel = document.createElement("div");
@@ -243,7 +236,6 @@ export class ViewerScene {
     slot.object = object;
     if (object) {
       object.name = name;
-      if (OVER_THE_COUNT_LAYERS.includes(name)) object.traverse((child) => child.layers.set(OVER_THE_COUNT));
       layerHooks(object).applyTheme?.(this.theme);
       layerHooks(object).followCamera?.(this.camera.position);
       this.scene.add(object);
@@ -270,8 +262,17 @@ export class ViewerScene {
   /** The hemisphere around the whole scene (R2 2), the one the sun path and the sky dome are drawn on: the compass ring lies on its rim. */
   setSceneHemisphere(hemisphere: Hemisphere | null): void {
     this.sceneHemisphere = hemisphere;
-    this.sunShading?.invalidate();      // the hours in shade are clipped to its rim
     this.rebuildGroundAids();
+    // The ring can move after the first framing (the test surfaces load after the maximum volume): the orbit point follows its centre,
+    // the camera moved with it, so the view is not turned (user, 2026-11-06: the orbit turns about the compass ring's centre).
+    if (hemisphere === null || this.modelBox().isEmpty()) return;
+    const shift = this.contentSphere().centre.sub(this.controls.target);
+    if (shift.lengthSq() < 1e-12) return;
+    this.cameraMove = null;
+    this.controls.target.add(shift);
+    this.camera.position.add(shift);
+    this.controls.update();
+    this.cameraChanged();
   }
 
   setGroundAid(aid: GroundAid): void {
@@ -285,12 +286,10 @@ export class ViewerScene {
     this.refreshLayers();
   }
 
-  /**
-   * Simulate's sun tool: the sun toward *sun* (a vector toward it in model coordinates; null for none), casting shadows on the solid
-   * layers and the ground when *shadows*, and the hours in shade over a range drawn over the view (null for none).
-   */
-  setSunStudy(sun: Point3 | null, shadows: boolean, shade: ShadeHours | null): void {
-    this.sunShading.set(sun, shadows, shade);
+  /** The sun tool: the sun toward *sun* (a vector toward it in model coordinates; null for none), casting shadows on the solid layers
+   *  and the ground when *shadows*. */
+  setSunStudy(sun: Point3 | null, shadows: boolean): void {
+    this.sunShading.set(sun, shadows);
     this.requestRender();
   }
 
@@ -410,7 +409,6 @@ export class ViewerScene {
     }
     this.fitPixelSizedObjects();
     this.renderer.domElement.setAttribute("aria-label", this.describe());
-    this.sunShading.invalidate();
     this.requestRender();
   }
 
@@ -442,7 +440,6 @@ export class ViewerScene {
     this.grid = groundGrid(groundGridSpacing(longestSide || EMPTY_SCENE_RADIUS_METRES), [centre.x, centre.y]);
     layerHooks(this.grid).applyTheme?.(this.theme);
     this.ring = compassRing(this.sceneHemisphere ?? EMPTY_SCENE_HEMISPHERE, this.northDegrees, this.theme);
-    this.ring.traverse((child) => child.layers.set(OVER_THE_COUNT));
     this.scene.add(this.grid, this.ring);
     this.showChosenGroundAid();
     this.fitPixelSizedObjects();
@@ -562,7 +559,6 @@ export class ViewerScene {
     for (const slot of this.slots.values()) if (slot.object) layerHooks(slot.object).followCamera?.(this.camera.position);
     const state = this.cameraState();
     for (const listener of this.cameraListeners) listener(state);
-    this.sunShading.invalidate();
     this.requestRender();
   }
 
@@ -649,20 +645,8 @@ export class ViewerScene {
       this.frameRequest = null;
       if (this.cameraMove) this.stepCameraMove(now);
       if (this.pendingHover) this.updateHover();
-      // The scene, the hours in shade over it, then the sun path and the sky dome over both (tested against the scene's depth).
       this.sunShading.prepare();
-      this.camera.layers.set(0);
       this.renderer.render(this.scene, this.camera);
-      this.sunShading.drawOverlay();
-      // A colour background makes three.js clear the frame whatever autoClear says: the second pass goes without it.
-      this.camera.layers.set(OVER_THE_COUNT);
-      const autoClear = this.renderer.autoClear, background = this.scene.background;
-      this.renderer.autoClear = false;
-      this.scene.background = null;
-      this.renderer.render(this.scene, this.camera);
-      this.scene.background = background;
-      this.renderer.autoClear = autoClear;
-      this.camera.layers.set(0);
       if (this.cameraMove) this.requestRender();
     });
   }

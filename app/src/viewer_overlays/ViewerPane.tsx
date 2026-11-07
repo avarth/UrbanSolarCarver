@@ -7,7 +7,8 @@
 // the selected study's values are one more layer, dimmed when the study is out of date, and the stamp shows while it is.
 // In Inspect the orientation of the test surfaces is one more layer, which replaces the test surfaces in the view; a click on a surface
 // is reported, and a request to frame a box moves the camera. Simulate's sun tool draws the year's sun path with the chosen day and
-// the sun (the sun_study layer), the shadows at that time and the hours in shade over a range (the scene's setSunStudy).
+// the sun (the sun_study layer) and the shadows at that time (the scene's setSunStudy). The sun tool's button is in the toolbar, its
+// panel (given by the workspace) under it, in every workspace.
 // Without WebGL (a remote desktop, a blocked graphics card) the scene cannot start: the view says so, and the steps go on working.
 // Framing leaves out the part of the view a panel lies over (leftInsetOf), so the model is never hidden behind it; the picture shifts and the camera still orbits about the centre of the compass ring.
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from "react";
@@ -187,8 +188,10 @@ export interface ViewerPaneProps {
   envelopeSeeThrough?: boolean;
   /** Inspect: while set, the test surfaces are hidden and the surface orientation layer is shown in their place. */
   inspect?: InspectView | null;
-  /** Simulate's sun tool: the sun path, the sun, its shadows and the hours in shade; null: none. */
+  /** The sun tool: the sun path, the sun and its shadows; null: none. */
   sunStudy?: SunStudyView | null;
+  /** The sun tool's button in the toolbar and, while open, its panel under it; null: no sun tool (no project open). */
+  sunTool?: { open: boolean; onToggle: () => void; panel: ReactNode } | null;
 }
 
 const NO_CAMERA: CameraState = { yawDegrees: 0, elevationDegrees: 90, metresPerPixel: 0 };
@@ -224,7 +227,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
                              maxVolumeAppearance, shownByDefault,
                              northDegrees, framingRequest, centreContent, results = NO_VIEWER_RESULTS, localOrigin = NO_SHIFT, dimmedLayers = NO_LAYERS,
                              missingLayers = NO_LAYERS, missingLayerNotes, runProgress = null, overlayContent, mode = null,
-                             analysisCurrent = false, skyDomeTitle, skyDomeChoiceRemembered = true, study = null, studyOutOfDate = false, envelopeSeeThrough = false, inspect = null, sunStudy = null }: ViewerPaneProps) {
+                             analysisCurrent = false, skyDomeTitle, skyDomeChoiceRemembered = true, study = null, studyOutOfDate = false, envelopeSeeThrough = false, inspect = null, sunStudy = null, sunTool = null }: ViewerPaneProps) {
   const container = useRef<HTMLDivElement>(null);
   const [scene, setScene] = useState<ViewerScene | null>(null);
   const [sceneUnavailable] = useState(() => !browserHasWebGl());
@@ -332,7 +335,6 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   const sunStudyObject = useMemo(() => scene && sunChart && hemisphere && sunStudyLayer(sunStudyObjects(sunChart, sunVector, hemisphere), hemisphere),
                                  [scene, sunChart, hemisphere, sunVector]);
   const sunShadows = sunStudy?.shadows ?? false;
-  const shade = sunStudy?.shade ?? null;
 
   // The layers in the order of the layers menu. *listed*: the menu lists the layer (a layer whose criteria are all hidden stays listed,
   // so they can be shown again; in Inspect the orientation layer takes the test surfaces' place, which are hidden). A slot keeps its
@@ -392,7 +394,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
     orbitsAboutInspectedFile.current = false;
     scene?.frameAll();
   }, [scene, inspecting]);
-  useEffect(() => scene?.setSunStudy(sunVector, sunShadows, shade), [scene, sunVector, sunShadows, shade]);
+  useEffect(() => scene?.setSunStudy(sunVector, sunShadows), [scene, sunVector, sunShadows]);
   useEffect(() => scene?.setEnvelopeSeeThrough(envelopeSeeThrough), [scene, envelopeSeeThrough]);
   useEffect(() => {
     if (framingRequest > 0) scene?.frameAll();
@@ -440,7 +442,6 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
           highestWeight: Math.max(...skyDome.weights) }
       : undefined,
     buildingMassing: shown("building_massing") && massing ? { storeyCount: storeyCountOf(massing) } : undefined,
-    shadeHours: shade ? { title: shade.title, maxHours: shade.maxHours, palette: shade.palette } : undefined,
     carvedByCriterion: shown("carved_by_criterion") && carvedByCriterion
       ? { criteria: carvedByCriterion.criterionIds.flatMap((id) => criteria.filter((entry) => entry.id === id).map(({ name, colour }) => ({ name, colour }))),
           thinningStep: carvedVoxelsOfCriteria?.thinningStep ?? 1 }
@@ -473,7 +474,8 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
       {progressBar}
       <Compass yawDegrees={camera.yawDegrees} northDegrees={northDegrees} theme={theme} onViewTop={() => scene?.viewTop()} />
       <ViewToolbar theme={theme} groundAid={groundAid} onFrameAll={() => scene?.frameAll()} onTopView={() => scene?.viewTop()}
-                   onGroundAidChange={setGroundAid} />
+                   onGroundAidChange={setGroundAid} sunTool={sunTool === null ? null : { open: sunTool.open, onToggle: sunTool.onToggle }} />
+      {sunTool !== null && sunTool.open && <div className="viewer-sun-tool">{sunTool.panel}</div>}
       {entries.length > 0 && (
         <LayersMenu entries={entries} skyDomeOpacity={skyDomeOpacity} theme={theme} onSkyDomeOpacityChange={setSkyDomeOpacity}
                     onVisibleChange={changeVisible} onPartVisibleChange={changePartVisible} />

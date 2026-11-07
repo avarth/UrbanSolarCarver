@@ -1,25 +1,16 @@
-// Simulate's sun tool (user, 2026-10-28: the traditional study of a project's massing with the sun): while the Sun panel is open, the
-// year's sun path with a day, and one of two views, never both: the shadows at a moment (a day and a time), or the hours in shade
-// over a period (days and hours, as the analysis period gives them), the times read in the clock chosen. The Sun panel sets them and
-// the 3D view draws them; a collapsed panel draws nothing. It reads GET sun-chart and sun-positions while Simulate and the panel are
-// open and the project has a weather file.
+// The sun tool (user, 2026-10-28: the traditional study of a project's massing with the sun; in every workspace since 2026-11-07):
+// while it is open, the year's sun path with a day, and, chosen on a switch, the shadows at a moment (a day and a time), the times read
+// in the clock chosen. The Sun panel sets them and the 3D view draws them; a closed tool draws nothing. It reads GET sun-chart and
+// sun-positions while the tool is open and the project has a weather file. The hours of sun over a period are a Sun hours study.
 import { useEffect, useEffectEvent, useMemo, useState } from "react";
-import {
-  ApiError, getSunChart, getSunPositions, reportServiceProblem, type SunChart, type SunPosition, type SunPositions,
-} from "../api_client/client";
+import { ApiError, getSunChart, getSunPositions, reportServiceProblem, type SunChart, type SunPosition } from "../api_client/client";
 import { useProjectSession } from "../api_client/project_session";
-import { dayAndMonth, messages } from "../messages";
-import type { AnalysisPeriodField } from "../settings_form/analysis_period";
 import type { Point3 } from "../viewer/local_origin";
-import { sunAt, type ShadeHours, type ShadePalette, type SunStudyView } from "../viewer/sun_study";
-import { useKeyedValue } from "../hooks/use_keyed_value";
+import { sunAt, type SunStudyView } from "../viewer/sun_study";
 
 const NOT_FOUND = 404;
 // The sun of the day is read every 5 minutes; the time strip moves in the same steps.
 export const TIME_STEP_MINUTES = 5;
-// The hours in shade are counted every 10 minutes on one day, every 30 over several days (sampled on fewer days when long).
-const SHADE_STEP_MINUTES_OF_A_DAY = 10;
-const SHADE_STEP_MINUTES_OF_DAYS = 30;
 export const MINUTES_PER_DAY = 24 * 60;
 
 export interface MonthDay {
@@ -31,23 +22,18 @@ export interface MonthDay {
 export type TimeBasis = "standard" | "solar" | "daylight_saving";
 export const TIME_BASES: readonly TimeBasis[] = ["standard", "solar", "daylight_saving"];
 
-/** What the view shows besides the sun path: nothing, the shadows at a moment, or the hours in shade over a period. */
-export type SunView = "none" | "shadows" | "shade";
-export const SUN_VIEWS: readonly SunView[] = ["none", "shadows", "shade"];
-
-export type ShadePeriod = Record<AnalysisPeriodField, number>;
+/** What the view shows besides the sun path: nothing, or the shadows at a moment. */
+export type SunView = "none" | "shadows";
+export const SUN_VIEWS: readonly SunView[] = ["none", "shadows"];
 
 export interface SunStudySettings {
   timeBasis: TimeBasis;
-  /** The Sun panel is open: the sun path and the view are drawn (user, 2026-10-28: opening the panel shows them). */
+  /** The sun tool is open: the sun path and the view are drawn (user, 2026-10-28: opening the tool shows them). */
   open: boolean;
   view: SunView;
   /** The moment: the day of the sun path and of the shadows, and the time (minute of the day). */
   date: MonthDay;
   minute: number;
-  /** The period of the hours in shade: its days, and its hours with the end hour counted (8 to 15 h is 08:00 to 16:00). */
-  period: ShadePeriod;
-  palette: ShadePalette;
 }
 
 export interface SunStudyHook {
@@ -62,34 +48,13 @@ export interface SunStudyHook {
 
 export const INITIAL_SUN_STUDY: SunStudySettings = {
   timeBasis: "standard", open: false, view: "none", date: { month: 12, day: 21 }, minute: 12 * 60,
-  period: { start_month: 12, start_day: 21, start_hour: 8, end_month: 12, end_day: 21, end_hour: 15 }, palette: "viridis",
 };
 
 export const monthDayText = ({ month, day }: MonthDay) => `${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 export const clockText = (minute: number) => `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
 
-/** The hours in shade the view counts from *positions*: each stands for its step, divided by the days sampled. */
-export function shadeHoursOf(positions: SunPositions, maxHours: number, palette: ShadePalette): ShadeHours {
-  return {
-    directions: positions.positions.map((position) => position.vector as Point3),
-    hoursEach: positions.step_minutes / 60 / Math.max(1, positions.days_sampled),
-    maxHours, palette,
-  };
-}
-
-/** The request of the hours in shade of *period*: each time is the middle of its step, so the count covers the hours and no more. */
-export function shadeRequest(period: ShadePeriod, timeBasis: TimeBasis) {
-  const from = monthDayText({ month: period.start_month, day: period.start_day });
-  const to = monthDayText({ month: period.end_month, day: period.end_day });
-  const step = from === to ? SHADE_STEP_MINUTES_OF_A_DAY : SHADE_STEP_MINUTES_OF_DAYS;
-  const hours = ((period.end_hour - period.start_hour + 24) % 24) + 1;      // over midnight when the end hour comes first
-  const start = period.start_hour * 60 + step / 2;
-  const end = (((period.end_hour + 1) * 60 - step / 2) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
-  return { range: { from, to, start, end, step, time_basis: timeBasis }, hours };
-}
-
 interface SunStudySource {
-  /** Simulate is open: the sun is read only then. */
+  /** A project is open: the sun is read only then (and while the tool is open). */
   active: boolean;
   hasWeatherFile: boolean;
 }
@@ -100,15 +65,14 @@ export function useSunStudy({ active, hasWeatherFile }: SunStudySource): SunStud
   const change = (changes: Partial<SunStudySettings>) => setSettings((current) => ({ ...current, ...changes }));
   const [chart, setChart] = useState<{ key: string; chart: SunChart } | null>(null);
   const [day, setDay] = useState<{ key: string; positions: SunPosition[] } | null>(null);
-  const [shadePositions, setShadePositions] = useState<{ key: string; positions: SunPositions } | null>(null);
   const reads = active && hasWeatherFile && settings.open;
-  const { timeBasis, view, period } = settings;
+  const { timeBasis, view } = settings;
   const report = useEffectEvent((error: unknown) => {
     if (!(error instanceof ApiError && error.status === NOT_FOUND)) reportServiceProblem(error, onServiceProblem);
   });
 
-  // The sun path's day: the moment's, or the first day of the period while the hours in shade are shown.
-  const date = monthDayText(view === "shade" ? { month: period.start_month, day: period.start_day } : settings.date);
+  // The sun path's day: the moment's.
+  const date = monthDayText(settings.date);
   const chartKey = `${date} ${timeBasis}`;
   useEffect(() => {
     if (!reads) return;
@@ -127,39 +91,14 @@ export function useSunStudy({ active, hasWeatherFile }: SunStudySource): SunStud
     return () => { wanted = false; };
   }, [reads, token, project, momentDate, timeBasis, dayKey]);
 
-  const shade = shadeRequest(period, timeBasis);
-  const shadeKey = JSON.stringify(shade.range);
-  // The same range object while its times are, so a period set again to the same times reads nothing.
-  const shadeRange = useKeyedValue(shade.range, shadeKey);
-  const shadeWanted = reads && view === "shade";
-  useEffect(() => {
-    if (!shadeWanted) return;
-    let wanted = true;
-    getSunPositions(token, project, shadeRange).then((reply) => { if (wanted) setShadePositions({ key: shadeKey, positions: reply }); })
-      .catch((error) => report(error));
-    return () => { wanted = false; };
-  }, [shadeWanted, token, project, shadeRange, shadeKey]);
-
   const sunNow = reads && day?.key === dayKey ? sunAt(day.positions, settings.minute, TIME_STEP_MINUTES / 2) : null;
-  const shownShade = shadeWanted && shadePositions?.key === shadeKey ? shadePositions.positions : null;
-  // The count once per set of positions; another palette only recolours it (the view does not count again).
-  const counted = useMemo(() => {
-    if (shownShade === null) return null;
-    const { from, to } = shadeRange;
-    const days = from === to ? dayAndMonth(from) : messages.sunToolDays(dayAndMonth(from), dayAndMonth(to), shownShade.day_step);
-    const end = clockText(((period.end_hour + 1) % 24) * 60);
-    return { ...shadeHoursOf(shownShade, shade.hours, INITIAL_SUN_STUDY.palette),
-             title: messages.shadeHoursLegend(clockText(period.start_hour * 60), end, days) };
-  }, [shownShade, shadeRange, shade.hours, period.start_hour, period.end_hour]);
-  const shadeView = useMemo(() => (counted === null ? null : { ...counted, palette: settings.palette }), [counted, settings.palette]);
   // The same array while the same position of the day is shown: the positions are kept as read.
-  const sunVector = view === "shade" || sunNow === null ? null : (sunNow.vector as Point3);
+  const sunVector = sunNow === null ? null : (sunNow.vector as Point3);
   const shownView = useMemo<SunStudyView>(() => ({
     chart: reads && chart?.key === chartKey ? chart.chart : null,
     sun: reads ? sunVector : null,
     shadows: reads && view === "shadows",
-    shade: reads && view === "shade" ? shadeView : null,
-  }), [reads, view, chart, chartKey, sunVector, shadeView]);
+  }), [reads, view, chart, chartKey, sunVector]);
 
   return { settings, change, available: hasWeatherFile, sunNow, view: shownView };
 }

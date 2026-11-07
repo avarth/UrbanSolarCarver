@@ -7,7 +7,8 @@
 //
 // The colour range (user, 2026-10-28): a low and a high end; the palette runs between them and values beyond either end take that
 // end's colour. By value the ends are the study's target (the low end, which the result card's "at target" reads) and target_max,
-// saved with the study, by default 0 and the highest value shown. By share they are percentages of the no-build value, 0 and 100 by
+// saved with the study, by default 0 and the 99th percentile of the values shown (a few high values, a roof turned to the sun, would
+// otherwise leave the rest in the middle of the palette; the bar still runs to the highest). By share they are percentages of the no-build value, 0 and 100 by
 // default, kept for each study while the app is open. The palettes are pinned (user, 2026-10-28): magma by value, viridis by share.
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { ApiError, getStudySkyPatches, getStudyValues, reportServiceProblem, type SkyDome, type StudyChange } from "../api_client/client";
@@ -16,7 +17,7 @@ import { useLatest } from "../hooks/use_latest";
 import { messages } from "../messages";
 import type { RunLoop } from "../common/run_state";
 import type { StudyPalette } from "../viewer/study_palettes";
-import { columnOf, distributionOf, FACING_GROUPS, facingGroups, highestOf, keptShareOf, OPEN_COLUMN, shareAtOrAbove, valuesAt, type ColourBy,
+import { columnOf, distributionOf, FACING_GROUPS, facingGroups, highestOf, keptShareOf, OPEN_COLUMN, percentile, shareAtOrAbove, valuesAt, type ColourBy,
   type FacingGroup, type StudyGeometry, type StudyStand, type StudyStatistics, type StudyView } from "../viewer/study_values";
 import { decodeStudyValues, type StudyValues } from "../viewer/study_values_decoder";
 import type { StudiesHook } from "./use_studies";
@@ -53,6 +54,8 @@ export interface StudyLegend {
 /** The result card's content: the statistics of the points that are not on the study's geometry, and of those on it, whole and by facing. */
 export interface StudyCard {
   unit: string;
+  /** A quick sun hours result counted the sun on every this many days; 1 otherwise. */
+  sunDayStep: number;
   /** The study's files, the surroundings, the terrain and the ground; null when the study samples none of them. */
   surroundings: StudyStatistics | null;
   /** The faces of the study's geometry; null when the study does not sample them. */
@@ -194,6 +197,7 @@ export function useStudyView({ studies, active, runs, editDisabled, northDegrees
     const building = geometry === "none" ? null : withTarget(parts.building, target);
     return {
       unit: values?.header.unit ?? "",
+      sunDayStep: values?.header.sun_day_step ?? 1,
       surroundings: withTarget(parts.surroundings, target),
       building: building === null || geometry === "none" || parts.byFacing === null ? null : {
         stand: geometry, statistics: building,
@@ -202,12 +206,15 @@ export function useStudyView({ studies, active, runs, editDisabled, northDegrees
     };
   }, [parts, target, geometry, values]);
   const highest = useMemo(() => (shown === null ? 0 : highestOf(shown)), [shown]);
+  /** The default high end by value: the 99th percentile. */
+  const defaultHigh = useMemo(() => (shown === null || shown.length === 0 ? 0
+    : Number(percentile(Float32Array.from(shown).sort(), 0.99).toPrecision(6))), [shown]);
 
   // The colour range on the scale shown.
   const byShare = colourBy === "share";
   const shareRange = (selectedId !== null ? shareRanges[selectedId] : undefined) ?? FULL_SHARE;
   // A saved high end at or below the target (an earlier legend let the two meet) counts as none.
-  const valueHigh = targetMax !== null && targetMax > (target ?? 0) ? targetMax : highest;
+  const valueHigh = targetMax !== null && targetMax > (target ?? 0) ? targetMax : defaultHigh > (target ?? 0) ? defaultHigh : highest;
   const [low, high]: [number, number] = byShare ? shareRange : [target ?? 0, valueHigh];
   const scale: [number, number] = byShare ? FULL_SHARE : [0, Math.max(highest, valueHigh, target ?? 0)];
 

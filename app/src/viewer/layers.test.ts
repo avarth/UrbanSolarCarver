@@ -376,7 +376,7 @@ test("a file that is not selected is drawn at 35 % strength, a selected one at f
 });
 
 test("a dimmed study keeps its colours, muted and opaque; other dimmed layers fade to a grey at 35 %", () => {
-  expect(dimmedAppearance("study_values")).toEqual([1, 0.4]);
+  expect(dimmedAppearance("study_values")).toEqual([1, 1]);        // full grey (user, 2026-11-07), still opaque
   expect(dimmedAppearance("kept_voxels")).toEqual([0.35, 1]);
   expect(dimmedAppearance("envelope")).toEqual([0.35, 1]);
 });

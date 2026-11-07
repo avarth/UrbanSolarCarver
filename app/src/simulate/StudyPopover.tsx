@@ -1,14 +1,13 @@
 // The settings of one study, in a popover beside the studies panel (simulate design, section 4): its name (a change renames it),
 // its metric (a select; the metrics whose inputs are missing are greyed with the reason), the analysis period when the metric has
 // one (the period control of the Criteria step), the metric's few mode settings and the test point spacing in a fold, its study
-// surfaces (what it accounts for on the plot: nothing, the max volume, the envelope or the massing; switches for what it simulates:
-// that geometry, the context, and the terrain or, without one, the ground; then additional surface files: the files the project
-// stores, to use or take out, and new files to add by the button or by dropping them), Duplicate and Delete. Each change is saved at once: a text or number
+// surfaces (what it accounts for on the plot, a select like the metric's: nothing, the max volume, the envelope or the massing; then
+// one list of switches for what it simulates: that geometry, the context, the terrain or, without one, the ground, and each test
+// surface file the project stores), Duplicate and Delete. Each change is saved at once: a text or number
 // field when it is left or Enter is pressed, the other controls on the change. The popover is a non-modal dialog: the view
 // around it stays usable; Escape and Close end it, and the focus goes back to the study's settings button.
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import type { InputFileInfo, MetricInfo, StudyChange, StudyWithState } from "../api_client/client";
-import { ProtectsBox } from "../common/ProtectsBox";
 import { messages } from "../messages";
 import { formattedNumber } from "../format_numbers";
 import { STUDY_STANDS, type StudyStand } from "../viewer/study_values";
@@ -37,8 +36,6 @@ interface StudyPopoverProps {
   disabledReason: string | null;
   /** Saves a change of the study; resolves with the reason it was refused, or null. */
   onChange: (change: StudyChange) => Promise<string | null>;
-  /** Uploads the files to the study; resolves with a message per file that could not be added (empty when all were). */
-  onAddFiles: (files: File[]) => Promise<string[]>;
   onUseFile: (fileName: string) => Promise<string | null>;
   onRemoveFile: (fileName: string) => Promise<string | null>;
   onDuplicate: () => Promise<string | null>;
@@ -57,7 +54,9 @@ const SURFACES_FROM = "surfaces_from";
 const GEOMETRY = "geometry";
 const SAMPLE_GEOMETRY = "sample_geometry";
 const SAMPLE_SPACING = "sample_spacing";
-const OWN_CONTROLS: readonly string[] = [SURFACES_FROM, GEOMETRY, SAMPLE_GEOMETRY, SAMPLE_SPACING];
+const QUICK = "quick";
+const METRICS_WITH_A_QUICK_COUNT = ["sun_hours"];
+const OWN_CONTROLS: readonly string[] = [SURFACES_FROM, GEOMETRY, SAMPLE_GEOMETRY, SAMPLE_SPACING, QUICK];
 const SOURCE_ORDER = ["context", "terrain", "ground"];
 
 /** The study simulates the faces of the geometry it accounts for (not for nothing). */
@@ -190,12 +189,15 @@ function SwitchRow({ label, hint, checked, disabled, onChange }: { label: string
   );
 }
 
-/** What the study accounts for on the plot (one of four; the envelope and the massing wait until Carve built them), and switches for what
- *  it simulates: that geometry's faces, the context (waiting for the project's surroundings files), and the terrain when the project has
- *  one, the ground when it has none. A source the study samples is shown and can be turned off even when its file has gone. */
-function AccountAndSimulate({ settings, hasSurroundings, hasTerrain, envelopeBuilt, massingBuilt, disabled, onChange }: {
-  settings: Record<string, unknown>; hasSurroundings: boolean; hasTerrain: boolean; envelopeBuilt: boolean; massingBuilt: boolean; disabled: boolean;
-  onChange: (values: Record<string, unknown>) => void;
+/** What the study accounts for on the plot (a select of four; the envelope and the massing wait until Carve built them), and one list of
+ *  switches for what it simulates: that geometry's faces, the context (waiting for the project's surroundings files), the terrain when the
+ *  project has one or the ground when it has none, then each test surface file the project stores. A source or file the study samples is
+ *  shown and can be turned off even when its file has gone. */
+function AccountAndSimulate({ settings, hasSurroundings, hasTerrain, envelopeBuilt, massingBuilt, fileChoices, chosenFiles, disabled, onChange,
+                              onToggleFile }: {
+  settings: Record<string, unknown>; hasSurroundings: boolean; hasTerrain: boolean; envelopeBuilt: boolean; massingBuilt: boolean;
+  fileChoices: string[]; chosenFiles: string[]; disabled: boolean; onChange: (values: Record<string, unknown>) => void;
+  onToggleFile: (fileName: string, on: boolean) => void;
 }) {
   const accountId = useId();
   const stand = standOf(settings);
@@ -210,20 +212,16 @@ function AccountAndSimulate({ settings, hasSurroundings, hasTerrain, envelopeBui
     onChange({ [SURFACES_FROM]: SOURCE_ORDER.filter((each) => (each === source ? on : chosen.includes(each))) });
   return (
     <>
-      <div className="study-field study-field-wide">
-        <span id={accountId} title={messages.studyAccountForHint}>{messages.studyAccountFor}</span>
-        <div className="segmented-switch study-account-for" role="group" aria-labelledby={accountId}>
-          {STUDY_STANDS.map((each) => {
-            const waiting = !built[each] && each !== stand;
-            return (
-              <button key={each} type="button" aria-pressed={each === stand} aria-disabled={waiting ? true : undefined}
-                      title={waiting ? messages.buildGeometryFirst[each] : undefined} disabled={disabled}
-                      onClick={() => { if (!waiting && each !== stand) onChange({ [GEOMETRY]: each }); }}>
-                {messages.studyStands[each]}
-              </button>
-            );
-          })}
-        </div>
+      <div className="study-field">
+        <label htmlFor={accountId} title={messages.studyAccountForHint}>{messages.studyAccountFor}</label>
+        <select id={accountId} className="study-account-for" value={stand} disabled={disabled}
+                onChange={(event) => onChange({ [GEOMETRY]: event.target.value })}>
+          {STUDY_STANDS.map((each) => (
+            <option key={each} value={each} disabled={!built[each] && each !== stand}>
+              {built[each] || each === stand ? messages.studyStands[each] : messages.studyStandWaiting(messages.studyStands[each], messages.buildGeometryFirst[each])}
+            </option>
+          ))}
+        </select>
       </div>
       <p className="study-subtitle">{messages.studySimulate}</p>
       <div className="study-switches">
@@ -239,12 +237,23 @@ function AccountAndSimulate({ settings, hasSurroundings, hasTerrain, envelopeBui
           );
         })}
       </div>
+      <p className="study-subtitle">{messages.studyTestSurfaceFiles}</p>
+      {fileChoices.length === 0
+        ? <p className="study-note">{messages.studyNoTestSurfaceFiles}</p>
+        : (
+          <div className="study-switches study-file-switches">
+            {fileChoices.map((fileName) => (
+              <SwitchRow key={fileName} label={fileName} checked={chosenFiles.includes(fileName)} disabled={disabled}
+                         onChange={(on) => onToggleFile(fileName, on)} />
+            ))}
+          </div>
+        )}
     </>
   );
 }
 
 export function StudyPopover({ id, study, metrics, storedFiles, hasSurroundings, hasTerrain, envelopeBuilt, massingBuilt, carvingSpacing, disabledReason,
-                               onChange, onAddFiles, onUseFile, onRemoveFile, onDuplicate, onDelete, onClose }: StudyPopoverProps) {
+                               onChange, onUseFile, onRemoveFile, onDuplicate, onDelete, onClose }: StudyPopoverProps) {
   const { entry } = study;
   const settings = entry.settings ?? {};
   const files = entry.test_surface_files ?? [];
@@ -260,7 +269,8 @@ export function StudyPopover({ id, study, metrics, storedFiles, hasSurroundings,
   const periodLabelId = useId();
   const periodInputId = useId();
   const filesTitleId = useId();
-  const additionalId = useId();
+  // The files a study can simulate: every test surface file the project stores, and any the study lists that has gone.
+  const fileChoices = [...storedFiles.map((file) => file.name), ...files.filter((name) => !storedFiles.some((file) => file.name === name))];
 
   useEffect(() => nameInput.current?.focus(), []);
 
@@ -307,16 +317,19 @@ export function StudyPopover({ id, study, metrics, storedFiles, hasSurroundings,
                           describedBy={undefined} disabled={disabled} />
         </div>
       )}
+      {METRICS_WITH_A_QUICK_COUNT.includes(entry.metric) && (
+        <div className="study-quick">
+          <SwitchRow label={messages.studyQuick} hint={messages.studyQuickHint} checked={settings[QUICK] === true} disabled={disabled}
+                     onChange={(on) => change({ values: { [QUICK]: on } })} />
+        </div>
+      )}
       <MoreSettings metric={entry.metric} settings={settings} carvingSpacing={carvingSpacing} disabled={disabled} onChange={(values) => change({ values })} />
       <div className="study-files" role="group" aria-labelledby={filesTitleId}>
         <p id={filesTitleId} className="study-files-title">{messages.studySurfaces}</p>
         <AccountAndSimulate settings={settings} hasSurroundings={hasSurroundings} hasTerrain={hasTerrain} envelopeBuilt={envelopeBuilt}
-                            massingBuilt={massingBuilt} disabled={disabled} onChange={(values) => change({ values })} />
-        <p id={additionalId} className="study-subtitle">{messages.studyAdditionalSurfaces}</p>
-        <ProtectsBox files={files.map((name) => storedFiles.find((file) => file.name === name) ?? { name, triangle_count: 0 })} mode=""
-                     hint={messages.studyNoSurfaceFiles} addLabel={messages.addStudySurfaces} onAddFiles={onAddFiles} onRemoveFile={onRemoveFile}
-                     disabledReason={disabledReason} otherFiles={storedFiles.map((file) => file.name).filter((name) => !files.includes(name))}
-                     onUseFile={onUseFile} otherFilesTitle={messages.useFileOfProject} />
+                            massingBuilt={massingBuilt} fileChoices={fileChoices} chosenFiles={files} disabled={disabled}
+                            onChange={(values) => change({ values })}
+                            onToggleFile={(fileName, on) => void send(() => (on ? onUseFile(fileName) : onRemoveFile(fileName)))} />
       </div>
       {problem !== null && <p className="studies-panel-problem" role="alert">{problem}</p>}
       <div className="study-popover-actions">

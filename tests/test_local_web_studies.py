@@ -226,6 +226,17 @@ def test_a_study_takes_its_geometry_its_faces_and_its_spacing_and_keeps_them_thr
         assert refused.value.status_code == 422 and store.studies(name)[0].settings == following.settings
 
 
+def test_a_sun_hours_study_takes_quick_and_another_metric_drops_it(project_with_inputs):
+    store, name = _with_weather(project_with_inputs)
+    study = store.add_study(name, metric="sun_hours")
+    assert "quick" not in study.settings                   # exact until chosen
+    assert store.update_study(name, study.id, values={"quick": True}).settings["quick"] is True
+    assert "quick" not in store.update_study(name, study.id, metric="sky_view").settings
+    with pytest.raises(ProjectError) as refused:
+        store.update_study(name, study.id, values={"quick": True})
+    assert refused.value.status_code == 422
+
+
 def test_duplicating_a_study_copies_its_metric_settings_and_files_under_a_new_number(project_with_inputs):
     store, name = _with_weather(project_with_inputs)
     store.add_criterion_test_surface(name, "1", "facade.ply", box_bytes([0, 20, 5], extents=(10, 0.0, 10)))
@@ -438,19 +449,27 @@ def test_a_file_a_criterion_uses_stays_when_the_study_is_deleted(project_with_in
     assert test_surfaces.fingerprint(store.open(name), "1") == criterion_joined_before
 
 
-def test_a_file_nothing_uses_any_more_goes_to_the_recycle_bin(project_with_inputs, monkeypatch):
+def test_a_file_a_study_takes_out_or_a_deleted_study_listed_stays_in_the_project(project_with_inputs, monkeypatch):
+    """A study picks among the project's test surface files with switches (user, 2026-11-07): switching one off, or deleting the
+    study, never puts the file in the recycle bin, even when no criterion and no other study lists it."""
     store, name = project_with_inputs
     recycle_bin = _with_recycle_bin(monkeypatch)
-    stored = store.open(name) / "inputs" / "test_surfaces"
     store.add_study(name, from_criterion="1")
     store.add_study(name, from_criterion="1")
     store.remove_criterion_test_surface(name, "1", "surface.ply")
     store.remove_study_test_surface(name, "1", "surface.ply")
-    assert recycle_bin.files == []                                  # study 2 still lists it
     store.delete_study(name, "2")
-    assert recycle_bin.files == [stored / "surface.ply"] and _stored_files(store, name) == []
-    assert store.input_files(name, "test_surfaces") == []
+    assert recycle_bin.files == [] and _stored_files(store, name) == ["surface.ply"]
+    assert [file.name for file in store.input_files(name, "test_surfaces")] == ["surface.ply"]
     assert not _study_joined(store, name, "1").exists() and not _study_joined(store, name, "2").exists()
+
+
+def test_a_file_no_criterion_and_no_study_lists_goes_to_the_recycle_bin_when_its_criterion_lets_it_go(project_with_inputs, monkeypatch):
+    store, name = project_with_inputs
+    recycle_bin = _with_recycle_bin(monkeypatch)
+    stored = store.open(name) / "inputs" / "test_surfaces"
+    store.remove_criterion_test_surface(name, "1", "surface.ply")
+    assert recycle_bin.files == [stored / "surface.ply"] and _stored_files(store, name) == []
 
 
 def test_a_study_joins_its_files_and_has_no_joined_file_without_any(project_with_inputs):

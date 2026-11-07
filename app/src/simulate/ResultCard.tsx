@@ -16,6 +16,8 @@ export interface ResultCardProps {
   surroundings: StudyStatistics | null;
   /** The faces of the study's geometry, whole and by facing; null when the study does not sample them. */
   building: { stand: StudyGeometry; statistics: StudyStatistics; byFacing: Record<FacingGroup, StudyStatistics | null> } | null;
+  /** A quick sun hours result counted the sun on every this many days: the card says so. 1 (the default) for an exact count. */
+  sunDayStep?: number;
 }
 
 const percentOf = (share: number) => formatPercent(Math.round(share * 100));
@@ -32,7 +34,7 @@ function linesOf(statistics: StudyStatistics, unit: string): string[] {
 
 const hasPoints = (statistics: StudyStatistics | null): statistics is StudyStatistics => statistics !== null && !Number.isNaN(statistics.mean);
 
-export function ResultCard({ unit, surroundings, building }: ResultCardProps) {
+export function ResultCard({ unit, surroundings, building, sunDayStep = 1 }: ResultCardProps) {
   const others = hasPoints(surroundings) ? surroundings : null;
   const own = building !== null && hasPoints(building.statistics) ? building : null;
   const [minimised, setMinimised] = useState(false);
@@ -49,6 +51,7 @@ export function ResultCard({ unit, surroundings, building }: ResultCardProps) {
           <span aria-hidden="true">{minimised ? "+" : "\u2212"}</span>
         </button>
       </div>
+      {!minimised && sunDayStep > 1 && <p className="result-card-note">{messages.resultQuick(sunDayStep)}</p>}
       {!minimised && others !== null && (
         <div className="result-card-block">
           {own !== null && <h3>{messages.resultSurroundings}</h3>}

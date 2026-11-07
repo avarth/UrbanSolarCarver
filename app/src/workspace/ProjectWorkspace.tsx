@@ -41,6 +41,7 @@ import type { StudyStand } from "../viewer/study_values";
 import { useStudies } from "../simulate/use_studies";
 import { useStudyView } from "../simulate/use_study_view";
 import { useSunStudy } from "../simulate/use_sun_study";
+import { SunPanel } from "../simulate/SunPanel";
 import { NO_VIEWER_RESULTS, ViewerPane } from "../viewer_overlays/ViewerPane";
 import { useColdPeriod } from "../settings_form/cold_period_request";
 import { boundsOf } from "../steps/input_meshes";
@@ -454,18 +455,20 @@ function OpenProject(props: ProjectWorkspaceProps) {
   const studyView = useStudyView({
     studies, active: simulating, runs, northDegrees, editDisabled: runActive,
   });
-  const sunStudy = useSunStudy({ active: simulating, hasWeatherFile });
+  const sunStudy = useSunStudy({ active: true, hasWeatherFile });
+  const sunTool = { open: sunStudy.settings.open, onToggle: () => sunStudy.change({ open: !sunStudy.settings.open }),
+                    panel: <SunPanel sunStudy={sunStudy} /> };
   const simulateView = (theme: ViewportTheme) => (
     <SimulateView studies={studies} criteria={criteria.criteria} storedTestSurfaces={files.test_surfaces} runs={runs}
                   hasSurroundings={files.context.length > 0} hasTerrain={files.terrain.length > 0}
                   envelopeBuilt={designResults?.envelope != null} massingBuilt={designResults?.massing != null} carvingSpacing={carvingSpacing}
-                  onStoredFilesChange={() => { void testSurfaceCalls.reloadStoredFiles(); refreshStageStatus(); }} studyView={studyView} sunStudy={sunStudy}
+                  onStoredFilesChange={() => { void testSurfaceCalls.reloadStoredFiles(); refreshStageStatus(); }} studyView={studyView}
                   theme={theme} notice={inputChangesNotice} />
   );
   const simulateViewer = { overlayContent: simulateView, study: studyView.view, studyOutOfDate: studyView.studyOutOfDate,
                            envelopeSeeThrough: studyView.geometry === "envelope",
                            results: { ...(designResults ?? NO_VIEWER_RESULTS), skyDome: studyView.skyDome }, skyDomeTitle: studyView.skyDomeTitle,
-                           dimmedLayers: studyView.studyOutOfDate ? ["sky_dome" as const] : [], sunStudy: sunStudy.view,
+                           dimmedLayers: studyView.studyOutOfDate ? ["sky_dome" as const] : [],
                            missingLayers: studyView.skyDomeMissing ? ["sky_dome" as const] : [],
                            missingLayerNotes: { sky_dome: messages.studySkyDomeNeedsRun } };
   const criteriaOutOfDate = activeCriteria(criteria.criteria).filter((criterion) => criterionStages[criterion.id]?.preprocessing === "out_of_date").length;
@@ -491,6 +494,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
       </aside>
       <section className="workspace-view">
         <ViewerPane maxVolume={maxVolume} testSurfaces={testSurfaceGroups} onTestSurfacesShownChange={setTestSurfacesShown}
+                    sunStudy={sunStudy.view} sunTool={sunTool}
                     criteria={active.map(({ id, name, colour }) => ({ id, name, colour }))} context={contextMesh.geometry} terrain={terrainMesh.geometry} sunPath={sunPath}
                     hemisphere={sceneSphere} skyDomeChoiceRemembered={props.mode === "design"}
                     maxVolumeAppearance={!inspecting && (simulating ? studyView.geometry !== "none" : STEPS_WITH_SOLID_MAX_VOLUME.includes(viewStep)) ? "solid" : "ghost"}

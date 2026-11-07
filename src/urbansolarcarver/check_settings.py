@@ -143,6 +143,8 @@ class CheckSettings(BaseModel):
     geometry: Literal["none", "max_volume", "envelope", "massing"] = Field(
         "max_volume", description="What stands on the plot and blocks: nothing, the maximum volume, the envelope or the massing")
     sample_geometry: bool = Field(False, description="Also sample the faces of the geometry that stands (not for none)")
+    quick: bool = Field(False, description="sun_hours: sample the sun on every n-th day, at most about 240 positions "
+                                           "(solar_check.QUICK_SUN_POSITIONS), each day counting for the days it stands for")
 
     @field_validator("sun_steps_per_hour")
     @classmethod
@@ -166,6 +168,8 @@ class CheckSettings(BaseModel):
             missing = [name for name in _PERIOD_FIELDS if getattr(self, name) is None]
             if missing:
                 raise ValueError(f"the check metric '{self.metric}' needs the analysis period: {', '.join(missing)}")
+        if self.quick and self.metric != "sun_hours":
+            raise ValueError(f"quick is a setting of sun hours only, not of '{self.metric}'")
         if self.time_basis != "standard" and self.metric in ("solar_energy", "useful_solar_energy"):
             raise ValueError(
                 f"time_basis '{self.time_basis}' is only valid for sun hours: the weather file's hourly "

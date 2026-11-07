@@ -1,16 +1,8 @@
-// Simulate's sun tool in the 3D view: a sun light at the chosen time that casts shadows (three.js shadow maps), and a quick count of
-// the hours in shade over a range of times.
-//
-// The count draws the solid meshes from the camera once for every sun position into a float target, adding the hours each position
-// stands for wherever a surface is in shade (behind something from the sun, or turned away from it), and shows the sum over the view
-// in a colour ramp, viridis or grey, from light at no shade to dark at the whole range in shade. The scene draws it under the sun
-// path and the sky dome (scene.ts, OVER_THE_COUNT_LAYERS). It is a picture of what the camera sees,
-// counted again once the camera rests and hidden while it moves, at the shadow map's resolution; Simulate's sun hours are the precise
-// count, per test point. Only what lies inside the compass circle (in plan) is coloured (user, 2026-10-28).
+// The sun tool in the 3D view: a sun light at the chosen time that casts shadows (three.js shadow maps) on the solid layers and on
+// the ground where no terrain is. Simulate's Sun hours studies count the hours of sun per test point; the view only shows a moment.
 import * as THREE from "three";
 import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import type { Point3 } from "./local_origin";
-import { shadeColour, type ShadeHours, type ShadePalette } from "./sun_study";
 
 const SHADOW_MAP_PIXELS = 4096;
 // The shadow camera covers this many site radii around the site's centre: the surroundings' shadows on the site, the site's on them.
@@ -19,17 +11,11 @@ const SUN_INTENSITY = 2.4;
 // While the sun casts shadows the sky light is lowered and the fixed light switched off, so the shade reads.
 const SKY_INTENSITY_WITH_SHADOWS = 1.1;
 const GROUND_SHADOW_OPACITY = 0.3;
-const SHADE_OVERLAY_OPACITY = 0.85;
-const RECOUNT_DELAY_MILLISECONDS = 250;
-const LIT_THRESHOLD = 1e-4;
-const RAMP_ENTRIES = 256;
-const NO_CLIP_RADIUS = 1e30;            // a radius nothing lies beyond (a finite float for the shader)
 
 /** What the sun shading needs of the view. */
 export interface SunShadingHost {
   scene: THREE.Scene;
   renderer: THREE.WebGLRenderer;
-  camera: THREE.Camera;
   skyLight: THREE.HemisphereLight;
   fixedLight: THREE.DirectionalLight;
   /** The meshes that cast and catch the sun's shadows: the solid layers shown. */
@@ -38,28 +24,11 @@ export interface SunShadingHost {
   siteBox(): THREE.Box3;
   /** The terrain is shown: it catches the shadows on the ground, so the shadow catcher stays hidden. */
   terrainShown(): boolean;
-  /** The compass circle in plan (the scene hemisphere's rim): the hours in shade are coloured inside it only; null: everywhere. */
-  clipCircle(): { centre: [number, number]; radius: number } | null;
-  requestRender(): void;
 }
 
 /** Whether *object* is a solid mesh that casts and catches shadows (not a fat line, which three draws as a mesh). */
 export function isSolidMesh(object: THREE.Object3D): object is THREE.Mesh {
   return (object as THREE.Mesh).isMesh === true && !(object instanceof LineSegments2);
-}
-
-/** The colours of *palette* as RGBA bytes from no shade to the whole range in shade, for the overlay's lookup. */
-function shadeRamp(palette: ShadePalette): THREE.DataTexture {
-  const bytes = new Uint8Array(RAMP_ENTRIES * 4);
-  const colour = new THREE.Color();
-  for (let entry = 0; entry < RAMP_ENTRIES; entry++) {
-    colour.setStyle(shadeColour(palette, (entry + 0.5) / RAMP_ENTRIES), THREE.NoColorSpace);
-    bytes.set([Math.round(colour.r * 255), Math.round(colour.g * 255), Math.round(colour.b * 255), 255], entry * 4);
-  }
-  const texture = new THREE.DataTexture(bytes, RAMP_ENTRIES, 1);
-  texture.magFilter = THREE.LinearFilter;
-  texture.needsUpdate = true;
-  return texture;
 }
 
 export class SunShading {
@@ -69,21 +38,8 @@ export class SunShading {
   private readonly host: SunShadingHost;
   private direction: THREE.Vector3 | null = null;
   private shadows = false;
-  private shade: ShadeHours | null = null;
-  private target: THREE.WebGLRenderTarget | null = null;
-  private counted = false;
-  private recountTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly skyIntensity: number;
   private readonly fixedIntensity: number;
-  private readonly maskMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide });
-  private readonly clipCentre = { value: new THREE.Vector2() };
-  private readonly clipRadius = { value: NO_CLIP_RADIUS };
-  private readonly countMaterial: THREE.MeshLambertMaterial;
-  private readonly hoursEach = { value: 0 };
-  private readonly overlayScene = new THREE.Scene();
-  private readonly overlayCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-  private readonly overlayMaterial: THREE.ShaderMaterial;
-  private readonly ramps: Record<ShadePalette, THREE.DataTexture> = { viridis: shadeRamp("viridis"), grey: shadeRamp("grey") };
 
   constructor(host: SunShadingHost) {
     this.host = host;
@@ -95,65 +51,12 @@ export class SunShading {
     this.ground.receiveShadow = true;
     this.ground.visible = false;
     host.scene.add(this.light, this.light.target, this.ground);
-
-    // The surfaces seen, marked where they lie inside the compass circle in plan: what lies outside keeps alpha 0 and no colour.
-    this.maskMaterial.onBeforeCompile = (shader) => {
-      shader.uniforms.clipCentre = this.clipCentre;
-      shader.uniforms.clipRadius = this.clipRadius;
-      shader.vertexShader = `varying vec2 vPlan;\n${shader.vertexShader}`.replace("#include <project_vertex>",
-        "#include <project_vertex>\n\tvPlan = (modelMatrix * vec4(transformed, 1.0)).xy;");
-      shader.fragmentShader = `uniform vec2 clipCentre;\nuniform float clipRadius;\nvarying vec2 vPlan;\n${shader.fragmentShader}`.replace("void main() {",
-        "void main() {\n\tif (distance(vPlan, clipCentre) > clipRadius) discard;");
-    };
-    // The count: Lambert lit by the sun alone, written as the hours of this position where nothing of the sun arrives, added up.
-    this.countMaterial = new THREE.MeshLambertMaterial({
-      side: THREE.DoubleSide, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
-      blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor, depthWrite: false, depthFunc: THREE.LessEqualDepth,
-      polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
-    });
-    this.countMaterial.onBeforeCompile = (shader) => {
-      shader.uniforms.shadeHours = this.hoursEach;
-      shader.fragmentShader = `uniform float shadeHours;\n${shader.fragmentShader}`.replace("#include <opaque_fragment>",
-        `#include <opaque_fragment>\n\tgl_FragColor = vec4(vec3(dot(outgoingLight, vec3(1.0)) < ${LIT_THRESHOLD.toExponential()} ? shadeHours : 0.0), 0.0);`);
-    };
-    this.overlayMaterial = new THREE.ShaderMaterial({
-      uniforms: { counted: { value: null }, ramp: { value: null }, maxHours: { value: 1 }, opacity: { value: SHADE_OVERLAY_OPACITY } },
-      vertexShader: "varying vec2 vUv;\nvoid main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }",
-      fragmentShader: [
-        "uniform sampler2D counted; uniform sampler2D ramp; uniform float maxHours; uniform float opacity; varying vec2 vUv;",
-        "void main() {",
-        "  vec4 sum = texture2D(counted, vUv);",
-        "  if (sum.a < 0.5) discard;",
-        "  float share = clamp(sum.r / maxHours, 0.0, 1.0);",
-        "  gl_FragColor = vec4(texture2D(ramp, vec2(share, 0.5)).rgb, opacity);",
-        "}",
-      ].join("\n"),
-      transparent: true, depthTest: false, depthWrite: false,
-    });
-    this.overlayScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.overlayMaterial));
   }
 
-  /** The sun toward *direction* (null: none), casting shadows when *shadows*; the hours in shade over a range, or null. */
-  set(direction: Point3 | null, shadows: boolean, shade: ShadeHours | null): void {
+  /** The sun toward *direction* (null: none), casting shadows when *shadows*. */
+  set(direction: Point3 | null, shadows: boolean): void {
     this.direction = direction === null ? null : new THREE.Vector3(...direction).normalize();
     this.shadows = shadows && direction !== null;
-    // Only another palette: the count stands, the overlay is recoloured.
-    const recount = shade === null || this.shade === null || shade.directions !== this.shade.directions || shade.hoursEach !== this.shade.hoursEach;
-    this.shade = shade;
-    if (recount) this.invalidate();
-  }
-
-  /** The camera or the content changed: the count no longer matches the view; it is counted again once things rest. */
-  invalidate(): void {
-    this.counted = false;
-    if (this.recountTimer !== null) clearTimeout(this.recountTimer);
-    this.recountTimer = null;
-    if (this.shade === null) return;
-    this.recountTimer = setTimeout(() => {
-      this.recountTimer = null;
-      this.count();
-      this.host.requestRender();
-    }, RECOUNT_DELAY_MILLISECONDS);
   }
 
   /** Before each frame: the sun, its shadow flags and the lights as the tool is set. */
@@ -169,35 +72,14 @@ export class SunShading {
     }
     this.ground.visible = casting && !this.host.terrainShown() && this.placeGround();
     if (casting) this.placeLight(this.direction!);
-    this.host.renderer.shadowMap.needsUpdate = casting;       // the second pass of a frame (the layers over the count) draws no new map
-  }
-
-  /** After each frame: the hours in shade over the view, when counted for the camera as it is. */
-  drawOverlay(): void {
-    if (this.shade === null || !this.counted || this.target === null) return;
-    this.overlayMaterial.uniforms.counted.value = this.target.texture;
-    this.overlayMaterial.uniforms.ramp.value = this.ramps[this.shade.palette];
-    this.overlayMaterial.uniforms.maxHours.value = Math.max(this.shade.maxHours, 1e-6);
-    const autoClear = this.host.renderer.autoClear;
-    this.host.renderer.autoClear = false;
-    this.host.renderer.render(this.overlayScene, this.overlayCamera);
-    this.host.renderer.autoClear = autoClear;
+    this.host.renderer.shadowMap.needsUpdate = casting;
   }
 
   dispose(): void {
-    if (this.recountTimer !== null) clearTimeout(this.recountTimer);
-    this.target?.dispose();
     this.light.shadow.dispose();
     this.ground.geometry.dispose();
     (this.ground.material as THREE.Material).dispose();
-    this.maskMaterial.dispose();
-    this.countMaterial.dispose();
-    this.ramps.viridis.dispose();
-    this.ramps.grey.dispose();
-    this.overlayMaterial.dispose();
   }
-
-  // ------------------------------------------------------------------------------------------------------------------------
 
   /** The site's centre and radius, for the shadow camera and the ground; null before anything is loaded. */
   private site(): { centre: THREE.Vector3; radius: number; groundZ: number } | null {
@@ -236,75 +118,5 @@ export class SunShading {
     // A texel of the shadow map is 2 reach / SHADOW_MAP_PIXELS wide: offsets of about a texel keep lit faces from shading themselves.
     this.light.shadow.normalBias = (3 * reach) / SHADOW_MAP_PIXELS;
     this.light.shadow.bias = -0.0002;
-  }
-
-  /** Counts the hours in shade over the view: the meshes only, lit by the sun alone, once per sun position. */
-  private count(): void {
-    const shade = this.shade;
-    const { renderer, scene, camera } = this.host;
-    if (shade === null || this.site() === null) return;
-    const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-    if (this.target === null || this.target.width !== size.x || this.target.height !== size.y) {
-      this.target?.dispose();
-      this.target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType });
-    }
-    const meshes = new Set<THREE.Object3D>(this.host.shadowMeshes());
-    const groundCounts = !this.host.terrainShown() && this.placeGround();
-    if (groundCounts) meshes.add(this.ground);
-    // Everything else is hidden for the count, and every light but the sun.
-    const hidden: THREE.Object3D[] = [];
-    scene.traverse((object) => {
-      const drawn = (object as THREE.Mesh).isMesh || (object as THREE.Line).isLine || (object as THREE.Points).isPoints || (object as THREE.Sprite).isSprite
-        || (object as THREE.Light).isLight;
-      if (drawn && object.visible && !meshes.has(object) && object !== this.light) {
-        object.visible = false;
-        hidden.push(object);
-      }
-    });
-    const flags = [...meshes].map((object) => [object, object.visible, (object as THREE.Mesh).castShadow, (object as THREE.Mesh).receiveShadow] as const);
-    for (const object of meshes) {
-      object.visible = true;
-      (object as THREE.Mesh).castShadow = object !== this.ground;
-      (object as THREE.Mesh).receiveShadow = true;
-    }
-    const lightState = [this.light.visible, this.light.castShadow] as const;
-    this.light.visible = true;
-    this.light.castShadow = true;
-    const background = scene.background;
-    const clearColour = renderer.getClearColor(new THREE.Color());
-    const clearAlpha = renderer.getClearAlpha();
-    const autoClear = renderer.autoClear;
-    scene.background = null;
-    renderer.autoClear = false;
-    renderer.setRenderTarget(this.target);
-    renderer.setClearColor(0x000000, 0);
-    renderer.clear();
-    // The surfaces seen, marked with alpha 1 inside the compass circle; then one pass per sun position adds its hours where the
-    // surface is in shade.
-    const circle = this.host.clipCircle();
-    this.clipCentre.value.set(circle?.centre[0] ?? 0, circle?.centre[1] ?? 0);
-    this.clipRadius.value = circle?.radius ?? NO_CLIP_RADIUS;
-    scene.overrideMaterial = this.maskMaterial;
-    renderer.render(scene, camera);
-    scene.overrideMaterial = this.countMaterial;
-    this.hoursEach.value = shade.hoursEach;
-    for (const direction of shade.directions) {
-      this.placeLight(new THREE.Vector3(...direction).normalize());
-      renderer.shadowMap.needsUpdate = true;
-      renderer.render(scene, camera);
-    }
-    scene.overrideMaterial = null;
-    renderer.setRenderTarget(null);
-    renderer.setClearColor(clearColour, clearAlpha);
-    renderer.autoClear = autoClear;
-    scene.background = background;
-    [this.light.visible, this.light.castShadow] = lightState;
-    for (const [object, visible, castShadow, receiveShadow] of flags) {
-      object.visible = visible;
-      (object as THREE.Mesh).castShadow = castShadow;
-      (object as THREE.Mesh).receiveShadow = receiveShadow;
-    }
-    for (const object of hidden) object.visible = true;
-    this.counted = true;
   }
 }

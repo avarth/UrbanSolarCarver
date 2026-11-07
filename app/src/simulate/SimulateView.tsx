@@ -1,5 +1,5 @@
 // What Simulate puts over the 3D view: the studies panel (StudiesPanel) with the popover of a study's settings (StudyPopover) and
-// Run, and under it the Sun panel (SunPanel: the sun path, the shadows and the hours in shade of the sun tool); for the selected study the target legend along the bottom and the result card in
+// Run; for the selected study the target legend along the bottom and the result card in
 // the bottom right corner (use_study_view.ts; the view draws its values, ProjectWorkspace gives them to ViewerPane). The studies are read when Simulate opens and again whenever a run ends while it is open: a simulation's results, or a run of
 // Design that changed what the studies trace. The simulation is a run of the app's run loop (origin "simulate"), one job at a time
 // with the runs of Design: Run waits while one of those goes on, and the studies cannot be changed while a run of the project does.
@@ -9,16 +9,13 @@ import { useProjectSession } from "../api_client/project_session";
 import { messages } from "../messages";
 import type { ViewportTheme } from "../viewer/colour_scales";
 import type { RunLoop } from "../common/run_state";
-import { inputProblemText } from "../common/InputBox";
 import { RunProgress } from "../common/RunProgress";
 import { TargetLegend } from "../viewer_overlays/TargetLegend";
 import { ResultCard } from "./ResultCard";
 import { StudiesPanel } from "./StudiesPanel";
 import { StudyPopover } from "./StudyPopover";
-import { SunPanel } from "./SunPanel";
 import type { StudiesHook } from "./use_studies";
 import type { StudyViewHook } from "./use_study_view";
-import type { SunStudyHook } from "./use_sun_study";
 import "./simulate.css";
 
 interface SimulateViewProps {
@@ -40,8 +37,6 @@ interface SimulateViewProps {
   onStoredFilesChange: () => void;
   /** The selected study on the view: the target legend and the result card. */
   studyView: StudyViewHook;
-  /** The sun tool: the Sun panel sets it, the view draws it. */
-  sunStudy: SunStudyHook;
   /** The viewport theme (the legend's palettes do not depend on it). */
   theme?: ViewportTheme;
   /** The notice of input files changed in the project folder or missing from it, at the top of the studies panel. */
@@ -49,7 +44,7 @@ interface SimulateViewProps {
 }
 
 export function SimulateView({ studies, criteria, storedTestSurfaces, hasSurroundings, hasTerrain, envelopeBuilt, massingBuilt, carvingSpacing, runs,
-                               onStoredFilesChange, studyView, sunStudy, notice }: SimulateViewProps) {
+                               onStoredFilesChange, studyView, notice }: SimulateViewProps) {
   const { project, onServiceProblem } = useProjectSession();
   const [popoverStudyId, setPopoverStudyId] = useState<string | null>(null);
   const view = useRef<HTMLDivElement>(null);
@@ -77,25 +72,6 @@ export function SimulateView({ studies, criteria, storedTestSurfaces, hasSurroun
       return failureTextOf(error);
     }
   };
-  /** Uploads the files one after another; resolves with a message per file that could not be added. The stored files are asked for
-   *  again after one was added, since the reply lists names only (a file of a stored name may have replaced it for a criterion too). */
-  const addFiles = async (id: string, files: File[]): Promise<string[]> => {
-    const problems: string[] = [];
-    let added = false;
-    for (const file of files) {
-      try {
-        await studies.addFile(id, file);
-        added = true;
-      } catch (error) {
-        if (reportServiceProblem(error, onServiceProblem)) {
-          break;
-        }
-        problems.push(inputProblemText(error, file.name));
-      }
-    }
-    if (added) onStoredFilesChange();
-    return problems;
-  };
   const settingsButtonOf =(id: string) => [...view.current?.querySelectorAll<HTMLElement>(".study-row") ?? []]
     .find((row) => row.dataset.studyId === id)?.querySelector<HTMLButtonElement>(".study-row-settings") ?? null;
   const closePopover = () => {
@@ -110,7 +86,6 @@ export function SimulateView({ studies, criteria, storedTestSurfaces, hasSurroun
     <StudyPopover key={shown.entry.id} id={popoverId} study={shown} metrics={studies.metrics} storedFiles={storedTestSurfaces}
                   hasSurroundings={hasSurroundings} hasTerrain={hasTerrain} envelopeBuilt={envelopeBuilt} massingBuilt={massingBuilt}
                   carvingSpacing={carvingSpacing} disabledReason={editDisabledReason} onChange={(change) => attempt(() => studies.update(shown.entry.id, change))}
-                  onAddFiles={(files) => addFiles(shown.entry.id, files)}
                   onUseFile={(fileName) => attempt(() => studies.useFile(shown.entry.id, fileName))}
                   onRemoveFile={(fileName) => attempt(async () => {
                     await studies.removeFile(shown.entry.id, fileName);
@@ -139,7 +114,6 @@ export function SimulateView({ studies, criteria, storedTestSurfaces, hasSurroun
                       }} loadProblem={studies.loadProblem} popover={popover} notice={notice}
                       shownOnView={studyView.shownOnView} onShownOnViewChange={studyView.setShownOnView}
                       runFeedback={<RunProgress runs={runs} project={project} origin="simulate" mode="" onGoToSetting={() => {}} studyNames={studyNames} foldWarnings />} />
-        <SunPanel sunStudy={sunStudy} />
       </div>
       {studyView.waitingForRun && <p className="viewer-overlay study-view-note" role="status">{messages.studyShownWhenRunEnds}</p>}
       {legend !== null && (
@@ -147,7 +121,7 @@ export function SimulateView({ studies, criteria, storedTestSurfaces, hasSurroun
                       palette={legend.palette} disabled={legend.disabled} onRangeEndChange={studyView.setRangeEnd}
                       onColourByChange={studyView.setColourBy} />
       )}
-      {card !== null && <ResultCard unit={card.unit} surroundings={card.surroundings} building={card.building} />}
+      {card !== null && <ResultCard unit={card.unit} surroundings={card.surroundings} building={card.building} sunDayStep={card.sunDayStep} />}
     </>
   );
 }

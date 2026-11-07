@@ -70,6 +70,13 @@ export function plainText(parts: MessagePart[]): string {
   return parts.map((part) => (typeof part === "string" ? part : part.code)).join("");
 }
 
+/** 2nd, 3rd, 22nd, 11th: an English ordinal. */
+function ordinalOf(value: number): string {
+  const tens = value % 100;
+  const suffix = tens >= 11 && tens <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[value % 10] ?? "th";
+  return `${value}${suffix}`;
+}
+
 export const messages = {
   // Top bar and start screen (4, 5.1)
   productName: "UrbanSolarCarver",
@@ -121,7 +128,12 @@ export const messages = {
   studySimulate: "Simulate",
   studySimulateGeometryHint: "Test points on its facades and roofs: how much the building itself gets",
   nothingToSimulate: "Nothing stands on the plot",
-  studyAdditionalSurfaces: "Additional surfaces to simulate",
+  studyTestSurfaceFiles: "Test surface files",
+  studyQuick: "Quick count",
+  studyQuickHint: "Counts the sun on every n-th day of the period (at most about 240 sun positions): about a second. Off: every hour",
+  resultQuick: (step: number) => `Quick count: the sun on every ${ordinalOf(step)} day`,
+  studyNoTestSurfaceFiles: "The project has no test surface files yet: add them to a criterion in Carve.",
+  studyStandWaiting: (stand: string, reason: string) => `${stand} (${String(reason).replace(/^./, (first) => first.toLowerCase())})`,
   // In the line of a study's row: "the massing, facades.obj, the context".
   studyStandInLine: { max_volume: "the max volume", envelope: "the envelope", massing: "the massing" } as Record<string, string>,
   studySpacing: "Spacing (m)",
@@ -801,20 +813,16 @@ export const messages = {
   sunToolClock: "Clock",
   sunToolTimeBases: { standard: "Local standard time", solar: "Local solar time", daylight_saving: "Local daylight saving time" } as Record<string, string>,
   sunToolShow: "Show",
-  sunToolViews: { none: "Sun path only", shadows: "Shadows at a time", shade: "Hours in shade" } as Record<string, string>,
+  sunToolViews: { none: "Sun path only", shadows: "Shadows at a time" } as Record<string, string>,
+  sunToolHint: "Sun: the sun path and the shadows at a time",
+  sunToolClose: "Close the sun tool",
   studySkyDomeNeedsRun: "Run the study again to see its sky dome: its result was computed before the sky patches were kept.",
   sunToolMoment: "Moment of the shadows",
   sunToolKeyDays: "Equinoxes and solstices",
-  sunToolPeriod: "Days and hours",
-  sunToolColours: "Colours",
-  shadePaletteNames: { viridis: "Viridis", grey: "Grey" } as Record<string, string>,
   sunToolDayName: (day: number, month: number) => `${day} ${MONTH_ABBREVIATIONS[month - 1]}`,
   sunToolTime: "Time",
   sunToolSunAt: (altitude: string, azimuth: string) => `Sun ${altitude}° above the horizon, ${azimuth}° from north`,
   sunToolBelowHorizon: "The sun is below the horizon.",
-  sunToolShadeNote: "A quick count of what the view shows, at the shadow map's resolution; Simulate's sun hours are the precise count.",
-  sunToolDays: (first: string, last: string, dayStep: number) => (dayStep > 1 ? `mean of ${first} to ${last}, every ${dayStep} days` : `mean of ${first} to ${last}`),
-  shadeHoursLegend: (start: string, end: string, days: string) => `Hours in shade per day, ${start} to ${end}, ${days}`,
 
   // Which hours count in Solar heating, and the typical building an energy-weighted criterion counts them by: the switch and
   // the box in the criterion's Settings, and the window where the building is edited and calculated.

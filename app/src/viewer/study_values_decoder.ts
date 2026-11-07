@@ -11,6 +11,7 @@ export interface StudyValuesHeader {
   unit: string;
   geometry?: string;                  // the geometry the result accounts for: "none", "max_volume", "envelope" or "massing"
   geometry_point_count?: number;      // how many of the points, the last ones, are on the faces of that geometry
+  sun_day_step?: number;              // a quick sun hours result counted the sun on every that many days; 1 otherwise
 }
 
 export interface StudyValues {

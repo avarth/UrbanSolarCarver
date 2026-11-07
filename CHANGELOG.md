@@ -16,12 +16,20 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - The result card gives the building's points a block of their own, with a table by facing (roofs, north, east, south,
   west) in a fold; the card minimises to its title.
 - Each study traces its geometry and the no-build case, not every geometry: the **Geometry bar** and **Difference** are
-  gone. Make two studies (**Duplicate study**) to compare two geometries. A study goes out of date only when its own
-  geometry changes.
+  gone. Make two studies (**Duplicate study**) to compare two geometries. A study no longer goes out of date when another
+  geometry is rebuilt.
 - The **ground** a study samples is a disc on the compass circle, not a square around the max volume.
 - A study has its own test point **spacing** (More settings), following Carve's until you type one.
-- The study switches read **Context**, **Terrain** and **Ground**; the study's files are under **Additional surfaces to
-  simulate**.
+- The study's surfaces are one list of switches: its geometry, **Context**, **Terrain** or **Ground**, and each of the
+  project's test surface files. A study no longer takes uploads of its own, and switching a file off or deleting a study
+  leaves the file in the project.
+- By value the colours end by default at the 99th percentile of the values, not the highest one.
+- An out-of-date study is drawn in grey, not in muted colours.
+- **Faster studies.** A study keeps its test points between runs while its surfaces and spacing are the same (a one-day sun
+  hours run on 1.5 million points: 7.5 s to 0.6 s), and writes its values uncompressed. Sun hours have a **Quick count**:
+  the sun on every n-th day, at most about 240 positions (seven months in about a second).
+- **The sun tool** moved from Simulate's Sun panel to a button in the view's toolbar, in Carve, Simulate and Inspect. It
+  shows the sun path and the shadows at a time; the view's count of hours in shade is gone (a Sun hours study replaces it).
 
 ## [0.11.0] - 2026-11-07
 

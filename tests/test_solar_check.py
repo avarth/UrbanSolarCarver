@@ -164,6 +164,28 @@ def test_sun_hours_past_a_box_match_an_independent_ray_box_test(example_epw_path
 
 @REQUIRES_WARP_CPU
 @pytest.mark.slow     # a year of sky matrix
+def test_quick_sun_hours_sample_every_nth_day_and_weigh_each_by_the_days_it_stands_for(example_epw_path):
+    from urbansolarcarver.solar_check import QUICK_SUN_POSITIONS, check_directions
+    assert QUICK_SUN_POSITIONS == 240
+    period = dict(start_month=10, start_day=1, start_hour=0, end_month=4, end_day=30, end_hour=23)
+    full = check_directions(_settings("sun_hours", epw_path=str(example_epw_path), **period))
+    quick = check_directions(_settings("sun_hours", epw_path=str(example_epw_path), quick=True, **period))
+    # 212 days of 24 hours: every 22nd day (5,088 hours over 240), about a tenth of the positions above the horizon.
+    assert len(quick.directions) < len(full.directions) / 15
+    assert quick.day_step == 22 and full.day_step == 1
+    # Each kept day counts for the days it stands for, so the hours of sun the period has stay about the same.
+    assert quick.values.sum() == pytest.approx(full.values.sum(), rel=0.03)
+    # A short period needs no thinning.
+    one_day = dict(start_month=12, start_day=21, start_hour=8, end_month=12, end_day=21, end_hour=16)
+    assert check_directions(_settings("sun_hours", epw_path=str(example_epw_path), quick=True, **one_day)).day_step == 1
+
+
+def test_quick_is_a_setting_of_sun_hours_only():
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        _settings("sky_view", quick=True)
+
+
 def test_solar_energy_on_an_unobstructed_horizontal_surface_is_the_sky_matrix_cosine_sum(example_epw_path):
     from urbansolarcarver.sky_patches import compute_EPW_based_weights
     from urbansolarcarver.sun import sample_period
@@ -669,11 +691,15 @@ def test_touching_bays_of_stacked_floors_leave_only_their_outer_faces():
     assert not inner.any()
 
 
-def test_faces_of_a_geometry_past_its_clip_are_not_sampled():
+def test_faces_of_a_geometry_further_past_its_clip_than_the_clip_depth_are_not_sampled():
     from urbansolarcarver.solar_check import sample_geometry_faces
-    points = sample_geometry_faces(box_between([0, 0, 0], [1, 1, 1.5]), 0.25, frame=np.zeros(3),
-                                   clip=box_between([0, 0, 0], [1, 1, 1]))
-    assert len(points.points) > 0 and points.points[:, 2].max() <= 1.0 + 1e-6
+    clip = box_between([0, 0, 0], [2, 2, 2])
+    # A voxel envelope stands up to a voxel outside the maximum volume: its facades and roof 0.5 m out are kept at a depth of 1 m.
+    near = sample_geometry_faces(box_between([-0.5, -0.5, 0], [2.5, 2.5, 2.5]), 0.25, frame=np.zeros(3), clip=clip, clip_depth=1.0)
+    assert np.isclose(near.points[:, 2].max(), 2.5) and np.isclose(near.points[:, 0].min(), -0.5)
+    # A body reaching 2 m above the maximum volume: its faces more than the depth past it are not sampled.
+    far = sample_geometry_faces(box_between([0, 0, 0], [2, 2, 4]), 0.25, frame=np.zeros(3), clip=clip, clip_depth=1.0)
+    assert len(far.points) > 0 and far.points[:, 2].max() <= 3.0 + 1e-6
 
 
 def test_sample_triangles_spreads_points_by_area_and_repeats():
@@ -696,6 +722,31 @@ def test_a_mesh_of_small_triangles_is_sampled_triangle_by_triangle():
     points = sample_geometry_faces(sphere, 0.5, frame=np.zeros(3))
     # Flat-panel sampling would give almost none (every triangle is about 0.1 m²); the lower half faces down and is left out.
     assert len(points.points) > 0.3 * sphere.area / 0.25
+
+
+@REQUIRES_WARP_CPU
+def test_a_study_keeps_its_points_between_runs_while_its_surfaces_and_spacing_are_the_same(tmp_path, monkeypatch):
+    from urbansolarcarver import solar_check
+    surface, max_volume, context = _study_files(tmp_path)
+    calls = []
+    real_sample = solar_check.sample_test_surfaces
+    monkeypatch.setattr(solar_check, "sample_test_surfaces", lambda *args, **kwargs: calls.append(1) or real_sample(*args, **kwargs))
+    settings = _settings("sky_view", sample_spacing=2.0, rays_per_patch=1, surfaces_from=["context"], sample_geometry=True)
+    first = solar_check.simulate_study(surface, max_volume, settings, context_path=str(context), out_dir=tmp_path / "study", device="cpu")
+    sampled = len(calls)
+    # Another metric, the same surfaces: the points are read back, not sampled again, and they are the same.
+    second = solar_check.simulate_study(surface, max_volume, _settings("sky_component", sample_spacing=2.0, rays_per_patch=1,
+                                                                      surfaces_from=["context"], sample_geometry=True),
+                                        context_path=str(context), out_dir=tmp_path / "study", device="cpu")
+    assert len(calls) == sampled
+    np.testing.assert_allclose(second.points.points, first.points.points, atol=1e-4)
+    assert second.summary["geometry_point_count"] == first.summary["geometry_point_count"]
+    assert second.summary["points_reused"] is True and first.summary["points_reused"] is False
+    # A new spacing samples again.
+    solar_check.simulate_study(surface, max_volume, _settings("sky_view", sample_spacing=1.0, rays_per_patch=1, surfaces_from=["context"],
+                                                              sample_geometry=True),
+                               context_path=str(context), out_dir=tmp_path / "study", device="cpu")
+    assert len(calls) > sampled
 
 
 @REQUIRES_WARP_CPU
