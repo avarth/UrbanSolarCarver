@@ -29,7 +29,7 @@ elif ! find_environment; then
   echo "UrbanSolarCarver is not installed yet. Installing it now with setup_env.py; this takes several minutes."
   system_python="$(command -v python3 || command -v python || true)"
   if [ -z "$system_python" ]; then
-    echo "Python 3.10 or newer was not found. Install it, then run this script again."
+    echo "Python 3.12 or newer was not found. Install it, then run this script again."
     exit 1
   fi
   if ! (cd "$repository" && "$system_python" setup_env.py) || ! find_environment; then

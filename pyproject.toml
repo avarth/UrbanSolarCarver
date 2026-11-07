@@ -8,7 +8,7 @@ version = "0.10.0"
 description = "GPU-accelerated generation of maximum buildable volumes that respect solar access, daylight, and thermal comfort constraints in urban environments."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 keywords = ["solar-envelope", "urban-design", "daylight", "GPU", "voxel", "computational-design"]
 authors = [
   { name = "Aristotelis Vartholomaios", email = "avartholomaios@uth.gr" },
@@ -19,9 +19,9 @@ classifiers = [
   "Intended Audience :: Education",
   "Topic :: Scientific/Engineering",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Operating System :: OS Independent",
 ]
 dependencies = [
@@ -30,9 +30,9 @@ dependencies = [
   "PyYAML>=6.0.2",
   "numpy>=1.24.3",
   "matplotlib>=3.10",
-  "scipy>=1.10,<1.16",
+  "scipy>=1.10",
   "numba>=0.58",
-  "scikit-image>=0.24,<0.26",
+  "scikit-image>=0.24",
   "Shapely>=2.1.1",
   "trimesh>=4.6.12",
   "rtree>=1.0",

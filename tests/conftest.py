@@ -90,15 +90,8 @@ def home_folder(no_real_home_folder):
 def pytest_configure(config):
     """Warp finds its kernel cache from the user's folders: with the home folder moved (no_real_home_folder) it would make a
     new cache in the working folder (an NVIDIA folder in the checkout) and compile every kernel again. Each test process
-    pins it to the usual cache first."""
-    if "WARP_CACHE_PATH" in os.environ:
-        return
-    try:
-        import warp.config
-        from warp.thirdparty import appdirs
-    except ImportError:
-        return
-    os.environ["WARP_CACHE_PATH"] = appdirs.user_cache_dir(appname="warp", appauthor="NVIDIA", version=warp.config.version)
+    pins it first, to a folder of the tests' own, so it reads nothing of Warp's internals, which move between versions."""
+    os.environ.setdefault("WARP_CACHE_PATH", str(Path.home() / ".cache" / "urbansolarcarver-tests" / "warp"))
 
 
 @pytest.fixture

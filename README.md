@@ -1,6 +1,6 @@
 # Urban Solar Carver
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19443737.svg)](https://doi.org/10.5281/zenodo.19443737)
 [![Paper DOI](https://img.shields.io/badge/paper-10.1007%2F978--3--032--34930--9__70-blue.svg)](https://doi.org/10.1007/978-3-032-34930-9_70)

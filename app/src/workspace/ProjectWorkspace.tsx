@@ -12,13 +12,14 @@
 // by it (Energy-weighted, in Solar heating).
 import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  failureTextOf, putSharedSettings, reportServiceProblem, updateCriterion, type HealthReply, type ModeInfo, type ProjectDetail, markModeChosen,
+  failureTextOf, markModeChosen, reportServiceProblem, type HealthReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
 import { ProjectSessionContext } from "../api_client/project_session";
 import { activeCriteria, filesOfOtherCriteria } from "../criteria/criteria_state";
 import { CriteriaStep, type CriteriaShows } from "../criteria/CriteriaStep";
 import { firstCriteriaShows } from "../criteria/criteria_shows";
 import { CriterionPanel } from "../criteria/CriterionPanel";
+import { FirstMode } from "../criteria/FirstMode";
 import { usePanelSections } from "../criteria/PanelSection";
 import { sectionOfSetting } from "../criteria/section_summaries";
 import { useTestSurfaceCalls } from "../criteria/test_surface_calls";
@@ -28,12 +29,11 @@ import { useWorkspaceCriteria } from "../criteria/use_workspace_criteria";
 import { useChangedDuringRender } from "../hooks/use_changed_during_render";
 import { AnalysisOutOfDateNotice, InspectView } from "../inspect/InspectView";
 import type { InspectTurns } from "../inspect/UnsavedTurnsDialog";
-import { useInspection, useInspectView } from "../inspect/use_inspection";
+import { useInspectView } from "../inspect/use_inspection";
 import { listedWithAnd, messages } from "../messages";
 import { hemisphereOfLatitude } from "../settings_form/analysis_period";
-import { shownValue, useSettingsForm, type FormStart, type SaveOutcome, type SettingsSend } from "../settings_form/form_state";
+import { shownValue, type SaveOutcome } from "../settings_form/form_state";
 import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf } from "../settings_form/presentation";
-import { sharedRefusalShown, splitSettings, useBothForms } from "../settings_form/two_forms";
 import type { LayerName, ViewportTheme } from "../viewer/scene";
 import { sceneHemisphere } from "../viewer/sky_dome";
 import { SimulateView } from "../simulate/SimulateView";
@@ -51,14 +51,15 @@ import type { RunLoop } from "../common/run_state";
 import { RunAnalysisButton, runAnalysisAfterSaving, SaveFailureNotice, saveFailureTextOf, SettingsToFix, stepOfSetting } from "../settings_form/SettingsStep";
 import { SiteAndGridStep } from "../steps/SiteAndGridStep";
 import { StepAccordion, type AccordionStep } from "./StepAccordion";
-import { testSurfaceGroupsOf, testSurfaceOwners } from "../steps/test_surface_groups";
 import { stepMark, stepNotUsableYet, stepSummary } from "./step_summaries";
 import { plainModeName } from "../modes";
 import { STEP_NAMES, type StepName } from "../stages";
 import { analysisPeriodOf, useSunPathOfStoredPeriod } from "../steps/sun_path_request";
 import { useInputFiles } from "./use_input_files";
-import { ModeStep } from "../criteria/ModeStep";
 import { InputChangesNotice } from "./InputChangesNotice";
+import { useProjectForms } from "./use_project_forms";
+import { useTestSurfaceDrawing } from "./use_test_surface_drawing";
+import { useWorkspaceInspection } from "./use_workspace_inspection";
 import { useKeptScroll } from "./use_kept_scroll";
 import { useStageStatus } from "./use_stage_status";
 import { periodChangedSince, weatherChangeSuggestion } from "../settings_form/weather_change_notice";
@@ -165,31 +166,9 @@ function OpenProject(props: ProjectWorkspaceProps) {
   const criterion = criteria.criteria.find((entry) => entry.id === shownCriterionId) ?? criteria.criteria.find((entry) => entry.id === criteria.selectedId) ?? null;
   const criterionId = criterion?.id ?? FIRST_CRITERION_ID;
   const resultsCriterionId = criteria.criteria.length > 0 ? formCriterionId : undefined;
-  // The project's settings are the shared ones with the first criterion's: each form starts from its own. The shared form takes
-  // the criterion's mode, which decides the settings it shows, but does not save it. The forms read their start once, when made.
-  const [formStarts] = useState((): { shared: FormStart; criterion: FormStart } => {
-    const { shared, criterion } = splitSettings(project.settings, criterionKeys);
-    return {
-      shared: { schema: props.schema, modes, settings: { ...shared, mode: criterion.mode }, gridPlan: project.grid_plan, savesMode: false },
-      criterion: { schema: props.schema, modes, settings: criterion, gridPlan: null },
-    };
+  const { sharedForm, criterionForm, form, dispatch, flushSave, cancelSave, changeAndSave, currentForm } = useProjectForms({
+    token, project, schema: props.schema, modes, criterionKeys, criteria, formCriterionId,
   });
-  // A criterion's save replaces its settings; a new mode may rename it, so its entry is kept. The save goes to the criterion whose
-  // settings the form holds (the form reads this send when a save goes out).
-  const saveCriterionSettings: SettingsSend = async (formToken, projectName, values) => {
-    const entry = await updateCriterion(formToken, projectName, formCriterionId, { values });
-    criteria.applyReply(entry);
-    return entry;
-  };
-  // A shared value refused by a criterion's own setting is said in Site and grid, with that criterion's name (sharedRefusalShown).
-  const saveSharedSettings: SettingsSend = (formToken, projectName, values) => putSharedSettings(formToken, projectName, values).catch((error: unknown) => {
-    const now = criteria.current().criteria;
-    throw sharedRefusalShown(error, criterionKeys, (id) => now.find((entry) => entry.id === id) ?? null, now.length >= 2);
-  });
-  const sharedForm = useSettingsForm(token, project.name, formStarts.shared, saveSharedSettings);
-  const criterionForm = useSettingsForm(token, project.name, formStarts.criterion, saveCriterionSettings);
-  // The steps show the settings of both forms as one; each change goes to the form of its settings.
-  const { form, dispatch, flushSave, cancelSave, changeAndSave, currentForm } = useBothForms(sharedForm, criterionForm, criterionKeys);
   const runActive = runs.activeRun?.project === project.name;
   // Files changed in the project folder, found by a stage status read: their lists and meshes are asked for again (the input files'
   // hook, set below), and so are the studies, which may now be out of date.
@@ -246,34 +225,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
   const maxVolume = maxVolumeMesh.geometry, testSurfaces = testSurfacesMesh.geometry;
   // The bounds of the maximum volume and the test surfaces loaded so far: the sun path and the sky dome are drawn around them (R2 2)
   const inputsBounds = useMemo(() => boundsOf([maxVolume, testSurfaces]), [maxVolume, testSurfaces]);
-  // Each criterion's test surfaces are drawn in its colour; the layers menu has a toggle for each (kept here, so a change of criterion or
-  // of step leaves it as it is; a new criterion starts with its toggle on).
-  const [hiddenTestSurfaceCriteria, setHiddenTestSurfaceCriteria] = useState<ReadonlySet<string>>(new Set());
-  const setTestSurfacesShown = (ids: readonly string[], shown: boolean) => setHiddenTestSurfaceCriteria((hidden) => {
-    const next = new Set(hidden);
-    for (const id of ids) {
-      if (shown) next.delete(id);
-      else next.add(id);
-    }
-    return next;
-  });
-  // A criterion gone takes its toggle with it.
-  const hiddenOfListedCriteria = new Set([...hiddenTestSurfaceCriteria].filter((id) => criteria.criteria.some((entry) => entry.id === id)));
-  if (hiddenOfListedCriteria.size !== hiddenTestSurfaceCriteria.size) setHiddenTestSurfaceCriteria(hiddenOfListedCriteria);
-  // What the groups hold, not which criterion is selected: a selection that moves no file to another criterion draws nothing again.
-  const testSurfaceDrawingKey = JSON.stringify([criteria.criteria.map((entry) => [entry.id, entry.name, entry.colour, entry.bypassed]),
-                                                [...testSurfaceOwners(criteria.criteria, criterion?.id ?? null, hiddenTestSurfaceCriteria)].sort(),
-                                                [...hiddenTestSurfaceCriteria].sort()]);
-  // The groups are kept until the key or the meshes change; a useMemo would make them again for each new list of the criteria.
-  const newTestSurfaceDrawing = () => ({
-    key: testSurfaceDrawingKey, byFile: testSurfacesMesh.byFile, allFiles: testSurfaces,
-    groups: testSurfaceGroupsOf(criteria.criteria, criterion?.id ?? null, hiddenTestSurfaceCriteria, testSurfacesMesh.byFile, testSurfaces),
-  });
-  const [testSurfaceDrawing, setTestSurfaceDrawing] = useState(newTestSurfaceDrawing);
-  if (testSurfaceDrawing.key !== testSurfaceDrawingKey || testSurfaceDrawing.byFile !== testSurfacesMesh.byFile || testSurfaceDrawing.allFiles !== testSurfaces) {
-    setTestSurfaceDrawing(newTestSurfaceDrawing());
-  }
-  const testSurfaceGroups = testSurfaceDrawing.groups;
+  const { testSurfaceGroups, setTestSurfacesShown } = useTestSurfaceDrawing(criteria.criteria, criterion, testSurfacesMesh, testSurfaces);
   const sceneSphere = useMemo(() => (inputsBounds === null ? null : sceneHemisphere(inputsBounds)), [inputsBounds]);
   const northDegrees = Number(shownValue(form, "north_deg") ?? 0);
 
@@ -306,44 +258,17 @@ function OpenProject(props: ProjectWorkspaceProps) {
   const testSurfaceCalls = useTestSurfaceCalls({
     criteria, criterionId, refreshStageStatus, followed: followedInputChange, onStoredFiles: storeTestSurfaceFiles,
   });
-  // Inspect: the inspection of the input files, read when Inspect opens. A save or restore writes a stored test surface file, which
-  // the stage status (the criteria and studies that list it go out of date) and the meshes Design draws follow.
   const inspecting = props.mode === "inspect";
-  // A save or restore in this visit to Inspect: the panel then says which analyses it left out of date.
-  const [surfacesChanged, setSurfacesChanged] = useState(false);
-  if (surfacesChanged && !inspecting) setSurfacesChanged(false);
-  const inspection = useInspection({
-    active: inspecting,
-    onSaved: () => {
-      setSurfacesChanged(true);
-      refreshStageStatus();
-      void testSurfaceCalls.reloadStoredFiles();
-    },
+  const { inspection, surfacesChanged } = useWorkspaceInspection({
+    inspecting, refreshStageStatus, reloadStoredFiles: testSurfaceCalls.reloadStoredFiles,
+    onUnsavedChange: props.onInspectUnsavedChange, onTurnsReady: props.onInspectTurnsReady,
   });
   const inspectView = useInspectView(inspection, origin, inspecting);
-  const latestInspection = useRef(inspection);
-  // Set once the render is committed: the hooks above call reloadInputRoles and reloadInspection with a reply, the app the turns' calls.
+  // Set once the render is committed: the hooks above call these with a reply.
   useLayoutEffect(() => {
-    latestInspection.current = inspection;
     reloadInspection.current = inspection.reload;
     reloadInputRoles.current = reloadRoles;
   });
-  // Leaving Inspect asks while turns are not saved and while a save or restore is under way (its refusal is then shown, not lost).
-  const inspectUnsavedOrUnderWay = inspection.unsaved || inspection.busy;
-  const tellInspectUnsaved = useEffectEvent((unsaved: boolean) => props.onInspectUnsavedChange?.(unsaved));
-  useEffect(() => tellInspectUnsaved(inspectUnsavedOrUnderWay), [inspectUnsavedOrUnderWay]);
-  const tellInspectTurns = useEffectEvent((turns: InspectTurns | null) => props.onInspectTurnsReady?.(turns));
-  useEffect(() => {
-    tellInspectTurns({
-      saveAll: () => latestInspection.current.saveAll(), discardAll: () => latestInspection.current.discardAll(),
-      waitForUnderWay: () => latestInspection.current.waitForUnderWay(), underWay: () => latestInspection.current.underWayNow(),
-      unsaved: () => latestInspection.current.unsavedNow(),
-    });
-    return () => {
-      tellInspectTurns(null);
-      tellInspectUnsaved(false);
-    };
-  }, []);
 
   // The criterion's files as stored, in its order; a file just added shows once the stored files have been asked for again.
   const criterionTestSurfaces = criterion === null ? files.test_surfaces
@@ -356,11 +281,10 @@ function OpenProject(props: ProjectWorkspaceProps) {
 
   useEffect(() => {
     if (settingToFocus === null) return;
-    // The input the field's label targets: the number field of a slider, the balance temperature's number of the balance widget;
-    // for the mode, its chosen tile (the one in the tab order).
+    // The input the field's label targets: the number field of a slider, the balance temperature's number of the balance widget.
     const field = panel.current?.querySelector<HTMLElement>(`[data-setting="${settingToFocus.name}"]`);
     const labelled = field?.dataset.inputId === undefined ? null : document.getElementById(field.dataset.inputId);
-    (labelled ?? field?.querySelector<HTMLElement>(':is(input, select, [role="radio"][tabindex="0"])'))?.focus();
+    (labelled ?? field?.querySelector<HTMLElement>(":is(input, select)"))?.focus();
   }, [settingToFocus]);
   // The criterion panel's open sections, kept here so they outlast the Criteria step while it is closed (not stored). A setting of
   // the panel to focus opens the section that holds it first, in the same render.
@@ -447,12 +371,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
     ),
     criteria: (
       <CriteriaStep list={cards.list} load={selection.load} chainLine={cards.chainLine} shows={criteriaShows ?? firstCriteriaShows(criteriaCount)} onShowsChange={setCriteriaShows}
-                    firstMode={modeToChoose ? (
-                      <section className="first-mode" aria-labelledby="first-mode-title">
-                        <h3 id="first-mode-title" className="first-mode-title">{messages.firstModeTitle}</h3>
-                        <ModeStep mode={null} onChoose={chooseFirstMode} disabledReason={inputsDisabledReason} />
-                      </section>
-                    ) : null}
+                    firstMode={modeToChoose ? <FirstMode onChoose={chooseFirstMode} disabledReason={inputsDisabledReason} /> : null}
                     panelProblem={workspaceCriteria.panelProblem} panel={
         <CriterionPanel key={criterionId} {...panelSections} testSurfaces={criterionTestSurfaces} criterionOn={criterionOn} testSurfaceDrawingProblems={testSurfacesMesh.drawingProblems} onAddTestSurfaces={testSurfaceCalls.add}
                         onRemoveTestSurface={testSurfaceCalls.remove} otherTestSurfaces={filesOfOtherCriteria(criteria.criteria, criterionId)}

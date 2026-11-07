@@ -54,8 +54,8 @@ from pathlib import Path
 
 VENV_DIR = ".venv"
 LOCKFILE = Path(__file__).resolve().parent / "requirements-lock.txt"
-MIN_PYTHON = (3, 10)
-MAX_LOCKED_PYTHON = (3, 12)  # numpy 1.26.4 and torch 2.5.1 have no wheels for 3.13
+MIN_PYTHON = (3, 12)  # numpy 2.5 and scipy 1.18 need it
+MAX_LOCKED_PYTHON = (3, 14)  # the newest Python the locked versions were installed and tested on
 
 # Deepest path the torch wheel creates under site-packages (its dist-info
 # license tree nests ~160 chars); used to predict Windows MAX_PATH failures.

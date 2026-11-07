@@ -136,7 +136,7 @@ test("a weighted mode shows Carve amount in % and no number tiles; the angle rul
 
 test("an analysis out of date dims the carving, disables its controls and says so", () => {
   rendered = renderForTest(<CarvingStep {...carvingProps({ analysisOutOfDate: true })} />);
-  expect(rendered.container.textContent).toContain("The mode or the settings changed since the analysis. Run it again to update the carving.");
+  expect(rendered.container.textContent).toContain("The settings changed since the analysis. Run it again to update the carving.");
   expect(rendered.container.querySelector(".carving-content-dimmed")).not.toBeNull();
   expect(rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!.disabled).toBe(true);
   expect(rendered.container.querySelector<HTMLInputElement>(".switch-row input")!.disabled).toBe(true);

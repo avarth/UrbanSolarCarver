@@ -254,7 +254,7 @@ test("the selected criterion's carving locks only while its own analysis is out 
   expect(panel().textContent).toContain("Run the analysis for Spring sun on windows first");
   await select("Spring sun on windows");
   expect(thresholdField().disabled).toBe(true);
-  expect(panel().textContent).toContain("The mode or the settings changed since the analysis. Run it again to update the carving.");
+  expect(panel().textContent).toContain("The settings changed since the analysis. Run it again to update the carving.");
 });
 
 test("a run refused for criterion 2's settings, seen from criterion 1, names criterion 2; its link selects it, opens the section and focuses the field", async () => {

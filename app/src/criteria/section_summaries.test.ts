@@ -63,3 +63,8 @@ test("the settings to fix by section: the criterion's fields with an error, one 
   // Counted as the steps count them: the mode in Criteria, the shared voxel size in Site and grid.
   expect(settingsToFixByStep({ fieldErrors: {}, stepErrors: [] }, form, CRITERION_KEYS)).toEqual({ criteria: 4, site_and_grid: 1 });
 });
+
+test("the angle rule's settings in one line: its angle, or one per direction", () => {
+  expect(criterionSettingsSummary(formFor({ mode: "tilted_plane", tilted_plane_angle_deg: 60 }), CRITERION_KEYS)).toBe("60\u00a0°");
+  expect(criterionSettingsSummary(formFor({ mode: "tilted_plane", tilted_plane_angle_deg: [10, 20, 30, 40, 50, 60, 70, 80] }), CRITERION_KEYS)).toBe("One angle per direction");
+});

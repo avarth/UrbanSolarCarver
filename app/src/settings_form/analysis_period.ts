@@ -57,6 +57,13 @@ export function periodInWords(period: Period): string {
   return messages.periodSummary(period.startMonth, period.startDay, period.startHour, period.endMonth, period.endDay, period.endHour);
 }
 
+/** How many days the period covers and how many hours each, the last of each counted; dates or hours across the new year or midnight wrap. */
+export function periodCounts(period: Period): { days: number; hoursPerDay: number } {
+  const days = dayOfYear(period.endMonth, period.endDay) - dayOfYear(period.startMonth, period.startDay);
+  const hours = period.endHour - period.startHour;
+  return { days: ((days + DAYS_IN_YEAR) % DAYS_IN_YEAR) + 1, hoursPerDay: ((hours + HOURS_IN_DAY) % HOURS_IN_DAY) + 1 };
+}
+
 /**
  * Whether the period is one date with hours across midnight (21 Dec, 22 to 2 h): the engine runs it as every night of the year,
  * the start (21 Dec 22:00) being after the end (21 Dec 02:00). A period stored so (a hand-edited config, an older save) is shown

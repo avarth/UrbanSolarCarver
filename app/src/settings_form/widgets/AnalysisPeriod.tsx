@@ -7,13 +7,13 @@
 // withOvernightHoursOnOneDateAsOneNight (analysis_period.ts), so hours across midnight on one date are one night. A period stored
 // as one date with hours across midnight (a hand-edited config, an older save) is shown as the engine runs it: the whole year on the
 // year strip, and a note under the strips that starts "Every day, 22 to 2 h", as the step summary reads; it is not changed until the
-// next change in the control. A period not set yet says so in the same place.
+// next change in the control. A period not set yet says so in the same place; any other period says there how many days and hours it covers.
 //
 // How changes are sent: a key or a preset is one change; a drag is held here and sent once, on release, so a value on the way (a
 // drag that crosses the end hour and comes back) never moves the end date. The form saves once the changes stop.
 //
 // In Solar heating a fifth preset, "Cold period from the weather file", sets the dates of the weather file's cold period
-// (settings_form/cold_period_request.ts). What it found, or why it cannot be used yet, is the preset's tooltip (on hover and keyboard focus,
+// (settings_form/cold_period_request.ts). Found, the button names its dates. What it found, or why it cannot be used yet, is the preset's tooltip (on hover and keyboard focus,
 // as the mode tiles show theirs) and its description for a screen reader; in an energy-weighted criterion it adds that the cold
 // period follows the cold hours rule, not the typical building. The heating season preset follows the hemisphere of the
 // weather file: October to April in the north, April to October in the south.
@@ -21,7 +21,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { messages } from "../../messages";
 import {
   changedPeriodSettings, dateHandleValueAfterKey, dateRangeSegments, dayOfYearAt, daysInMonth, DAYS_IN_YEAR, handlePositionOf, handleValueOf,
-  datesMatch, hourAt, hourHandleValueAfterKey, hourRangeSegments, HOURS_IN_DAY, monthDayOf, PERIOD_PRESETS, periodFromSettings, periodInWords,
+  datesMatch, hourAt, hourHandleValueAfterKey, hourRangeSegments, HOURS_IN_DAY, monthDayOf, PERIOD_PRESETS, periodCounts, periodFromSettings, periodInWords,
   periodWithDates, periodWithHandleAt, presetMatches, presetPeriod, runsEveryNightOfTheYear, withOvernightHoursOnOneDateAsOneNight,
   type AnalysisPeriodField, type ColdPeriodState, type Hemisphere, type Period, type PeriodDates, type PeriodPreset, type PeriodHandle,
 } from "../analysis_period";
@@ -113,6 +113,7 @@ export function AnalysisPeriod({ values, onChange, inputId, labelId, invalid, de
   };
   const noteUnderStrips = stored === null ? messages.periodNotSet
     : runsEveryNightOfTheYear(stored) ? messages.periodRunsEveryDay(periodInWords(stored)) : null;
+  const counts = periodCounts(shown);
 
   return (
     <div role="group" aria-labelledby={labelId} className="period-control">
@@ -120,7 +121,8 @@ export function AnalysisPeriod({ values, onChange, inputId, labelId, invalid, de
                   valueAt={dayOfYearAt} valueRange={[1, DAYS_IN_YEAR]} cells={MONTH_CELLS} />
       <ScaleStrip {...strip} handles={[stripHandleOf(shown, "start_hour"), stripHandleOf(shown, "end_hour")]} segments={hourRangeSegments(shown)}
                   valueAt={hourAt} valueRange={[0, HOURS_IN_DAY - 1]} cells={HOUR_CELLS} />
-      {noteUnderStrips !== null && <p className="setting-note">{noteUnderStrips}</p>}
+      {noteUnderStrips !== null ? <p className="setting-note">{noteUnderStrips}</p>
+        : <p className="period-counts">{messages.periodCounts(counts.days, counts.hoursPerDay)}</p>}
       <div role="group" aria-label={messages.periodPresets} className="period-presets">
         {PERIOD_PRESETS.map((preset) => (
           <button key={preset} type="button" className="period-preset" disabled={disabled} aria-pressed={stored !== null && presetMatches(preset, current, hemisphere)}
@@ -205,7 +207,9 @@ function ColdPeriodPreset({ coldPeriod, pressed, disabled, onUse }: ColdPeriodPr
                 pointerPressing.current = false;
                 if (coldPeriod.kind === "found") onUse(coldPeriod.dates);
               }}>
-        {messages.coldPeriodPreset}
+        {coldPeriod.kind === "found" ? messages.coldPeriodPresetWithDates(
+          messages.periodDateOnBubble(coldPeriod.dates.startMonth, coldPeriod.dates.startDay),
+          messages.periodDateOnBubble(coldPeriod.dates.endMonth, coldPeriod.dates.endDay)) : messages.coldPeriodPreset}
       </button>
       <span id={descriptionId} className="visually-hidden" role="status">{line}</span>
       {open && (

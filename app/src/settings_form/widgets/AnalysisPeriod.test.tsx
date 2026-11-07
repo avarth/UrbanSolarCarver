@@ -243,29 +243,29 @@ test("the tooltip writes the default period in the same words as the step summar
 });
 
 
-const COLD_PERIOD = "Cold period from the weather file";
-const coldLine = () => document.getElementById(presetButton(COLD_PERIOD).getAttribute("aria-describedby")!)!.textContent;
+const coldPreset = () => rendered!.container.querySelector<HTMLButtonElement>(".period-preset-anchor .period-preset")!;
+const coldLine = () => document.getElementById(coldPreset().getAttribute("aria-describedby")!)!.textContent;
 
 test("the cold period preset sets the dates the weather file gives, keeps the hours and shows as chosen", () => {
   renderPeriod(form(), false, { kind: "found", dates: { startMonth: 9, startDay: 30, endMonth: 5, endDay: 15 }, baseTemperature: 13 });
   expect(coldLine()).toBe(`Cold period of the weather file, where the mean of the month around each day is below 13${NBSP}°C: 30 Sep to 15 May.`);
-  expect(presetButton(COLD_PERIOD).getAttribute("aria-pressed")).toBe("false");
-  click(presetButton(COLD_PERIOD));
+  expect(coldPreset().getAttribute("aria-pressed")).toBe("false");
+  click(coldPreset());
   expect(periodValues()).toEqual({ start_month: 9, start_day: 30, start_hour: 10, end_month: 5, end_day: 15, end_hour: 14 });
-  expect(presetButton(COLD_PERIOD).getAttribute("aria-pressed")).toBe("true");
+  expect(coldPreset().getAttribute("aria-pressed")).toBe("true");
   expect(bubbles().slice(0, 2)).toEqual(["30 Sep", "15 May"]);
 });
 
 test("the cold period preset waits for the weather file, or says no day is cold enough, and sets nothing", () => {
   renderPeriod(form(), false, { kind: "needs_weather_file" });
-  expect(presetButton(COLD_PERIOD).getAttribute("aria-disabled")).toBe("true");      // still in the tab order, with its line
+  expect(coldPreset().getAttribute("aria-disabled")).toBe("true");      // still in the tab order, with its line
   expect(coldLine()).toBe("Add a weather file to find its cold period.");
-  click(presetButton(COLD_PERIOD));
+  click(coldPreset());
   rendered!.unmount();
   renderPeriod(form(), false, { kind: "none", baseTemperature: 9.5 });
-  expect(presetButton(COLD_PERIOD).getAttribute("aria-disabled")).toBe("true");
+  expect(coldPreset().getAttribute("aria-disabled")).toBe("true");
   expect(coldLine()).toBe(`No month-long stretch of the weather file has a mean below 9.5${NBSP}°C (balance temperature minus dead band).`);
-  click(presetButton(COLD_PERIOD));
+  click(coldPreset());
   expect(changes).toEqual([]);
 });
 
@@ -289,11 +289,11 @@ test("the cold period line is no longer always shown: it is the preset's tooltip
   expect(coldTooltip()).toBeNull();
   expect(rendered!.container.querySelector("p.setting-note")).toBeNull();
   expect(coldLine()).toBe(FOUND_TEXT);
-  movePointer(outside, presetButton(COLD_PERIOD));
+  movePointer(outside, coldPreset());
   expect(coldTooltip()!.textContent).toBe(FOUND_TEXT);
   expect(coldTooltip()!.getAttribute("role")).toBe("tooltip");
   expect(coldTooltip()!.getAttribute("aria-hidden")).toBe("true");          // seen, not read: the description reads it
-  movePointer(presetButton(COLD_PERIOD), outside);
+  movePointer(coldPreset(), outside);
   expect(coldTooltip()).toBeNull();
   outside.remove();
 });
@@ -301,16 +301,16 @@ test("the cold period line is no longer always shown: it is the preset's tooltip
 test("the keyboard focus on the cold period preset shows its tooltip, Escape closes it; the focus of a pointer press does not", () => {
   renderPeriod(form(), false, FOUND);
   act(() => {
-    presetButton(COLD_PERIOD).dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-    presetButton(COLD_PERIOD).focus();
+    coldPreset().dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    coldPreset().focus();
   });
   expect(coldTooltip()).toBeNull();
-  click(presetButton(COLD_PERIOD));
+  click(coldPreset());
   expect(periodValues()).toMatchObject({ start_month: 9, start_day: 21, end_month: 5, end_day: 25 });
-  act(() => presetButton(COLD_PERIOD).blur());
-  act(() => presetButton(COLD_PERIOD).focus());
+  act(() => coldPreset().blur());
+  act(() => coldPreset().focus());
   expect(coldTooltip()!.textContent).toBe(FOUND_TEXT);
-  press(presetButton(COLD_PERIOD), "Escape");
+  press(coldPreset(), "Escape");
   expect(coldTooltip()).toBeNull();
 });
 
@@ -321,7 +321,7 @@ test("the reasons the cold period preset cannot be used yet are in its tooltip t
     [{ kind: "failed", reason: "The weather file cannot be read." }, "The cold period cannot be found. The weather file cannot be read."],
   ] as const) {
     renderPeriod(form(), false, state);
-    act(() => presetButton(COLD_PERIOD).focus());
+    act(() => coldPreset().focus());
     expect(coldTooltip()!.textContent).toBe(text);
     expect(coldLine()).toBe(text);
     rendered!.unmount();
@@ -332,12 +332,21 @@ test("the reasons the cold period preset cannot be used yet are in its tooltip t
 test("the cold period tooltip lets the pointer through, so it never takes a click meant for what lies under it", () => {
   const removeStyles = [addStyleSheetForTest("src/settings_form/settings_form.css")];
   renderPeriod(form(), false, FOUND);
-  act(() => presetButton(COLD_PERIOD).focus());
+  act(() => coldPreset().focus());
   expect(getComputedStyle(coldTooltip()!).pointerEvents).toBe("none");
   removeStyles.forEach((remove) => remove());
 });
 
 test("a mode without a cold period has no such preset", () => {
   renderPeriod();
-  expect(presetButton(COLD_PERIOD)).toBeUndefined();
+  expect(coldPreset()).toBeNull();
+});
+
+test("under the strips a line counts the days and the hours a day; the cold period button names the dates it found", () => {
+  renderPeriod(form(), false, { kind: "finding" });
+  expect(rendered!.container.querySelector(".period-counts")!.textContent).toBe("1 day, 5 hours a day");
+  expect(coldPreset().textContent).toBe("Cold period from the weather file");
+  rendered!.unmount();
+  renderPeriod(form(), false, { kind: "found", dates: { startMonth: 10, startDay: 23, endMonth: 4, endDay: 29 }, baseTemperature: 15 });
+  expect(coldPreset().textContent).toBe("Cold period: 23 Oct to 29 Apr");
 });

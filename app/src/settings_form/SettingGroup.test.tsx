@@ -316,17 +316,17 @@ test("a number outside the engine's range is refused in the field, with a messag
   expect(onChange).toHaveBeenCalledTimes(2);
 });
 
-test("a setting whose empty value is automatic shows 'automatic' in the empty field and says in its tooltip what empty does in the mode", () => {
-  const tooltipOf = (mode: string) => {
+test("a setting whose empty value is automatic shows 'automatic' in the empty field, 'off' where empty means off, and says in its tooltip what empty does in the mode", () => {
+  const tooltipOf = (mode: string, placeholder = "automatic") => {
     rendered?.unmount();
     rendered = renderForTest(<SettingField view={viewOf("carving", mode, "max_slope_deg")} form={formFor(mode)} onChange={() => {}} />);
-    expect(rendered.container.querySelector<HTMLInputElement>("input[type='number']")!.placeholder).toBe("automatic");
+    expect(rendered.container.querySelector<HTMLInputElement>("input[type='number']")!.placeholder).toBe(placeholder);
     click(rendered.container.querySelector("button.setting-info")!);
     return rendered.container.querySelector("[role='tooltip']")!.textContent;
   };
   expect(tooltipOf("daylight")).toContain("Left empty, it is 60 ° in Daylight.");
-  expect(tooltipOf("time-based")).toContain("Left empty, it is off in Sun hours.");
-  expect(tooltipOf("tilted_plane")).toContain("Left empty, it is off in Angle rule.");
+  expect(tooltipOf("time-based", "off")).toContain("Left empty, it is off in Sun hours.");
+  expect(tooltipOf("tilted_plane", "off")).toContain("Left empty, it is off in Angle rule.");
   // A setting with a value of its own shows no placeholder.
   rendered?.unmount();
   rendered = renderForTest(<SettingField view={viewOf("settings", "daylight", "voxel_size")} form={formFor("daylight")} onChange={() => {}} />);
@@ -401,4 +401,13 @@ test("a setting is not drawn while the switch it needs is off", () => {
   rendered.rerender(<SettingGroup group={group} form={{ ...form, userValues: { apply_smoothing: true } }} onChange={() => {}} disabled={false} />);
   click(rendered.container.querySelector<HTMLButtonElement>(".setting-fold")!);
   expect(rendered.container.querySelector('[data-setting="smooth_iters"]')).not.toBeNull();
+});
+
+test("Floors rest on floors below is a switch: on is supported, off is free", () => {
+  const onChange = vi.fn();
+  rendered = renderForTest(<SettingField view={viewOf("envelope_and_massing", "daylight", "plate_stacking")} form={formFor("daylight")} onChange={onChange} />);
+  const floors = rendered.container.querySelector<HTMLInputElement>("input[role='switch']")!;
+  expect(floors.checked).toBe(true);
+  click(floors);
+  expect(onChange).toHaveBeenCalledExactlyOnceWith({ plate_stacking: "free" });
 });

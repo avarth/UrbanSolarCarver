@@ -16,6 +16,8 @@ export const PANEL_SECTIONS: readonly PanelSectionId[] = ["test_surfaces", "sett
 
 export const DEFAULT_OPEN_SECTIONS: ReadonlySet<PanelSectionId> = new Set(["carving"]);
 
+const PLANE_ANGLE = "tilted_plane_angle_deg";
+
 const sameValue = (first: unknown, second: unknown) => JSON.stringify(first) === JSON.stringify(second);
 
 /** The section whose field shows a setting: Carving rule for a carving setting, Settings for the others. */
@@ -33,7 +35,8 @@ export function testSurfacesSummary(files: string[]): string {
 }
 
 /**
- * A mode that reads an analysis period: the period in words, "21 Dec, 7 to 19 h". Another mode: "Starting values" while none of
+ * A mode that reads an analysis period: the period in words, "21 Dec, 7 to 19 h". The angle rule: its angle, "45 °", or that there is
+ * one per direction. Another mode: "Starting values" while none of
  * the criterion's settings in Settings differs from the mode's starting values, else "2 settings changed".
  */
 export function criterionSettingsSummary(form: FormState, criterionKeys: ReadonlySet<string>): string {
@@ -41,6 +44,11 @@ export function criterionSettingsSummary(form: FormState, criterionKeys: Readonl
     const settings = Object.fromEntries(ANALYSIS_PERIOD_FIELDS.map((name) => [name, shownValue(form, name)])) as Record<AnalysisPeriodField, number | null>;
     const period = periodFromSettings(settings);
     if (period !== null) return periodInWords(period);
+  }
+  if (settingIsShownIn(PLANE_ANGLE, form.mode)) {
+    const angle = shownValue(form, PLANE_ANGLE);
+    if (typeof angle === "number") return withUnit(formattedNumber(angle), "°");
+    if (Array.isArray(angle)) return messages.anglesPerDirectionSummary;
   }
   const changedFields = new Set(Object.entries(form.userValues)
     .filter(([name, value]) => criterionKeys.has(name) && SETTING_PRESENTATIONS[name]?.step === "settings" && settingIsShownIn(name, form.mode)

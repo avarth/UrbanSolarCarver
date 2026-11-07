@@ -191,8 +191,8 @@
       "step": "envelope_and_massing", "group": "Building massing", "essential": false, "display": "percent", "slider": { "low": 0, "high": 1, "step": 0.01 }
     },
     "plate_stacking": {
-      "label": "Floors rest on floors below", "unit": "choice",
-      "help": "Supported: a module is built only on a module below. Free: each storey is decided on its own.",
+      "label": "Floors rest on floors below", "unit": "on/off",
+      "help": "On: a module is built only on a module below. Off: each storey is decided on its own.",
       "step": "envelope_and_massing", "group": "Building massing", "essential": false
     },
     "final_mesh_format": {

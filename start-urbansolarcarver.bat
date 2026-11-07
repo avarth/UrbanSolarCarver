@@ -40,7 +40,7 @@ if defined USC_PYTHON goto start
 goto install_failed
 
 :no_system_python
-echo Python 3.10 or newer was not found. Install it from https://www.python.org/downloads/
+echo Python 3.12 or newer was not found. Install it from https://www.python.org/downloads/
 echo (tick "Add python.exe to PATH"), then run this file again.
 goto fail
 

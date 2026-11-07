@@ -119,6 +119,16 @@ function joinedParts(root: THREE.Object3D): THREE.BufferGeometry {
   return joined;
 }
 
+// The keywords of the OBJ lines a mesh export holds. An OBJ with no faces is a real result (nothing kept), so an empty mesh is no
+// proof; a first line that is none of these is: the parser skips such lines, and a text file would pass as a mesh of nothing.
+const OBJ_LINE = /^(#|v|vt|vn|vp|f|l|p|g|o|s|mtllib|usemtl)(\s|$)/;
+
+/** Whether the first line that says anything is a line of an OBJ file; a file with no such line (empty, comments only) is one. */
+export function isObjText(text: string): boolean {
+  const firstLine = text.split(/\r?\n/).map((line) => line.trim()).find((line) => line !== "");
+  return firstLine === undefined || OBJ_LINE.test(firstLine);
+}
+
 function isAsciiPly(buffer: ArrayBuffer): boolean {
   const start = new TextDecoder().decode(new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 512)));
   return /format\s+ascii/.test(start);
@@ -149,6 +159,7 @@ async function parsedMesh(buffer: ArrayBuffer, extension: MeshExtension | string
   const text = () => new TextDecoder().decode(buffer);
   switch (extension.toLowerCase().replace(/^\./, "")) {
     case "obj":
+      if (!isObjText(text())) throw new MeshNotReadableError(messages.meshCannotBeDrawn);
       return joinedParts(new OBJLoader().parse(shiftKeywordLines(text(), "v", localOriginPoint)));
     case "stl": {
       if (!isBinaryStl(buffer)) return positionsOnly(new STLLoader().parse(shiftKeywordLines(text(), "vertex", localOriginPoint)));

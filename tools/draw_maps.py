@@ -67,10 +67,7 @@ def _count_graph(name: str, boxes: dict, counts: Counter, red: set) -> str:
 def _layers() -> tuple[list[list[str]], list[str]]:
     """The layers of the layers contract in pyproject.toml (top first, each a list of module tails) and its ignored
     imports."""
-    try:
-        import tomllib
-    except ModuleNotFoundError:          # Python 3.10
-        import tomli as tomllib
+    import tomllib
     config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["importlinter"]
     contract = next(c for c in config["contracts"] if c["type"] == "layers")
     layers = [[tail.strip() for tail in layer.replace("|", ":").split(":")] for layer in contract["layers"]]

@@ -60,7 +60,8 @@ def stop_daemon():
 def rhino_id(given):
     if given:
         return given
-    listing = subprocess.run([str(RHINOCODE), "list"], capture_output=True, text=True).stdout
+    # errors="replace": the listing holds the paths of open documents, which need not fit the system's code page.
+    listing = subprocess.run([str(RHINOCODE), "list"], capture_output=True, encoding="utf-8", errors="replace").stdout
     ids = re.findall(r"rhinocode_remotepipe_\d+", listing)
     if len(ids) != 1:
         sys.exit(f"found {len(ids)} running Rhino instances; pass --rhino <ID from 'RhinoCode.exe list'>")

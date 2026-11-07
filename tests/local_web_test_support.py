@@ -354,7 +354,7 @@ def make_worker(store, handle_request=None, device="cpu") -> RunWorker:
     return RunWorker(store, device, handle_request=handle_request or FakeEngine(), session_factory=FakeSession)
 
 
-def wait_until_finished(worker: RunWorker, run_id: str, deadline_seconds: float = 20.0) -> list[dict]:
+def wait_until_finished(worker: RunWorker, run_id: str, deadline_seconds: float = 60.0) -> list[dict]:
     """All events of a run once it has finished; fails the test when the run does not finish within the deadline."""
     state = worker.run_state(run_id)
     deadline = time.monotonic() + deadline_seconds

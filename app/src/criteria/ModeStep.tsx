@@ -175,7 +175,6 @@ export function ModeStep({ mode, onChoose, disabledReason }: ModeStepProps) {
           <ModeTooltipContent tile={openTile} />
         </div>
       )}
-      <p className="mode-step-note">{messages.modeFillsStartingValues}</p>
       {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
     </div>
   );

@@ -3,8 +3,10 @@
 import { useId } from "react";
 import { messages } from "../../messages";
 import { NumberInput, type ControlProps } from "./NumberInput";
+import { RangeSlider } from "./RangeSlider";
 
 const DIRECTION_COUNT = 8;
+const ANGLE_SLIDER = { low: 0, high: 90, step: 1 };
 
 interface TiltedPlaneAnglesProps extends ControlProps {
   value: number | number[] | null;
@@ -42,10 +44,8 @@ export function TiltedPlaneAngles({ value, startingAngle, unit, onAngles, inputI
           ))}
         </div>
       ) : (
-        <div className="setting-control">
-          <NumberInput id={inputId} ariaLabelledBy={labelId} value={firstAngle} mayBeEmpty invalid={invalid} describedBy={describedBy} disabled={disabled} onValue={onAngles} />
-          <span className="setting-unit">{unit}</span>
-        </div>
+        <RangeSlider value={firstAngle} slider={ANGLE_SLIDER} engineRange={{}} mayBeEmpty unit={unit} onValue={onAngles} inputId={inputId} labelId={labelId}
+                     invalid={invalid} describedBy={describedBy} disabled={disabled} />
       )}
     </div>
   );

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import {
+import { periodCounts,
   changedPeriodSettings, dateHandleValueAfterKey, dayOfYear, dayOfYearAt, daysInMonth, hemisphereOfLatitude, hourAt, hourHandleValueAfterKey,
   monthDayOf, periodFromSettings, periodInWords, periodShiftedBySixMonths, periodWithHandleAt, presetPeriod, presetMatches, seasonsOfLatitude, coverTheSameDays,
   runsEveryNightOfTheYear, withOvernightHoursOnOneDateAsOneNight, dateRangeSegments, hourRangeSegments, type Period,
@@ -181,4 +181,11 @@ test("the drawn ranges: one piece, or two wrapped pieces across the new year or 
   expect(hourRangeSegments(period(12, 21, 10, 12, 21, 14))).toEqual([{ start: 10 / 24, end: 15 / 24 }]);
   expect(hourRangeSegments(period(12, 21, 22, 12, 22, 2))).toEqual([{ start: 22 / 24, end: 1 }, { start: 0, end: 3 / 24 }]);
   expect(hourRangeSegments(period(1, 1, 0, 12, 31, 23))).toEqual([{ start: 0, end: 1 }]);
+});
+
+test("a period counts its days and hours, the last of each included, across the new year and midnight", () => {
+  const period = (startMonth: number, startDay: number, startHour: number, endMonth: number, endDay: number, endHour: number) => ({ startMonth, startDay, startHour, endMonth, endDay, endHour });
+  expect(periodCounts(period(12, 21, 10, 12, 21, 14))).toEqual({ days: 1, hoursPerDay: 5 });
+  expect(periodCounts(period(1, 1, 0, 12, 31, 23))).toEqual({ days: 365, hoursPerDay: 24 });
+  expect(periodCounts(period(10, 15, 22, 4, 15, 2))).toEqual({ days: 183, hoursPerDay: 5 });
 });

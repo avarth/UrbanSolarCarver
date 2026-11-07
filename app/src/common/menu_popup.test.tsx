@@ -115,3 +115,12 @@ test("Tab closes the menu without focusing the anchor; a press elsewhere, a scro
   act(() => { window.dispatchEvent(new Event("resize")); });
   expect(items()).toEqual([]);
 });
+
+test("a menu wider than the room right of its anchor moves left, and stays inside a window narrower than it", () => {
+  stubLayout({ top: 100, bottom: 120, left: 300, right: 340 }, 800, 200);
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(320);
+  vi.stubGlobal("innerWidth", 375);
+  rendered = renderForTest(<Menu align="start" />);
+  open();
+  expect(popupStyle().left).toBe("47px");
+});

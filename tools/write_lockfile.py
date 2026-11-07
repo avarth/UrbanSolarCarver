@@ -16,10 +16,7 @@ from pathlib import Path
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
-try:
-    import tomllib
-except ModuleNotFoundError:     # Python 3.10
-    import tomli as tomllib
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 LOCKFILE = ROOT / "requirements-lock.txt"

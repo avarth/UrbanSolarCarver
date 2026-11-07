@@ -30,7 +30,6 @@ test("the six tiles form one radio group, in the order of R2 3, with the chosen 
   expect(tiles().map((each) => each.querySelector(".mode-tile-name")!.textContent)).toEqual(MODE_NAMES);
   expect(tiles().map((each) => each.getAttribute("aria-checked"))).toEqual(["false", "true", "false", "false", "false", "false"]);
   expect(tiles().map((each) => each.tabIndex)).toEqual([-1, 0, -1, -1, -1, -1]);
-  expect(rendered.container.textContent).toContain("Choosing a mode fills its starting settings. Further criteria can use other modes.");
 });
 
 test("a tile shows its symbol and its name only", () => {

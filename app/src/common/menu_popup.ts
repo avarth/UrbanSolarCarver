@@ -5,6 +5,7 @@
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from "react";
 
 const GAP_UNDER_ANCHOR_PIXELS = 4;
+const WINDOW_MARGIN_PIXELS = 8;
 
 /** "end": the menu ends at the anchor's right edge (a small button at the end of a row); "start": it opens under its left edge. */
 export type MenuAlign = "start" | "end";
@@ -42,7 +43,10 @@ export function useMenuPopup(anchor: RefObject<HTMLElement | null>, align: MenuA
     const roomBelow = window.innerHeight - box.bottom - GAP_UNDER_ANCHOR_PIXELS;
     const roomAbove = box.top - GAP_UNDER_ANCHOR_PIXELS;
     if (menuHeight > roomBelow && roomAbove > roomBelow) setPlace((current) => ({ ...current, top: box.top - GAP_UNDER_ANCHOR_PIXELS - menuHeight }));
-  }, [open, anchor]);
+    // A menu that would run past the right of the window moves left, as far as it takes.
+    const widestLeft = window.innerWidth - popup.current!.offsetWidth - WINDOW_MARGIN_PIXELS;
+    if (align === "start" && box.left > widestLeft) setPlace((current) => ({ ...current, left: Math.max(WINDOW_MARGIN_PIXELS, widestLeft) }));
+  }, [open, anchor, align]);
 
   const hideByItself = useEffectEvent(() => hide(false));
   useEffect(() => {

@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { messages } from "../messages";
-import { loadMesh, MeshNotReadableError } from "./loaders";
+import { isObjText, loadMesh, MeshNotReadableError } from "./loaders";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -93,4 +93,11 @@ test("a mesh of a type the view does not draw rejects with the reason of message
   const loading = loadMesh("/m.3dm", "t", "3dm");
   await expect(loading).rejects.toBeInstanceOf(MeshNotReadableError);
   await expect(loading).rejects.toThrow(messages.meshTypeCannotBeShown("3dm"));
+});
+
+test("an OBJ has OBJ lines, or none: a text file is not one, while a file of nothing is a mesh of nothing", () => {
+  expect(isObjText("# exported\nv 0 0 0\nf 1 1 1\n")).toBe(true);
+  expect(isObjText("\n# nothing kept\n")).toBe(true);
+  expect(isObjText("")).toBe(true);
+  expect(isObjText("This is not a mesh.\nv 0 0 0")).toBe(false);
 });

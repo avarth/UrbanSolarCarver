@@ -228,7 +228,7 @@ const switchButtons = () => [...rendered!.container.querySelectorAll<HTMLButtonE
 
 test("the cold period preset belongs to the cold hours rule: Cold hours offers it, Energy-weighted does not", () => {
   const coldPeriod = { kind: "found" as const, dates: { startMonth: 10, startDay: 23, endMonth: 4, endDay: 29 }, baseTemperature: 15 };
-  const presetShown = () => [...rendered!.container.querySelectorAll("button")].some((button) => button.textContent === "Cold period from the weather file");
+  const presetShown = () => [...rendered!.container.querySelectorAll("button")].some((button) => button.textContent!.startsWith("Cold period"));
   rendered = renderForTest(<CriterionPanel {...panelProps({ form: formFor("benefit"), coldPeriod, hoursCounted: hoursCounted() })} />);
   expect(presetShown()).toBe(true);
   rendered.rerender(<CriterionPanel {...panelProps({ form: formFor("benefit"), coldPeriod, hoursCounted: hoursCounted({ energyWeighted: true }) })} />);

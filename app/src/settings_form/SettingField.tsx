@@ -42,7 +42,7 @@ export interface SettingFieldProps {
 
 // The words shown for the options of a choice the engine names in code.
 const CHOICE_NAMES: Record<string, Record<string, string>> = {
-  plate_stacking: messages.floorStackingChoices, time_basis: messages.timeBasisChoices, rays_per_patch: messages.raysPerPatchChoices,
+  plate_stacking: { supported: messages.switchedOn, free: messages.switchedOff }, time_basis: messages.timeBasisChoices, rays_per_patch: messages.raysPerPatchChoices,
 };
 
 /** The messages of the last rejected save for the settings *view* draws (the six of the analysis period), or undefined. */
@@ -129,7 +129,7 @@ export function defaultTextOf(view: SettingView, form: FormState, isShadowTolera
   const value = toDisplayValue(view.name, defaultValue(form, view.name), shownValue(form, "voxel_size"));
   const unit = unitBesideValue(view, value);
   if (view.widget === "threshold" && value === null) return isShadowTolerated ? withUnit("0", unit) : messages.carvingRuleChoices.carve_fraction;
-  if (value === null) return messages.automatic;
+  if (value === null) return automaticValueOf(view, form)?.text === messages.switchedOff ? messages.switchedOff : messages.automatic;
   if (typeof value === "boolean") return value ? messages.switchedOn : messages.switchedOff;
   if (typeof value === "string") return CHOICE_NAMES[view.name]?.[value] ?? value;
   if (typeof value === "number" && CHOICE_NAMES[view.name]?.[String(value)] !== undefined) return CHOICE_NAMES[view.name][String(value)];
@@ -203,7 +203,12 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
       break;
     }
     default:
-      if (types.includes("boolean")) {
+      if (view.name === "plate_stacking") {
+        controlElement = (
+          <input id={inputId} type="checkbox" role="switch" className="setting-switch" checked={shown === "supported"} disabled={disabled}
+                 aria-invalid={control.invalid} aria-describedby={control.describedBy} onChange={(event) => changeTo(event.target.checked ? "supported" : "free")} />
+        );
+      } else if (types.includes("boolean")) {
         controlElement = (
           <input id={inputId} type="checkbox" role="switch" className="setting-switch" checked={shown === true} disabled={disabled}
                  aria-invalid={control.invalid} aria-describedby={control.describedBy} onChange={(event) => changeTo(event.target.checked)} />
@@ -223,7 +228,8 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
         const engineRange = view.display === "percent" ? { minimum: 0, maximum: 100 } : rangeOf(property);
         const value = typeof shown === "number" ? shown : null;
         const mayBeEmpty = types.includes("null");
-        const placeholder = mayBeEmpty && defaultValue(form, view.name) === null ? messages.automatic : undefined;
+        const placeholder = !mayBeEmpty || defaultValue(form, view.name) !== null ? undefined
+          : automaticValueOf(view, form)?.text === messages.switchedOff ? messages.switchedOff : messages.automatic;
         const slider = shownSliderOf(view);
         controlElement = slider !== undefined ? (
           <RangeSlider {...control} value={value} slider={slider} engineRange={engineRange} mayBeEmpty={mayBeEmpty} unit={unit} placeholder={placeholder}

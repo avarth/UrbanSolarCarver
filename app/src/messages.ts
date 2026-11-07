@@ -344,7 +344,6 @@ export const messages = {
   modeGroupLabel: "Mode",
   firstModeTitle: "Choose a mode for the first criterion",
   chooseModeSummary: "Choose a mode",
-  modeFillsStartingValues: "Choosing a mode fills its starting settings. Further criteria can use other modes.",
   criterionModeLine: (plainName: string) => `Mode: ${plainName}`,
   // After a mode change that set values the user had set back to the new mode's own (the new mode refuses them).
   valuesResetForMode: (listedLabels: string, count: number, modeName: string) => (count === 1
@@ -446,7 +445,7 @@ export const messages = {
 
   // Carving (5.5)
   angleRuleHasNoThreshold: "The angle rule has no threshold: everything above the planes is removed. Change the angle above.",
-  analysisOutOfDate: "The mode or the settings changed since the analysis. Run it again to update the carving.",
+  analysisOutOfDate: "The settings changed since the analysis. Run it again to update the carving.",
   sliderLowestEnd: "0",
   sliderHighestScore: (highestText: string) => `${highestText}, the highest of any voxel`,
   updateWhenThresholdChanges: "Update the carving as I change these settings",
@@ -604,6 +603,11 @@ export const messages = {
   // The cold period of the weather file (round 2, section 8), a preset of Solar heating: the longest run of days whose
   // month-around mean temperature is below the balance temperature minus the dead band.
   coldPeriodPreset: "Cold period from the weather file",
+  coldPeriodPresetWithDates: (startText: string, endText: string) => `Cold period: ${startText} to ${endText}`,
+  // Under the strips: the last date and the last hour count.
+  periodCounts: (days: number, hoursPerDay: number) =>
+    `${groupedDigits(days)} ${days === 1 ? "day" : "days"}, ${hoursPerDay} ${hoursPerDay === 1 ? "hour" : "hours"} a day`,
+  anglesPerDirectionSummary: "One angle per direction",
   coldPeriodNeedsWeatherFile: "Add a weather file to find its cold period.",
   coldPeriodFinding: "Finding the cold period of the weather file.",
   coldPeriodFound: (startDay: number, startMonth: number, endDay: number, endMonth: number, baseText: string) =>
@@ -639,7 +643,6 @@ export const messages = {
   sunStepsOption: (stepsPerHour: number) =>
     stepsPerHour === 1 ? "1 per hour" : stepsPerHour === 60 ? "60 per hour (every minute)" : `${stepsPerHour} per hour (every ${60 / stepsPerHour} minutes)`,
   meshFormatNames: { ply: "PLY", obj: "OBJ", stl: "STL", glb: "GLB" },
-  floorStackingChoices: { supported: "Supported", free: "Free" },
   timeBasisChoices: { standard: "Standard time", daylight_saving: "Daylight saving time", solar: "Solar time" },
   raysPerPatchChoices: { "1": "1, at the patch centre", "4": "4, spread over the patch", "9": "9, spread over the patch", "16": "16, spread over the patch" },
   carvingRuleChoices: { carve_fraction: "Manual", headtail: "Automatic" },

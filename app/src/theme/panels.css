@@ -925,7 +925,7 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 .add-criterion { display: flex; flex-direction: column; align-items: flex-start; gap: calc(var(--space-unit) * 2); }
 .first-mode { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
 .first-mode-title { margin: 0; font-size: var(--text-body); font-weight: 600; }
-.mode-menu { max-width: 360px; }
+.mode-menu { max-width: min(360px, calc(100vw - 16px)); }
 .mode-menu-tooltip::before, .mode-menu-tooltip::after { display: none; }     /* beside the menu: no arrow to an anchor under it */
 .action-menu-popup.mode-menu [role="menuitem"] { display: flex; align-items: center; gap: calc(var(--space-unit) * 3); }
 .mode-menu .mode-tile-symbol { flex: none; width: 24px; height: 24px; margin: 0; }

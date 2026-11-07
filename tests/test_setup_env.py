@@ -87,7 +87,8 @@ def test_the_default_install_takes_the_lockfile_and_latest_asks_the_indexes(monk
     requirement, options, constraints, url, _ = setup_env.install_choice(False, "13.2", force_cpu=False)
     assert requirement.startswith("torch==") and options == ["--no-deps"]
     assert constraints == ["-c", str(setup_env.LOCKFILE)]
-    assert url.endswith("/cu121")
+    locked_wheels = next(line for line in setup_env.LOCKFILE.read_text(encoding="utf-8").splitlines() if line.startswith("# torch-wheels: "))
+    assert url.endswith("/" + locked_wheels.rsplit(" ", 1)[1])
     # newest_torch_on is bound as a default argument, so --latest reaches the indexes through it
     monkeypatch.setattr(setup_env.resolve_torch_index, "__defaults__", (offered,))
     requirement, options, constraints, url, _ = setup_env.install_choice(True, "13.2", force_cpu=False)
@@ -95,7 +96,7 @@ def test_the_default_install_takes_the_lockfile_and_latest_asks_the_indexes(monk
     assert url.endswith("/cu132")
 
 
-@pytest.mark.parametrize("version, stopped", [((3, 10), False), ((3, 12), False), ((3, 13), True), ((3, 14), True)])
+@pytest.mark.parametrize("version, stopped", [((3, 12), False), ((3, 14), False), ((3, 15), True)])
 def test_a_locked_install_stops_on_a_python_the_locked_versions_do_not_support(version, stopped):
     problem = setup_env.locked_python_problem(version)
     assert bool(problem) is stopped
