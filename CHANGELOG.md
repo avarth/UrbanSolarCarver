@@ -29,192 +29,65 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - Projects made with development builds before 0.10.0 no longer open as chains; recreate them.
 - Grasshopper: USC_ZoneOperation has three new inputs (`free_running`, `vent_above`, `vent_ach`); run USC_SyncCanvas.
 
-The sections below list every change since 0.10.0.
+The full list of changes is in the CHANGELOG at the v0.11.0 tag:
+https://github.com/avarth/UrbanSolarCarver/blob/v0.11.0/CHANGELOG.md
 
 ### Added
 
-- **Skipped test surfaces** in the 3D view: a run saves the surfaces it left out and why (`skipped_surfaces.json`, `GET .../run/skipped-surfaces`), and the Layers menu draws them and says how many, as in "8 of 43 surfaces not protected: 8 not flat".
-- **Windows with an altitude** in an explicit archetype: a window may carry the altitude of its normal (90 for a
-  skylight). The weights file is now schema version 2 (version 1 is still read; 0.10.0 refuses version 2).
-- **Progress of Calculate** in the typical building window: a bar under the button fills as the weights are calculated
-  (`GET /projects/{name}/typical-building/progress`; `generate_simulated_weights` takes a `progress` callback). A run
-  that calculates the weights first reports the same progress, in percent.
-- **Import rules and drawn maps** for developers: the Python package's seven layers are written in
-  `pyproject.toml` and checked by import-linter in the tests, the app's folders in eleven layers and its other rules by
-  dependency-cruiser in `npm test`, and `python tools/draw_maps.py` draws both as SVG. The Project Map page explains
-  them in place of its file list; each file's description is its own docstring or header comment.
-- **The model of the simulated weights in the docs**: the Simulated Weights page now gives the 5R1C equations, the
-  archetype rules, the attribution, the weights file's format and how benefit mode uses it, which were in a design
-  note of the repository; the note is no longer published.
-- **ESLint for the app**, run by `npm test`: typescript-eslint and the React hooks rules (effect dependencies, refs and
-  state during render). The 153 findings were cleared without changing what the app does; one line sets a rule aside,
-  with its reason.
-
-- **`setup_env.py` installs the tested versions.** It used to take the newest torch and packages `pyproject.toml` allows, so a
-  fresh install could run a torch the tests had never seen. It now installs `requirements-lock.txt`, written by
-  `tools/write_lockfile.py`, and so do the launchers on their first run. `--latest` gives the old behaviour; the locked versions
-  need Python 3.12 to 3.14, and the script says so before it installs anything.
-- **Developer checks.** `tools/check_references.py` reports routes, files and names in the docs that no longer exist
-  (`tests/test_docs_references.py` runs it). Ruff runs in `tests/test_architecture.py`, with mistakes as its rules and no
-  formatting. `tools/repo_state.py` prints where the repository stands, asking GitHub rather than the local tracking refs.
+- **Skipped test surfaces** in the 3D view: the Layers menu draws the surfaces a run left out and says why ("8 of 43
+  surfaces not protected: 8 not flat"); `GET .../run/skipped-surfaces`.
+- **Windows with an altitude** in an explicit archetype (90 for a skylight); weights file schema version 2.
+- **Progress of Calculate** in the typical building window, and in a run that calculates the weights first.
+- **The model of the simulated weights** in the docs: the 5R1C equations, the archetype rules, the attribution and the
+  weights file's format.
+- **`setup_env.py` installs the tested versions** from `requirements-lock.txt` (`--latest` takes the newest).
+- For developers: import rules checked by import-linter and dependency-cruiser, drawn by `tools/draw_maps.py`; ESLint for
+  the app; Ruff in the tests; `tools/check_references.py` and `tools/repo_state.py`.
 
 ### Changed
 
-- **Warnings of a run in plain words**, with a link to the setting each one is about; the engine's wording is folded under
-  them. "Thresholding produced an all-False mask" now reads "Every voxel was carved: the threshold is probably too low."
-- **Balance temperature with one handle** while summer overheating is not subtracted: the strip then sets only where sun
-  starts to count, named "Sun counts below", and moves the dead band whole.
-- **Dates and hours of the analysis period can be typed**: a click on a bubble, or Enter on its handle, opens it for
-  "21 Dec", "21/12" or "10:00".
-- **`npm run api-types`** finds the project's environment itself, also from a git worktree. pytest no longer prints the 15
-  slowest tests on every run; add `--durations=15` to ask for them.
-- **The simulated weights take about 4 s instead of 7 s, with the same numbers.** The attribution computes a run perturbed
-  at hour t only from hour t on, starting from the base run's state, and takes the base run from its first row; the sun is
-  placed once for all the windows. Calculate in the Typical building window takes about 5 s, and the tests that calculate
-  weights about half as long.
-- **The 3D view's layers come from one list** in the app: each layer's object, whether the layers menu lists it, and
-  whether it is shown and dimmed are one entry, which one hook gives the scene (30 effects in the view pane down to
-  12). What a layer offers the scene (theme colours, its summary, recolouring, picking) is typed (`layer_hooks.ts`).
-  A study shown on another geometry is now recoloured in place instead of being built again.
-- **The open project's plumbing in the app**: the token, the project's name and the handler of failed requests come
-  from one context (`api_client/project_session.ts`) instead of being handed to 16 hooks and panels;
-  `reportServiceProblem` replaces 24 copies of the same check, `configErrorOf` four readers of a refused save's field
-  errors. Three small hooks in a new `hooks/` folder (`useChangedDuringRender`, `useLatest`, `useKeyedValue`) replace
-  about 20 hand-written copies. Nothing the app does changes.
-- **The daemon's key file is found when it is asked for**: `daemon_client.daemon_authkey_path()` replaces the constant
-  `DAEMON_AUTHKEY_PATH`, which was fixed when the module was imported and so ignored a home folder set later.
-- **Tests keep out of the user's folders on their own**: every test gets a home folder of its own, and Warp's kernel cache
-  stays in its usual folder (no more `NVIDIA` folder in the checkout after a test run). The smallest shared test scene
-  has its test surface under the cube, as described, not inside it; its end-to-end tests now check that part of the cube
-  is carved. `pytest` collects from `tests/` only. The app's fake service checks its main replies against the service's
-  types, and the fake 3D scene against the real one's methods. `docs/testing.md` lists the shared scenes and fakes.
-- **The tests were reviewed one by one** for the mistake each catches. About 90 duplicate or trivial tests were deleted
-  and about 40 merged into the ones kept; tests tied to markup, CSS text or private functions now check behaviour; 30
-  weak assertions now fail on the mistake they aim at. A small plot, street and neighbour scene (`tests/_plot_scene.py`)
-  checks which side each mode carves. Tests wait on events instead of the clock, and the app tests' `settle` waits until
-  no reply is outstanding. The app tests read the service's schema and modes from a snapshot that a test keeps current
-  (`tools/write_app_test_service_data.py`), and each shared helper is written once (see `docs/testing.md`).
-- **`PipelineResult` is defined in `urbansolarcarver.api_core.pipeline_result`**, below `api`, since `run_chain` builds
-  it too. `from urbansolarcarver import PipelineResult` and `from urbansolarcarver.api import PipelineResult` work as
-  before.
-- **The typical building runs free**: the energy-weighted Solar usefulness weights now measure passive performance.
-  The room has no heating or cooling; its two set points are the limits of a **comfort band**, its windows open for
-  natural ventilation (above **Open the windows above**, 25 °C in the examples, when outdoors is cooler, up to **Open
-  windows let in at most**, 4 air changes per hour), and each hour's sun counts by the degree-hours below the band it
-  removes (benefit) and above it it adds (harm), times the room's heat loss coefficient so the weights stay shares of a
-  watt-hour. The window shows the room's degree-hours below and above the band. In the engine this is
-  `operation: free_running` with `vent_above` and `vent_ach` (`simulate_free_running`, `attribute_free_running`);
-  `conditioned`, the earlier ideal heating and cooling, stays the engine's default (and `usc archetype`'s). Weights
-  calculated before are out of date and are calculated again.
-- **Grasshopper: USC_Archetype's room runs free** by default, as the app's. USC_ZoneOperation takes `free_running`
-  (False for the heated and cooled room), `vent_above` and `vent_ach`, added after its earlier inputs so wires carried
-  over by USC_SyncCanvas stay in place; the setpoints are the comfort band of a free-running room. After a sync, a canvas
-  that leaves `free_running` unwired gets free-running weights. `OPERATIONS` and `FREE_RUNNING_DEFAULTS` move to
-  `archetype_defaults.py` (still importable from `simulated_weights`).
-- **Irradiance and benefit rays count the angle of incidence**: each ray (each sub-ray with `rays_per_patch` above 1)
-  counts its patch weight times cos θ to its test surface's normal, so a score is the energy the protected surface
-  receives, as Simulate's solar energy and useful solar gains count it. Before, a ray counted its patch's radiation as
-  if the surface faced the patch. The same weight goes into the context drop figures and `test_point_access_evaluation`.
-  On the bundled examples, full year in Golden, carve fraction 0.7: 4.5 to 9.0 % of the voxels are decided differently
-  and 0.6 to 1.5 % less volume is kept; scores fall to 58 to 67 % of before, so a numeric threshold of these modes
-  carves less. `daylight` and `radiative_cooling` are unchanged. `ModeSpec.incidence` says which modes take the term.
-- **One averaged room values the sun for every facade**: the rooms per facade direction (archetype key
-  `direction_rooms`, the app's **One room per facade direction**, between 0.10.0 and this change) are removed. What
-  lies behind a test surface is not known, and with the angle of incidence above a facade counts the absolute gains
-  it receives. A typical building stored with `by_direction` reads without it (its weights are calculated again when
-  it was on); a weights file that holds `hourly.directions` is read for the room's own series.
-- **App: fewer numbers on the carving, the last run's time in the top bar.** The Carving rule no longer has the tiles
-  under its histogram (Kept here, Obstruction removed, Last analysis took): the criterion's card says what it removes, now
-  without a volume, "Removes 80 % of the obstruction" in the weighted modes and "Removes 39 % of what reached it" in
-  the others. The line under two or more criteria reads "After all criteria: kept 61 % of the maximum volume", and is not
-  shown without that share. The time of the last run of the open project, a pipeline run or a simulation, is in the top
-  bar beside the device status, "Last run 7.0 s", after a run in this page; a narrow window leaves it out.
+- **Python 3.12 or newer, and new package versions**: torch 2.14.1, Warp 1.19, numpy 2.5, trimesh 5.2, tested on
+  Python 3.14. The results of the examples are unchanged.
+- **The typical building runs free**: no heating or cooling; the sun counts by the degree-hours it removes below a
+  comfort band (benefit) and adds above it (harm), with windows opened for natural ventilation. `conditioned` stays the
+  engine's default. Grasshopper's USC_Archetype and USC_ZoneOperation follow.
+- **Irradiance and benefit rays count the angle of incidence** to their test surface, as Simulate does. Scores fall to
+  about 58 to 67 % of before, so a numeric threshold carves less.
+- **One averaged room values the sun for every facade**: the rooms per facade direction are removed.
+- **The app**:
+  - the mode is chosen once: a new project shows the mode tiles when Criteria opens, and a criterion's Mode section is gone;
+  - Solar time-based is named Sun hours and Solar usefulness Solar heating (engine names unchanged); Bliss constant,
+    Detailed statistics and Drop mesh fragments left the app, the engine keeps them;
+  - warnings of a run in plain words with a link to their setting, the engine's wording folded under them;
+  - the balance temperature has one handle while summer overheating is not subtracted;
+  - dates and hours of the analysis period can be typed in their bubbles, and the period counts its days and hours;
+  - one orbit about the compass ring's centre in every workspace;
+  - Inspect's panel is named Geometries, and saving turned surfaces says which criteria went out of date;
+  - fewer numbers on the carving; the last run's time in the top bar; clearer labels and help.
+- The simulated weights take about 4 s instead of 7 s, with the same numbers.
 
 ### Removed
 
-- **Support for projects of development builds before 0.10.0**: the migration to a chain of one criterion, the rebuild of joined test
-  surface files without normals, and the checks for manifests without `grid_step`, `score_unit`, the maximum volume heights,
-  `scores_compared_with_cutoff_path` or `export_mesh_path`, which are now required. Such a project no longer opens as a chain or runs from its old stages.
-- The `criterion` query of `GET /projects/{name}`: the reply lists every criterion with its settings.
-- **The service route `POST /projects/{name}/carve-further`** and the code behind it (`carve_further.py`,
-  `ProjectStore.replace_max_volume_with_envelope`). The app dropped Carve further on 2026-10-26 for chained criteria, and
-  no other client called the route. A project carved further before still opens: it keeps its `carving_chain` and
-  `inputs/earlier_max_volumes/`, and the app still names the modes under its maximum volume file.
-- **The service route `PUT /projects/{name}/config`**, which saved the shared and one criterion's settings together. The
-  app has saved them with `PUT /projects/{name}/shared-settings` and `PATCH /projects/{name}/criteria/{id}` since
-  2026-10-26.
-- **Test surfaces as a project input**: an upload or removal through `/projects/{name}/inputs/test_surfaces` (which the
-  app before 2026-10-25 used, for the only criterion) is refused with 422; they go to a criterion or a study. Listing them
-  there stays.
-- **Two settings dropped on read**: `score_rule` (2026-10-22 only, before any release) and a typical building's
-  `by_direction` (2026-10-30 to 31). A config that still sets `score_rule` is refused with the field named; a building
-  that has `by_direction` is no longer read, so the window asks for a building again.
-- `UserConfig.effective_max_slope_deg`, which nothing called.
+- Support for projects of development builds before 0.10.0.
+- The service routes `POST /projects/{name}/carve-further` and `PUT /projects/{name}/config`, the `criterion` query of
+  `GET /projects/{name}`, and test surfaces as a project input (they go to a criterion or a study).
+- The settings `score_rule` and a typical building's `by_direction`, now refused on read.
 
 ### Fixed
 
-- **Flat test surfaces with sliver triangles are sampled.** A sliver a few micrometres high, whose normal is rounding noise, made
-  the whole surface count as not planar, so it was skipped and not protected: 8 of the 43 roofs of the New building example. A face
-  now counts against a surface only when it leaves the surface's plane by more than 0.1 mm.
-- **A cancelled or failed run keeps what it finished.** The next run no longer traces the criteria before the one that stopped.
-- **A result file that is gone makes its stage missing** for every stage, not only preprocessing, so the next run writes it again.
-- **A result that cannot be read says so.** Score points, envelope and massing now show in the Layers menu with a note, as the sky dome did, in place of an empty layer without a word.
-- **Python 3.12 or newer, and new package versions.** Python 3.10 is gone: torch has no new versions for it, and Warp 1.20 removes it. The tested versions are now torch 2.14.1, Warp 1.19, numpy 2.5 and trimesh 5.2, on Python 3.14; the caps on scipy and scikit-image are lifted. The results of the examples are unchanged.
-- **Small polish.** Steepest slope reads "off" where empty means off; Floors rest on floors below is a switch; the plane angle has a slider and shows in the Settings summary; the analysis period counts its days and hours, and the Cold period button names the dates it found; a text file named .obj shows as unreadable.
-- **The mode is chosen once.** A new project shows the six mode tiles when Criteria opens (`POST /projects/{name}/mode-chosen`, `mode_to_choose` in project.json); the Mode section of a criterion is gone, and its weather box and notes moved to Settings.
-- **Inspect after a review.** The panel is named Geometries; Save or Restore original says when criteria went out of date, with **Go to Carve**. The panels of Inspect and Simulate sit under the compass, not over it. The Add criterion menu shows the tooltip of each mode. The camera orbits about the centre of the compass ring, so the ring, sun path and sky dome stay in place.
-- **Two modes renamed, three settings gone from the app.** Solar time-based is now Sun hours and Solar usefulness is now Solar heating; the engine names `time-based` and `benefit` stay. Bliss constant, Detailed statistics and Drop mesh fragments under are no longer in the app; `bliss_k`, `diagnostics` and `min_face_count` still work in configuration files.
-- **One orbit in every workspace.** The view turns about the maximum volume in Carve, Simulate and Inspect: a floating panel shifts the picture, not the point the camera turns about, the sky dome and other visible layers count only in how far the camera stands, and leaving Inspect after it framed a file frames the model again.
-- **Clearer settings**: Smoothing passes and Cut voxels needed show only while their switch is on; plainer labels and help (Shade allowed per voxel, Ignore sun below, Steepest slope of the envelope, Part of a module allowed outside the envelope); mode tiles show their one line; example cards name the mode; Envelope and massing shows the test surfaces; the Angle rule legend and a Solar time-based cutoff of 0 say what the voxels are.
-- **The UI**: Tab goes round every control of a dialog; an editor whose criterion is gone shows the list; Escape over a tooltip in a dialog closes the tooltip, not the dialog; the status line says a criterion only when it is the one asked for; an edge strip left from Night cooling is said in the other weighted modes, which read it.
-- **`carve_above_applied` is false** in the diagnostics of a criterion with no voxel left to decide about.
-- **A sky dome that cannot be read is no longer silent.** After a finished run it disappeared without a word, and in Simulate any
-  failure reading it was ignored, a stopped engine or lost access included. **Layers** now lists it as missing and says how to write
-  it again, and lost access is reported. A run or study without sky patches, such as a time-based one, is not a failure: both
-  `sky-patches` routes answer `null` for it instead of 404.
-- **A file of the analysis that is gone from the project folder no longer leaves the project stuck.** The stage stayed current, so
-  the result was missing and no Run analysis was offered. The stage now counts as missing and a run writes the file again.
-- **The browser tab has an icon**, in place of a blank one and a 404 for `favicon.ico`.
-- **The Criteria bar offers only the run the project needs.** It said Run analysis even with nothing to run, and a carving
-  update left no trace. Now it shows Run analysis while an analysis is missing or out of date, Update carving while only a
-  carving is, and neither when everything is current; Run analysis in Site and grid shows only for an analysis. A finished
-  carving update says which criteria it carved: "Carving updated: Daylight, Solar energy."
-- **The New building example's roofs no longer have a bottom.** `neighbor_roofs.ply` closed four of its pitched roofs with
-  a flat base facing down (965 m², a third of the file's area), so a share of its test points faced the ground: they read 0
-  in Simulate and their rays did not steer the carving. The bases are removed (1,809 faces down to 1,293; 43 roof surfaces),
-  in the packaged example and in `examples/test_inputs/new_building/`. A project made from the example before keeps its
-  copy; make it again from Try an example to get the new file.
-- **Simulate's study values no longer break into stripes with the test surfaces shown.** The patches and the test
-  surfaces they lie on were pulled forward in depth by the same amount, so with the Test surfaces layer turned on the two
-  took turns pixel by pixel, more at grazing angles. The patches are now pulled further forward.
-- **A criterion turned back on shows its result again.** The run summary lists only the criteria that are on, and the app
-  fetched it at open and after runs only: a criterion turned on after the summary was read had an empty card line, and
-  the chain line kept the numbers without it, until the next run or a reload. The app now fetches the summary again
-  whenever the criteria that are on change.
-- **North now turns the sky of irradiance and benefit.** Ladybug's sky matrix only records its north and runs Radiance's
-  gendaymtx without it, so the patch weights of every `north_deg` were those of north 0: a turned site got the sun
-  from the model's -Y. The sky is now turned by gendaymtx's `-r` before the sun is binned into the patches, which
-  stay in the model's frame. The plot test scene turned a quarter now loses 1,253 voxels against 1,272 unturned
-  (1,463 before). This changes the carving, Simulate's solar energy and useful solar energy and the sky dome of
-  every project whose North is not 0; results computed before are not marked out of date, so run them again.
-  Time-based, daylight and radiative cooling are unchanged.
-- **A NaN score no longer carves its neighbours.** The score smoothing before thresholding blurred NaN and Inf scores into
-  every voxel the kernel reached, which were then carved too (one NaN voxel in a 20 m cube of 1 m voxels carved 729). A
-  non-finite score now adds nothing to its neighbours' blur and is carved on its own, as the warning about it says. Runs
-  without non-finite scores are unchanged.
-- **A chain run of preprocessing alone that leaves the last criterion out no longer fails.** The engine took the reply's
-  folders from the last criterion only, which had none (`IndexError`); it now takes each stage's folder from the last
-  criterion that ran it. The app always asks for thresholding too; `POST /projects/{name}/runs` could send such a request.
-- **Simulate drew some test points' patches in the wrong place.** On a panel whose sampling plane had to be turned to face outward, each
-  point's patch was mirrored through the panel's centre, so it showed another point's value (on the Allatini example about a third
-  of the patches; a facade could read darker at the top than at the bottom). The test points, their values and the carving
-  did not change. A study run before this fix shows the old patches until it is run again.
-- **The legend's two ends can no longer meet.** Dragging the high end onto the low end saved both at one value: the high mark hid
-  under the low one and the palette spanned one unit (0 to 1 kWh/m², with nearly everything in the top colour). An end now stays
-  1 % of the bar short of the other, and a saved high end at or below the target counts as none.
-- **New study settings clear the colour range.** Changing a study's settings (its period, for example) or its metric clears
-  the two ends of its colour range, which are in the study's unit and fitted the last result; the next run shows its own range
-  (a range set on a year's result no longer applies to a day's).
+- **North now turns the sky of irradiance and benefit**: every `north_deg` used to get the sky of north 0. Run projects
+  with a North other than 0 again.
+- A NaN score no longer carves its neighbours through the score smoothing.
+- A cancelled or failed run keeps the criteria it finished.
+- Flat test surfaces with sliver triangles are sampled.
+- A result file that is gone, or cannot be read, says so and makes its stage missing, in place of an empty layer or a
+  stuck project.
+- Simulate: patches drawn in the wrong place on some turned panels, stripes with the test surfaces shown, legend ends
+  that could meet, a colour range kept after the study settings changed.
+- A chain run of preprocessing alone that leaves the last criterion out no longer fails; a criterion turned back on
+  shows its result again; `carve_above_applied` is false with nothing left to decide.
+- The New building example's roofs no longer have a bottom.
+- The Criteria bar offers only the run the project needs; the browser tab has an icon.
 
 ## [0.10.0] - 2026-10-30
 
