@@ -440,6 +440,46 @@ export const messages = {
   runConnectionLost: "The connection to the engine was lost during the run.",
   runReportUnreadable: "The run report could not be read. Build the envelope or the massing again to write it.",
   warningsTitle: "Warnings",
+  engineWarnings: "As the engine wrote them",
+  issueOfCriterion: (criterionName: string, text: string) => `${criterionName}: ${text}`,
+  // A run's warnings by their code (common/issue_text.ts)
+  issues: {
+    everythingCarved: "Every voxel was carved: the threshold is probably too low.",
+    nothingCarved: "Nothing was carved: the threshold is probably too high.",
+    nothingLeftToCarve: "The criterion before this one kept no voxel, so this one had nothing to carve.",
+    thresholdValueDisagrees: "The threshold value and the carve fraction disagree; the threshold value is used.",
+    settingUnused: (label: string) => `${label} is not used by this mode.`,
+    settingsUnused: (labels: string[]) => `This mode does not use: ${labels.join(", ")}.`,
+    smoothingClipped: (radius: string | null) =>
+      radius === null ? "Score smoothing was reduced to the largest it can be at this voxel size."
+        : `Score smoothing was reduced to ${radius} m, the largest it can be at this voxel size.`,
+    edgeTaperIgnored: "The edge strip with less weight has no effect in this mode.",
+    edgeTaperExcluded: "A test surface is narrower than about twice the edge strip with less weight, so it is only partly protected.",
+    testPointsBlocked: (blocked: string, total: string) =>
+      `${blocked} of ${total} test points see no sky: they lie inside or below a surrounding mass or the terrain, or face into one, so they protect nothing. Check the test surfaces there.`,
+    testSurfacesSkipped: (counts: string) =>
+      `Test surfaces skipped and not protected: ${counts}. Each one must be a single flat face. The Layers menu shows them.`,
+    horizontalTestSurfaces: (flat: string, total: string) =>
+      `${flat} of ${total} sample points lie on horizontal test surfaces, which face no direction a tilted plane can follow; there the plane protects only the sky straight above.`,
+    contextNotClosed: "The surroundings are not a closed mesh, so where they reach the grid the voxels they remove may be too few or too many. They still block rays.",
+    footprintUnreadable: "The footprint of the maximum volume could not be read; the building massing uses the voxel footprint.",
+    footprintMismatch: (percent: string) =>
+      `The footprint of the maximum volume does not match the voxels (${percent}% of them lie outside it); the building massing uses the voxel footprint.`,
+    raisedPart: (height: string) => `A part of the envelope starts ${height} m above the lowest point; its floors are counted from the lowest point.`,
+    noPlatesFit: "No storey of the building massing fits the envelope with these settings.",
+    nonfiniteScores: (percent: string) => `${percent}% of the voxels have no valid score and are always carved. Check the input geometry.`,
+    noSunVectors: "The sun is never above the “Ignore sun below” altitude in the analysis period, so nothing was carved.",
+    noSunPositions: "The sun is never above the “Ignore sun below” altitude in the check period, so every test point gets 0 sun hours.",
+    noColdHours: "No hour of the analysis period is below the balance temperature, so no sun counts as useful and the carving has nothing to go on. Widen the period or raise the balance temperature.",
+    harmEverywhere: "Overheating outweighs the useful sun from every part of the sky, so the carving has nothing to go on. Narrow the period or stop subtracting summer overheating.",
+    zeroWeights: "The typical building gains nothing from the sun in the analysis period, so the carving has nothing to go on. Widen the period.",
+    dewPointOutsideFit: (celsius: string) =>
+      `The night dew point, ${celsius} °C, is outside −15 to 25 °C, where the sky emissivity formula holds; the cooling weights may be off.`,
+    balancePointUnused: "The balance temperature is not used: the typical building's weights decide which hours count.",
+    rayBatchClamped: (size: string) => `Rays per batch was too large and was lowered to ${size}.`,
+    keptLargestPart: "Every part of the envelope mesh is smaller than the mesh cleanup keeps, so only the largest part was kept.",
+    experimentalMode: "This mode is experimental and may change.",
+  },
   warningCount: (count: number) => `${count} ${count === 1 ? "warning" : "warnings"}`,
   summaryWithWarnings: (summary: string, warningsText: string) => `${summary}, ${warningsText}`,
 
@@ -598,6 +638,8 @@ export const messages = {
   periodHandleNames: { start_date: "Start date", end_date: "End date", start_hour: "Start hour", end_hour: "End hour" },
   periodDateSpoken: (month: number, day: number) => `${day} ${MONTH_NAMES[month - 1]}`,
   periodHourSpoken: (hour: number) => `${hour}\u00a0h`,
+  typeADate: "Click to type a date, as 21 Dec or 21/12, then press Enter",
+  typeAnHour: "Click to type an hour from 0 to 23, then press Enter",
   periodDateOnBubble: (month: number, day: number) => `${day} ${MONTH_ABBREVIATIONS[month - 1]}`,
   periodPresets: "Presets",
   // The cold period of the weather file (round 2, section 8), a preset of Solar heating: the longest run of days whose
@@ -654,6 +696,11 @@ export const messages = {
   // The balance temperature strip: the names of its two handles, the two ends of the dead band.
   balanceLowerEnd: "Counts below",
   balanceUpperEnd: "Too warm above",
+  // Without harm counted the strip has one handle, and the setting is named and explained by it.
+  balanceSunCountsBelow: "Sun counts below",
+  balanceSunCountsBelowHelp: "Sun counts in the hours colder than this temperature; warmer hours are left out. It lies a little below " +
+    "the building's balance temperature, about 12 °C for offices and 18 °C for homes. With summer overheating subtracted, a second " +
+    "handle sets the temperature above which sun counts against it.",
 
   // Input files changed in the project folder from outside the app, or missing from it (the stage status lists them).
   inputFileInRole: (fileName: string, role: string) => `${fileName} (${INPUT_ROLE_WORDS[role] ?? role})`,

@@ -1,6 +1,7 @@
 // The analysis period (R2 4.3): the six period settings as one control. A year strip of twelve months with a start and an end date
 // handle, an hour strip of 0 to 23 h with a start and an end hour handle, each handle with its value in a bubble over it ("21 Dec",
-// "10 h"), and a row of presets that set the dates and keep the hours. The strips are drawn by ScaleStrip, which the balance
+// "10 h"), and a row of presets that set the dates and keep the hours. A click on a bubble, or Enter on its handle, lets the value be
+// typed ("21 Dec", "21/12", "10", "10:00"; ScaleStrip). The strips are drawn by ScaleStrip, which the balance
 // temperature shares.
 //
 // A start after the end is drawn wrapped: dates across the new year, hours across midnight. Every change goes through
@@ -22,7 +23,8 @@ import { messages } from "../../messages";
 import {
   changedPeriodSettings, dateHandleValueAfterKey, dateRangeSegments, dayOfYearAt, daysInMonth, DAYS_IN_YEAR, handlePositionOf, handleValueOf,
   datesMatch, hourAt, hourHandleValueAfterKey, hourRangeSegments, HOURS_IN_DAY, monthDayOf, PERIOD_PRESETS, periodCounts, periodFromSettings, periodInWords,
-  periodWithDates, periodWithHandleAt, presetMatches, presetPeriod, runsEveryNightOfTheYear, withOvernightHoursOnOneDateAsOneNight,
+  periodWithDates, periodWithHandleAt, presetMatches, presetPeriod, runsEveryNightOfTheYear, typedDayOfYear, typedHour,
+  withOvernightHoursOnOneDateAsOneNight,
   type AnalysisPeriodField, type ColdPeriodState, type Hemisphere, type Period, type PeriodDates, type PeriodPreset, type PeriodHandle,
 } from "../analysis_period";
 import { placedTooltipStyle, placementUnder, type TooltipPlacement } from "../SettingTooltip";
@@ -72,6 +74,8 @@ function stripHandleOf(period: Period, handle: PeriodHandle, id?: string): Scale
     name: handle, id, position: handlePositionOf(period, handle), accessibleName: messages.periodHandleNames[handle], valueNow: value,
     spokenValue: isHourHandle(handle) ? messages.periodHourSpoken(value) : messages.periodDateSpoken(month, day),
     bubbleText: isHourHandle(handle) ? messages.periodHourSpoken(value) : messages.periodDateOnBubble(month, day),
+    parseTyped: isHourHandle(handle) ? typedHour : (text) => typedDayOfYear(text, messages.monthNames),
+    typingHint: isHourHandle(handle) ? messages.typeAnHour : messages.typeADate,
   };
 }
 
@@ -110,6 +114,7 @@ export function AnalysisPeriod({ values, onChange, inputId, labelId, invalid, de
       send(periodWithHandleAt(current, handle, value));
       return handle;
     },
+    onTyped: (handle: PeriodHandle, value: number) => send(periodWithHandleAt(current, handle, value)),
   };
   const noteUnderStrips = stored === null ? messages.periodNotSet
     : runsEveryNightOfTheYear(stored) ? messages.periodRunsEveryDay(periodInWords(stored)) : null;

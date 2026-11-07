@@ -2,7 +2,7 @@ import { act, useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ModeInfo } from "../../api_client/client";
 import { serviceModes, serviceSchemaWith } from "../../api_client/service_data_for_test";
-import { addStyleSheetForTest, click, press, renderForTest, type RenderedOverlay } from "../../viewer_overlays/render_for_test";
+import { addStyleSheetForTest, click, press, renderForTest, type, type RenderedOverlay } from "../../viewer_overlays/render_for_test";
 import type { ColdPeriodState, Hemisphere } from "../analysis_period";
 import { formReducer, initialFormState, shownValue, type FormState } from "../form_state";
 import { settingsForStep } from "../presentation";
@@ -349,4 +349,40 @@ test("under the strips a line counts the days and the hours a day; the cold peri
   rendered!.unmount();
   renderPeriod(form(), false, { kind: "found", dates: { startMonth: 10, startDay: 23, endMonth: 4, endDay: 29 }, baseTemperature: 15 });
   expect(coldPreset().textContent).toBe("Cold period: 23 Oct to 29 Apr");
+});
+
+test("a click on a bubble lets the value be typed: Enter sets it, a text that names no value is marked and kept, Escape leaves it", () => {
+  renderPeriod();
+  const bubble = (index: number) => rendered!.container.querySelectorAll<HTMLElement>(".scale-strip-bubble")[index];
+  const field = () => rendered!.container.querySelector<HTMLInputElement>(".scale-strip-bubble-input")!;
+  click(bubble(0));                                       // the start date, 21 Dec
+  expect(field().getAttribute("aria-label")).toBe("Start date");
+  expect(field().value).toBe(`21${NBSP}Dec`.replace(NBSP, " "));
+  type(field(), "1 Nov");
+  press(field(), "Enter");
+  expect(field()).toBeNull();
+  expect(periodValues()).toMatchObject({ start_month: 11, start_day: 1, end_month: 12, end_day: 21 });
+  expect(document.activeElement).toBe(handle("Start date"));
+  click(bubble(3));                                       // the end hour, 14 h
+  type(field(), "25");
+  press(field(), "Enter");
+  expect(field().getAttribute("aria-invalid")).toBe("true");
+  type(field(), "16:00");
+  press(field(), "Enter");
+  expect(periodValues()).toMatchObject({ end_hour: 16 });
+  click(bubble(2));
+  type(field(), "3");
+  press(field(), "Escape");
+  expect(field()).toBeNull();
+  expect(periodValues()).toMatchObject({ start_hour: 10 });
+});
+
+test("Enter on a handle opens its bubble for typing; a disabled control's bubbles take no click", () => {
+  renderPeriod();
+  press(handle("End date"), "Enter", { focus: true });
+  expect(rendered!.container.querySelector<HTMLInputElement>(".scale-strip-bubble-input")!.getAttribute("aria-label")).toBe("End date");
+  rendered!.unmount();
+  renderPeriod(form(), true);
+  click(rendered!.container.querySelector(".scale-strip-bubble")!);
+  expect(rendered!.container.querySelector(".scale-strip-bubble-input")).toBeNull();
 });

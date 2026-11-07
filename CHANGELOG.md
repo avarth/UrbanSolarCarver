@@ -36,6 +36,12 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Warnings of a run in plain words**, with a link to the setting each one is about; the engine's wording is folded under
+  them. "Thresholding produced an all-False mask" now reads "Every voxel was carved: the threshold is probably too low."
+- **Balance temperature with one handle** while summer overheating is not subtracted: the strip then sets only where sun
+  starts to count, named "Sun counts below", and moves the dead band whole.
+- **Dates and hours of the analysis period can be typed**: a click on a bubble, or Enter on its handle, opens it for
+  "21 Dec", "21/12" or "10:00".
 - **`npm run api-types`** finds the project's environment itself, also from a git worktree. pytest no longer prints the 15
   slowest tests on every run; add `--durations=15` to ask for them.
 - **The simulated weights take about 4 s instead of 7 s, with the same numbers.** The attribution computes a run perturbed

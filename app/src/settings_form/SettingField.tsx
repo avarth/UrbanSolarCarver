@@ -167,6 +167,11 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
   // Controls made of several inputs are labelled as a group; the others are the target of their label.
   const isGroupOfInputs = view.widget === "analysis_period" || view.widget === "tilted_plane_angles" || view.widget === "mesh_format"
     || view.widget === "balance_temperature";
+  // Without harm counted the balance strip has one handle, the temperature below which sun counts, and is named and explained as that.
+  const harmCounted = shownValue(form, "include_harm") === true;
+  const isOneEndOfBalance = view.widget === "balance_temperature" && !harmCounted;
+  const label = isOneEndOfBalance ? messages.balanceSunCountsBelow : view.label;
+  const help = isOneEndOfBalance ? messages.balanceSunCountsBelowHelp : view.help;
 
   let controlElement: ReactNode;
   switch (view.widget) {
@@ -197,7 +202,7 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
       controlElement = (
         <BalanceTemperatureSlider {...control} balanceTemperature={typeof shown === "number" ? shown : null}
                                   deadBand={typeof deadBand === "number" ? deadBand : null}
-                                  track={view.slider!} unit={unit} onChange={onChange}
+                                  track={view.slider!} unit={unit} onChange={onChange} harmCounted={harmCounted}
                                   invalid={control.invalid || BALANCE_TEMPERATURE_FIELDS.some((name) => form.fieldErrors[name] !== undefined)} />
       );
       break;
@@ -250,9 +255,9 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
     // data-input-id names the input the label targets (a group's first), which a link to the setting focuses.
     <div className="setting-field" data-setting={view.name} data-input-id={inputId}>
       <div className="setting-label-row">
-        {isGroupOfInputs ? <span id={labelId} className="setting-label">{view.label}</span>
-          : <label id={labelId} htmlFor={inputId} className="setting-label">{view.label}</label>}
-        <SettingTooltip settingLabel={view.label} help={view.help} defaultText={defaultTextOf(view, form, isShadowTolerated)}
+        {isGroupOfInputs ? <span id={labelId} className="setting-label">{label}</span>
+          : <label id={labelId} htmlFor={inputId} className="setting-label">{label}</label>}
+        <SettingTooltip settingLabel={label} help={help} defaultText={defaultTextOf(view, form, isShadowTolerated)}
                         configName={view.widget === "analysis_period" ? messages.analysisPeriodConfigNames : view.name}
                         extraLine={(view.name === "voxel_size" ? gridLineOf(form) : emptyMeaningOf(view, form)) ?? undefined} />
       </div>

@@ -37,6 +37,40 @@ export function daysInMonth(month: number): number {
 }
 
 /** 1 January is 1, 31 December is 365. */
+/** The month a typed name names: its first three letters or more, in any case ("dec", "Decem"); null when it names none. */
+function monthOfName(name: string, monthNames: readonly string[]): number | null {
+  const typed = name.toLowerCase().replace(/\.$/, "");
+  if (typed.length < 3) return null;
+  const index = monthNames.findIndex((month) => month.toLowerCase().startsWith(typed));
+  return index < 0 ? null : index + 1;
+}
+
+/**
+ * The day of the year a typed date names: day first, as the bubbles show it ("21 Dec", "21 december", "21/12", "21.12"), or the
+ * month first ("Dec 21"); null when it names no date of the year (the 30th of February, a 13th month, a word that is no month).
+ */
+export function typedDayOfYear(text: string, monthNames: readonly string[]): number | null {
+  const typed = text.trim();
+  let day: number, month: number | null;
+  const inNumbers = /^(\d{1,2})\s*[./-]\s*(\d{1,2})\.?$/.exec(typed);
+  const dayThenName = /^(\d{1,2})\.?\s*([a-z]+\.?)$/i.exec(typed);
+  const nameThenDay = /^([a-z]+\.?)\s*(\d{1,2})$/i.exec(typed);
+  if (inNumbers !== null) [day, month] = [Number(inNumbers[1]), Number(inNumbers[2])];
+  else if (dayThenName !== null) [day, month] = [Number(dayThenName[1]), monthOfName(dayThenName[2], monthNames)];
+  else if (nameThenDay !== null) [day, month] = [Number(nameThenDay[2]), monthOfName(nameThenDay[1], monthNames)];
+  else return null;
+  if (month === null || month < 1 || month > 12 || day < 1 || day > daysInMonth(month)) return null;
+  return dayOfYear(month, day);
+}
+
+/** The hour a typed hour names: "10", "10 h", "10:00"; null for anything else, or an hour outside 0 to 23. */
+export function typedHour(text: string): number | null {
+  const typed = /^(\d{1,2})(?::00)?\s*h?$/i.exec(text.trim());
+  if (typed === null) return null;
+  const hour = Number(typed[1]);
+  return hour < HOURS_IN_DAY ? hour : null;
+}
+
 export function dayOfYear(month: number, day: number): number {
   return DAYS_IN_EACH_MONTH.slice(0, month - 1).reduce((total, days) => total + days, 0) + day;
 }

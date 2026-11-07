@@ -11,6 +11,10 @@
 // keeps the handle its first move picked. A key toward the other end moves the focus to that end's handle and steps it (Home and
 // End take it to the strip's end); the keys after it go to that handle. A value off the strip (a hand-edited config) pins its
 // handle at the strip's end, and its bubble and the handle say the value itself; a key steps it from the end it is drawn at.
+//
+// Without harm counted (include_harm off) the upper end does nothing, so the strip has one handle, the lower end, and the fill runs
+// from the strip's start to it: the cold hours whose sun counts. The handle moves the whole band, keeping its width, so the upper
+// end is where it was relative to the lower one when harm is turned on again.
 import { messages } from "../../messages";
 import type { BALANCE_TEMPERATURE_FIELDS, SliderRange } from "../presentation";
 import type { ControlProps } from "./NumberInput";
@@ -26,6 +30,8 @@ interface BalanceTemperatureSliderProps extends ControlProps {
   track: SliderRange;
   /** Whether the last save of either setting was refused: both ends show it, as each end is made of both settings. */
   invalid: boolean;
+  /** Whether hours above the upper end count against the sun (include_harm): only then does the upper end have a handle. */
+  harmCounted: boolean;
   unit: string;
   onChange: (values: Partial<Record<BalanceTemperatureField, number>>) => void;
 }
@@ -75,8 +81,8 @@ function temperatureCells(track: SliderRange): ScaleStripCell[] {
   });
 }
 
-export function BalanceTemperatureSlider({ balanceTemperature, deadBand, track, invalid, unit, onChange, inputId, labelId, describedBy,
-                                           disabled }: BalanceTemperatureSliderProps) {
+export function BalanceTemperatureSlider({ balanceTemperature, deadBand, track, invalid, harmCounted, unit, onChange, inputId, labelId,
+                                           describedBy, disabled }: BalanceTemperatureSliderProps) {
   const balance = balanceTemperature ?? track.low, halfWidth = deadBand ?? 0;
   const lower = withoutFloatingPointNoise(balance - halfWidth), upper = withoutFloatingPointNoise(balance + halfWidth);
   const lowerOnTrack = positionOnTrack(lower, track), upperOnTrack = positionOnTrack(upper, track);
@@ -97,13 +103,36 @@ export function BalanceTemperatureSlider({ balanceTemperature, deadBand, track, 
     return moved;
   };
 
+  const lowerHandle = { name: "lower" as const, id: inputId, position: fractionOf(lowerOnTrack), valueNow: lowerOnTrack,
+                        spokenValue: spokenValue(lower, unit), bubbleText: spokenValue(lower, unit) };
+  if (!harmCounted) {
+    // One handle: the band moves whole, so its width is kept for when harm is counted again.
+    const moveBand = (_end: End, value: number) => {
+      if (value !== lower) onChange(balanceSettingsOf(value, withoutFloatingPointNoise(value + (upper - lower))));
+    };
+    const onBandKey = (_own: End, key: string): End | null => {
+      const value = balanceEndAfterKey(lowerOnTrack, key, track);
+      if (value === null) return null;
+      moveBand("lower", value);
+      return "lower";
+    };
+    return (
+      <div role="group" aria-labelledby={labelId} className="balance-slider">
+        <ScaleStrip<End>
+          handles={[{ ...lowerHandle, accessibleName: messages.balanceSunCountsBelow }]}
+          segments={[{ start: 0, end: fractionOf(lowerOnTrack) }]} cells={temperatureCells(track)}
+          valueAt={(fraction) => temperatureAt(fraction, track)} valueRange={[track.low, track.high]} invalid={invalid} describedBy={describedBy}
+          disabled={disabled} onDragMove={moveBand} onDragEnd={() => {}} onKey={onBandKey} />
+      </div>
+    );
+  }
+
   return (
     <div role="group" aria-labelledby={labelId} className="balance-slider">
       {/* The lower end first, as on the strip, so Tab reaches the ends in their order. */}
       <ScaleStrip<End>
         handles={[
-          { name: "lower", id: inputId, position: fractionOf(lowerOnTrack), accessibleName: messages.balanceLowerEnd, valueNow: lowerOnTrack,
-            spokenValue: spokenValue(lower, unit), bubbleText: spokenValue(lower, unit) },
+          { ...lowerHandle, accessibleName: messages.balanceLowerEnd },
           { name: "upper", position: fractionOf(upperOnTrack), accessibleName: messages.balanceUpperEnd, valueNow: upperOnTrack,
             spokenValue: spokenValue(upper, unit), bubbleText: spokenValue(upper, unit) },
         ]}

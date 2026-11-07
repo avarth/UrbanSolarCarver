@@ -262,6 +262,12 @@
   pointer-events: none;
 }
 
+/* A bubble whose value can be typed takes a click; typed in, it is a text field of the same size. */
+.scale-strip-bubble-typable { pointer-events: auto; cursor: text; font: inherit; font-size: var(--text-secondary); }
+.scale-strip-bubble-typable:hover { background: var(--colour-accent-soft); }
+.scale-strip-bubble-input { pointer-events: auto; font: inherit; font-size: var(--text-secondary); text-align: center; }
+.scale-strip-bubble-input[aria-invalid="true"] { border-color: var(--colour-error); box-shadow: 0 0 0 2px var(--colour-error); }
+
 /* The bubble's tail, pointing down at its handle: a small square turned on its corner, held between the bubble's corners when the
    bubble is moved aside. */
 .scale-strip-bubble::after {

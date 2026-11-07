@@ -409,6 +409,28 @@ test("folded, the warnings of a run are one line with a toggle; how the run ende
   expect(rendered.container.querySelector(".run-issues ul")).toBeNull();
 });
 
+test("a warning is said in plain words with a link to its setting; the engine's wording is folded under the list", () => {
+  const onGoToSetting = vi.fn();
+  let state = initialRunState(["preprocessing"]);
+  state = runReducer(state, { type: "issue", stage: "thresholding", criterion: "2", code: "everything_carved",
+                              message: "Thresholding produced an all-False mask (everything carved). Threshold value 0.1 may be too low." });
+  const view = (shown: string) => (
+    <RunProgress runs={runs({ serial: 1, project: "p", origin: "build", runId: "r", state: runReducer(state, { type: "run_finished", stages: [], files: [] }), refusal: null })}
+                 project="p" origin="build" mode="time-based" onGoToSetting={onGoToSetting} shownCriterionId={shown}
+                 criterionNames={{ 1: "Facades", 2: "Windows" }} criterionKeys={SERVICE_CRITERION_KEYS} />
+  );
+  rendered = renderForTest(view("2"));
+  const item = rendered.container.querySelector(".run-issues li")!;
+  expect(item.textContent).toBe("Every voxel was carved: the threshold is probably too low. Go to shade allowed per voxel");
+  click(item.querySelector("button")!);
+  expect(onGoToSetting).toHaveBeenCalledWith("threshold", "2");
+  expect(rendered.container.querySelector(".run-issues details")!.textContent).toContain("all-False mask");
+  // Shown from another criterion, the warning names its own.
+  rendered.rerender(view("1"));
+  expect(rendered.container.querySelector(".run-issues li")!.textContent)
+    .toBe("Windows: Every voxel was carved: the threshold is probably too low. Go to shade allowed per voxel of Windows");
+});
+
 function unfoldCarvingSettings(container: HTMLElement) {
   click([...container.querySelectorAll("button")].find((button) => button.textContent === "More carving settings")!);
 }

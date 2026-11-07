@@ -7,6 +7,10 @@
 // handle by its direction: to the left the start, to the right the end. The caller holds the values: it is told each move of a
 // drag and its end, and each key, and says which handle a key moved; that handle takes the focus. Keys and drags are ignored
 // while the strip is disabled, and keys while a drag is under way.
+//
+// A handle that can be typed (parseTyped) has a bubble that takes a click, and Enter on the handle does the same: the bubble becomes
+// a text field with the value in it, selected. Enter sets what was typed (a text that names no value is marked and kept for a
+// correction), Escape or leaving the field puts the bubble back unchanged, and the focus returns to the handle.
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import type { RangeSegment } from "../analysis_period";
 
@@ -24,6 +28,10 @@ export interface ScaleStripHandle<HandleName extends string> {
   bubbleText: string;
   /** The id of the handle, where the field's label names it (a link to the setting focuses it). */
   id?: string;
+  /** The value a typed text names, or null when it names none; absent: the value cannot be typed. */
+  parseTyped?: (text: string) => number | null;
+  /** How to type the value, said on the bubble and in the text field ("Type a date, as 21 Dec"). */
+  typingHint?: string;
 }
 
 /** A cell of the scale: its label (empty for an unlabelled tick) and its length, relative to the other cells. */
@@ -47,6 +55,15 @@ interface ScaleStripProps<HandleName extends string> {
   onDragEnd: () => void;
   /** A key on *handle*: returns the handle the key moved, or null for a key that moves nothing. */
   onKey: (handle: HandleName, key: string) => HandleName | null;
+  /** A value typed in the bubble of *handle* (one with parseTyped). */
+  onTyped?: (handle: HandleName, value: number) => void;
+}
+
+/** The bubble being typed in: its handle, the text so far, and whether Enter found that it names no value. */
+interface Typing<HandleName extends string> {
+  handle: HandleName;
+  text: string;
+  refused: boolean;
 }
 
 // Handles closer than this on the strip lie on one spot: the direction of the drag picks the one it moves. The width of a period
@@ -104,14 +121,31 @@ interface StripDrag<HandleName extends string> {
 }
 
 export function ScaleStrip<HandleName extends string>({ handles, segments, cells, valueAt, valueRange, invalid, describedBy, disabled, onDragMove,
-                                                        onDragEnd, onKey }: ScaleStripProps<HandleName>) {
+                                                        onDragEnd, onKey, onTyped }: ScaleStripProps<HandleName>) {
   // One handle is both the start and the end: a press anywhere moves it, and its bubble is only kept over the strip.
   const single = handles.length === 1;
   const [startHandle, endHandle = startHandle] = handles;
   const stripElement = useRef<HTMLDivElement>(null);
   const handleElements = useRef<Partial<Record<HandleName, HTMLDivElement | null>>>({});
-  const bubbleElements = useRef<(HTMLSpanElement | null)[]>([]);
+  const bubbleElements = useRef<(HTMLElement | null)[]>([]);
   const stripDrag = useRef<StripDrag<HandleName> | null>(null);
+  const [typing, setTyping] = useState<Typing<HandleName> | null>(null);
+  const isTypable = (handle: ScaleStripHandle<HandleName>) => handle.parseTyped !== undefined && onTyped !== undefined && !disabled;
+  const startTyping = (handle: ScaleStripHandle<HandleName>) => setTyping({ handle: handle.name, text: handle.bubbleText, refused: false });
+  const stopTyping = (handle: HandleName) => {
+    setTyping(null);
+    handleElements.current[handle]?.focus();
+  };
+  const commitTyping = (handle: ScaleStripHandle<HandleName>) => {
+    if (typing === null) return;
+    const value = handle.parseTyped!(typing.text.replace(/\u00a0/g, " "));
+    if (value === null) {
+      setTyping({ ...typing, refused: true });
+      return;
+    }
+    stopTyping(handle.name);
+    onTyped!(handle.name, value);
+  };
 
   // The widths the bubbles are placed by, measured after each change of their text and each resize of the strip.
   const [measured, setMeasured] = useState({ stripWidth: 0, bubbleWidths: [0, 0] as [number, number] });
@@ -121,7 +155,7 @@ export function ScaleStrip<HandleName extends string>({ handles, segments, cells
     setMeasured((before) => (before.stripWidth === stripWidth && before.bubbleWidths.every((width, index) => width === bubbleWidths[index])
       ? before : { stripWidth, bubbleWidths }));
   };
-  useLayoutEffect(measureBubbles, [startHandle.bubbleText, endHandle.bubbleText]);
+  useLayoutEffect(measureBubbles, [startHandle.bubbleText, endHandle.bubbleText, typing]);
   useEffect(() => {
     if (typeof ResizeObserver === "undefined" || stripElement.current === null) return;
     const observer = new ResizeObserver(measureBubbles);
@@ -177,6 +211,12 @@ export function ScaleStrip<HandleName extends string>({ handles, segments, cells
   };
   const onHandleKeyDown = (handle: HandleName, event: KeyboardEvent) => {
     if (disabled || stripDrag.current !== null) return;
+    const described = handles.find((each) => each.name === handle)!;
+    if (event.key === "Enter" && isTypable(described)) {
+      event.preventDefault();
+      startTyping(described);
+      return;
+    }
     const moved = onKey(handle, event.key);
     if (moved === null) return;
     event.preventDefault();
@@ -202,12 +242,34 @@ export function ScaleStrip<HandleName extends string>({ handles, segments, cells
                tabIndex={disabled ? -1 : 0} className="scale-strip-handle" style={positionStyle} aria-label={handle.accessibleName} aria-orientation="horizontal" aria-valuemin={valueRange[0]} aria-valuemax={valueRange[1]}
                aria-valuenow={handle.valueNow} aria-valuetext={handle.spokenValue} aria-invalid={invalid} aria-describedby={describedBy}
                aria-disabled={disabled ? true : undefined} onKeyDown={(event) => onHandleKeyDown(handle.name, event)} />,
-          // Seen, not read: the handle says its value itself.
-          <span key={`${handle.name}-bubble`} ref={(element) => { bubbleElements.current[index] = element; }} className="scale-strip-bubble"
-                aria-hidden="true"
-                style={{ ...positionStyle, "--bubble-shift": `${bubbleShifts[index]}px` } as CSSProperties}>
-            {handle.bubbleText}
-          </span>,
+          typing?.handle === handle.name ? (
+            <input key={`${handle.name}-typed`} ref={(element) => { bubbleElements.current[index] = element; }} type="text" autoFocus
+                   className="scale-strip-bubble scale-strip-bubble-input" aria-label={handle.accessibleName} title={handle.typingHint}
+                   aria-invalid={typing.refused} value={typing.text} size={Math.max(typing.text.length, 4)}
+                   style={{ ...positionStyle, "--bubble-shift": `${bubbleShifts[index]}px` } as CSSProperties}
+                   onFocus={(event) => event.target.select()} onPointerDown={(event) => event.stopPropagation()}
+                   onChange={(event) => setTyping({ ...typing, text: event.target.value, refused: false })}
+                   onBlur={() => setTyping(null)}
+                   onKeyDown={(event) => {
+                     if (event.key === "Enter") { event.preventDefault(); commitTyping(handle); }
+                     else if (event.key === "Escape") { event.preventDefault(); stopTyping(handle.name); }
+                   }} />
+          ) : isTypable(handle) ? (
+            // Seen, not read: the handle says its value itself, and Enter on it opens the same field.
+            <button key={`${handle.name}-bubble`} ref={(element) => { bubbleElements.current[index] = element; }} type="button" tabIndex={-1}
+                    className="scale-strip-bubble scale-strip-bubble-typable" aria-hidden="true" title={handle.typingHint}
+                    style={{ ...positionStyle, "--bubble-shift": `${bubbleShifts[index]}px` } as CSSProperties}
+                    onPointerDown={(event) => event.stopPropagation()} onClick={() => startTyping(handle)}>
+              {handle.bubbleText}
+            </button>
+          ) : (
+            // Seen, not read: the handle says its value itself.
+            <span key={`${handle.name}-bubble`} ref={(element) => { bubbleElements.current[index] = element; }} className="scale-strip-bubble"
+                  aria-hidden="true"
+                  style={{ ...positionStyle, "--bubble-shift": `${bubbleShifts[index]}px` } as CSSProperties}>
+              {handle.bubbleText}
+            </span>
+          ),
         ];
       })}
     </div>

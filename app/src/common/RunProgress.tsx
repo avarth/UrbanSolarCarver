@@ -10,9 +10,10 @@ import { presentedSettingOf } from "../settings_form/presentation";
 import { formatNumber } from "../format_numbers";
 import { criterionOfKey, SIMULATE_STAGE, stageDisplayName, stageOfKey, type RunLoop, type RunOrigin, type RunRecord, type RunState } from "./run_state";
 import { shownLabelOf } from "../settings_form/SettingsStep";
+import { issueTextOf } from "./issue_text";
 import "../theme/panels.css";
 
-/** Goes to a setting a failed run names; *criterion*: the criterion whose settings the run found it in, null when it named none. */
+/** Goes to a setting a failed run or a warning names; *criterion*: the criterion whose settings the run found it in, null when it named none. */
 export type GoToSetting = (settingName: string, criterion?: string | null) => void;
 
 const ELAPSED_TICK_MILLISECONDS = 100;
@@ -134,11 +135,50 @@ function RunEnded({ finishedNote, ...props }: EndedRunContext & { record: RunRec
   }
 }
 
-/** The warnings a run reported: listed under a title, or folded behind a toggle that says how many. */
-function RunIssues({ issues, folded }: { issues: RunState["issues"]; folded: boolean }) {
+/**
+ * The warnings a run reported, in plain words (issueTextOf), each with a link to the setting that changes it, and the engine's
+ * own wording in a fold: listed under a title, or folded behind a toggle that says how many.
+ */
+function RunIssues({ issues, folded, mode, onGoToSetting, shownCriterionId, criterionNames, criterionKeys }:
+                     EndedRunContext & { issues: RunState["issues"]; folded: boolean }) {
   const listId = useId();
   const [open, setOpen] = useState(false);
-  const list = <ul id={listId}>{issues.map((issue, index) => <li key={index}>{issue.message}</li>)}</ul>;
+  const labelOf = (name: string) => shownLabelOf(name, mode);
+  const texts = issues.map((issue) => issueTextOf(issue, labelOf));
+  // The engine's wording is folded under the list when the app said any warning in other words.
+  const isReworded = texts.some(({ text }, index) => text !== issues[index].message);
+  const list = (
+    <>
+      <ul id={listId}>
+        {issues.map((issue, index) => {
+          const { text, setting } = texts[index];
+          const criterion = issue.criterion ?? null;
+          const ofCriterion = setting !== null && (criterionKeys?.has(setting) ?? true);
+          // A warning of a criterion other than the one shown says its name, so its setting is not taken for the shown one's.
+          const otherName = criterion !== null && criterion !== shownCriterionId ? criterionNames?.[criterion] ?? null : null;
+          return (
+            <li key={index}>
+              {otherName === null ? text : messages.issueOfCriterion(otherName, text)}
+              {setting !== null && (
+                <>
+                  {" "}
+                  <button type="button" className="link-button" onClick={() => onGoToSetting(setting, ofCriterion ? criterion : null)}>
+                    {otherName === null || !ofCriterion ? messages.goToSetting(labelOf(setting)) : messages.goToSettingOf(labelOf(setting), otherName)}
+                  </button>
+                </>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {isReworded && (
+        <details className="run-failure-details">
+          <summary>{messages.engineWarnings}</summary>
+          {issues.map((issue, index) => <p key={index} className="run-failure-message">{issue.message}</p>)}
+        </details>
+      )}
+    </>
+  );
   if (!folded) {
     return (
       <div className="run-issues">
@@ -198,7 +238,9 @@ export function RunProgress({ runs, project, origin, mode, onGoToSetting, criter
                          studyNameOf={(id) => studyNames?.[id] ?? null} />
             : <RunEnded record={record} mode={mode} onGoToSetting={onGoToSetting} shownCriterionId={shownCriterionId} criterionNames={criterionNames}
                         criterionKeys={criterionKeys} finishedNote={finishedNote} />}
-          {record.state.issues.length > 0 && <RunIssues key={record.serial} issues={record.state.issues} folded={foldWarnings} />}
+          {record.state.issues.length > 0 && <RunIssues key={record.serial} issues={record.state.issues} folded={foldWarnings} mode={mode}
+                                                                 onGoToSetting={onGoToSetting} shownCriterionId={shownCriterionId}
+                                                                 criterionNames={criterionNames} criterionKeys={criterionKeys} />}
         </>
       )}
     </div>

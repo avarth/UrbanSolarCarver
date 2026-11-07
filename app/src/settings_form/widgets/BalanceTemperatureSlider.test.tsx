@@ -19,8 +19,9 @@ afterEach(() => {
   rendered = null;
 });
 
+// Harm counted unless a test says otherwise: only then does the strip have both handles.
 function form(settings: Record<string, unknown> = {}): FormState {
-  return initialFormState({ schema: SCHEMA, modes: MODES, settings: { mode: "benefit", ...settings }, gridPlan: null });
+  return initialFormState({ schema: SCHEMA, modes: MODES, settings: { mode: "benefit", include_harm: true, ...settings }, gridPlan: null });
 }
 
 const balanceView = () => settingsForStep("settings", "benefit").flatMap((group) => group.essential).find((view) => view.name === "balance_temperature")!;
@@ -39,6 +40,8 @@ function renderBalance(start: FormState = form(), disabled = false) {
   strip().getBoundingClientRect = () => ({ left: 0, width: 200, top: 0, height: 26, right: 200, bottom: 26, x: 0, y: 0, toJSON: () => ({}) });
 }
 
+/** The two balance settings the user set (the form's user values also hold the settings a test starts with). */
+const balanceValues = () => Object.fromEntries(Object.entries(latest!.userValues).filter(([name]) => name.startsWith("balance_")));
 const strip = () => rendered!.container.querySelector<HTMLElement>(".scale-strip")!;
 const handle = (name: string) => rendered!.container.querySelector<HTMLElement>(`[role='slider'][aria-label='${name}']`)!;
 const lowerHandle = () => handle("Counts below"), upperHandle = () => handle("Too warm above");
@@ -80,18 +83,18 @@ test("one strip from 10 to 30 °C whose two handles are the ends of the dead ban
 test("each handle moves its own end; the engine gets the middle and half the width, and an end cannot pass the other", () => {
   renderBalance();
   drag(30, 20, 10);                                       // the lower end, 13 °C, to 11 °C
-  expect(latest!.userValues).toEqual({ balance_temperature: 14, balance_offset: 3 });
+  expect(balanceValues()).toEqual({ balance_temperature: 14, balance_offset: 3 });
   drag(70, 120);                                          // the upper end, 17 °C, to 22 °C
-  expect(latest!.userValues).toEqual({ balance_temperature: 16.5, balance_offset: 5.5 });
+  expect(balanceValues()).toEqual({ balance_temperature: 16.5, balance_offset: 5.5 });
   drag(10, 150);                                          // the lower end past the upper one: the band closes there
-  expect(latest!.userValues).toEqual({ balance_temperature: 22, balance_offset: 0 });
+  expect(balanceValues()).toEqual({ balance_temperature: 22, balance_offset: 0 });
   expect(bubbles()).toEqual([degrees(22), degrees(22)]);
 });
 
 test("a press on the strip moves the nearer end there, to the step of the track", () => {
   renderBalance();
   drag(162);                                              // 26.2 °C, nearer the upper end: 26 °C
-  expect(latest!.userValues).toEqual({ balance_temperature: 19.5, balance_offset: 6.5 });
+  expect(balanceValues()).toEqual({ balance_temperature: 19.5, balance_offset: 6.5 });
 });
 
 test("an end outside 10 to 30 °C says its value in its bubble, with its handle pinned at the end of the strip", () => {
@@ -124,23 +127,23 @@ test("disabled (the carving lock): both handles say so and leave the tab order; 
   }
   press(lowerHandle(), "ArrowLeft", { focus: true });
   drag(30, 10);
-  expect(latest!.userValues).toEqual({});
+  expect(balanceValues()).toEqual({});
 });
 
 test("arrows move an end by the step of the track, Page Up and Page Down by 2 °C, Home and End to the ends of the track", () => {
   renderBalance();
   expect(press(upperHandle(), "ArrowRight", { focus: true })).toBe(true);
-  expect(latest!.userValues).toEqual({ balance_temperature: 15.25, balance_offset: 2.25 });            // 13 to 17.5
+  expect(balanceValues()).toEqual({ balance_temperature: 15.25, balance_offset: 2.25 });            // 13 to 17.5
   press(upperHandle(), "PageUp", { focus: true });
-  expect(latest!.userValues).toEqual({ balance_temperature: 16.25, balance_offset: 3.25 });            // 13 to 19.5
+  expect(balanceValues()).toEqual({ balance_temperature: 16.25, balance_offset: 3.25 });            // 13 to 19.5
   press(lowerHandle(), "PageDown", { focus: true });
   press(lowerHandle(), "ArrowDown", { focus: true });
-  expect(latest!.userValues).toEqual({ balance_temperature: 15, balance_offset: 4.5 });                // 10.5 to 19.5
+  expect(balanceValues()).toEqual({ balance_temperature: 15, balance_offset: 4.5 });                // 10.5 to 19.5
   press(lowerHandle(), "Home", { focus: true });
   press(upperHandle(), "End", { focus: true });
-  expect(latest!.userValues).toEqual({ balance_temperature: 20, balance_offset: 10 });                 // 10 to 30
+  expect(balanceValues()).toEqual({ balance_temperature: 20, balance_offset: 10 });                 // 10 to 30
   press(upperHandle(), "Enter", { focus: true });
-  expect(latest!.userValues).toEqual({ balance_temperature: 20, balance_offset: 10 });
+  expect(balanceValues()).toEqual({ balance_temperature: 20, balance_offset: 10 });
 });
 
 test("on one spot (a dead band of 0) the direction of the move picks the end, for a whole drag", () => {
@@ -149,53 +152,53 @@ test("on one spot (a dead band of 0) the direction of the move picks the end, fo
   pointer("pointermove", 60);                              // to the right: the upper end
   pointer("pointermove", 55);                              // back toward the spot: still the upper end of this drag
   pointer("pointerup", 55);
-  expect(latest!.userValues).toEqual({ balance_temperature: 15.25, balance_offset: 0.25 });
+  expect(balanceValues()).toEqual({ balance_temperature: 15.25, balance_offset: 0.25 });
   rendered!.unmount();
   renderBalance(form({ balance_offset: 0 }));
   drag(50, 30);                                            // to the left: the lower end
-  expect(latest!.userValues).toEqual({ balance_temperature: 14, balance_offset: 1 });
+  expect(balanceValues()).toEqual({ balance_temperature: 14, balance_offset: 1 });
 });
 
 test("on one spot, a key toward the other end moves the focus to that end's handle, which steps; a key toward its own end steps it", () => {
   renderBalance(form({ balance_offset: 0 }));
   expect(press(lowerHandle(), "ArrowRight", { focus: true })).toBe(true);
   expect(document.activeElement).toBe(upperHandle());
-  expect(latest!.userValues).toEqual({ balance_temperature: 15.25, balance_offset: 0.25 });
+  expect(balanceValues()).toEqual({ balance_temperature: 15.25, balance_offset: 0.25 });
   press(upperHandle(), "ArrowRight", { focus: true });     // off the spot: the focused handle steps
   expect(document.activeElement).toBe(upperHandle());
-  expect(latest!.userValues).toEqual({ balance_temperature: 15.5, balance_offset: 0.5 });
+  expect(balanceValues()).toEqual({ balance_temperature: 15.5, balance_offset: 0.5 });
   rendered!.unmount();
   renderBalance(form({ balance_offset: 0 }));
   press(lowerHandle(), "ArrowLeft", { focus: true });      // its own end
   expect(document.activeElement).toBe(lowerHandle());
-  expect(latest!.userValues).toEqual({ balance_temperature: 14.75, balance_offset: 0.25 });
+  expect(balanceValues()).toEqual({ balance_temperature: 14.75, balance_offset: 0.25 });
 });
 
 test("on one spot, Home and End pick the end by their direction too: Home the lower end, End the upper one", () => {
   renderBalance(form({ balance_offset: 0 }));             // both ends at 15
   press(upperHandle(), "Home", { focus: true });
   expect(document.activeElement).toBe(lowerHandle());
-  expect(latest!.userValues).toEqual({ balance_temperature: 12.5, balance_offset: 2.5 });             // 10 to 15
+  expect(balanceValues()).toEqual({ balance_temperature: 12.5, balance_offset: 2.5 });             // 10 to 15
   rendered!.unmount();
   renderBalance(form({ balance_offset: 0 }));
   press(lowerHandle(), "End", { focus: true });
   expect(document.activeElement).toBe(upperHandle());
-  expect(latest!.userValues).toEqual({ balance_temperature: 22.5, balance_offset: 7.5 });             // 15 to 30
+  expect(balanceValues()).toEqual({ balance_temperature: 22.5, balance_offset: 7.5 });             // 15 to 30
   press(upperHandle(), "Home", { focus: true });                                                       // off the spot: to the lower end
   expect(document.activeElement).toBe(upperHandle());
-  expect(latest!.userValues).toEqual({ balance_temperature: 15, balance_offset: 0 });
+  expect(balanceValues()).toEqual({ balance_temperature: 15, balance_offset: 0 });
 });
 
 test("both ends pinned at an end of the track step back from it", () => {
   renderBalance(form({ balance_temperature: 35, balance_offset: 0 }));       // both at 35, drawn at 30
   press(upperHandle(), "ArrowLeft", { focus: true });
   expect(document.activeElement).toBe(lowerHandle());
-  expect(latest!.userValues).toEqual({ balance_temperature: 32.25, balance_offset: 2.75 });             // 29.5 to 35
+  expect(balanceValues()).toEqual({ balance_temperature: 32.25, balance_offset: 2.75 });             // 29.5 to 35
   rendered!.unmount();
   renderBalance(form({ balance_temperature: 5, balance_offset: 0 }));        // both at 5, drawn at 10
   press(lowerHandle(), "ArrowRight", { focus: true });
   expect(document.activeElement).toBe(upperHandle());
-  expect(latest!.userValues).toEqual({ balance_temperature: 7.75, balance_offset: 2.75 });              // 5 to 10.5
+  expect(balanceValues()).toEqual({ balance_temperature: 7.75, balance_offset: 2.75 });              // 5 to 10.5
 });
 
 test("the lower handle comes first, as on the strip, so Tab reaches the ends in their order", () => {
@@ -204,12 +207,24 @@ test("the lower handle comes first, as on the strip, so Tab reaches the ends in 
   expect(handles.map((end) => end.getAttribute("aria-label"))).toEqual(["Counts below", "Too warm above"]);
 });
 
-test("the upper end looks and reads like the lower one whether or not harm is counted: no note, nothing muted", () => {
-  for (const settings of [{}, { include_harm: true }]) {
-    renderBalance(form(settings));
-    expect(rendered!.container.textContent).not.toContain("harm");
-    expect(upperHandle().getAttribute("aria-describedby")).toBe(lowerHandle().getAttribute("aria-describedby"));
-    rendered!.unmount();
-  }
-  rendered = null;
+test("without harm counted the strip has one handle, named by what it sets, filled from the strip's start to it", () => {
+  renderBalance(form({ include_harm: false }));
+  const handles = [...rendered!.container.querySelectorAll("[role='slider']")];
+  expect(handles.map((end) => end.getAttribute("aria-label"))).toEqual(["Sun counts below"]);
+  expect(rendered!.container.querySelector(".setting-label")!.textContent).toBe("Sun counts below");
+  expect(bubbles()).toEqual([degrees(13)]);
+  rendered!.unmount();
+  renderBalance(form({ include_harm: true }));
+  expect(rendered!.container.querySelector(".setting-label")!.textContent).toBe("Balance temperature");
+});
+
+test("the one handle moves the whole band, keeping its width for when harm is counted again", () => {
+  renderBalance(form({ include_harm: false }));
+  drag(30, 10);                                           // 13 °C to 11 °C; the band, 4 °C wide, follows
+  expect(balanceValues()).toEqual({ balance_temperature: 13, balance_offset: 2 });
+  const sunCountsBelow = handle("Sun counts below");
+  press(sunCountsBelow, "ArrowRight");                    // 11.5 °C
+  expect(balanceValues()).toEqual({ balance_temperature: 13.5, balance_offset: 2 });
+  press(sunCountsBelow, "End");                           // the end of the strip, the band past it
+  expect(balanceValues()).toEqual({ balance_temperature: 32, balance_offset: 2 });
 });

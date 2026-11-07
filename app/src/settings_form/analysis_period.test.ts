@@ -2,8 +2,9 @@ import { expect, test } from "vitest";
 import { periodCounts,
   changedPeriodSettings, dateHandleValueAfterKey, dayOfYear, dayOfYearAt, daysInMonth, hemisphereOfLatitude, hourAt, hourHandleValueAfterKey,
   monthDayOf, periodFromSettings, periodInWords, periodShiftedBySixMonths, periodWithHandleAt, presetPeriod, presetMatches, seasonsOfLatitude, coverTheSameDays,
-  runsEveryNightOfTheYear, withOvernightHoursOnOneDateAsOneNight, dateRangeSegments, hourRangeSegments, type Period,
+  runsEveryNightOfTheYear, withOvernightHoursOnOneDateAsOneNight, dateRangeSegments, hourRangeSegments, typedDayOfYear, typedHour, type Period,
 } from "./analysis_period";
+import { messages } from "../messages";
 
 const period = (startMonth: number, startDay: number, startHour: number, endMonth: number, endDay: number, endHour: number): Period =>
   ({ startMonth, startDay, startHour, endMonth, endDay, endHour });
@@ -188,4 +189,17 @@ test("a period counts its days and hours, the last of each included, across the 
   expect(periodCounts(period(12, 21, 10, 12, 21, 14))).toEqual({ days: 1, hoursPerDay: 5 });
   expect(periodCounts(period(1, 1, 0, 12, 31, 23))).toEqual({ days: 365, hoursPerDay: 24 });
   expect(periodCounts(period(10, 15, 22, 4, 15, 2))).toEqual({ days: 183, hoursPerDay: 5 });
+});
+
+test("a typed date: day first as the bubbles show it, in numbers, or the month first; a date the year does not have is refused", () => {
+  const typed = (text: string) => typedDayOfYear(text, messages.monthNames);
+  for (const text of ["21 Dec", "21 december", "21dec", "21. Dec.", "21/12", "21.12", "21-12", "Dec 21", "decem 21"]) expect(typed(text)).toBe(355);
+  expect(typed("1 Jan")).toBe(1);
+  expect(typed("28 Feb")).toBe(59);
+  for (const text of ["30 Feb", "31/4", "21/13", "0 Jan", "21 de", "21 Dek", "21", "", "Dec"]) expect(typed(text)).toBeNull();
+});
+
+test("a typed hour: 0 to 23, with or without h or :00", () => {
+  for (const [text, hour] of [["10", 10], ["10 h", 10], ["10h", 10], ["10:00", 10], [" 0 ", 0], ["23", 23]] as const) expect(typedHour(text)).toBe(hour);
+  for (const text of ["24", "10:30", "-1", "ten", ""]) expect(typedHour(text)).toBeNull();
 });

@@ -94,13 +94,15 @@ function MoreSettings({ metric, settings, disabled, onChange }: { metric: string
       {keys.map((key) => {
         const value = settings[key];
         if (key === BALANCE_TEMPERATURE_FIELDS[0]) {
+          const harmCounted = settings.include_harm === true;
           return (
             <div key={key} className="study-field study-field-wide">
-              <span id={balanceLabelId}>{balance.label}</span>
+              <span id={balanceLabelId}>{harmCounted ? balance.label : messages.balanceSunCountsBelow}</span>
               <BalanceTemperatureSlider balanceTemperature={typeof value === "number" ? value : null}
                                         deadBand={typeof settings[BALANCE_TEMPERATURE_FIELDS[1]] === "number" ? settings[BALANCE_TEMPERATURE_FIELDS[1]] as number : null}
                                         track={balance.slider!} unit={balance.unit} onChange={onChange} inputId={balanceInputId} labelId={balanceLabelId}
-                                        invalid={false} describedBy={undefined} disabled={disabled} />
+                                        invalid={false} describedBy={undefined} disabled={disabled}
+                                        harmCounted={harmCounted} />
             </div>
           );
         }
