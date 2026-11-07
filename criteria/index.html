@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -31,10 +31,10 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -1540,22 +1540,22 @@ depends on the criterion before it.</p>
 <h2 id="the-config-file">The config file<a class="headerlink" href="#the-config-file" title="Permanent link">&para;</a></h2>
 <p>Settings shared by the whole chain are at the top level, and the criteria are listed under <code>criteria:</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Shared by the whole chain</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nt">max_volume_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;site/maxVolume.ply&quot;</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nt">context_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;site/surroundings.ply&quot;</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="nt">epw_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;weather/athens.epw&quot;</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nt">max_volume_path</span><span class="p">:</span><span class="w"> </span><span class="s">"site/maxVolume.ply"</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nt">context_path</span><span class="p">:</span><span class="w"> </span><span class="s">"site/surroundings.ply"</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="nt">epw_path</span><span class="p">:</span><span class="w"> </span><span class="s">"weather/athens.epw"</span>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nt">voxel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nt">out_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;outputs&quot;</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nt">out_dir</span><span class="p">:</span><span class="w"> </span><span class="s">"outputs"</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="nt">criteria</span><span class="p">:</span>
 <a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">daylight</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Daylight on neighbours&#39; windows</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Daylight on neighbours' windows</span>
 <a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">    </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">daylight</span>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">    </span><span class="nt">test_surface_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;protect/windows.ply&quot;</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">    </span><span class="nt">test_surface_path</span><span class="p">:</span><span class="w"> </span><span class="s">"protect/windows.ply"</span>
 <a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">    </span><span class="nt">carve_fraction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.7</span>
 <a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">winter-sun</span>
 <a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Winter sun on the yard</span>
 <a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="w">    </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">benefit</span>
-<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="w">    </span><span class="nt">test_surface_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;protect/yard.ply&quot;</span>
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="w">    </span><span class="nt">test_surface_path</span><span class="p">:</span><span class="w"> </span><span class="s">"protect/yard.ply"</span>
 <a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="w">    </span><span class="nt">start_month</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">11</span>
 <a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="w">    </span><span class="nt">start_day</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 <a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="w">    </span><span class="nt">start_hour</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
@@ -1608,7 +1608,7 @@ ignoring case (Windows and macOS ignore case in folder names). The names Windows
 <p>From Python:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">urbansolarcarver</span><span class="w"> </span><span class="kn">import</span> <span class="n">run_chain</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">result</span> <span class="o">=</span> <span class="n">run_chain</span><span class="p">(</span><span class="s2">&quot;chain.yaml&quot;</span><span class="p">,</span> <span class="n">out_dir</span><span class="o">=</span><span class="s2">&quot;outputs&quot;</span><span class="p">,</span> <span class="n">produce</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;exporting&quot;</span><span class="p">,</span> <span class="s2">&quot;massing&quot;</span><span class="p">))</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">result</span> <span class="o">=</span> <span class="n">run_chain</span><span class="p">(</span><span class="s2">"chain.yaml"</span><span class="p">,</span> <span class="n">out_dir</span><span class="o">=</span><span class="s2">"outputs"</span><span class="p">,</span> <span class="n">produce</span><span class="o">=</span><span class="p">(</span><span class="s2">"exporting"</span><span class="p">,</span> <span class="s2">"massing"</span><span class="p">))</span>
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">result</span><span class="o">.</span><span class="n">criteria</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">thresholding</span><span class="o">.</span><span class="n">retention_pct</span>   <span class="c1"># what the first criterion kept</span>
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">result</span><span class="o">.</span><span class="n">exporting</span><span class="o">.</span><span class="n">export_path</span>
 </code></pre></div>
@@ -1659,7 +1659,7 @@ would build from the criterion that is in the chain's folder. The output folder 
 (<code>StageChainError</code>).</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">urbansolarcarver</span><span class="w"> </span><span class="kn">import</span> <span class="n">thresholding</span>
 <a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">thr2</span> <span class="o">=</span> <span class="n">thresholding</span><span class="p">(</span><span class="n">pre2</span><span class="p">,</span> <span class="n">cfg2</span><span class="p">,</span> <span class="s2">&quot;outputs/criteria/winter-sun/thresholding&quot;</span><span class="p">,</span> <span class="n">after</span><span class="o">=</span><span class="n">thr1</span><span class="p">)</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">thr2</span> <span class="o">=</span> <span class="n">thresholding</span><span class="p">(</span><span class="n">pre2</span><span class="p">,</span> <span class="n">cfg2</span><span class="p">,</span> <span class="s2">"outputs/criteria/winter-sun/thresholding"</span><span class="p">,</span> <span class="n">after</span><span class="o">=</span><span class="n">thr1</span><span class="p">)</span>
 </code></pre></div>
 <p><code>--after</code> and <code>after</code> take the folder or the <code>manifest.json</code> of the previous criterion's thresholding (the Python
 function also takes its result). The mask of this run is never True where the previous mask is False.</p>
@@ -1681,7 +1681,7 @@ and see the effect on the whole chain, edit it and run <code>usc run -c chain.ya
 <h2 id="in-the-browser-apps-service">In the browser app's service<a class="headerlink" href="#in-the-browser-apps-service" title="Permanent link">&para;</a></h2>
 <p>The local service behind <code>usc ui</code> keeps the criteria of a project in <code>project.json</code> and writes the project's <code>config.yaml</code> as a chain file from them, so a project folder also runs with <code>usc run -c &lt;folder&gt;/config.yaml</code>. Each criterion has its own test surface files: a file is stored once in the project, several criteria can use it, and the engine reads one joined file per criterion. A criterion's id is a number the service assigns (<code>1</code>, <code>2</code>, ...); it names the criterion's output folder and stays the same when the criteria are reordered.</p>
 <p>A run does only what changed. The service compares each criterion's settings and test surfaces with the ones its results were made from, and asks the engine to trace only the criteria whose rays changed (<code>trace_criteria</code>), then to threshold the chain from the first traced criterion on. When a criterion earlier in the chain needs thresholding again while a later one is traced, it also sends <code>threshold_from_criterion</code>; when no criterion needs tracing, it thresholds the chain from the first criterion whose thresholding is out of date on (<code>threshold_from_criterion</code>), so the ones before it keep their results. The result of each criterion, the volume each one kept and the criterion that removed each voxel are served per criterion.</p>
-<p>On the packaged Perimeter block example (Solar time-based, then Daylight on the same test surfaces; NVIDIA RTX 3060), the first analysis took 2.4 s and kept 187,743 m³. After adding the Daylight criterion, the next analysis traced only that criterion and took 2.7 s; the chain then kept 187,743 m³ after the first criterion and 119,848 m³ after the second. The app shows a row for each criterion, runs only the ones that changed and shows the carved voxels by criterion in 3D (see <a href="../ui/#several-criteria">Several criteria</a>). Projects made with an earlier version open as a chain of one criterion with their results still current. The routes, the files and the rules for what goes out of date are in <a href="../ui/#criteria-in-a-project">Criteria in a project</a>.</p>
+<p>On the packaged Perimeter block example (Sun hours, then Daylight on the same test surfaces; NVIDIA RTX 3060), the first analysis took 2.4 s and kept 187,743 m³. After adding the Daylight criterion, the next analysis traced only that criterion and took 2.7 s; the chain then kept 187,743 m³ after the first criterion and 119,848 m³ after the second. The app shows a row for each criterion, runs only the ones that changed and shows the carved voxels by criterion in 3D (see <a href="../ui/#several-criteria">Several criteria</a>). Projects made with an earlier version open as a chain of one criterion with their results still current. The routes, the files and the rules for what goes out of date are in <a href="../ui/#criteria-in-a-project">Criteria in a project</a>.</p>
 <h2 id="in-grasshopper">In Grasshopper<a class="headerlink" href="#in-grasshopper" title="Permanent link">&para;</a></h2>
 <p><strong>USC_ThresholdStage</strong> has an <code>after</code> input, the last one: the <code>thr_result</code> of the thresholding stage of the criterion before. Empty, it behaves as before. To chain two criteria, give the second one its own Config (a different <code>out_dir</code>), Preprocess and ThresholdStage, and connect the first ThresholdStage's <code>thr_result</code> to the second one's <code>after</code>. The second stage decides only among the voxels the first one kept and never keeps one it removed. USC_Export and USC_Massing connected to the second criterion's Config and results then build from what both criteria kept. See <a href="../grasshopper/#components">Grasshopper</a>.</p>
 <p>The daemon request behind it is a <code>run</code> that starts at <code>thresholding</code> with the <code>after</code> key (<code>RunRequest.after</code>; <code>run_pipeline(..., after=...)</code> in Python). A request with <code>after</code> and a chain file, or with <code>after</code> and a <code>start_from</code> other than <code>thresholding</code>, gets a <code>ConfigError</code> reply: a chain file links its criteria itself, and a stage that does not run thresholding would ignore <code>after</code> without a message. An engine older than this feature would ignore the key and run the second criterion on its own, so the ping reply lists the engine's <code>features</code>, and <code>usc_gh.run_stages</code> pings first when <code>after</code> is given. For an engine without <code>run_after</code> it raises "The UrbanSolarCarver engine running now is older than this definition and cannot chain criteria. Restart it from USC_Session." and sends no run request.</p>
@@ -1734,10 +1734,10 @@ and see the effect on the whole chain, edit it and run <code>usc run -c chain.ya
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.expand", "navigation.indexes", "content.code.copy", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.expand", "navigation.indexes", "content.code.copy", "toc.follow"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   </body>

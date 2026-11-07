@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -31,10 +31,10 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -559,10 +559,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-files-panel" class="md-nav__link">
+  <a href="#the-geometries-panel" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The Files panel
+        The Geometries panel
       
     </span>
   </a>
@@ -1405,10 +1405,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-files-panel" class="md-nav__link">
+  <a href="#the-geometries-panel" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The Files panel
+        The Geometries panel
       
     </span>
   </a>
@@ -1547,9 +1547,9 @@
 <h2 id="carve-simulate-and-inspect">Carve, Simulate and Inspect<a class="headerlink" href="#carve-simulate-and-inspect" title="Permanent link">&para;</a></h2>
 <p>The switch <strong>Carve | Simulate | Inspect</strong> in the header, next to the project name, changes the workspace. Inspect hides the steps and gives the 3D view the whole window. Switching away keeps Carve's step and scroll position and Simulate's selection as they were. The Layers menu and the viewer tools are the same in all three; Inspect adds one layer, <strong>Surface orientation</strong>.</p>
 <p>Inspect works while a run of the project is going. Only Save and Restore original wait for it to end, as uploads do.</p>
-<h2 id="the-files-panel">The Files panel<a class="headerlink" href="#the-files-panel" title="Permanent link">&para;</a></h2>
-<p>The <strong>Files</strong> panel floats over the top left of the 3D view and collapses to an icon. It lists the input mesh files by role: maximum volume, test surfaces, existing surroundings and terrain. The weather file has no geometry and is not listed. Each row gives the file name, its triangle count and its area. A file that cannot be read stays in the list with its problem, for example a broken export, and has nothing to select.</p>
-<p>Pressing a row selects the file. The view frames it, in the part of the view the Files panel does not cover, and draws the other test surface files faint, so you see what the selected one faces. The selected row also opens the file's summary:</p>
+<h2 id="the-geometries-panel">The Geometries panel<a class="headerlink" href="#the-geometries-panel" title="Permanent link">&para;</a></h2>
+<p>The <strong>Geometries</strong> panel floats over the top left of the 3D view and collapses to an icon. It lists the input mesh files by role: maximum volume, test surfaces, existing surroundings and terrain. The weather file has no geometry and is not listed. Each row gives the file name, its triangle count and its area. A file that cannot be read stays in the list with its problem, for example a broken export, and has nothing to select.</p>
+<p>Pressing a row selects the file. The view frames it, in the part of the view the Geometries panel does not cover, and draws the other test surface files faint, so you see what the selected one faces. The selected row also opens the file's summary:</p>
 <ul>
 <li><strong>Bounds</strong>: the minimum and maximum corner in the file's own coordinates. When a corner is more than 10 km from zero, a note says the coordinates look georeferenced and how far they are. The info "i" beside the panel's title says which point the view is drawn around, since the view uses a local origin: "The view is drawn around x -141, y -91.72, z 0 of the files' coordinates."</li>
 <li><strong>Surfaces</strong>, for a test surface file: how many surfaces it has (below).</li>
@@ -1599,7 +1599,7 @@
 <p>Save has the effects of uploading the file again through the app:</p>
 <ul>
 <li>The joined files of the criteria and studies that list the file are built again.</li>
-<li>Those criteria and studies go out of date, and the criteria after them have to carve again. A run traces the file again.</li>
+<li>Those criteria and studies go out of date, and the criteria after them have to carve again. A run traces the file again. When a criterion that had been analysed goes out of date, the panel says how many and offers <strong>Go to Carve</strong>.</li>
 <li>The file's record in <code>project.json</code> is renewed. There is no "changed in the project folder" notice, since you made the change in the app.</li>
 </ul>
 <p>Save and Restore original are not available while a run of the project is going. The panel says so beside the buttons.</p>
@@ -1692,10 +1692,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.expand", "navigation.indexes", "content.code.copy", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.expand", "navigation.indexes", "content.code.copy", "toc.follow"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   </body>

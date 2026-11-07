@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -31,10 +31,10 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -1831,7 +1831,7 @@ the columns context took.</p>
 </tr>
 </tbody>
 </table>
-<p>The patch weights of <code>irradiance</code> and <code>benefit</code> are kWh/m² per patch (Ladybug's sky matrix), counted on a surface facing the patch. The patches lie in the model's frame; with <code>north_deg</code> the sky is turned before Radiance's gendaymtx bins the sun into them, so each patch carries the radiation of the sky in its direction. Each ray counts its share of that weight times cos θ, the cosine of the angle between the ray and its surface's normal (per ray, so per sub-ray with <code>rays_per_patch</code> above 1), so the kWh are those the protected surface receives: a patch low in front of a facade counts fully, one grazing it nearly nothing, and a facade counts the sun that reaches it, as Simulate's solar energy does. Over a year in Golden an open horizontal point then receives 1,597 kWh/m² against the weather file's global horizontal 1,620, an open south facade 1,170 and a north one 263. The <code>daylight</code> and <code>radiative_cooling</code> weights are each patch's share of its sky and sum to 1, so 1 m² is the whole sky of 1 m² of open horizontal surface (a vertical facade sees half of it at most). Summed over a set of voxels a score counts what they block more than once when a ray crosses several of them; it compares voxels, it is not an energy balance. Scores written before this unit was introduced (preprocessing manifests without <code>score_unit</code>) were sums of patch weights without the area, and changed four times when the sample spacing halved.</p>
+<p>The patch weights of <code>irradiance</code> and <code>benefit</code> are kWh/m² per patch (Ladybug's sky matrix), counted on a surface facing the patch. The patches lie in the model's frame; with <code>north_deg</code> the sky is turned before Radiance's gendaymtx bins the sun into them, so each patch carries the radiation of the sky in its direction. Each ray counts its share of that weight times cos θ, the cosine of the angle between the ray and its surface's normal (per ray, so per sub-ray with <code>rays_per_patch</code> above 1), so the kWh are those the protected surface receives: a patch low in front of a facade counts fully, one grazing it nearly nothing, and a facade counts the sun that reaches it, as Simulate's solar energy does. Over a year in Golden an open horizontal point then receives 1,597 kWh/m² against the weather file's global horizontal 1,620, an open south facade 1,170 and a north one 263. The <code>daylight</code> and <code>radiative_cooling</code> weights are each patch's share of its sky and sum to 1, so 1 m² is the whole sky of 1 m² of open horizontal surface (a vertical facade sees half of it at most). Summed over a set of voxels a score counts what they block more than once when a ray crosses several of them; it compares voxels, it is not an energy balance.</p>
 <table>
 <thead>
 <tr>
@@ -1952,7 +1952,7 @@ the columns context took.</p>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">simulated_weights_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">simulated_weights.json</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="c1"># include_harm: true   # experimental: also subtract summer-overheating contributions</span>
 </code></pre></div>
-<p><strong>In the browser app</strong> the same weights come from the Settings of a Solar usefulness criterion: <strong>Which hours count</strong>, <strong>Energy-weighted</strong>. The project's <strong>typical building</strong> is chosen from a library (read-only examples grouped by the source of their values, and the user's own entries; a new project has none until one is chosen), edited in a form (its use, fabric and summer shading; under Advanced its room, roof and floor, and air) and calculated there or by Run analysis. Its default room is a square turned 45° with the same window share on its four walls, roof and floor adiabatic, so the weights favour no direction (<a href="../simulated-weights/#in-the-app">Simulated Benefit Weights: in the app</a>); the app writes <code>simulated_weights_path</code> into the criterion's config and leaves out its balance values. See <a href="../ui/#the-typical-building">Browser UI: the typical building</a>.</p>
+<p><strong>In the browser app</strong> the same weights come from the Settings of a Solar heating criterion: <strong>Which hours count</strong>, <strong>Energy-weighted</strong>. The project's <strong>typical building</strong> is chosen from a library (read-only examples grouped by the source of their values, and the user's own entries; a new project has none until one is chosen), edited in a form (its use, fabric and summer shading; under Advanced its room, roof and floor, and air) and calculated there or by Run analysis. Its default room is a square turned 45° with the same window share on its four walls, roof and floor adiabatic, so the weights favour no direction (<a href="../simulated-weights/#in-the-app">Simulated Benefit Weights: in the app</a>); the app writes <code>simulated_weights_path</code> into the criterion's config and leaves out its balance values. See <a href="../ui/#the-typical-building">Browser UI: the typical building</a>.</p>
 <p>A full-year <code>analysis_period</code> is the natural choice with simulated weights, since the schedule itself selects the useful hours. <code>balance_temperature</code> / <code>balance_offset</code> are unused (USC warns if you customize them). With <code>diagnostic_plots: true</code>, the run's diagnostics include a comparison dome showing how the simulated weights shifted the sky relative to the simple rule.</p>
 <p><strong>Use case</strong>: benefit envelopes that respond to the thermal mass, insulation, and glazing of the building stock being protected.</p>
 <p><strong>Key parameters</strong>: <code>simulated_weights_path</code>, <code>include_harm</code> (experimental; without declared seasonal shading (<code>shading_hot</code> in the archetype) harm is overstated, so treat it as a bracketing scenario).</p>
@@ -2027,10 +2027,10 @@ the columns context took.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.expand", "navigation.indexes", "content.code.copy", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.expand", "navigation.indexes", "content.code.copy", "toc.follow"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   </body>

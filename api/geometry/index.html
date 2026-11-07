@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -31,10 +31,10 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -968,6 +968,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.surface_sampling.SkippedSurfaces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SkippedSurfaces
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.surface_sampling.AnalysisMesh" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1556,6 +1567,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.surface_sampling.SkippedSurfaces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SkippedSurfaces
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.surface_sampling.AnalysisMesh" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1903,6 +1925,56 @@ Used by preprocessing.</p>
 
 
 
+<h3 id="urbansolarcarver.surface_sampling.SkippedSurfaces" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>              <code class="highlight language-python"><span class="n">SkippedSurfaces</span><span class="p">(</span><span class="n">surface_count</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">surfaces</span><span class="o">=</span><span class="nb">list</span><span class="p">())</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#urbansolarcarver.surface_sampling.SkippedSurfaces" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>What the sampling left out: how many surfaces it saw, and for each one skipped the reason ("degenerate", "non-planar" or
+"no samples") and its triangles ((T, 3, 3) array).</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
 <h3 id="urbansolarcarver.surface_sampling.AnalysisMesh" class="doc doc-heading">
 <code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>              <code class="highlight language-python"><span class="n">AnalysisMesh</span><span class="p">(</span><span class="n">vertices</span><span class="p">,</span> <span class="n">faces</span><span class="p">,</span> <span class="n">face_normals</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
@@ -2016,7 +2088,7 @@ sampling density or per-point results.</p>
 
 
 <h3 id="urbansolarcarver.surface_sampling.sample_surface" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">sample_surface</span><span class="p">(</span><span class="n">insolation_mesh</span><span class="p">,</span> <span class="n">settings</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">sample_surface</span><span class="p">(</span><span class="n">insolation_mesh</span><span class="p">,</span> <span class="n">settings</span><span class="p">,</span> <span class="n">skipped_surfaces</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.surface_sampling.sample_surface" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -2453,7 +2525,7 @@ area-weighted normal of the mesh faces.</p>
 
 
 <h3 id="urbansolarcarver.surface_sampling.discretize_surface_with_normals" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">discretize_surface_with_normals</span><span class="p">(</span><span class="n">mesh</span><span class="p">,</span> <span class="n">sample_step</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">coplanarity_tol_deg</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span> <span class="n">edge_taper</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">discretize_surface_with_normals</span><span class="p">(</span><span class="n">mesh</span><span class="p">,</span> <span class="n">sample_step</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">coplanarity_tol_deg</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span> <span class="n">edge_taper</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">skipped_surfaces</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.surface_sampling.discretize_surface_with_normals" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -2463,8 +2535,9 @@ area-weighted normal of the mesh faces.</p>
         <p>Sample the nearly planar connected components of a mesh and return
 point/normal pairs.</p>
 <p>Each connected component whose faces all lie within
-<code>coplanarity_tol_deg</code> of the component's area-weighted mean normal is
-sampled with <code>sample_planar_surface</code>; other components are skipped
+<code>coplanarity_tol_deg</code> of the component's area-weighted mean normal, or
+stay within 0.1 mm of its plane, is sampled with
+<code>sample_planar_surface</code>; other components are skipped
 with a UserWarning.  The quad analysis mesh has one face per sample
 point, suitable for per-face colouring (e.g. "LB Spatial Heatmap" in
 Grasshopper/Rhino).</p>
@@ -2546,6 +2619,26 @@ coplanarity check guarantees exists.</p>
             </td>
             <td>
                   <code>0.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>skipped_surfaces</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="              SkippedSurfaces(surface_count=0, surfaces=list())
+
+  
+      dataclass
+   (urbansolarcarver.surface_sampling.SkippedSurfaces)" href="#urbansolarcarver.surface_sampling.SkippedSurfaces">SkippedSurfaces</a> or None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Filled with the surfaces seen and the ones skipped, when given.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
             </td>
           </tr>
       </tbody>
@@ -4098,10 +4191,10 @@ returned and a UserWarning is issued.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "navigation.indexes", "content.code.copy", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "navigation.indexes", "content.code.copy", "toc.follow"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   </body>
