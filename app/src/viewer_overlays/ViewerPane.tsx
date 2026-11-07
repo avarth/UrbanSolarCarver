@@ -313,10 +313,10 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   const massingObject = useMemo(() => scene && massing && buildingMassingLayer(massing.clone()), [scene, massing]);
 
   // The study's patches are placed once per set of values and made into a layer once per set of patches; the colours are painted
-  // then, and again in place for a new geometry shown, target, range or Change.
+  // then, and again in place for a new column shown, target or range.
   const studyValues = study?.values ?? null;
   const studyCorners = useMemo(() => (studyValues === null ? null : patchCorners(studyValues, origin)), [studyValues, origin]);
-  const drawnStudy = study !== null && study.values.values[study.geometry] !== undefined ? study : null;
+  const drawnStudy = study !== null && study.values.values[study.column] !== undefined ? study : null;
   const studyDrawn = drawnStudy !== null;
   const studyObject = useMemo(() => (scene && studyDrawn && studyCorners ? studyValuesLayer(studyCorners) : null), [scene, studyDrawn, studyCorners]);
 
@@ -362,13 +362,13 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   useSceneLayers(scene, layers);
   const present = layers.filter(({ listed }) => listed).map(({ name }) => name);
 
-  const { change: studyChange, colourBy: studyColourBy, range: [studyLow, studyHigh] = [], palette: studyPalette, geometry: studyGeometry } = drawnStudy ?? {};
+  const { colourBy: studyColourBy, range: [studyLow, studyHigh] = [], palette: studyPalette, column: studyColumn } = drawnStudy ?? {};
   const paintStudy = useEffectEvent(() => {
     if (drawnStudy === null || studyObject === null) return;
     layerHooks(studyObject).recolour?.(drawnStudy);
     scene?.redraw();
   });
-  useEffect(() => paintStudy(), [studyObject, studyGeometry, studyChange, studyColourBy, studyLow, studyHigh, studyPalette]);
+  useEffect(() => paintStudy(), [studyObject, studyColumn, studyColourBy, studyLow, studyHigh, studyPalette]);
 
   const surfaceClicked = useEffectEvent((intersection: THREE.Intersection) => {
     const hit = inspectObject && layerHooks(inspectObject).fileAndSurfaceOf?.(intersection);

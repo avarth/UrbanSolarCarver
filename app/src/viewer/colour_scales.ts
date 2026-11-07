@@ -1,7 +1,5 @@
 // The data colours of the 3D view (UX 10.1): cividis for scores, the sun ramp for sky patch weights, the storey ramp for the building
-// massing, the change ramp (viridis) for a study's change from the maximum volume; a study's values take study_palettes.ts. The theme colours and the ends of the storey ramp live in theme/tokens.css and are read from there.
-
-import { studyPaletteColour } from "./study_palettes";
+// massing; a study's values take study_palettes.ts. The theme colours and the ends of the storey ramp live in theme/tokens.css and are read from there.
 
 export type ViewportTheme = "light" | "dark";
 
@@ -67,20 +65,6 @@ function mixedColour(from: string, to: string, t: number): string {
 /** The sky dome ramp: the viewport background at 0, the sun colour at 1. */
 export function sunRamp(t: number, viewportTheme: ViewportTheme): string {
   return mixedColour(viewportBackground(viewportTheme), colourToken("sun"), t);
-}
-
-/**
- * The change ramp of Simulate's Change (a study's change from the maximum volume): viridis, from no change to the largest gain (user,
- * 2026-10-28). A loss (t below 0), which carving cannot give but a massing can, is drawn in the carved colour.
- */
-export function changeRamp(t: number): string {
-  if (t < 0) return colourToken("carved");
-  return studyPaletteColour("viridis", t);
-}
-
-/** The change ramp at *steps* evenly spaced shares from 0 to 1 (changeRamp's colours). */
-export function changeRampStops(steps: number): string[] {
-  return Array.from({ length: steps }, (_, step) => studyPaletteColour("viridis", step / (steps - 1)));
 }
 
 /** The colour of a storey (0 for the ground storey) of the building massing: the storey ramp, from light grey to slate (UX 10.1). */

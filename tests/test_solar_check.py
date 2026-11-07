@@ -282,12 +282,14 @@ def test_check_of_a_run_compares_the_maximum_volume_with_the_envelope_and_the_ma
     from _plot_scene import plot_scene
     from urbansolarcarver.api import run_pipeline
     from urbansolarcarver.check_settings import CheckSettings
-    from urbansolarcarver.solar_check import load_solar_check, simulate_study
+    from urbansolarcarver.solar_check import load_solar_check, run_geometries, simulate_study, solar_check
     config = plot_scene(tmp_path).config(tmp_path / "run", "daylight", threshold="carve_fraction", carve_fraction=0.7)
     run_pipeline(config, config.out_dir, produce=("exporting", "massing"))
-    result = simulate_study(config.test_surface_path, config.max_volume_path, CheckSettings.for_config(config),
-                            run_folder=config.out_dir, context_path=config.context_path,
-                            out_dir=tmp_path / "run" / "check", voxel_size=config.voxel_size, device="cpu")
+    settings = CheckSettings.for_config(config)
+    frame = np.round(trimesh.load(str(config.max_volume_path)).bounds[0], 6)
+    result = solar_check(config.test_surface_path, run_geometries(config.max_volume_path, config.out_dir, config.voxel_size),
+                         settings, blocking=config.context_path, sampling_frame=frame, out_dir=tmp_path / "run" / "check",
+                         device="cpu")
     assert list(result.values) == ["open", "max_volume", "envelope", "massing"]
     # The check samples the points the analysis did.
     np.testing.assert_allclose(result.points.points, np.load(tmp_path / "run" / "preprocessing" / "test_points.npy"),
@@ -312,7 +314,13 @@ def test_check_of_a_run_compares_the_maximum_volume_with_the_envelope_and_the_ma
     loaded = load_solar_check(tmp_path / "run" / "check")
     np.testing.assert_allclose(loaded.values["envelope"], result.values["envelope"], rtol=1e-6)
     np.testing.assert_allclose(loaded.points.quads, result.points.quads, atol=1e-4)
-    assert set(summary["fingerprints"]["geometries"]) == {"envelope", "massing"}
+    # A study traces its one geometry and the no-build case, and records only that geometry's mesh.
+    study = simulate_study(config.test_surface_path, config.max_volume_path, settings.model_copy(update={"geometry": "envelope"}),
+                           run_folder=config.out_dir, context_path=config.context_path, out_dir=tmp_path / "run" / "study",
+                           voxel_size=config.voxel_size, device="cpu")
+    assert list(study.values) == ["open", "envelope"]
+    np.testing.assert_allclose(study.values["envelope"], result.values["envelope"], rtol=1e-5, atol=1e-5)
+    assert set(study.summary["fingerprints"]["geometries"]) == {"envelope"}
 
 
 @REQUIRES_WARP_CPU
@@ -385,6 +393,34 @@ def test_sun_hours_have_no_sky_patches(example_epw_path):
 
 
 @REQUIRES_WARP_CPU
+@REQUIRES_WARP_CPU
+def test_a_study_on_nothing_has_only_the_no_build_column(tmp_path):
+    from urbansolarcarver.solar_check import simulate_study
+    surface, max_volume, _context = _study_files(tmp_path)
+    result = simulate_study(surface, max_volume, _settings("sky_view", sample_spacing=2.0, rays_per_patch=1, geometry="none"),
+                            out_dir=tmp_path / "study", device="cpu")
+    assert list(result.values) == ["open"] and list(result.summary["columns"]) == ["open"]
+    assert result.summary["geometry"] == "none"
+
+
+@pytest.mark.parametrize("geometry", ["envelope", "massing"])
+def test_a_study_on_a_geometry_carve_has_not_built_is_refused(tmp_path, geometry):
+    from urbansolarcarver.errors import InputError
+    from urbansolarcarver.solar_check import simulate_study
+    surface, max_volume, _context = _study_files(tmp_path)
+    with pytest.raises(InputError, match=geometry):
+        simulate_study(surface, max_volume, _settings("sky_view", sample_spacing=2.0, geometry=geometry),
+                       run_folder=tmp_path / "no_run", out_dir=tmp_path / "study", device="cpu")
+    assert not (tmp_path / "study").exists()
+
+
+def test_the_geometry_of_a_study_is_one_of_four_and_defaults_to_the_maximum_volume():
+    from pydantic import ValidationError
+    assert _settings("sky_view").geometry == "max_volume" and _settings("sky_view").sample_geometry is False
+    with pytest.raises(ValidationError):
+        _settings("sky_view", geometry="plates")
+
+
 def test_simulate_study_without_a_run_has_only_the_maximum_volume(tmp_path):
     from urbansolarcarver.solar_check import SUMMARY_FILE, simulate_study
     surface, max_volume, _context = _study_files(tmp_path)
@@ -503,25 +539,37 @@ def test_a_study_that_samples_the_context_has_points_on_it_and_none_without(tmp_
 
 
 @REQUIRES_WARP_CPU
-def test_a_study_that_samples_the_ground_has_points_at_the_maximum_volumes_foot_and_its_margin(tmp_path):
+def test_a_study_that_samples_the_ground_has_points_on_the_disc_at_the_maximum_volumes_foot(tmp_path):
     from urbansolarcarver.solar_check import simulate_study
     _surface, max_volume, _context = _study_files(tmp_path)
     result = simulate_study(None, max_volume,
                             _settings("sky_view", sample_spacing=2.0, rays_per_patch=1, surfaces_from=["ground"]),
-                            out_dir=tmp_path / "study", device="cpu")
+                            ground_disc=(5.0, 5.0, 30.0), out_dir=tmp_path / "study", device="cpu")
     points = result.points.points
     assert np.allclose(points[:, 2], 0.0) and np.allclose(result.points.normals, [0.0, 0.0, 1.0])
-    # The cube is 0 to 10 m: a margin of 20 m makes the ground -20 to 30 m both ways.
-    assert points[:, :2].min() == pytest.approx(-20.0, abs=1.0) and points[:, :2].max() == pytest.approx(30.0, abs=1.0)
+    # The disc of radius 30 m around (5, 5): every point within it, and points reaching near its edge.
+    radii = np.hypot(points[:, 0] - 5.0, points[:, 1] - 5.0)
+    assert radii.max() <= 30.0 + 1e-6 and radii.max() > 27.0
     assert result.summary["inputs"]["test_surfaces"] is None and result.summary["fingerprints"]["test_surface"] is None
+    assert result.summary["fingerprints"]["ground_disc"] == [5.0, 5.0, 30.0]
 
 
-def test_the_ground_margin_is_half_the_longer_side_of_a_large_maximum_volume():
-    from urbansolarcarver.solar_check import ground_square
-    ground = ground_square(box_between([0, 0, 2], [100, 40, 30]))
-    # Half of 100 m is 50 m, more than 20 m: the square is 200 m wide, centred on (50, 20).
-    assert np.allclose(ground.bounds, [[-50, -80, 2], [150, 120, 2]])
-    assert np.allclose(ground.face_normals, [0.0, 0.0, 1.0])
+def test_ground_disc_is_a_flat_circle_facing_up():
+    from urbansolarcarver.solar_check import ground_disc
+    disc = ground_disc((10.0, -5.0), 30.0, 2.0, spacing=0.5)
+    assert np.allclose(disc.vertices[:, 2], 2.0)
+    assert (disc.face_normals[:, 2] > 0.999).all()
+    radii = np.hypot(disc.vertices[:, 0] - 10.0, disc.vertices[:, 1] + 5.0)
+    assert radii.max() <= 30.0 + 1e-9
+    # The polygon's edge stays within the spacing of the true circle.
+    assert disc.area == pytest.approx(math.pi * 30.0 ** 2, rel=0.5 / 30.0)
+
+
+def test_a_study_that_samples_the_ground_needs_the_disc():
+    from urbansolarcarver.errors import InputError
+    from urbansolarcarver.solar_check import study_surfaces
+    with pytest.raises(InputError, match="ground"):
+        study_surfaces(None, ["ground"], box_between([0, 0, 0], [5, 5, 5]), disc=None)
 
 
 def test_a_terrain_stored_facing_down_is_sampled_facing_up_on_each_of_its_slopes(tmp_path):
@@ -548,6 +596,130 @@ def test_a_study_refuses_a_source_without_its_file_and_a_study_with_nothing_to_s
     with pytest.raises(InputError, match="no surface to sample"):
         simulate_study(None, max_volume, _settings("sky_view"), out_dir=tmp_path / "study", device="cpu")
     assert not (tmp_path / "study").exists()
+
+
+# --- a study that samples the faces of its geometry ----------------------------------------------------------------
+
+def _stacked_boxes():
+    """A 2 x 2 x 1 m box with a 1 x 1 x 1 m box on its corner, as the massing stacks its floors: two closed bodies, the
+    upper one's bottom on the lower one's top."""
+    return trimesh.util.concatenate([box_between([0, 0, 0], [2, 2, 1]), box_between([0, 0, 1], [1, 1, 2])])
+
+
+@REQUIRES_WARP_CPU
+@pytest.mark.parametrize("tolerance", [0.05, 0.5])
+@pytest.mark.parametrize("clipped", [False, True])
+def test_a_geometry_sampled_on_its_own_faces_does_not_shade_them(tolerance, clipped):
+    from urbansolarcarver.solar_check import CheckGeometry, sample_geometry_faces, solar_check
+    box = box_between([0, 0, 0], [1, 1, 1])
+    clip = box_between([-1, -1, 0], [2, 2, 2]) if clipped else None
+    points = sample_geometry_faces(box, 0.25, frame=np.zeros(3), clip=clip)
+    geometry = CheckGeometry("envelope", "Envelope", box, clip=clip, surface_tolerance=tolerance)
+    result = solar_check(None, [geometry], _settings("sky_view", sample_spacing=0.25, rays_per_patch=16),
+                         geometry_points=points, device="cpu")
+    values, normals = result.values["envelope"], result.points.normals
+    roof = normals[:, 2] > 0.7
+    assert roof.sum() > 0 and (~roof).sum() == 4 * roof.sum()
+    assert values[roof].mean() == pytest.approx(100.0, abs=1.0)
+    assert values[~roof].mean() == pytest.approx(50.0, abs=2.0)
+    assert not (normals[:, 2] < -0.9).any()          # the bottom stands on the ground and is left out
+    assert result.summary["geometry_point_count"] == len(points.points) == 5 * roof.sum()
+
+
+def test_the_covered_part_of_a_lower_floors_top_is_not_sampled():
+    from urbansolarcarver.solar_check import sample_geometry_faces
+    from urbansolarcarver.solar_check import sample_test_surfaces
+    points = sample_geometry_faces(_stacked_boxes(), 0.25, frame=np.zeros(3))
+    lower_top = np.isclose(points.points[:, 2], 1.0) & (points.normals[:, 2] > 0.9)
+    # The 2 x 2 m top sampled whole, less what lies under the upper box (its foot included): the 3 m² L of terrace.
+    whole = sample_test_surfaces(trimesh.Trimesh([[0, 0, 1], [2, 0, 1], [2, 2, 1], [0, 2, 1]], [[0, 1, 2], [0, 2, 3]]),
+                                 0.25, np.zeros(3)).points
+    covered = (whole[:, 0] <= 1.0 + 1e-6) & (whole[:, 1] <= 1.0 + 1e-6)
+    assert lower_top.sum() == (~covered).sum()
+    assert not (lower_top & (points.points[:, 0] <= 1.0 + 1e-6) & (points.points[:, 1] <= 1.0 + 1e-6)).any()
+    assert np.isclose(points.points[:, 2], 2.0).sum() > 0
+
+
+def test_the_point_count_estimate_of_a_geometry_leaves_out_its_bottoms(tmp_path, monkeypatch):
+    from urbansolarcarver import solar_check
+    from urbansolarcarver.io import save_mesh
+    # A 10 m cube sampled on its faces at 1 m: 500 m² of faces that are sampled, 600 m² with its bottom.
+    save_mesh(box_between([0, 0, 0], [10, 10, 10]), str(tmp_path / "max_volume.ply"))
+    monkeypatch.setattr(solar_check, "MAX_CHECK_POINTS", 550)
+    monkeypatch.setattr(solar_check, "evaluate_test_points", lambda points, *_args, **_kwargs: np.ones(len(points)))
+    result = solar_check.simulate_study(None, tmp_path / "max_volume.ply",
+                                        _settings("sky_view", sample_spacing=1.0, rays_per_patch=1, sample_geometry=True),
+                                        out_dir=tmp_path / "study", device="cpu")
+    assert result.summary["geometry_point_count"] > 0
+
+
+@REQUIRES_WARP_CPU
+def test_touching_bays_of_stacked_floors_leave_only_their_outer_faces():
+    """As the massing builds a floor: square bays side by side, each its own closed box, the floors stacked on each other. The
+    faces where two boxes touch lie in one plane, which a probe ray meets at once on both; none of them is sampled."""
+    from urbansolarcarver.solar_check import sample_geometry_faces
+    boxes = [box_between([x, y, 3.0 * floor], [x + 2, y + 2, 3.0 * (floor + 1)])
+             for x in (0, 2, 4) for y in (0, 2, 4) for floor in range(3)]
+    points = sample_geometry_faces(trimesh.util.concatenate(boxes), 0.5, frame=np.zeros(3), device="cpu")
+    up = points.normals[:, 2] > 0.9
+    # Only the roof of the top floor faces up; every point lies on the outside of the 6 x 6 x 9 m block.
+    assert up.any() and np.allclose(points.points[up, 2], 9.0)
+    inner = ((points.points[:, 0] > 1e-6) & (points.points[:, 0] < 6 - 1e-6) & (points.points[:, 1] > 1e-6)
+             & (points.points[:, 1] < 6 - 1e-6) & (points.points[:, 2] < 9 - 1e-6))
+    assert not inner.any()
+
+
+def test_faces_of_a_geometry_past_its_clip_are_not_sampled():
+    from urbansolarcarver.solar_check import sample_geometry_faces
+    points = sample_geometry_faces(box_between([0, 0, 0], [1, 1, 1.5]), 0.25, frame=np.zeros(3),
+                                   clip=box_between([0, 0, 0], [1, 1, 1]))
+    assert len(points.points) > 0 and points.points[:, 2].max() <= 1.0 + 1e-6
+
+
+def test_sample_triangles_spreads_points_by_area_and_repeats():
+    from urbansolarcarver.solar_check import sample_triangles
+    sphere = trimesh.creation.icosphere(subdivisions=4, radius=5.0)
+    first, second = sample_triangles(sphere, 0.5), sample_triangles(sphere, 0.5)
+    assert len(first.points) == pytest.approx(sphere.area / 0.25, rel=0.05)
+    assert np.array_equal(first.points, second.points)
+    # Each point lies on the sphere and faces out; its patch is a square of side 0.5 m in its triangle's plane.
+    assert np.allclose(np.linalg.norm(first.points, axis=1), 5.0, atol=0.05)
+    assert (np.einsum("ij,ij->i", first.normals, first.points) > 0).all()
+    sides = np.linalg.norm(first.quads[:, 1] - first.quads[:, 0], axis=1)
+    assert np.allclose(sides, 0.5, atol=1e-6)
+
+
+def test_a_mesh_of_small_triangles_is_sampled_triangle_by_triangle():
+    from urbansolarcarver.solar_check import sample_geometry_faces
+    sphere = trimesh.creation.icosphere(subdivisions=4, radius=5.0)
+    sphere.apply_translation([0, 0, 5.0])
+    points = sample_geometry_faces(sphere, 0.5, frame=np.zeros(3))
+    # Flat-panel sampling would give almost none (every triangle is about 0.1 m²); the lower half faces down and is left out.
+    assert len(points.points) > 0.3 * sphere.area / 0.25
+
+
+@REQUIRES_WARP_CPU
+def test_a_study_samples_its_geometrys_faces_after_its_other_surfaces(tmp_path):
+    from urbansolarcarver.solar_check import POINTS_FILE, simulate_study
+    surface, max_volume, _context = _study_files(tmp_path)
+    plain = simulate_study(surface, max_volume, _settings("sky_view", sample_spacing=2.0, rays_per_patch=1),
+                           out_dir=tmp_path / "plain", device="cpu")
+    both = simulate_study(surface, max_volume,
+                          _settings("sky_view", sample_spacing=2.0, rays_per_patch=1, sample_geometry=True),
+                          out_dir=tmp_path / "both", device="cpu")
+    count = len(plain.points.points)
+    # The 10 m cube: a roof and four sides with as many points each; its bottom is left out.
+    added = both.summary["geometry_point_count"]
+    assert added > 0 and added % 5 == 0 and len(both.points.points) == count + added
+    assert not (both.points.normals[count:, 2] < -0.9).any()
+    np.testing.assert_allclose(both.points.points[:count], plain.points.points)
+    assert int(np.load(tmp_path / "both" / POINTS_FILE)["geometry_point_count"]) == added
+    assert plain.summary["geometry_point_count"] == 0
+    # A study with nothing but the geometry's faces runs.
+    alone = simulate_study(None, max_volume, _settings("sky_view", sample_spacing=2.0, rays_per_patch=1, sample_geometry=True),
+                           out_dir=tmp_path / "alone", device="cpu")
+    assert len(alone.points.points) == added
+    assert alone.values["max_volume"][alone.points.normals[:, 2] > 0.7].min() > 95.0
 
 
 # --- Ladybug's incident radiation ------------------------------------------------------------------------------

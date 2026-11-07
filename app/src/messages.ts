@@ -101,26 +101,35 @@ export const messages = {
   studySurfaces: "Study surfaces",
   studyNoSurfaceFiles: "No study surface files yet",
   addStudySurfaces: "Add study surfaces",
-  studySurfacesFrom: { context: "The surroundings", terrain: "The terrain", ground: "The ground around the site" } as Record<string, string>,
-  // The same in the line of a study's row, after its file names: "facades.obj, the surroundings".
-  studySurfacesFromInLine: { context: "the surroundings", terrain: "the terrain", ground: "the ground" } as Record<string, string>,
+  studySurfacesFrom: { context: "Context", terrain: "Terrain", ground: "Ground" } as Record<string, string>,
+  studySurfacesFromHint: { context: "The faces of the surroundings files, without their bottoms",
+                           terrain: "The terrain file",
+                           ground: "A flat disc on the compass circle, at the foot of the max volume" } as Record<string, string>,
+  // The same in the line of a study's row: "the massing, facades.obj, the context".
+  studySurfacesFromInLine: { context: "the context", terrain: "the terrain", ground: "the ground" } as Record<string, string>,
   studyNeedsSurroundingsFiles: "The project has no surroundings files: add them in Inputs",
   useFileOfProject: "Use a file of the project",
   deleteStudy: "Delete study",
   closeStudySettings: "Close",
   designRunInProgress: "A carving run is in progress",
   simulationInProgress: "A simulation is in progress",
-  // Results on the view (simulate design, section 3): the geometry switch, the target legend and the result card
-  geometrySwitch: "Geometry",
-  studyGeometries: { max_volume: "Max volume", envelope: "Envelope", massing: "Massing" },
-  buildGeometryFirst: { envelope: "Build the envelope first", massing: "Build the massing first" },
-  runStudyAgainFor: { envelope: "Run the study again to see it on the envelope", massing: "Run the study again to see it on the massing" },
-  outOfDateInDesign: "Out of date in Carve",
-  changeToggle: "Difference",
-  changeToggleHint: "Colours each point by its difference from the maximum volume",
-  changeNeedsGeometry: "Choose Envelope or Massing",
-  changeLegend: (unit: string) => `Difference from max volume (${unit})`,
-  changeLoss: "Loss",
+  // What a study stands on the plot (its "geometry" setting), and whether it samples the faces of it.
+  studyStands: { none: "Nothing", max_volume: "Max volume", envelope: "Envelope", massing: "Massing" } as Record<string, string>,
+  studyAccountFor: "Account for",
+  studyAccountForHint: "What stands on the plot and blocks; the context and the terrain always block",
+  buildGeometryFirst: { envelope: "Build the envelope in Carve", massing: "Build the massing in Carve" } as Record<string, string>,
+  studySimulate: "Simulate",
+  studySimulateGeometryHint: "Test points on its facades and roofs: how much the building itself gets",
+  nothingToSimulate: "Nothing stands on the plot",
+  studyAdditionalSurfaces: "Additional surfaces to simulate",
+  // In the line of a study's row: "the massing, facades.obj, the context".
+  studyStandInLine: { max_volume: "the max volume", envelope: "the envelope", massing: "the massing" } as Record<string, string>,
+  studySpacing: "Spacing (m)",
+  studySpacingFromCarve: (spacing: string) => `${spacing}, from Carve`,
+  studySpacingHint: "Test points every this many meters. Follows the carving's spacing until you type one",
+  studySpacingFollowsCarve: "Follows Carve",
+  studySpacingReset: "Follow Carve",
+  duplicateStudy: "Duplicate study",
   // Colouring by the value (the default), or by each point's share of what it receives with nothing built on the plot (the no-build
   // value: the surroundings and terrain still block), between the two ends of the colour range.
   shareLegend: (label: string) => `${label}, share of the no-build value`,
@@ -136,6 +145,14 @@ export const messages = {
   resultMean: (value: string) => `mean ${value}`,
   resultLowestTenth: (value: string) => `lowest tenth ${value}`,
   resultAtTarget: (value: string) => `${value} at or above the target`,
+  // The result card's blocks: the study's other surfaces, and the faces of its geometry, whole and by the way they face.
+  resultSurroundings: "Study surfaces",
+  resultBuilding: { max_volume: "The max volume", envelope: "The envelope", massing: "The massing" } as Record<string, string>,
+  resultByFacing: "By facing",
+  resultCardMinimise: "Minimise the result",
+  resultCardShow: "Show the result",
+  resultFacings: { roof: "Roofs", N: "North", E: "East", S: "South", W: "West" } as Record<string, string>,
+  resultFacingColumns: { facing: "Facing", mean: "Mean", lowestTenth: "Lowest tenth", atTarget: "At target" },
 
   // Inspect: the Geometries panel over the 3D view, a file's summary, flipping its surfaces (inspect design, sections 3, 5 and 6). The
   // titles of the roles are the layers' (layerNames).

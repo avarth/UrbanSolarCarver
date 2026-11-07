@@ -7,8 +7,10 @@ import { toLocal, type Point3 } from "./local_origin";
 export interface StudyValuesHeader {
   frame: Point3;              // world coordinates the corners are relative to
   point_count: number;
-  columns: string[];          // "open", "max_volume", then "envelope" and "massing" when they were built
+  columns: string[];          // "open", then the study's geometry ("max_volume", "envelope" or "massing") unless it stands nothing
   unit: string;
+  geometry?: string;                  // the geometry the result accounts for: "none", "max_volume", "envelope" or "massing"
+  geometry_point_count?: number;      // how many of the points, the last ones, are on the faces of that geometry
 }
 
 export interface StudyValues {

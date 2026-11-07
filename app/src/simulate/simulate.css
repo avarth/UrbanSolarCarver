@@ -114,52 +114,17 @@
 .study-more-settings > summary { cursor: pointer; }
 .study-more-settings[open] > summary { margin-bottom: calc(var(--space-unit) * 2); }
 .study-files-title { font-weight: 600; }
-/* Under a study's files, the project's surfaces it can sample too: the surroundings, the terrain or the ground. */
-.study-surfaces-from { display: flex; flex-direction: column; gap: var(--space-unit); margin-top: calc(var(--space-unit) * 2); }
-
-/* The geometry switch at the top centre of the view: three toggle segments joined in one bar, and Change beside them. A segment that
-   waits (not built yet) is greyed; one out of date in Design has a dot in the stamp's colour. The out-of-date stamp of the view goes
-   under the switch. */
-.simulate-geometry-bar { position: absolute; top: 12px; left: 50%; z-index: 4; transform: translateX(-50%); }
-/* While a study's popover is open the bar starts to the right of it (12 px, the panel 280, 8, the popover 340, 12), so the switch stays
-   in reach: the popover would cover a bar centred on a window narrower than about 1640 px. */
-.simulate-geometry-bar-beside-popover { left: calc(12px + 280px + 8px + 340px + 12px); transform: none; }
-.geometry-switch { display: flex; align-items: center; gap: calc(var(--space-unit) * 2); }
-.geometry-switch-segments {
-  display: flex;
-  overflow: hidden;
-  background: var(--colour-panel);
-  border: 1px solid var(--colour-line);
-  border-radius: var(--radius-large);
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--colour-shadow) 16%, transparent);
-}
-.geometry-switch-segment,
-.geometry-switch-change {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-unit);
-  min-height: 32px;
-  padding: 0 calc(var(--space-unit) * 3);
-  border: 0;
-  background: var(--colour-panel);
-  color: var(--colour-ink);
-  font: inherit;
-  font-size: var(--text-secondary);
-  cursor: pointer;
-}
-.geometry-switch-segment + .geometry-switch-segment { border-left: 1px solid var(--colour-line); }
-.geometry-switch-segment[aria-pressed="true"],
-.geometry-switch-change[aria-pressed="true"] { background: var(--colour-accent); color: var(--colour-panel); }
-.geometry-switch-segment[aria-disabled="true"],
-.geometry-switch-change[aria-disabled="true"] { color: var(--colour-muted); cursor: not-allowed; }
-.geometry-switch-segment:focus-visible, .geometry-switch-change:focus-visible { outline: 2px solid var(--colour-accent); outline-offset: -2px; }
-.geometry-switch-change {
-  border: 1px solid var(--colour-line);
-  border-radius: var(--radius-large);
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--colour-shadow) 16%, transparent);
-}
-.geometry-switch-stale { width: 6px; height: 6px; border-radius: 50%; background: var(--colour-out-of-date); }
-.viewer-pane:has(.simulate-geometry-bar) .viewer-out-of-date { top: 56px; }
+/* A study's surfaces: what it accounts for (one of four, as one bar), switches for what it simulates, then its additional files. */
+.study-subtitle { margin: calc(var(--space-unit) * 3) 0 var(--space-unit); color: var(--colour-muted); font-size: var(--text-secondary); }
+.study-account-for { display: flex; width: 100%; }
+.study-account-for button { flex: 1; padding-left: 0; padding-right: 0; }
+.study-account-for button[aria-disabled="true"] { color: var(--colour-muted); cursor: not-allowed; }
+.study-switches { display: flex; flex-direction: column; gap: var(--space-unit); }
+.study-field.study-switch-row { flex-direction: row; align-items: center; justify-content: space-between; gap: calc(var(--space-unit) * 2); cursor: pointer; }
+.study-switch-row .setting-switch { flex: none; margin: 0; }
+.study-spacing .study-field-value { display: flex; align-items: center; gap: calc(var(--space-unit) * 2); }
+.study-spacing-note { color: var(--colour-muted); font-size: var(--text-secondary); }
+.study-popover-actions { display: flex; gap: calc(var(--space-unit) * 2); flex-wrap: wrap; }
 
 /* What stands where the legend goes while the selected study's values wait for the run to end. */
 .study-view-note { bottom: calc(var(--overlay-gap) + 40px); left: 50%; transform: translateX(-50%); margin: 0; padding: 8px 12px; }
@@ -168,17 +133,30 @@
 }
 
 /* The result card in the bottom right corner; the legend of the view (the massing's storeys) goes above it. */
-.result-card { right: var(--overlay-gap); bottom: var(--overlay-gap); width: 220px; padding: 8px 12px; }
+.result-card { right: var(--overlay-gap); bottom: var(--overlay-gap); width: 240px; padding: 8px 12px; }
 .result-card h3 { margin: 0 0 4px; font-size: var(--text-secondary); font-weight: 600; }
-.result-card-baseline { color: var(--colour-muted); font-weight: 400; }
+.result-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.result-card-title { color: var(--colour-muted); font-size: var(--text-secondary); }
+.result-card-toggle { width: 22px; height: 22px; padding: 0; border: 0; background: none; color: var(--colour-ink); cursor: pointer; font: inherit; }
+.result-card-toggle:focus-visible { outline: 2px solid var(--colour-accent); }
+.result-card-minimised { width: auto; padding: 4px 8px; }
+.result-card-minimised .result-card-header { margin-bottom: 0; gap: 8px; }
+.result-card-facings-fold { margin-top: 6px; font-size: var(--text-secondary); }
+.result-card-facings-fold summary { cursor: pointer; color: var(--colour-muted); }
 .result-card ul { margin: 0; padding: 0; list-style: none; font-variant-numeric: tabular-nums; }
+/* The building's block under the study's other surfaces, with its table by facing. */
+.result-card-block + .result-card-block { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--colour-line); }
+.result-card-facings { width: 100%; margin-top: 6px; border-collapse: collapse; font-size: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.result-card-facings th, .result-card-facings td { padding: 1px 0; text-align: right; font-weight: 400; }
+.result-card-facings th:first-child { text-align: left; }
+.result-card-facings thead th { color: var(--colour-muted); }
 .viewer-pane:has(.result-card) .viewer-legend { bottom: 124px; }
+.viewer-pane:has(.result-card-minimised) .viewer-legend { bottom: 56px; }
+.viewer-pane:has(.result-card-building:not(:has(.result-card-facings-fold[open]))) .viewer-legend { bottom: 200px; }
+.viewer-pane:has(.result-card-facings-fold[open]) .viewer-legend { bottom: 300px; }
 
-/* Up to 1000 px the bar goes to the top right, under the toolbar, and the popover goes under the panel instead of beside it, so the
-   two do not meet; the bar stays where it is whether a popover is open or not. */
+/* Up to 1000 px the popover goes under the panel instead of beside it. */
 @media (max-width: 1000px) {
-  .simulate-geometry-bar, .simulate-geometry-bar-beside-popover { top: 56px; right: 12px; left: auto; transform: none; }
-  .viewer-pane:has(.simulate-geometry-bar) .viewer-out-of-date { top: 100px; }
   .study-popover { position: static; width: auto; max-height: 60vh; margin-top: calc(var(--space-unit) * 2); }
 }
 

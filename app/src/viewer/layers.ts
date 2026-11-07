@@ -7,8 +7,8 @@ import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
 import type { SkyDome } from "../api_client/client";
 import { messages } from "../messages";
-import { changeOf, changeTolerance, highestOf, OPEN_COLUMN, shareOfOpen, type StudyView } from "./study_values";
-import { changeRamp, changeRampStops, cividis, colourToken, storeyColour, sunRamp, type ViewportTheme } from "./colour_scales";
+import { noBuildTolerance, OPEN_COLUMN, shareOfOpen, type StudyView } from "./study_values";
+import { cividis, colourToken, storeyColour, sunRamp, type ViewportTheme } from "./colour_scales";
 import { studyPaletteColour, type StudyPalette } from "./study_palettes";
 import type { CarvedVoxels } from "./carved_by_criterion_decoder";
 import { layerHooks } from "./layer_hooks";
@@ -471,12 +471,10 @@ export function carvedByCriterionLayer({ voxels, colours, voxelSize }: CarvedByC
 
 // The study of Simulate ------------------------------------------------------------------------------------------------------
 
-const CHANGE_RAMP_STEPS = 256;
-
 /** Writes each point's colour into its four corners of *colours*, as studyValuesLayer describes. */
 function paintStudyValues(colours: Float32Array, view: StudyView): void {
-  const { values: studyValues, geometry: shownGeometry, change } = view;
-  const shown = studyValues.values[shownGeometry];
+  const { values: studyValues, column } = view;
+  const shown = studyValues.values[column];
   const count = shown.length;
   const paint = (point: number, colour: THREE.Color) => {
     for (let at = point * 12; at < point * 12 + 12; at += 3) {
@@ -485,31 +483,18 @@ function paintStudyValues(colours: Float32Array, view: StudyView): void {
       colours[at + 2] = colour.b;
     }
   };
-  if (change) {
-    const changes = changeOf(shown, studyValues.values.max_volume);
-    const tolerance = changeTolerance(studyValues.values[OPEN_COLUMN], studyValues.values.max_volume);
-    const highest = highestOf(changes);
-    const ramp = changeRampStops(CHANGE_RAMP_STEPS).map((colour) => new THREE.Color(colour));
-    const loss = new THREE.Color(changeRamp(-1));
-    for (let point = 0; point < count; point++) {
-      const value = changes[point];
-      const share = Math.abs(value) <= tolerance || highest <= 0 ? 0 : value / highest;
-      paint(point, value < -tolerance ? loss : ramp[Math.round(Math.min(1, share) * (CHANGE_RAMP_STEPS - 1))]);
-    }
+  // The palette between the two ends of the range; a value beyond an end takes that end's colour.
+  const ramp = paletteColours(view.palette);
+  const [low, high] = view.range;
+  const span = high > low ? high - low : 1;
+  const rampAt = (x: number) => ramp[Math.min(255, Math.max(0, Math.floor(((x - low) / span) * 256)))];
+  if (view.colourBy === "share") {
+    // Each point by its share of its own no-build value, in percent (a point the no-build case gives nothing loses nothing: 100 %).
+    const open = studyValues.values[OPEN_COLUMN];
+    const tolerance = noBuildTolerance(open);
+    for (let point = 0; point < count; point++) paint(point, rampAt(open === undefined ? 100 : 100 * shareOfOpen(shown[point], open[point], tolerance)));
   } else {
-    // The palette between the two ends of the range; a value beyond an end takes that end's colour.
-    const ramp = paletteColours(view.palette);
-    const [low, high] = view.range;
-    const span = high > low ? high - low : 1;
-    const rampAt = (x: number) => ramp[Math.min(255, Math.max(0, Math.floor(((x - low) / span) * 256)))];
-    if (view.colourBy === "share") {
-      // Each point by its share of its own no-build value, in percent (a point the no-build case gives nothing loses nothing: 100 %).
-      const open = studyValues.values[OPEN_COLUMN];
-      const tolerance = changeTolerance(open, studyValues.values.max_volume);
-      for (let point = 0; point < count; point++) paint(point, rampAt(open === undefined ? 100 : 100 * shareOfOpen(shown[point], open[point], tolerance)));
-    } else {
-      for (let point = 0; point < count; point++) paint(point, rampAt(shown[point]));
-    }
+    for (let point = 0; point < count; point++) paint(point, rampAt(shown[point]));
   }
 }
 

@@ -1,23 +1,23 @@
 // What Simulate shows of the selected study on the 3D view: its values (GET studies/{id}/values, read while Simulate is open, again
-// after each run), the geometry shown, Change and the colouring (kept across studies), the colour range and palette, and what the
-// view, the legend and the result card draw from them. One study at a time: the values of another study are not drawn once one is
-// selected. The statistics are computed once per set of values and geometry; the share at the target once per target.
+// after each run) with the geometry the study stands on the plot (its setting "geometry"), the colouring (kept across studies), the
+// colour range and palette, and what the view, the legend and the result card draw from them. One study at a time: the values of
+// another study are not drawn once one is selected. The statistics are computed once per set of values; the shares at the target once
+// per target. The result card has the points on the study's geometry (the service puts them last) apart from the others, and those
+// by the way they face.
 //
 // The colour range (user, 2026-10-28): a low and a high end; the palette runs between them and values beyond either end take that
 // end's colour. By value the ends are the study's target (the low end, which the result card's "at target" reads) and target_max,
-// saved with the study, by default 0 and the highest value of the geometry shown. By share they are percentages of the no-build
-// value, 0 and 100 by default, kept for each study while the app is open. The palettes are pinned (user, 2026-10-28): magma by
-// value, viridis by share (and for Change).
+// saved with the study, by default 0 and the highest value shown. By share they are percentages of the no-build value, 0 and 100 by
+// default, kept for each study while the app is open. The palettes are pinned (user, 2026-10-28): magma by value, viridis by share.
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { ApiError, getStudySkyPatches, getStudyValues, reportServiceProblem, type SkyDome, type StudyChange } from "../api_client/client";
 import { useProjectSession } from "../api_client/project_session";
 import { useLatest } from "../hooks/use_latest";
 import { messages } from "../messages";
 import type { RunLoop } from "../common/run_state";
-import type { StageState } from "../stages";
 import type { StudyPalette } from "../viewer/study_palettes";
-import { changeOf, changeTolerance, distributionOf, highestOf, keptShareOf, OPEN_COLUMN, shareAtOrAbove, type ColourBy, type StudyGeometry,
-  type StudyStatistics, type StudyView } from "../viewer/study_values";
+import { columnOf, distributionOf, FACING_GROUPS, facingGroups, highestOf, keptShareOf, OPEN_COLUMN, shareAtOrAbove, valuesAt, type ColourBy,
+  type FacingGroup, type StudyGeometry, type StudyStand, type StudyStatistics, type StudyView } from "../viewer/study_values";
 import { decodeStudyValues, type StudyValues } from "../viewer/study_values_decoder";
 import type { StudiesHook } from "./use_studies";
 
@@ -29,53 +29,50 @@ interface StudyViewSource {
   /** Simulate is open: the values are read only then. */
   active: boolean;
   runs: RunLoop;
-  /** Design has built the envelope, the massing (their meshes are drawn). */
-  envelopeBuilt: boolean;
-  massingBuilt: boolean;
-  /** The states of Design's envelope ("exporting") and massing stages. */
-  envelopeStage: StageState;
-  massingStage: StageState;
   /** The studies cannot be changed now (a run of the project): the saved ends wait. */
   editDisabled: boolean;
+  /** The project's north (degrees clockwise from +y): the facades of the study's geometry are grouped by the compass point they face. */
+  northDegrees: number;
 }
 
 /** The legend's content: the scale the bar spans, the two ends of the colour range on it, and what it is coloured by. */
 export interface StudyLegend {
   label: string;
   unit: string;
-  mode: "share" | "value" | "change";
-  /** The extent of the bar: 0 to 100 (%) by share, 0 to the highest value (or change) otherwise. */
+  mode: ColourBy;
+  /** The extent of the bar: 0 to 100 (%) by share, 0 to the highest value otherwise. */
   scale: [number, number];
-  /** The two ends of the colour range (not by change, where the bar is the change ramp). */
+  /** The two ends of the colour range. */
   low: number;
   high: number;
   palette: StudyPalette;
-  hasLoss: boolean;
   /** The ends cannot be moved now (a run of the project); by value they are saved with the study. */
   disabled: boolean;
 }
 
+/** The result card's content: the statistics of the points that are not on the study's geometry, and of those on it, whole and by facing. */
+export interface StudyCard {
+  unit: string;
+  /** The study's files, the surroundings, the terrain and the ground; null when the study samples none of them. */
+  surroundings: StudyStatistics | null;
+  /** The faces of the study's geometry; null when the study does not sample them. */
+  building: { stand: StudyGeometry; statistics: StudyStatistics; byFacing: Record<FacingGroup, StudyStatistics | null> } | null;
+}
+
 export interface StudyViewHook {
-  geometry: StudyGeometry;
-  setGeometry: (geometry: StudyGeometry) => void;
-  /** Colour by the change from the maximum volume (never on the maximum volume itself). */
-  change: boolean;
-  setChange: (change: boolean) => void;
-  /** How the values are coloured when Change is off (kept across studies): share of the no-build value, or the value. */
+  /** What the selected study stands on the plot (max_volume without a selected study). */
+  geometry: StudyStand;
+  /** How the values are coloured (kept across studies): share of the no-build value, or the value. */
   colourBy: ColourBy;
   setColourBy: (colourBy: ColourBy) => void;
   /** The selected study is shown on the view (its values, legend and result card); off, nothing of it is drawn. */
   shownOnView: boolean;
   setShownOnView: (shown: boolean) => void;
-  available: StudyGeometry[];
-  outOfDateInDesign: StudyGeometry[];
-  /** Geometries Design has built that the selected study's last result does not have: they wait for a new run of the study. */
-  waitingForStudy: StudyGeometry[];
   /** The selected study is out of date: the view's stamp says so. */
   studyOutOfDate: boolean;
   /** The selected study has a result whose values are not read during a run: the view says they are shown when it ends. */
   waitingForRun: boolean;
-  /** What the 3D view draws; null without a selected study whose values have the geometry shown. */
+  /** What the 3D view draws; null without a selected study whose values have its geometry's column. */
   view: StudyView | null;
   /** The selected study's sky dome (the value each patch carried) and its legend title; null while nothing is drawn, for a sun
    * hours study, or for a result from before the patch values were kept. Design's dome is not shown in Simulate. */
@@ -85,7 +82,7 @@ export interface StudyViewHook {
   skyDomeMissing: boolean;
   /** The legend and the result card; null when the view draws nothing. */
   legend: StudyLegend | null;
-  card: { geometry: StudyGeometry; unit: string; statistics: StudyStatistics; baseline: StudyStatistics | null } | null;
+  card: StudyCard | null;
   /** Moves the low or the high end of the colour range (null: back to its default); by value it is saved with the selected study once
    * the gesture ends. */
   setRangeEnd: (end: "low" | "high", value: number | null) => void;
@@ -97,10 +94,25 @@ export const TARGET_SAVE_DELAY_MILLISECONDS = 300;
 /** The palette of each colouring: magma by value, viridis by share of the no-build value. */
 const PALETTE_OF: Record<ColourBy, StudyPalette> = { value: "magma", share: "viridis" };
 
-export function useStudyView({ studies, active, runs, envelopeBuilt, massingBuilt, envelopeStage, massingStage, editDisabled }: StudyViewSource): StudyViewHook {
+/** What a study stands on the plot, from its settings: the maximum volume until one is chosen. */
+export function standOf(settings: Record<string, unknown> | undefined): StudyStand {
+  const stand = settings?.geometry;
+  return stand === "none" || stand === "envelope" || stand === "massing" ? stand : "max_volume";
+}
+
+/** The part of the statistics that does not depend on the target, of *values* and of their no-build values *open*; null for no points. */
+function partOf(values: Float32Array, open: Float32Array | null) {
+  if (values.length === 0) return null;
+  return { values, distribution: distributionOf(values), kept: open === null ? null : keptShareOf(values, open) };
+}
+
+type Part = ReturnType<typeof partOf>;
+
+const withTarget = (part: Part, target: number | null): StudyStatistics | null =>
+  part === null ? null : { ...part.distribution, shareAtTarget: shareAtOrAbove(part.values, target), keptShare: part.kept };
+
+export function useStudyView({ studies, active, runs, editDisabled, northDegrees }: StudyViewSource): StudyViewHook {
   const { token, project, onServiceProblem } = useProjectSession();
-  const [chosenGeometry, setGeometry] = useState<StudyGeometry>("max_volume");
-  const [chosenChange, setChange] = useState(false);
   const [colourBy, setColourBy] = useState<ColourBy>("value");
   const [shownOnView, setShownOnView] = useState(true);
   const palette = PALETTE_OF[colourBy];
@@ -115,6 +127,7 @@ export function useStudyView({ studies, active, runs, envelopeBuilt, massingBuil
   const selectedId = selected?.entry.id ?? null;
   // Made before the memos that read the study: the React Compiler takes a call given part of the study as one that may change it.
   const skyDomeTitle = messages.studySkyDomeLegend(selected?.entry.metric);
+  const geometry = standOf(selected?.entry.settings);
   const hasResult = selected !== null && (selected.state === "current" || selected.state === "out_of_date");
   const running = runs.activeRun !== null;
   const reportReadProblem = useEffectEvent((error: unknown) => {
@@ -147,18 +160,12 @@ export function useStudyView({ studies, active, runs, envelopeBuilt, massingBuil
     return () => { wanted = false; };
   }, [active, token, project, selectedId, hasResult, running]);
 
-  const available: StudyGeometry[] = ["max_volume", ...(envelopeBuilt ? ["envelope" as const] : []), ...(massingBuilt ? ["massing" as const] : [])];
-  const outOfDateInDesign: StudyGeometry[] = [...(envelopeStage === "out_of_date" ? ["envelope" as const] : []),
-                                              ...(massingStage === "out_of_date" ? ["massing" as const] : [])];
   const values = hasResult && loaded !== null && loaded.id === selectedId ? loaded.values : null;
-  // A geometry Design built after the study's last run has no values in it: its segment waits for a new run, and the view shows the
-  // maximum volume meanwhile (the choice is kept for the studies that have it).
-  const waitingForStudy = values === null ? [] : available.filter((each) => values.values[each] === undefined);
-  const geometry = available.includes(chosenGeometry) && !waitingForStudy.includes(chosenGeometry) ? chosenGeometry : "max_volume";
-  const change = chosenChange && geometry !== "max_volume";
-
-  const shown = values?.values[geometry] ?? null;
-  const baselineValues = values?.values.max_volume ?? null;
+  const column = columnOf(geometry);
+  // A result of another geometry than the study accounts for now (run before the study changed) is not drawn, even when it has the
+  // column (every result has "open"): nothing is drawn until the study runs again, and the stamp says it is out of date.
+  const resultGeometry = values?.header.geometry ?? geometry;
+  const shown = resultGeometry === geometry ? values?.values[column] ?? null : null;
   const savedEnd = (key: "target" | "target_max"): number | null => {
     if (selected === null) return null;
     if (saving?.id === selectedId && key in saving.change) return saving.change[key] ?? null;
@@ -167,24 +174,34 @@ export function useStudyView({ studies, active, runs, envelopeBuilt, massingBuil
   const target = savedEnd("target");
   const targetMax = savedEnd("target_max");
 
-  const distribution = useMemo(() => (shown === null ? null : distributionOf(shown)), [shown]);
-  const baselineDistribution = useMemo(() => (baselineValues === null || geometry === "max_volume" ? null : distributionOf(baselineValues)),
-                                       [baselineValues, geometry]);
-  const share = useMemo(() => (shown === null ? null : shareAtOrAbove(shown, target)), [shown, target]);
-  const openValues = values?.values[OPEN_COLUMN] ?? null;
-  const kept = useMemo(() => (shown === null || openValues === null ? null : keptShareOf(shown, openValues)), [shown, openValues]);
-  const baselineKept = useMemo(() => (baselineValues === null || openValues === null || geometry === "max_volume" ? null
-    : keptShareOf(baselineValues, openValues)), [baselineValues, openValues, geometry]);
-  const baselineShare = useMemo(() => (baselineDistribution === null || baselineValues === null ? null : shareAtOrAbove(baselineValues, target)),
-                                   [baselineDistribution, baselineValues, target]);
+  // The points on the study's geometry are the last ones; the card has them apart, and by the way they face.
+  const parts = useMemo(() => {
+    if (shown === null || values === null) return null;
+    const open = values.values[OPEN_COLUMN] ?? null;
+    const count = shown.length;
+    const onGeometry = geometry === "none" ? 0 : Math.min(count, Math.max(0, values.header.geometry_point_count ?? 0));
+    const split = count - onGeometry;
+    const facing = onGeometry === 0 ? null : facingGroups(values.quads, split, count, northDegrees);
+    return {
+      surroundings: partOf(shown.subarray(0, split), open === null ? null : open.subarray(0, split)),
+      building: partOf(shown.subarray(split), open === null ? null : open.subarray(split)),
+      byFacing: facing === null ? null : Object.fromEntries(FACING_GROUPS.map((group) =>
+        [group, partOf(valuesAt(shown, facing[group]), open === null ? null : valuesAt(open, facing[group]))])) as Record<FacingGroup, Part>,
+    };
+  }, [shown, values, geometry, northDegrees]);
+  const card = useMemo((): StudyCard | null => {
+    if (parts === null) return null;
+    const building = geometry === "none" ? null : withTarget(parts.building, target);
+    return {
+      unit: values?.header.unit ?? "",
+      surroundings: withTarget(parts.surroundings, target),
+      building: building === null || geometry === "none" || parts.byFacing === null ? null : {
+        stand: geometry, statistics: building,
+        byFacing: Object.fromEntries(FACING_GROUPS.map((group) => [group, withTarget(parts.byFacing![group], target)])) as Record<FacingGroup, StudyStatistics | null>,
+      },
+    };
+  }, [parts, target, geometry, values]);
   const highest = useMemo(() => (shown === null ? 0 : highestOf(shown)), [shown]);
-  // By change: the scale runs to the largest gain; a loss is a fall by more than the tolerance.
-  const changeScale = useMemo(() => {
-    if (!change || shown === null || values === null) return null;
-    const changes = changeOf(shown, values.values.max_volume);
-    const tolerance = changeTolerance(values.values[OPEN_COLUMN], values.values.max_volume);
-    return { highest: highestOf(changes), hasLoss: changes.some((value) => value < -tolerance) };
-  }, [change, shown, values]);
 
   // The colour range on the scale shown.
   const byShare = colourBy === "share";
@@ -192,7 +209,7 @@ export function useStudyView({ studies, active, runs, envelopeBuilt, massingBuil
   // A saved high end at or below the target (an earlier legend let the two meet) counts as none.
   const valueHigh = targetMax !== null && targetMax > (target ?? 0) ? targetMax : highest;
   const [low, high]: [number, number] = byShare ? shareRange : [target ?? 0, valueHigh];
-  const scale: [number, number] = change ? [0, changeScale?.highest ?? 0] : byShare ? FULL_SHARE : [0, Math.max(highest, valueHigh, target ?? 0)];
+  const scale: [number, number] = byShare ? FULL_SHARE : [0, Math.max(highest, valueHigh, target ?? 0)];
 
   const unit = values?.header.unit ?? "";
   const label = studies.metrics.find((metric) => metric.name === selected?.entry.metric)?.label ?? "";
@@ -239,21 +256,14 @@ export function useStudyView({ studies, active, runs, envelopeBuilt, massingBuil
   };
 
   return {
-    geometry, setGeometry, change, setChange, colourBy, setColourBy, shownOnView, setShownOnView, available, outOfDateInDesign, waitingForStudy,
-    setRangeEnd,
+    geometry, colourBy, setColourBy, shownOnView, setShownOnView, setRangeEnd,
     waitingForRun: active && running && hasResult && values === null,
     studyOutOfDate: active && shownOnView && selected?.state === "out_of_date",       // a hidden study shows no stamp
     skyDome: drawn && loadedSky?.id === selectedId ? loadedSky.dome : null,
     skyDomeMissing: drawn && loadedSky?.id === selectedId && loadedSky.dome === null && selected?.entry.metric !== "sun_hours",
     skyDomeTitle,
-    view: drawn ? { values, geometry, change, colourBy, range: [low, high], palette, unit, dimmed: selected.state === "out_of_date" } : null,
-    legend: drawn ? {
-      label, unit, mode: change ? "change" : colourBy, scale, low, high, palette, hasLoss: changeScale?.hasLoss ?? false,
-      disabled: !byShare && editDisabled,
-    } : null,
-    card: drawn && distribution !== null ? {
-      geometry, unit, statistics: { ...distribution, shareAtTarget: share, keptShare: kept },
-      baseline: baselineDistribution === null ? null : { ...baselineDistribution, shareAtTarget: baselineShare, keptShare: baselineKept },
-    } : null,
+    view: drawn ? { values, column, colourBy, range: [low, high], palette, unit, dimmed: selected.state === "out_of_date" } : null,
+    legend: drawn ? { label, unit, mode: colourBy, scale, low, high, palette, disabled: !byShare && editDisabled } : null,
+    card: drawn ? card : null,
   };
 }

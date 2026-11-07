@@ -65,8 +65,8 @@ MAX_CHECK_POINTS = 2_000_000
 _RAYS_PER_LAUNCH = 1 << 25
 # Hits closer than this to a ray's origin are ignored (m).
 _MIN_HIT = 1e-3
-# The least margin of the ground a study can sample around the maximum volume's plan bounds (m; ground_square).
-GROUND_MARGIN = 20.0
+# The fewest segments of the ground disc's polygon (ground_disc).
+GROUND_DISC_MIN_SEGMENTS = 64
 # A face of the surroundings whose normal points this far down (z component) is a bottom, left out of a study's surfaces.
 DOWNWARD_NORMAL_Z = -0.9
 
@@ -387,6 +387,119 @@ def sample_test_surfaces(test_surfaces, spacing: float, frame=None) -> CheckPoin
     return CheckPoints(np.asarray(points, dtype=np.float64) + frame, np.asarray(normals, dtype=np.float64), quads)
 
 
+def _no_points() -> CheckPoints:
+    return CheckPoints(np.zeros((0, 3)), np.zeros((0, 3)), np.zeros((0, 4, 3)))
+
+
+def _joined_points(parts) -> CheckPoints:
+    """The points of *parts* (CheckPoints) one after another."""
+    parts = [part for part in parts if part is not None and len(part.points)]
+    if not parts:
+        return _no_points()
+    return CheckPoints(*(np.concatenate([getattr(part, name) for part in parts]) for name in ("points", "normals", "quads")))
+
+
+def sample_triangles(mesh, spacing: float, seed: int = 0) -> CheckPoints:
+    """Points spread over the triangles of *mesh*, about one per ``spacing**2`` of area: each triangle gets the whole part of its
+    area over ``spacing**2`` and one more point with the chance of the rest, the points uniform in it, from a generator seeded
+    with *seed* (a rerun gives the same points).  Each point has its triangle's normal and, for drawing, a square patch of side
+    *spacing* in the triangle's plane centred on it.  For meshes whose flat pieces are mostly smaller than the spacing (a
+    smoothed envelope), where :func:`sample_test_surfaces` would give almost no point."""
+    rng = np.random.default_rng(seed)
+    triangles = np.asarray(mesh.triangles, dtype=np.float64)
+    if not len(triangles):
+        return _no_points()
+    expected = np.asarray(mesh.area_faces, dtype=np.float64) / (spacing * spacing)
+    counts = np.floor(expected).astype(np.int64) + (rng.random(len(expected)) < expected % 1.0)
+    owner = np.repeat(np.arange(len(triangles)), counts)
+    if not len(owner):
+        return _no_points()
+    # Uniform in a triangle: fold the unit square's upper half onto the lower one.
+    u, v = rng.random(len(owner)), rng.random(len(owner))
+    folded = u + v > 1.0
+    u[folded], v[folded] = 1.0 - u[folded], 1.0 - v[folded]
+    a, b, c = triangles[owner, 0], triangles[owner, 1], triangles[owner, 2]
+    points = a + (b - a) * u[:, None] + (c - a) * v[:, None]
+    normals = np.asarray(mesh.face_normals, dtype=np.float64)[owner]
+    # An axis in the plane: across the normal from up, or from x for a face that faces up or down.
+    reference = np.where(np.abs(normals[:, 2:3]) > 0.9, [[1.0, 0.0, 0.0]], [[0.0, 0.0, 1.0]])
+    first = np.cross(reference, normals)
+    first /= np.linalg.norm(first, axis=1, keepdims=True)
+    second = np.cross(normals, first)
+    half = spacing / 2.0
+    quads = np.stack([points + (sx * first + sy * second) * half
+                      for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))], axis=1)
+    return CheckPoints(points, normals, quads)
+
+
+def points_inside(points, mesh, *, on_surface: float = 0.0, frame=None, device=None) -> np.ndarray:
+    """Whether each of *points* lies inside the solid of *mesh* (bodies that touch or stack each count as their own solid), by
+    the generalised winding number (``warp_kernels.points_inside_mesh_kernel``), or with *on_surface* above 0, within that
+    distance of its surface (a point on a face plane, where the solid's edge cannot be told)."""
+    import warp as wp
+    from .warp_kernels import _near_mesh_kernel, points_inside_mesh_kernel, require_dda_backend
+    points = np.asarray(points, dtype=np.float64).reshape(-1, 3)
+    if not len(points) or mesh is None or not len(mesh.faces):
+        return np.zeros(len(points), dtype=bool)
+    device = resolve_compute_device(device or "auto")
+    require_dda_backend(device)
+    wp_device = warp_device_name(device)
+    frame = points.min(axis=0) if frame is None else np.asarray(frame, dtype=np.float64)
+    bvh = wp.Mesh(points=wp.array((np.asarray(mesh.vertices, dtype=np.float64) - frame).astype(np.float32), dtype=wp.vec3,
+                                  device=wp_device),
+                  indices=wp.array(np.asarray(mesh.faces, dtype=np.int32).ravel(), dtype=wp.int32, device=wp_device),
+                  support_winding_number=True)
+    inside = wp.zeros(len(points), dtype=wp.uint8, device=wp_device)
+    reach = float(np.linalg.norm(np.ptp(np.vstack([points, mesh.vertices]), axis=0))) * 2.0 + 1.0
+    wp_points = wp.array((points - frame).astype(np.float32), dtype=wp.vec3, device=wp_device)
+    wp.launch(points_inside_mesh_kernel, dim=len(points), device=wp_device, inputs=[bvh.id, wp_points, reach, inside])
+    result = inside.numpy().astype(bool)
+    if on_surface > 0.0:
+        near = wp.zeros(len(points), dtype=wp.uint8, device=wp_device)
+        wp.launch(_near_mesh_kernel, dim=len(points), device=wp_device, inputs=[bvh.id, wp_points, float(on_surface), near])
+        result |= near.numpy().astype(bool)
+    wp.synchronize_device(wp_device)
+    return result
+
+
+def _keep(points: CheckPoints, keep: np.ndarray) -> CheckPoints:
+    return CheckPoints(points.points[keep], points.normals[keep], points.quads[keep])
+
+
+def sample_geometry_faces(mesh, spacing: float, frame, clip=None, origin_offset: float = 0.01, device=None) -> CheckPoints:
+    """The test points on the faces of a study's geometry (*mesh*, closed, facing out), in *frame* (see
+    :func:`sample_test_surfaces`).
+
+    The faces that face down are left out (:func:`without_downward_faces`: they stand on the ground or face it).  The rest is
+    sampled as flat panels (:func:`flat_pieces`, :func:`sample_test_surfaces`) when at least half its area lies in flat
+    pieces of at least ``spacing**2``, else triangle by triangle (:func:`sample_triangles`; a smoothed envelope).  A point
+    whose position moved *origin_offset* along its normal lies inside *mesh*, or within half that of its surface, is on a
+    face covered by another (the top of a floor under the next floor of a massing, or the foot of the wall above it) and is
+    dropped; with *clip* (the maximum volume, for the envelope and the massing), so is a point whose position moved
+    *origin_offset* against its normal lies outside *clip* and not within half that of its surface (a face past it)."""
+    faces = without_downward_faces(mesh)
+    if not len(faces.faces):
+        return _no_points()
+    pieces = flat_pieces(faces)
+    piece_areas = np.array([part.area for part in pieces.split(only_watertight=False)]) if len(pieces.faces) else np.zeros(0)
+    large = float(piece_areas[piece_areas >= spacing * spacing].sum())
+    if large >= 0.5 * float(faces.area):
+        try:
+            points = sample_test_surfaces(pieces, spacing, frame)
+        except Exception:      # InputError: no flat panel large enough
+            points = _no_points()
+    else:
+        points = sample_triangles(faces, spacing)
+    if not len(points.points):
+        return points
+    margin = origin_offset / 2.0
+    keep = ~points_inside(points.points + points.normals * origin_offset, mesh, on_surface=margin, frame=frame, device=device)
+    if clip is not None:
+        keep &= points_inside(points.points - points.normals * origin_offset, clip, on_surface=margin, frame=frame,
+                              device=device)
+    return _keep(points, keep)
+
+
 # --- the check -----------------------------------------------------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -438,12 +551,14 @@ def solar_check(
     out_dir: Union[str, Path, None] = None,
     device=None,
     summary_extra: Optional[dict] = None,
+    geometry_points: Optional[CheckPoints] = None,
 ) -> SolarCheckResult:
     """The check's metric per test point for each of *geometries*, and with none of them ("open").
 
     Samples *test_surfaces* (a mesh or a mesh file) every
     ``settings.sample_spacing`` meters (:func:`sample_test_surfaces`, in
-    *sampling_frame*) and
+    *sampling_frame*; None for none) and appends *geometry_points* (the points on a geometry's faces,
+    :func:`sample_geometry_faces`) after them, then
     traces each geometry with :func:`evaluate_test_points`, clipped by its
     ``clip`` mesh and with its own surface tolerance.  *blocking* (meshes or
     mesh files, or None: the context and terrain), joined into one mesh,
@@ -480,7 +595,13 @@ def solar_check(
     test_surface_path = str(test_surfaces) if isinstance(test_surfaces, (str, Path)) else None
     blocking_mesh, blocking_paths = join_blocking(blocking)
     device = resolve_compute_device(device or "auto")
-    check_points = sample_test_surfaces(test_surfaces, settings.sample_spacing, sampling_frame)
+    geometry_points = geometry_points if geometry_points is not None else _no_points()
+    surface_points = (sample_test_surfaces(test_surfaces, settings.sample_spacing, sampling_frame)
+                      if test_surfaces is not None else _no_points())
+    check_points = _joined_points([surface_points, geometry_points])
+    if not len(check_points.points):
+        from .errors import InputError
+        raise InputError(f"No test points were sampled at a spacing of {settings.sample_spacing:g} m.")
     frame = check_points.points.min(axis=0)
     directions = check_directions(settings)
 
@@ -523,6 +644,8 @@ def solar_check(
         "settings": settings.model_dump(),
         "baseline": BASELINE,
         "point_count": int(len(check_points.points)),
+        "geometry_point_count": int(len(geometry_points.points)),
+        "sample_spacing_m": float(settings.sample_spacing),
         "direction_count": int(len(directions.directions)),
         "device": str(device),
         "inputs": {
@@ -545,7 +668,8 @@ def solar_check(
             folder / POINTS_FILE, frame=frame,
             points=(check_points.points - frame).astype(np.float32),
             normals=check_points.normals.astype(np.float32),
-            quads=(check_points.quads - frame).astype(np.float32))
+            quads=(check_points.quads - frame).astype(np.float32),
+            geometry_point_count=np.int64(len(geometry_points.points)))
         np.savez_compressed(folder / VALUES_FILE, **{name: array.astype(np.float32) for name, array in values.items()})
         patch_values = sky_patch_values(directions)
         if patch_values is None:
@@ -574,9 +698,10 @@ def load_solar_check(folder: Union[str, Path]) -> Optional[SolarCheckResult]:
 
 # --- the geometries of a run ---------------------------------------------------------------------------------------
 
-def run_geometries(max_volume_path, run_folder=None, fallback_voxel_size: float = 1.0) -> list:
+def run_geometries(max_volume_path, run_folder=None, fallback_voxel_size: float = 1.0, only: Optional[str] = None) -> list:
     """The geometries of a run to check: the maximum volume, and the carved envelope and the building massing of
-    *run_folder* when they were built (none without a run folder).
+    *run_folder* when they were built (none without a run folder); with *only* ("envelope" or "massing"), the maximum volume
+    and that one alone, the others not read; with any other *only*, the maximum volume alone.
 
     The envelope and the massing are clipped by the maximum volume, with the voxel size of the analysis they were
     built from as their surface tolerance (*fallback_voxel_size* when the chain of manifests does not tell it;
@@ -585,7 +710,9 @@ def run_geometries(max_volume_path, run_folder=None, fallback_voxel_size: float 
     from .io import load_mesh
     max_volume = load_mesh(str(max_volume_path))
     geometries = [CheckGeometry("max_volume", "Maximum volume", max_volume, path=str(max_volume_path))]
-    for found in run_geometry_files(run_folder, fallback_voxel_size, report_unusable=True):
+    if only is not None and only not in ("envelope", "massing"):
+        return geometries
+    for found in run_geometry_files(run_folder, fallback_voxel_size, report_unusable=only is None, only=only):
         geometries.append(CheckGeometry(found.name, found.label, load_mesh(str(found.path)), clip=max_volume,
                                         surface_tolerance=found.surface_tolerance, path=str(found.path)))
     return geometries
@@ -593,11 +720,12 @@ def run_geometries(max_volume_path, run_folder=None, fallback_voxel_size: float 
 
 # --- one study of Simulate -----------------------------------------------------------------------------------------
 
-def _refuse_too_many_points(test_surfaces, spacing: float) -> None:
-    """Raise InputError when sampling *test_surfaces* every *spacing* m would give more than
-    :data:`MAX_CHECK_POINTS` points (estimated from their area), naming the spacing that fits."""
+def _refuse_too_many_points(test_surfaces, spacing: float, extra_area: float = 0.0) -> None:
+    """Raise InputError when sampling *test_surfaces* (None for none) and *extra_area* m² more (a geometry's faces) every
+    *spacing* m would give more than :data:`MAX_CHECK_POINTS` points (estimated from their area), naming the spacing that
+    fits."""
     from .errors import InputError
-    area = float(test_surfaces.area)
+    area = (float(test_surfaces.area) if test_surfaces is not None else 0.0) + float(extra_area)
     estimate = area / (spacing * spacing)
     if estimate <= MAX_CHECK_POINTS:
         return
@@ -637,29 +765,35 @@ def without_downward_faces(mesh):
     return mesh.submesh([np.flatnonzero(keep)], append=True, repair=False) if not keep.all() else mesh
 
 
-def ground_square(max_volume):
-    """A flat square facing up at the lowest z of *max_volume*, centred on its plan bounds and covering them with a margin on
-    each side of :data:`GROUND_MARGIN` m or half the longer side of the bounds, whichever is more."""
+def ground_disc(centre_xy, radius: float, z: float, spacing: float):
+    """A flat disc facing up at height *z*: a polygon inscribed in the circle of *radius* around *centre_xy*, with enough
+    segments (at least :data:`GROUND_DISC_MIN_SEGMENTS`) that its edge lies within *spacing* of the circle.  The service gives
+    it the compass ring's centre and radius, so the ground a study samples is the one the view draws."""
     import trimesh
-    (x0, y0, z0), (x1, y1, _z1) = np.asarray(max_volume.bounds, dtype=np.float64)
-    longer = max(x1 - x0, y1 - y0)
-    half = longer / 2.0 + max(GROUND_MARGIN, longer / 2.0)
-    cx, cy = (x0 + x1) / 2.0, (y0 + y1) / 2.0
-    vertices = [[cx - half, cy - half, z0], [cx + half, cy - half, z0], [cx + half, cy + half, z0], [cx - half, cy + half, z0]]
-    return trimesh.Trimesh(vertices=vertices, faces=[[0, 1, 2], [0, 2, 3]], process=False)
+    radius = float(radius)
+    sagitta = min(max(float(spacing), 1e-6), radius)
+    segments = max(GROUND_DISC_MIN_SEGMENTS, math.ceil(math.pi / math.acos(1.0 - sagitta / radius)))
+    angles = np.linspace(0.0, 2.0 * math.pi, segments, endpoint=False)
+    cx, cy = float(centre_xy[0]), float(centre_xy[1])
+    rim = np.column_stack([cx + radius * np.cos(angles), cy + radius * np.sin(angles), np.full(segments, float(z))])
+    vertices = np.vstack([[cx, cy, float(z)], rim])
+    faces = np.column_stack([np.zeros(segments, dtype=np.int64), 1 + np.arange(segments), 1 + (np.arange(segments) + 1) % segments])
+    return trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
 
 
-def study_surfaces(test_surface_path, surfaces_from, max_volume, *, context_path=None, terrain_path=None):
+def study_surfaces(test_surface_path, surfaces_from, max_volume, *, context_path=None, terrain_path=None, disc=None,
+                   spacing: float = 0.5):
     """The surfaces a Simulate study samples, joined into one mesh: its test surface file when it has one, and each source of
     *surfaces_from*: ``"context"`` the context files, their closed bodies turned to face out and without the faces that face
     down (:func:`without_downward_faces`); ``"terrain"`` the terrain file,
-    turned to face up when most of its area faces down; ``"ground"`` :func:`ground_square` under *max_volume* (a mesh).  The
+    turned to face up when most of its area faces down; ``"ground"`` the disc *disc* (centre x, centre y, radius;
+    :func:`ground_disc`, its edge within *spacing*) at the lowest z of *max_volume* (a mesh).  The
     context and the terrain are cut into their flat pieces (:func:`flat_pieces`).
 
     Raises
     ------
     InputError
-        When a source has no file, or there is nothing to sample.
+        When a source has no file (or the ground no disc), or there is nothing to sample.
     """
     import trimesh
     from .errors import InputError
@@ -679,7 +813,10 @@ def study_surfaces(test_surface_path, surfaces_from, max_volume, *, context_path
                 terrain.invert()
             meshes.append(flat_pieces(terrain))
         elif source == "ground":
-            meshes.append(ground_square(max_volume))
+            if disc is None:
+                raise InputError("The study samples the ground around the site, but it was given no ground disc.")
+            cx, cy, radius = disc
+            meshes.append(ground_disc((cx, cy), radius, float(max_volume.bounds[0][2]), spacing))
         else:
             raise InputError(f"'{source}' is not a surface a study can sample: use context, terrain or ground.")
     if not meshes:
@@ -696,6 +833,7 @@ def simulate_study(
     run_folder=None,
     context_path=None,
     terrain_path=None,
+    ground_disc=None,
     out_dir,
     voxel_size: float = 1.0,
     device=None,
@@ -704,11 +842,10 @@ def simulate_study(
 
     The surfaces sampled are the test surface file (None for none) and the sources of ``settings.surfaces_from``
     (:func:`study_surfaces`: the context, the terrain, the ground around the maximum volume); the summary lists those
-    sources under ``surfaces_from``.  The columns are "open", ``max_volume``, and the carved ``envelope`` and
-    ``massing`` of *run_folder* when their manifests exist
-    (:func:`run_geometries`; *voxel_size* is their surface tolerance when
-    the manifests do not record it).  The context and terrain files block in
-    every column.  The test points are sampled in the maximum volume's
+    sources under ``surfaces_from``; *ground_disc* (centre x, centre y, radius) is the ground's disc.  The columns are "open"
+    and the geometry of ``settings.geometry``: ``max_volume``, or the carved ``envelope`` or ``massing`` of *run_folder*
+    (:func:`run_geometries`; *voxel_size* is their surface tolerance when the manifests do not record it); "open" alone for
+    ``none``.  The context and terrain files block in both columns.  The test points are sampled in the maximum volume's
     frame, its minimum corner rounded to 1 µm, as preprocessing samples
     them.
 
@@ -716,7 +853,8 @@ def simulate_study(
     computed from, so the service can tell when it is out of date:
     ``test_surface``, ``max_volume``, ``geometries`` (the envelope's and
     massing's meshes, only those built), ``weather``, ``context``,
-    ``terrain`` (each :func:`file_fingerprint`, None when absent) and
+    ``terrain`` (each :func:`file_fingerprint`, None when absent), ``ground_disc`` (the disc rounded to a millimetre when the
+    ground is sampled, else None) and
     ``settings_digest`` (:func:`check_settings.settings_digest`: the
     settings without the weather file's path, which ``weather`` records).
 
@@ -724,25 +862,40 @@ def simulate_study(
     ------
     InputError
         When the surfaces would need more than :data:`MAX_CHECK_POINTS` points at the settings' spacing, when a source of
-        ``surfaces_from`` has no file, or when there is no surface to sample.
+        ``surfaces_from`` has no file, when there is no surface to sample, or when ``settings.geometry`` is the envelope or the
+        massing and *run_folder* has not built it.
     """
+    from .errors import InputError
     from .io import load_optional_mesh
-    geometries = run_geometries(max_volume_path, run_folder, voxel_size)
-    max_volume = geometries[0]
-    test_surfaces = study_surfaces(test_surface_path, settings.surfaces_from, max_volume.mesh, context_path=context_path,
-                                   terrain_path=terrain_path)
-    _refuse_too_many_points(test_surfaces, settings.sample_spacing)
+    built = run_geometries(max_volume_path, run_folder, voxel_size, only=settings.geometry)
+    max_volume = built[0]
+    geometries = [geometry for geometry in built if geometry.name == settings.geometry]
+    if settings.geometry in ("envelope", "massing") and not geometries:
+        raise InputError(f"The study traces the {settings.geometry}, but Carve has not built the {settings.geometry}.")
+    frame = np.round(max_volume.mesh.bounds[0], 6)
+    sampled = geometries[0] if settings.sample_geometry and geometries else None
+    has_other = test_surface_path is not None or bool(settings.surfaces_from)
+    test_surfaces = (study_surfaces(test_surface_path, settings.surfaces_from, max_volume.mesh, context_path=context_path,
+                                    terrain_path=terrain_path, disc=ground_disc, spacing=settings.sample_spacing)
+                     if has_other or sampled is None else None)
+    # The geometry's faces that face down are not sampled, so they do not count toward the estimate either.
+    _refuse_too_many_points(test_surfaces, settings.sample_spacing,
+                            extra_area=float(without_downward_faces(sampled.mesh).area) if sampled is not None else 0.0)
+    geometry_points = (sample_geometry_faces(sampled.mesh, settings.sample_spacing, frame, clip=sampled.clip,
+                                             origin_offset=settings.origin_offset, device=device)
+                       if sampled is not None else None)
     loaded = [(path, load_optional_mesh(path, name)) for path, name in ((context_path, "context"), (terrain_path, "terrain"))]
     blocking = [mesh for _path, mesh in loaded if mesh is not None]
-    frame = np.round(max_volume.mesh.bounds[0], 6)
     digest = settings_digest(settings)
     fingerprints = {
         "test_surface": file_fingerprint(test_surface_path),
         "max_volume": file_fingerprint(max_volume_path),
-        "geometries": {geometry.name: file_fingerprint(geometry.path) for geometry in geometries[1:]},
+        "geometries": {geometry.name: file_fingerprint(geometry.path) for geometry in geometries if geometry.name != "max_volume"},
         "weather": file_fingerprint(settings.epw_path) if settings.spec.needs_epw else None,
         "context": file_fingerprint(context_path),
         "terrain": file_fingerprint(terrain_path),
+        "ground_disc": ([round(float(value), 3) for value in ground_disc]
+                        if ground_disc is not None and "ground" in settings.surfaces_from else None),
         "settings_digest": digest,
     }
     # The meshes are passed loaded, so the summary's inputs are named here: the files read, those with triangles only.
@@ -751,4 +904,6 @@ def simulate_study(
               "weather": fingerprints["weather"]}
     return solar_check(test_surfaces, geometries, settings, blocking=blocking, sampling_frame=frame, out_dir=out_dir,
                        device=device, summary_extra={"inputs": inputs, "fingerprints": fingerprints,
-                                                     "surfaces_from": list(settings.surfaces_from)})
+                                                     "surfaces_from": list(settings.surfaces_from),
+                                                     "geometry": settings.geometry},
+                       geometry_points=geometry_points)

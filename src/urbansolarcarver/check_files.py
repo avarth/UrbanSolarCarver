@@ -60,9 +60,10 @@ class RunGeometryFile(NamedTuple):
     surface_tolerance: float
 
 
-def run_geometry_files(run_folder, fallback_voxel_size: float = 1.0, report_unusable: bool = False) -> list[RunGeometryFile]:
+def run_geometry_files(run_folder, fallback_voxel_size: float = 1.0, report_unusable: bool = False,
+                       only: str | None = None) -> list[RunGeometryFile]:
     """The carved envelope and the building massing of *run_folder* that were built (their manifest and mesh exist), in that
-    order; none without a run folder. The surface tolerance is the voxel size of the analysis they were built from
+    order; none without a run folder; with *only*, that geometry alone (the other's manifest not read). The surface tolerance is the voxel size of the analysis they were built from
     (:func:`voxel_size_of`), *fallback_voxel_size* when the chain of manifests does not tell it.
 
     A geometry whose manifest exists but cannot be read or names no mesh is left out; with *report_unusable* (the check does
@@ -74,6 +75,8 @@ def run_geometry_files(run_folder, fallback_voxel_size: float = 1.0, report_unus
     run_folder = Path(run_folder)
     found = []
     for name, label, stage in RUN_GEOMETRY_STAGES:
+        if only is not None and name != only:
+            continue
         folder = stage_folder(run_folder, stage)
         manifest = read_manifest(folder)
         mesh_name = manifest.get("mesh_path") if manifest is not None else None

@@ -1,14 +1,18 @@
 // The settings of one study, in a popover beside the studies panel (simulate design, section 4): its name (a change renames it),
 // its metric (a select; the metrics whose inputs are missing are greyed with the reason), the analysis period when the metric has
-// one (the period control of the Criteria step), the metric's few mode settings in a fold, its study surfaces (its files: the files
-// the project stores, to use or take out, and new files to add by the button or by dropping them; then check boxes for the project's
-// surfaces it samples too: the surroundings, and the terrain or, without one, the ground around the site) and Delete. Each change is saved at once: a text or number
+// one (the period control of the Criteria step), the metric's few mode settings and the test point spacing in a fold, its study
+// surfaces (what it accounts for on the plot: nothing, the max volume, the envelope or the massing; switches for what it simulates:
+// that geometry, the context, and the terrain or, without one, the ground; then additional surface files: the files the project
+// stores, to use or take out, and new files to add by the button or by dropping them), Duplicate and Delete. Each change is saved at once: a text or number
 // field when it is left or Enter is pressed, the other controls on the change. The popover is a non-modal dialog: the view
 // around it stays usable; Escape and Close end it, and the focus goes back to the study's settings button.
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import type { InputFileInfo, MetricInfo, StudyChange, StudyWithState } from "../api_client/client";
 import { ProtectsBox } from "../common/ProtectsBox";
 import { messages } from "../messages";
+import { formattedNumber } from "../format_numbers";
+import { STUDY_STANDS, type StudyStand } from "../viewer/study_values";
+import { standOf } from "./use_study_view";
 import { ANALYSIS_PERIOD_FIELDS, BALANCE_TEMPERATURE_FIELDS, SETTING_PRESENTATIONS } from "../settings_form/presentation";
 import { AnalysisPeriod, type AnalysisPeriodField } from "../settings_form/widgets/AnalysisPeriod";
 import { BalanceTemperatureSlider } from "../settings_form/widgets/BalanceTemperatureSlider";
@@ -24,6 +28,11 @@ interface StudyPopoverProps {
   hasSurroundings: boolean;
   /** The project has a terrain file: the study can sample it, and the ground around the site is not offered. */
   hasTerrain: boolean;
+  /** Carve has built the envelope, the massing: a study can account for them. */
+  envelopeBuilt: boolean;
+  massingBuilt: boolean;
+  /** The carving's test point spacing (m), which a study follows until it has its own. */
+  carvingSpacing: number;
   /** Why the study cannot be changed now (a run of the project); null when it can. */
   disabledReason: string | null;
   /** Saves a change of the study; resolves with the reason it was refused, or null. */
@@ -32,6 +41,7 @@ interface StudyPopoverProps {
   onAddFiles: (files: File[]) => Promise<string[]>;
   onUseFile: (fileName: string) => Promise<string | null>;
   onRemoveFile: (fileName: string) => Promise<string | null>;
+  onDuplicate: () => Promise<string | null>;
   onDelete: () => Promise<string | null>;
   onClose: () => void;
 }
@@ -41,9 +51,19 @@ interface StudyPopoverProps {
 const PERIOD_KEYS: readonly string[] = ANALYSIS_PERIOD_FIELDS;
 const TIME_BASIS = "time_basis";
 const METRICS_WITH_A_CLOCK = ["sun_hours"];
-// The setting of the surfaces the study samples besides its files, drawn as check boxes under them.
+// The settings of what the study accounts for and simulates, drawn in its study surfaces rather than in the fold, and its spacing,
+// drawn in the fold as a field of its own.
 const SURFACES_FROM = "surfaces_from";
+const GEOMETRY = "geometry";
+const SAMPLE_GEOMETRY = "sample_geometry";
+const SAMPLE_SPACING = "sample_spacing";
+const OWN_CONTROLS: readonly string[] = [SURFACES_FROM, GEOMETRY, SAMPLE_GEOMETRY, SAMPLE_SPACING];
 const SOURCE_ORDER = ["context", "terrain", "ground"];
+
+/** The study simulates the faces of the geometry it accounts for (not for nothing). */
+export function simulatesGeometry(settings: Record<string, unknown>): boolean {
+  return settings[SAMPLE_GEOMETRY] === true && standOf(settings) !== "none";
+}
 
 /** The project's surfaces the study samples besides its files, from its settings. */
 export function surfacesFromOf(settings: Record<string, unknown>): string[] {
@@ -79,18 +99,20 @@ function NumberField({ setting, value, disabled, onSave }: { setting: string; va
 }
 
 /** The metric's own settings, in a fold: the balance temperature (one control for its two settings), the others one field each. */
-function MoreSettings({ metric, settings, disabled, onChange }: { metric: string; settings: Record<string, unknown>; disabled: boolean;
-                                                                 onChange: (values: Record<string, unknown>) => void }) {
+function MoreSettings({ metric, settings, carvingSpacing, disabled, onChange }: { metric: string; settings: Record<string, unknown>;
+                                                                                 carvingSpacing: number; disabled: boolean;
+                                                                                 onChange: (values: Record<string, unknown>) => void }) {
   const balanceLabelId = useId();
   const balanceInputId = useId();
   const timeBasisId = useId();
   const keys = Object.keys(settings).filter((key) => !PERIOD_KEYS.includes(key) && (key !== TIME_BASIS || METRICS_WITH_A_CLOCK.includes(metric))
-    && key !== BALANCE_TEMPERATURE_FIELDS[1] && key !== SURFACES_FROM);
-  if (keys.length === 0) return null;
+    && key !== BALANCE_TEMPERATURE_FIELDS[1] && !OWN_CONTROLS.includes(key));
   const balance = SETTING_PRESENTATIONS[BALANCE_TEMPERATURE_FIELDS[0]];
+  const ownSpacing = typeof settings[SAMPLE_SPACING] === "number" ? settings[SAMPLE_SPACING] as number : null;
   return (
     <details className="study-more-settings">
       <summary>{messages.studyMoreSettings}</summary>
+      <SpacingField own={ownSpacing} carving={carvingSpacing} disabled={disabled} onChange={(spacing) => onChange({ [SAMPLE_SPACING]: spacing })} />
       {keys.map((key) => {
         const value = settings[key];
         if (key === BALANCE_TEMPERATURE_FIELDS[0]) {
@@ -130,36 +152,99 @@ function MoreSettings({ metric, settings, disabled, onChange }: { metric: string
   );
 }
 
-/** Check boxes for the project's surfaces the study samples besides its files. The surroundings wait for the project's surroundings
- *  files; the terrain is offered when the project has one, the ground around the site when it has none. A source the study samples
- *  is shown and can be turned off even when its file has gone. */
-function SurfacesFrom({ chosen, hasSurroundings, hasTerrain, disabled, onChange }: { chosen: string[]; hasSurroundings: boolean; hasTerrain: boolean;
-                                                                                     disabled: boolean; onChange: (sources: string[]) => void }) {
-  const shown = [
+/** The test point spacing: the study's own, or the carving's while it has none ("0.5, from Carve"). Typing a number gives the study its
+ *  own; Follows Carve takes it away again. */
+function SpacingField({ own, carving, disabled, onChange }: { own: number | null; carving: number; disabled: boolean;
+                                                              onChange: (spacing: number | null) => void }) {
+  const [typed, setTyped] = useState<string | null>(null);
+  const inputId = useId();
+  const hintId = useId();
+  const save = () => {
+    const number = typed === null ? NaN : Number(typed);
+    setTyped(null);
+    if (typed !== null && typed.trim() !== "" && Number.isFinite(number) && number > 0 && number !== own) onChange(number);
+  };
+  return (
+    <div className="study-field study-spacing">
+      <label htmlFor={inputId} title={messages.studySpacingHint}>{messages.studySpacing}</label>
+      <span className="study-field-value">
+        <input id={inputId} type="number" className="setting-number" step="any" min="0" value={typed ?? (own === null ? "" : String(own))}
+               placeholder={formattedNumber(carving)} aria-describedby={hintId} disabled={disabled}
+               onChange={(event) => setTyped(event.target.value)} onBlur={save} onKeyDown={(event) => { if (event.key === "Enter") save(); }} />
+        {own === null
+          ? <span id={hintId} className="study-spacing-note">{messages.studySpacingFollowsCarve}</span>
+          : <button id={hintId} type="button" className="link-button study-spacing-reset" disabled={disabled} onClick={() => onChange(null)}>{messages.studySpacingReset}</button>}
+      </span>
+    </div>
+  );
+}
+
+/** A switch row of the study surfaces: a label, its hint on hover, and an on/off switch. */
+function SwitchRow({ label, hint, checked, disabled, onChange }: { label: string; hint?: string; checked: boolean; disabled: boolean;
+                                                                   onChange: (on: boolean) => void }) {
+  return (
+    <label className="study-field study-switch-row" title={hint}>
+      <span>{label}</span>
+      <input type="checkbox" role="switch" className="setting-switch" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
+    </label>
+  );
+}
+
+/** What the study accounts for on the plot (one of four; the envelope and the massing wait until Carve built them), and switches for what
+ *  it simulates: that geometry's faces, the context (waiting for the project's surroundings files), and the terrain when the project has
+ *  one, the ground when it has none. A source the study samples is shown and can be turned off even when its file has gone. */
+function AccountAndSimulate({ settings, hasSurroundings, hasTerrain, envelopeBuilt, massingBuilt, disabled, onChange }: {
+  settings: Record<string, unknown>; hasSurroundings: boolean; hasTerrain: boolean; envelopeBuilt: boolean; massingBuilt: boolean; disabled: boolean;
+  onChange: (values: Record<string, unknown>) => void;
+}) {
+  const accountId = useId();
+  const stand = standOf(settings);
+  const chosen = surfacesFromOf(settings);
+  const built: Record<StudyStand, boolean> = { none: true, max_volume: true, envelope: envelopeBuilt, massing: massingBuilt };
+  const sources = [
     { source: "context", available: hasSurroundings, reason: messages.studyNeedsSurroundingsFiles },
     ...(hasTerrain || chosen.includes("terrain") ? [{ source: "terrain", available: hasTerrain, reason: undefined }] : []),
     ...(!hasTerrain || chosen.includes("ground") ? [{ source: "ground", available: true, reason: undefined }] : []),
   ];
   const toggle = (source: string, on: boolean) =>
-    onChange(SOURCE_ORDER.filter((each) => (each === source ? on : chosen.includes(each))));
+    onChange({ [SURFACES_FROM]: SOURCE_ORDER.filter((each) => (each === source ? on : chosen.includes(each))) });
   return (
-    <div className="study-surfaces-from">
-      {shown.map(({ source, available, reason }) => {
-        const checked = chosen.includes(source);
-        return (
-          <label key={source} className="study-field study-field-check" title={available ? undefined : reason}>
-            <input type="checkbox" checked={checked} disabled={disabled || (!available && !checked)}
-                   onChange={(event) => toggle(source, event.target.checked)} />
-            {messages.studySurfacesFrom[source]}
-          </label>
-        );
-      })}
-    </div>
+    <>
+      <div className="study-field study-field-wide">
+        <span id={accountId} title={messages.studyAccountForHint}>{messages.studyAccountFor}</span>
+        <div className="segmented-switch study-account-for" role="group" aria-labelledby={accountId}>
+          {STUDY_STANDS.map((each) => {
+            const waiting = !built[each] && each !== stand;
+            return (
+              <button key={each} type="button" aria-pressed={each === stand} aria-disabled={waiting ? true : undefined}
+                      title={waiting ? messages.buildGeometryFirst[each] : undefined} disabled={disabled}
+                      onClick={() => { if (!waiting && each !== stand) onChange({ [GEOMETRY]: each }); }}>
+                {messages.studyStands[each]}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <p className="study-subtitle">{messages.studySimulate}</p>
+      <div className="study-switches">
+        <SwitchRow label={stand === "none" ? messages.nothingToSimulate : messages.studyStands[stand]}
+                   hint={stand === "none" ? undefined : messages.studySimulateGeometryHint}
+                   checked={simulatesGeometry(settings)} disabled={disabled || stand === "none"}
+                   onChange={(on) => onChange({ [SAMPLE_GEOMETRY]: on })} />
+        {sources.map(({ source, available, reason }) => {
+          const checked = chosen.includes(source);
+          return (
+            <SwitchRow key={source} label={messages.studySurfacesFrom[source]} hint={available ? messages.studySurfacesFromHint[source] : reason}
+                       checked={checked} disabled={disabled || (!available && !checked)} onChange={(on) => toggle(source, on)} />
+          );
+        })}
+      </div>
+    </>
   );
 }
 
-export function StudyPopover({ id, study, metrics, storedFiles, hasSurroundings, hasTerrain, disabledReason, onChange, onAddFiles, onUseFile, onRemoveFile,
-                               onDelete, onClose }: StudyPopoverProps) {
+export function StudyPopover({ id, study, metrics, storedFiles, hasSurroundings, hasTerrain, envelopeBuilt, massingBuilt, carvingSpacing, disabledReason,
+                               onChange, onAddFiles, onUseFile, onRemoveFile, onDuplicate, onDelete, onClose }: StudyPopoverProps) {
   const { entry } = study;
   const settings = entry.settings ?? {};
   const files = entry.test_surface_files ?? [];
@@ -175,6 +260,7 @@ export function StudyPopover({ id, study, metrics, storedFiles, hasSurroundings,
   const periodLabelId = useId();
   const periodInputId = useId();
   const filesTitleId = useId();
+  const additionalId = useId();
 
   useEffect(() => nameInput.current?.focus(), []);
 
@@ -221,18 +307,22 @@ export function StudyPopover({ id, study, metrics, storedFiles, hasSurroundings,
                           describedBy={undefined} disabled={disabled} />
         </div>
       )}
-      <MoreSettings metric={entry.metric} settings={settings} disabled={disabled} onChange={(values) => change({ values })} />
+      <MoreSettings metric={entry.metric} settings={settings} carvingSpacing={carvingSpacing} disabled={disabled} onChange={(values) => change({ values })} />
       <div className="study-files" role="group" aria-labelledby={filesTitleId}>
         <p id={filesTitleId} className="study-files-title">{messages.studySurfaces}</p>
+        <AccountAndSimulate settings={settings} hasSurroundings={hasSurroundings} hasTerrain={hasTerrain} envelopeBuilt={envelopeBuilt}
+                            massingBuilt={massingBuilt} disabled={disabled} onChange={(values) => change({ values })} />
+        <p id={additionalId} className="study-subtitle">{messages.studyAdditionalSurfaces}</p>
         <ProtectsBox files={files.map((name) => storedFiles.find((file) => file.name === name) ?? { name, triangle_count: 0 })} mode=""
                      hint={messages.studyNoSurfaceFiles} addLabel={messages.addStudySurfaces} onAddFiles={onAddFiles} onRemoveFile={onRemoveFile}
                      disabledReason={disabledReason} otherFiles={storedFiles.map((file) => file.name).filter((name) => !files.includes(name))}
                      onUseFile={onUseFile} otherFilesTitle={messages.useFileOfProject} />
-        <SurfacesFrom chosen={surfacesFromOf(settings)} hasSurroundings={hasSurroundings} hasTerrain={hasTerrain} disabled={disabled}
-                      onChange={(sources) => change({ values: { [SURFACES_FROM]: sources } })} />
       </div>
       {problem !== null && <p className="studies-panel-problem" role="alert">{problem}</p>}
-      <button type="button" className="secondary-button study-delete" disabled={disabled} onClick={() => void send(onDelete)}>{messages.deleteStudy}</button>
+      <div className="study-popover-actions">
+        <button type="button" className="secondary-button study-duplicate" disabled={disabled} onClick={() => void send(onDuplicate)}>{messages.duplicateStudy}</button>
+        <button type="button" className="secondary-button study-delete" disabled={disabled} onClick={() => void send(onDelete)}>{messages.deleteStudy}</button>
+      </div>
     </div>
   );
 }

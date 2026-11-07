@@ -14,10 +14,14 @@ export function packedStudyValues(header: object, quads: number[], columns: numb
   return buffer;
 }
 
-/** One unit square patch per point along x, at height 0 in a frame at the origin, with *columns* by name (each one value per point). */
-export function studyValuesOf(columns: Record<string, number[]>, unit = "h"): ArrayBuffer {
+/** One unit square patch per point along x, at height 0 in a frame at the origin, facing up, with *columns* by name (each one value
+ * per point); the last *geometryPointCount* points are on the faces of the study's geometry. */
+export function studyValuesOf(columns: Record<string, number[]>, unit = "h", geometryPointCount = 0, geometry?: string): ArrayBuffer {
   const names = Object.keys(columns);
   const count = columns[names[0]].length;
   const quads = Array.from({ length: count }, (_, point) => [point, 0, 0, point + 1, 0, 0, point + 1, 1, 0, point, 1, 0]).flat();
-  return packedStudyValues({ frame: [0, 0, 0], point_count: count, columns: names, unit }, quads, names.map((name) => columns[name]));
+  // The result's geometry: the column after "open", "none" with only "open" (as the service names it).
+  const stand = geometry ?? names.find((name) => name !== "open") ?? "none";
+  return packedStudyValues({ frame: [0, 0, 0], point_count: count, columns: names, unit, geometry_point_count: geometryPointCount, geometry: stand }, quads,
+                           names.map((name) => columns[name]));
 }

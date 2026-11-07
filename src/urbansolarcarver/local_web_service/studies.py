@@ -30,9 +30,15 @@ PERIOD_SETTING_KEYS = (*PERIOD_KEYS, "time_basis")
 # The surfaces a study of any metric samples besides its files (CheckSettings.surfaces_from: "context", "terrain", "ground"). A
 # study stores it once it is set; without it the study samples its files alone.
 SURFACES_FROM = "surfaces_from"
+# What stands on the plot in a study ("none", "max_volume", "envelope", "massing"), whether its faces are sampled, and the test point
+# spacing (m). Stored once set, like surfaces_from: without them a study stands the maximum volume, samples none of its faces and
+# follows the carving's spacing. A spacing of None removes it, so the study follows the carving again.
+GEOMETRY, SAMPLE_GEOMETRY, SAMPLE_SPACING = "geometry", "sample_geometry", "sample_spacing"
+# The settings of any metric that say what the study samples and what stands; a new metric keeps them.
+SAMPLING_SETTING_KEYS = (SURFACES_FROM, GEOMETRY, SAMPLE_GEOMETRY, SAMPLE_SPACING)
 # Every key a study's settings can hold.
 STUDY_SETTING_KEYS = (*PERIOD_SETTING_KEYS, "balance_temperature", "balance_offset", "include_harm", "dew_point_celsius", "bliss_k",
-                      SURFACES_FROM)
+                      *SAMPLING_SETTING_KEYS)
 MONTH_ABBREVIATIONS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 NOT_SENT = object()     # an update that does not mention the target (None means: no target)
 # A weather file name for the validation of settings, which does not read the file.
@@ -65,9 +71,10 @@ def checked_study_name(name: str) -> str:
 
 def settings_keys_of(metric: str) -> tuple[str, ...]:
     """The keys of the settings of a study of this metric: the period and its time basis when the metric needs a period, its
-    mode settings, and the surfaces it samples besides its files."""
+    mode settings, the surfaces it samples besides its files, what stands on the plot, whether its faces are sampled, and the
+    spacing."""
     spec = CHECK_METRICS[metric]
-    return (*(PERIOD_SETTING_KEYS if spec.needs_period else ()), *METRIC_MODE_SETTING_KEYS.get(metric, ()), SURFACES_FROM)
+    return (*(PERIOD_SETTING_KEYS if spec.needs_period else ()), *METRIC_MODE_SETTING_KEYS.get(metric, ()), *SAMPLING_SETTING_KEYS)
 
 
 def default_study_settings(metric: str) -> dict:
@@ -162,10 +169,10 @@ def change_study(entry: StudyEntry, *, name: str | None = None, metric: str | No
                  target: object = NOT_SENT, target_max: object = NOT_SENT) -> None:
     """Change a study in place; what is not given stays. A ProjectError(422) leaves it as it was.
 
-    A new metric resets the settings to its defaults, keeping the values of the keys both metrics have and the surfaces the study
-    samples, except a time basis the new metric does not take (only sun hours reads another clock than standard time), which
+    A new metric resets the settings to its defaults, keeping the values of the keys both metrics have and the sampling settings
+    (SAMPLING_SETTING_KEYS), except a time basis the new metric does not take (only sun hours reads another clock than standard time), which
     becomes the default. *values* then change
-    those keys. The settings are checked after a metric change or with *values*, so no study is stored with settings its metric
+    those keys; a sample_spacing of None removes it (the study follows the carving's spacing again). The settings are checked after a metric change or with *values*, so no study is stored with settings its metric
     refuses. A study the user did not name is named again by its metric and period. New settings or a new metric clear target and
     target_max (the colour range of the last result), unless they are given here.
     """
@@ -175,11 +182,14 @@ def change_study(entry: StudyEntry, *, name: str | None = None, metric: str | No
     if new_metric != entry.metric:
         defaults = default_study_settings(new_metric)
         settings = {**{key: settings.get(key, default) for key, default in defaults.items()},
-                    **({SURFACES_FROM: settings[SURFACES_FROM]} if SURFACES_FROM in settings else {})}
+                    **{key: settings[key] for key in SAMPLING_SETTING_KEYS if key in settings}}
         if "time_basis" in settings and not _takes_time_basis(new_metric, settings["time_basis"]):
             settings["time_basis"] = defaults["time_basis"]
     if new_metric != entry.metric or values is not None:
-        settings = checked_study_settings(new_metric, {**settings, **(values or {})})
+        merged = {**settings, **(values or {})}
+        if merged.get(SAMPLE_SPACING, NOT_SENT) is None:
+            del merged[SAMPLE_SPACING]
+        settings = checked_study_settings(new_metric, merged)
     # The ends of the colour range are in the study's unit and fit its last result: new settings or a new metric clear them, so
     # the next run shows its own range (user, 2026-11-01). An end sent with the change is set below.
     if new_metric != entry.metric or settings != entry.settings:

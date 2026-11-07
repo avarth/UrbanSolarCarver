@@ -209,10 +209,15 @@ test("a study's settings take the focus, use a stored file, and Escape gives the
   expect(settingsButton.getAttribute("aria-expanded")).toBe("false");
 });
 
-const surfacesFromBoxes = () => [...studyPopover()!.querySelectorAll<HTMLLabelElement>(".study-surfaces-from label")]
+/** The switches of what a study simulates: its geometry first, then the project's surfaces. */
+const simulateSwitches = () => [...studyPopover()!.querySelectorAll<HTMLLabelElement>(".study-switches label")]
   .map((label) => ({ label: label.textContent, checked: label.querySelector("input")!.checked, disabled: label.querySelector("input")!.disabled }));
-const surfacesFromBox = (label: string) => [...studyPopover()!.querySelectorAll<HTMLLabelElement>(".study-surfaces-from label")]
+const surfacesFromBoxes = () => simulateSwitches().slice(1);
+const simulateSwitch = (label: string) => [...studyPopover()!.querySelectorAll<HTMLLabelElement>(".study-switches label")]
   .find((each) => each.textContent === label)!.querySelector("input")!;
+const surfacesFromBox = simulateSwitch;
+const accountFor = (label: string) => [...studyPopover()!.querySelectorAll<HTMLButtonElement>(".study-account-for button")]
+  .find((button) => button.textContent === label)!;
 
 test("the study surfaces offer the surroundings, greyed without their files, and the ground without a terrain", async () => {
   await openSimulate(undefined, (service) => { service.studies = [study("1", "sky_view", ["facades.obj"], "current")]; });
@@ -221,13 +226,69 @@ test("the study surfaces offer the surroundings, greyed without their files, and
   expect(studyPopover()!.querySelector('[role="group"]')!.getAttribute("aria-labelledby"))
     .toBe(studyPopover()!.querySelector(".study-files-title")!.id);
   expect(surfacesFromBoxes()).toEqual([
-    { label: "The surroundings", checked: false, disabled: true }, { label: "The ground around the site", checked: false, disabled: false },
+    { label: "Context", checked: false, disabled: true }, { label: "Ground", checked: false, disabled: false },
   ]);
-  await act(async () => surfacesFromBox("The ground around the site").click());
+  await act(async () => surfacesFromBox("Ground").click());
   await settle();
   expect(simulateService.studyPatches).toEqual([{ id: "1", body: { values: { surfaces_from: ["ground"] } } }]);
-  expect(surfacesFromBoxes()[1]).toEqual({ label: "The ground around the site", checked: true, disabled: false });
+  expect(surfacesFromBoxes()[1]).toEqual({ label: "Ground", checked: true, disabled: false });
   expect(studyLine("Sky view factor")).toBe("Out of date");
+});
+
+test("a study accounts for one geometry, waits for one Carve has not built, and simulates its faces with a switch", async () => {
+  await openSimulate(undefined, (service) => {
+    service.summary = BUILT_ENVELOPE;
+    service.studies = [study("1", "sky_view", ["facades.obj"], "current")];
+  }, { exporting: "current" });
+  await openStudySettings("Sky view factor");
+  expect([...studyPopover()!.querySelectorAll(".study-account-for button")].map((button) => button.textContent))
+    .toEqual(["Nothing", "Max volume", "Envelope", "Massing"]);
+  expect(accountFor("Max volume").getAttribute("aria-pressed")).toBe("true");       // until another is chosen
+  expect(accountFor("Massing").getAttribute("aria-disabled")).toBe("true");
+  expect(accountFor("Massing").title).toBe("Build the massing in Carve");
+  await act(async () => accountFor("Massing").click());
+  await settle();
+  expect(simulateService.studyPatches).toEqual([]);                                  // a geometry not built is not chosen
+  expect(simulateSwitches()[0]).toEqual({ label: "Max volume", checked: false, disabled: false });
+  await act(async () => accountFor("Envelope").click());
+  await settle();
+  expect(simulateService.studyPatches).toEqual([{ id: "1", body: { values: { geometry: "envelope" } } }]);
+  expect(simulateSwitches()[0].label).toBe("Envelope");
+  await act(async () => simulateSwitch("Envelope").click());
+  await settle();
+  expect(simulateService.studyPatches.at(-1)).toEqual({ id: "1", body: { values: { sample_geometry: true } } });
+  await act(async () => accountFor("Nothing").click());
+  await settle();
+  expect(simulateSwitches()[0]).toEqual({ label: "Nothing stands on the plot", checked: false, disabled: true });
+  expect(studyPopover()!.querySelector(".study-subtitle:last-of-type")!.textContent).toBe("Additional surfaces to simulate");
+});
+
+test("a study's spacing follows Carve until typed, and Follow Carve takes it back", async () => {
+  await openSimulate(undefined, (service) => { service.studies = [study("1", "sky_view", ["facades.obj"], "current")]; });
+  await openStudySettings("Sky view factor");
+  const spacing = () => studyPopover()!.querySelector<HTMLInputElement>(".study-spacing input")!;
+  expect(spacing().value).toBe("");
+  expect(spacing().placeholder).toBe("0.5");               // half the voxel size of 1 m
+  expect(studyPopover()!.querySelector(".study-spacing-note")!.textContent).toBe("Follows Carve");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(spacing(), "2");
+    spacing().dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => { spacing().dispatchEvent(new FocusEvent("focusout", { bubbles: true })); });
+  await settle();
+  expect(simulateService.studyPatches.at(-1)).toEqual({ id: "1", body: { values: { sample_spacing: 2 } } });
+  await act(async () => studyPopover()!.querySelector<HTMLButtonElement>(".study-spacing-reset")!.click());
+  await settle();
+  expect(simulateService.studyPatches.at(-1)).toEqual({ id: "1", body: { values: { sample_spacing: null } } });
+});
+
+test("Duplicate study adds a copy, selects it and opens its settings", async () => {
+  await openSimulate(undefined, (service) => { service.studies = [study("1", "sky_view", ["facades.obj"], "current")]; });
+  await openStudySettings("Sky view factor");
+  await act(async () => studyPopover()!.querySelector<HTMLButtonElement>(".study-duplicate")!.click());
+  await settle();
+  expect(simulateService.requests).toContain("POST /studies/1/duplicate");
+  expect(studyPopover()!.querySelector("h3")!.textContent).toBe("Sky view factor copy");
 });
 
 test("with surroundings and a terrain, the study can sample both, and its line names them once its result is current", async () => {
@@ -239,15 +300,16 @@ test("with surroundings and a terrain, the study can sample both, and its line n
   expect(studyLine("Sky view factor")).toBe("facades.obj, the terrain");
   await openStudySettings("Sky view factor");
   expect(surfacesFromBoxes()).toEqual([
-    { label: "The surroundings", checked: false, disabled: false }, { label: "The terrain", checked: true, disabled: false },
+    { label: "Context", checked: false, disabled: false }, { label: "Terrain", checked: true, disabled: false },
   ]);
-  await act(async () => surfacesFromBox("The surroundings").click());
+  await act(async () => surfacesFromBox("Context").click());
   await settle();
   expect(simulateService.studyPatches).toEqual([{ id: "1", body: { values: { surfaces_from: ["context", "terrain"] } } }]);
-  await act(async () => surfacesFromBox("The terrain").click());
+  await act(async () => surfacesFromBox("Terrain").click());
   await settle();
   expect(simulateService.studyPatches.at(-1)).toEqual({ id: "1", body: { values: { surfaces_from: ["context"] } } });
-  expect(studyPopover()!.querySelector(".study-more-settings")).toBeNull();       // the sources are not a field of More settings
+  // The sources are not fields of More settings, which holds the spacing alone for this metric.
+  expect([...studyPopover()!.querySelectorAll(".study-more-settings .study-field")].map((field) => field.className)).toEqual(["study-field study-spacing"]);
 });
 
 /** Chooses the files in the popover's file input, as the user does with the add button. */
@@ -303,12 +365,10 @@ test("a file the service refuses is named with its reason, and the study keeps w
   expect(popoverFiles()).toEqual([]);
 });
 
-// Results on the view: the selected study's values on the geometry shown, the geometry switch, the target legend and the result card.
+// Results on the view: the selected study's values with its geometry standing, the target legend and the result card.
 
 const scene = () => FakeViewerScene.latest!;
 const studyLayerSummary = () => scene().layers.get("study_values")?.userData.summary ?? null;
-const geometrySegment = (label: string) => [...container().querySelectorAll<HTMLButtonElement>(".geometry-switch-segment")]
-  .find((button) => button.textContent === label)!;
 const targetMark = () => container().querySelector<HTMLElement>('.target-legend [role="slider"][data-end="low"]')!;
 const targetBar = () => container().querySelector<HTMLElement>(".target-legend-bar")!;
 /** Colours by the value in the study's unit (the default), where the target is moved; or by the share of the no-build value. */
@@ -316,6 +376,8 @@ const colourByValue = () => act(() => container().querySelector<HTMLButtonElemen
 const colourByShare = () => act(() => container().querySelector<HTMLButtonElement>(".target-legend-colour-by button:last-child")!.click());
 const cardLines = () => [...container().querySelectorAll(".result-card-line")].map((line) => line.textContent);
 const stamp = () => container().querySelector(".viewer-out-of-date");
+/** A sun hours study's settings: the default period, then what a test adds (its geometry, its faces). */
+const SUN_HOURS_SETTINGS = { start_month: 12, start_day: 21, start_hour: 10, end_month: 12, end_day: 21, end_hour: 14, time_basis: "standard" };
 const BUILT_ENVELOPE = { carving: CARVING, envelope: { ...ENVELOPE, mesh_file: "export.obj" }, massing: null };
 
 async function selectStudy(name: string) {
@@ -393,40 +455,69 @@ test("an out of date study's values stay drawn, dimmed, with the stamp", async (
   expect(stamp()).toBeNull();
 });
 
-test("the geometry shown uses Design's layers, without the criteria's test surfaces; Envelope once built, marked out of date in Design", async () => {
+test("a study on the envelope draws it see-through with its values, the criteria's test surfaces off; Design takes it away again", async () => {
   await openSimulate(undefined, (service) => {
     service.summary = BUILT_ENVELOPE;
-    service.studies = [study("1", "sun_hours", ["facades.obj"], "current")];
-    service.valuesOf = { 1: studyValuesOf({ open: [4, 4], max_volume: [1, 2], envelope: [3, 4] }) };
+    service.studies = [study("1", "sun_hours", ["facades.obj"], "current", null, { ...SUN_HOURS_SETTINGS, geometry: "envelope" })];
+    service.valuesOf = { 1: studyValuesOf({ open: [4, 4], envelope: [3, 4] }) };
   }, { exporting: "out_of_date" });
   await selectStudy("Sun hours, 21 Dec");
-  expect(geometrySegment("Envelope").getAttribute("aria-disabled")).toBeNull();
-  expect(geometrySegment("Envelope").title).toBe("Out of date in Carve");
-  expect(geometrySegment("Massing").getAttribute("aria-disabled")).toBe("true");
-  expect(geometrySegment("Massing").title).toBe("Build the massing first");
-  expect([...scene().visibleLayers].sort()).toEqual(["max_volume", "study_values"]);
-  expect(scene().dimmed.size).toBe(0);         // the envelope out of date in Design is not dimmed here: the switch says so
-  expect(scene().envelopeSeeThrough).toBe(false);
-
-  act(() => geometrySegment("Envelope").click());
-  await settle();
+  expect(container().querySelector(".geometry-switch")).toBeNull();        // the study names its geometry: no switch
   expect([...scene().visibleLayers].sort()).toEqual(["envelope", "study_values"]);
+  expect(scene().dimmed.size).toBe(0);         // the envelope out of date in Design is not dimmed here
   expect(scene().envelopeSeeThrough).toBe(true);
-  expect(cardLines()).toEqual(["keeps 88 % of the no-build value (38)", "mean 3.5 h (1.5)", "lowest tenth 3.1 h (1.1)"]);
+  expect(cardLines()).toEqual(["keeps 88 % of the no-build value", "mean 3.5 h", "lowest tenth 3.1 h"]);
   expect(stamp()).toBeNull();
 
   // Back in Design the steps' layers and the envelope's own look come back, without the study.
   await switchMode("design");
   expect(scene().envelopeSeeThrough).toBe(false);
   expect(studyLayerSummary()).toBeNull();
-  expect(container().querySelector(".geometry-switch")).toBeNull();
-  // Simulate again: the same study on the same geometry, its values read again (they are let go in Design).
+  // Simulate again: the same study, its values read again (they are let go in Design).
   const reads = simulateService.count("GET /studies/1/values");
   await switchMode("simulate");
   await settle();
   expect(simulateService.count("GET /studies/1/values")).toBe(reads + 1);
-  expect(geometrySegment("Envelope").getAttribute("aria-pressed")).toBe("true");
   expect(studyLayerSummary()).toBe("2 points");
+});
+
+test("a study on nothing draws its no-build values with the maximum volume as a ghost", async () => {
+  await openSimulate(undefined, (service) => {
+    service.studies = [study("1", "sun_hours", ["facades.obj"], "current", null, { ...SUN_HOURS_SETTINGS, geometry: "none" })];
+    service.valuesOf = { 1: studyValuesOf({ open: [4, 2] }) };
+  });
+  await selectStudy("Sun hours, 21 Dec");
+  expect(studyLayerSummary()).toBe("2 points");
+  expect([...scene().visibleLayers].sort()).toEqual(["max_volume", "study_values"]);
+  const maxVolume = scene().layers.get("max_volume")!.children[0] as THREE.Mesh;
+  expect((maxVolume.material as THREE.Material).opacity).toBeLessThan(1);
+  expect(cardLines()).toEqual(["keeps 100 % of the no-build value", "mean 3 h", "lowest tenth 2.2 h"]);
+});
+
+test("a result of another geometry than the study accounts for now is not drawn until it runs again", async () => {
+  await openSimulate(undefined, (service) => {
+    service.studies = [study("1", "sun_hours", ["facades.obj"], "out_of_date", null, { ...SUN_HOURS_SETTINGS, geometry: "none" })];
+    // Run on the maximum volume, its faces sampled: the open column is there, but it is not this study's result now.
+    service.valuesOf = { 1: studyValuesOf({ open: [4, 4, 6], max_volume: [2, 4, 3] }, "h", 1, "max_volume") };
+  });
+  await selectStudy("Sun hours, 21 Dec");
+  expect(studyLayerSummary()).toBeNull();
+  expect(container().querySelector(".result-card")).toBeNull();
+  expect(stamp()!.textContent).toContain("Out of date");
+});
+
+test("a study that samples its geometry's faces has a block for them on the result card, by facing", async () => {
+  await openSimulate(undefined, (service) => {
+    service.studies = [study("1", "sun_hours", ["facades.obj"], "current", null, { ...SUN_HOURS_SETTINGS, sample_geometry: true })];
+    // Two points on the study's files, then two on the maximum volume's faces (the test patches face up: roofs).
+    service.valuesOf = { 1: studyValuesOf({ open: [4, 4, 6, 6], max_volume: [2, 4, 3, 6] }, "h", 2) };
+  });
+  await selectStudy("Sun hours, 21 Dec");
+  expect(studyLayerSummary()).toBe("4 points");
+  expect([...container().querySelectorAll(".result-card h3")].map((heading) => heading.textContent)).toEqual(["Study surfaces", "The max volume"]);
+  expect(cardLines()).toEqual(["keeps 75 % of the no-build value", "mean 3 h", "lowest tenth 2.2 h",
+                               "keeps 75 % of the no-build value", "mean 4.5 h", "lowest tenth 3.3 h"]);
+  expect([...container().querySelectorAll(".result-card-facing")].map((row) => row.getAttribute("data-facing"))).toEqual(["roof"]);
 });
 
 test("dragging the target mark or pressing arrow keys moves the target and saves it with the study", async () => {
@@ -489,35 +580,6 @@ test("a saved high end at or below the target counts as none: the colours run fr
   expect(highMark.style.left).toBe("100%");
 });
 
-test("a study run before the envelope was built waits on Envelope with the reason, shows the maximum volume, and keeps the stamp", async () => {
-  await openSimulate(undefined, (service) => {
-    service.summary = BUILT_ENVELOPE;
-    service.studies = [study("1", "sun_hours", ["facades.obj"], "current"), study("2", "sky_view", ["facades.obj"], "out_of_date")];
-    service.valuesOf = { 1: studyValuesOf({ open: [4, 4], max_volume: [1, 2], envelope: [3, 4] }),
-                         2: studyValuesOf({ open: [90, 90, 90], max_volume: [40, 50, 60] }, "%") };       // no envelope column
-  }, { exporting: "current" });
-  await selectStudy("Sun hours, 21 Dec");
-  act(() => geometrySegment("Envelope").click());
-  await settle();
-  expect(scene().visibleLayers.has("envelope")).toBe(true);
-
-  await selectStudy("Sky view factor");
-  expect(geometrySegment("Envelope").getAttribute("aria-disabled")).toBe("true");
-  expect(geometrySegment("Envelope").title).toBe("Run the study again to see it on the envelope");
-  expect(reasonOf(geometrySegment("Envelope"))).toBe("Run the study again to see it on the envelope");
-  expect(geometrySegment("Max volume").getAttribute("aria-pressed")).toBe("true");
-  expect([...scene().visibleLayers].sort()).toEqual(["max_volume", "study_values"]);
-  expect(studyLayerSummary()).toBe("3 points");
-  expect(scene().dimmed.has("study_values")).toBe(true);
-  expect(stamp()!.textContent).toContain("Out of date");
-  expect(cardLines()).toEqual(["keeps 56 % of the no-build value", "mean 50 %", "lowest tenth 42 %"]);
-
-  // The first study has the envelope: the choice comes back.
-  await selectStudy("Sun hours, 21 Dec");
-  expect(geometrySegment("Envelope").getAttribute("aria-pressed")).toBe("true");
-  expect(stamp()).toBeNull();
-});
-
 test("by share the two ends are percentages kept for the study while the app is open, not saved; the value button names the unit", async () => {
   await openSimulate(undefined, (service) => {
     service.studies = [study("1", "sun_hours", ["facades.obj"], "current")];
@@ -547,16 +609,6 @@ test("the stamp shows while the selected study is out of date, even before its v
   await selectStudy("Sun hours, 21 Dec");
   expect(studyLayerSummary()).toBeNull();
   expect(stamp()!.textContent).toContain("Out of date");
-});
-
-test("while a study's popover is open the geometry switch moves to the right of it, so the popover does not cover the switch", async () => {
-  await openSimulate(undefined, (service) => { service.studies = [study("1", "sun_hours", ["facades.obj"], "current")]; });
-  const bar = () => container().querySelector<HTMLElement>(".simulate-geometry-bar")!;
-  expect(bar().classList.contains("simulate-geometry-bar-beside-popover")).toBe(false);
-  await openStudySettings("Sun hours, 21 Dec");
-  expect(bar().classList.contains("simulate-geometry-bar-beside-popover")).toBe(true);
-  press(studyPopover()!, "Escape");
-  expect(bar().classList.contains("simulate-geometry-bar-beside-popover")).toBe(false);
 });
 
 test("the palettes are pinned: magma by value, viridis by share; none is offered", async () => {

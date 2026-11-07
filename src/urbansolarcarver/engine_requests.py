@@ -24,7 +24,7 @@ import logging
 import os
 import typing
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Mapping, Optional, Union
+from typing import Any, Dict, List, Literal, Mapping, Optional, Tuple, Union
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
@@ -123,10 +123,12 @@ class SimulateWeightsRequest(_EngineRequest):
 class CheckRequest(_EngineRequest):
     """Run one Simulate study (:func:`urbansolarcarver.solar_check.simulate_study`) into *out_dir*.
 
-    The columns are ``open``, ``max_volume`` (*max_volume_path*) and, when built, ``envelope`` and ``massing`` from
-    *run_folder*.  *context_path* and *terrain_path* block in every column.  *settings* are CheckSettings values.
+    The columns are ``open`` and the geometry the settings name (``geometry``): ``max_volume`` (*max_volume_path*), or the
+    ``envelope`` or ``massing`` from *run_folder*; ``open`` alone for ``none``.  *context_path* and *terrain_path* block in every
+    column.  *settings* are CheckSettings values.
     *test_surface_path* is None for a study that samples only the sources of the settings' ``surfaces_from``.
     *voxel_size* is the envelope's and massing's surface tolerance when their run folder does not record it.
+    *ground_disc* (centre x, centre y, radius) is the ground a study samples when the settings' ``surfaces_from`` names it.
     """
     cmd: Literal["check"]
     test_surface_path: Optional[str] = None
@@ -136,6 +138,7 @@ class CheckRequest(_EngineRequest):
     run_folder: Optional[str] = None
     context_path: Optional[str] = None
     terrain_path: Optional[str] = None
+    ground_disc: Optional[Tuple[float, float, float]] = None
     voxel_size: float = 1.0
     device: str = "auto"
 
@@ -388,7 +391,8 @@ def _check(request: CheckRequest, context: RunContext) -> CheckReply:
     context.raise_if_cancelled()
     with stage_context("check"):
         simulate_study(request.test_surface_path, request.max_volume_path, settings, run_folder=request.run_folder,
-                       context_path=request.context_path, terrain_path=request.terrain_path, out_dir=request.out_dir,
+                       context_path=request.context_path, terrain_path=request.terrain_path,
+                       ground_disc=request.ground_disc, out_dir=request.out_dir,
                        voxel_size=request.voxel_size, device=request.device)
     return CheckReply(summary_path=str(Path(request.out_dir) / SUMMARY_FILE), issues=_issue_replies(context))
 

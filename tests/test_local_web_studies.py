@@ -209,6 +209,37 @@ def test_a_study_of_any_metric_takes_the_surfaces_it_samples_and_keeps_them_thro
         assert refused.value.status_code == 422 and store.studies(name)[0].settings == kept.settings
 
 
+def test_a_study_takes_its_geometry_its_faces_and_its_spacing_and_keeps_them_through_a_new_metric(project_with_inputs):
+    store, name = _with_weather(project_with_inputs)
+    study = store.add_study(name, metric="sky_view")
+    assert not {"geometry", "sample_geometry", "sample_spacing"} & set(study.settings)     # the defaults until chosen
+    changed = store.update_study(name, study.id, values={"geometry": "massing", "sample_geometry": True, "sample_spacing": 1.5})
+    assert changed.settings == {"geometry": "massing", "sample_geometry": True, "sample_spacing": 1.5}
+    kept = store.update_study(name, study.id, metric="sun_hours")
+    assert {key: kept.settings[key] for key in ("geometry", "sample_geometry", "sample_spacing")} == changed.settings
+    # A spacing of null follows the carving's again.
+    following = store.update_study(name, study.id, values={"sample_spacing": None})
+    assert "sample_spacing" not in following.settings and following.settings["geometry"] == "massing"
+    for bad in ({"geometry": "plates"}, {"sample_spacing": 0}, {"sample_spacing": -1.0}):
+        with pytest.raises(ProjectError) as refused:
+            store.update_study(name, study.id, values=bad)
+        assert refused.value.status_code == 422 and store.studies(name)[0].settings == following.settings
+
+
+def test_duplicating_a_study_copies_its_metric_settings_and_files_under_a_new_number(project_with_inputs):
+    store, name = _with_weather(project_with_inputs)
+    store.add_criterion_test_surface(name, "1", "facade.ply", box_bytes([0, 20, 5], extents=(10, 0.0, 10)))
+    source = store.add_study(name, metric="sun_hours")
+    store.use_study_test_surface(name, source.id, "facade.ply")
+    store.update_study(name, source.id, values={"geometry": "envelope", "end_hour": 13})
+    copy = store.duplicate_study(name, source.id)
+    original = store.studies(name)[0]
+    assert copy.id == "2" and copy.metric == "sun_hours" and copy.settings == original.settings
+    assert copy.test_surface_files == ["facade.ply"] and copy.name == f"{original.name} copy" and copy.named_by_user
+    assert (store.open(name) / joined_study_surfaces_path(copy.id)).is_file()
+    assert [study.id for study in store.studies(name)] == ["1", "2"]
+
+
 def test_a_new_metric_that_does_not_take_the_time_basis_resets_it_to_standard(project_with_inputs):
     from urbansolarcarver.local_web_service.simulation import refusal_of
     store, name = _with_weather(project_with_inputs)

@@ -7,6 +7,22 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Simulate
+
+- **Simulate the resulting volumes.** A study accounts for one geometry (**Account for**: nothing, the max volume, the
+  envelope or the massing) and can simulate its own facades and roofs, beside the context, the ground and its files, so
+  you see how much sun or sky the new building gets. Faces that face down or that another part covers (the top of a floor
+  under the next) are left out; a smoothed envelope is sampled triangle by triangle.
+- The result card gives the building's points a block of their own, with a table by facing (roofs, north, east, south,
+  west) in a fold; the card minimises to its title.
+- Each study traces its geometry and the no-build case, not every geometry: the **Geometry bar** and **Difference** are
+  gone. Make two studies (**Duplicate study**) to compare two geometries. A study goes out of date only when its own
+  geometry changes.
+- The **ground** a study samples is a disc on the compass circle, not a square around the max volume.
+- A study has its own test point **spacing** (More settings), following Carve's until you type one.
+- The study switches read **Context**, **Terrain** and **Ground**; the study's files are under **Additional surfaces to
+  simulate**.
+
 ## [0.11.0] - 2026-11-07
 
 ### Highlights

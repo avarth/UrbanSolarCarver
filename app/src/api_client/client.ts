@@ -361,6 +361,10 @@ export const addStudy = (token: string, project: string, source: StudySource) =>
 export const updateStudy = (token: string, project: string, studyId: string, change: StudyChange) =>
   requestJson<StudyEntry>(token, studyPath(project, studyId), "PATCH", change);
 
+/** Adds a copy of a study (its metric, settings and files, not its results) at the end. */
+export const duplicateStudy = (token: string, project: string, studyId: string) =>
+  requestJson<StudyEntry>(token, `${studyPath(project, studyId)}/duplicate`, "POST");
+
 export async function deleteStudy(token: string, project: string, studyId: string): Promise<void> {
   await send(token, studyPath(project, studyId), "DELETE");
 }

@@ -4,7 +4,7 @@
 // and changes nothing; a failed read keeps what was shown and says why (loadProblem).
 import { useRef, useState } from "react";
 import {
-  addStudy, addStudyTestSurface, deleteStudy, failureTextOf, getStudies, removeStudyTestSurface, reorderStudies, reportServiceProblem,
+  addStudy, addStudyTestSurface, deleteStudy, duplicateStudy, failureTextOf, getStudies, removeStudyTestSurface, reorderStudies, reportServiceProblem,
   updateStudy, useStudyTestSurface, type MetricInfo, type StudyChange, type StudyEntry, type StudySource, type StudyWithState,
 } from "../api_client/client";
 import { useProjectSession } from "../api_client/project_session";
@@ -20,6 +20,8 @@ export interface StudiesHook {
   /** Adds a study at the end and selects it. */
   add: (source: StudySource) => Promise<StudyEntry>;
   update: (id: string, change: StudyChange) => Promise<StudyEntry>;
+  /** Adds a copy of the study at the end and selects it. */
+  duplicate: (id: string) => Promise<StudyEntry>;
   /** Removes the study; when it was selected, none is. */
   remove: (id: string) => Promise<void>;
   /** Puts the studies in the order of *ids* (every id once). */
@@ -92,6 +94,12 @@ export function useStudies(): StudiesHook {
       return entry;
     },
     update: (id, change) => changeEntry(updateStudy(token, project, id, change)),
+    duplicate: async (id) => {
+      const entry = await duplicateStudy(token, project, id);
+      commit({ studies: [...latest.current.studies, newStudy(entry)], selectedId: entry.id });
+      void refresh();
+      return entry;
+    },
     remove: async (id) => {
       await deleteStudy(token, project, id);
       const { studies, selectedId } = latest.current;

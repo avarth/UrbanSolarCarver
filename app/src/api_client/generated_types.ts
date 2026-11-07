@@ -773,6 +773,26 @@ export interface paths {
         patch: operations["update_study"];
         trace?: never;
     };
+    "/api/projects/{name}/studies/{study_id}/duplicate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Duplicate Study
+         * @description Add a copy of a study (its metric, settings and test surface files, not its results) at the end of the list.
+         */
+        post: operations["duplicate_study"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}/studies/{study_id}/test-surfaces": {
         parameters: {
             query?: never;
@@ -4092,6 +4112,56 @@ export interface operations {
                 "application/json": components["schemas"]["UpdateStudyRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyEntry"];
+                };
+            };
+            /** @description There is no such study. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    duplicate_study: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                study_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

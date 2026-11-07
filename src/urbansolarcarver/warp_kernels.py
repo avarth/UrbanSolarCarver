@@ -20,7 +20,7 @@ device (:func:`dda_backend_available`), precompiles the kernels
   against the context and terrain meshes (:func:`ray_tracing.mesh_blocks_rays`);
 * the mesh visibility kernel of the sun and sky check (:mod:`solar_check`),
   which traces rays against a triangle mesh's BVH (``wp.Mesh``) instead of
-  the voxel grid.
+  the voxel grid, and its test of which points lie inside a mesh.
 
 All kernels live in this one module on purpose: Warp compiles a Python
 module as one unit and caches it on disk by module, so
@@ -1329,3 +1329,21 @@ if _warp_available:
                     w = w * c
                 acc = acc + wp.float64(w)
         out[i] = out[i] + acc
+
+    @wp.kernel
+    def points_inside_mesh_kernel(
+        mesh_id: wp.uint64,                  # a wp.Mesh built with support_winding_number=True
+        points: wp.array(dtype=wp.vec3),     # (N,) query points
+        max_distance: float,
+        inside: wp.array(dtype=wp.uint8),    # out: 1 where the point lies inside the mesh's solid
+    ):
+        """Whether each point lies inside a mesh's solid, by the generalised winding number (above one half inside).  A probe
+        ray would meet the faces where two bodies touch (the floors of a massing, stacked on each other, or its bays side by
+        side) at the same distance and take either; the winding number counts every face, so touching bodies each count
+        once, and small gaps in a mesh that is not quite closed are bridged."""
+        i = wp.tid()
+        q = wp.mesh_query_point_sign_winding_number(mesh_id, points[i], max_distance)
+        if q.result and q.sign < 0.0:
+            inside[i] = wp.uint8(1)
+        else:
+            inside[i] = wp.uint8(0)

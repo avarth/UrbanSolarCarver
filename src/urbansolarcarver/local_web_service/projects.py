@@ -626,6 +626,22 @@ class ProjectStore:
                 discard_folder(study_folder(project_folder, removed.id))
             self._discard_test_surface_files(project_folder, unused_files)
 
+    def duplicate_study(self, name: str, study_id: str) -> StudyEntry:
+        """Add a copy of a study at the end of the list: its metric, settings, test surface files and target, named "<name> copy"
+        (a name of the user's, so it stays when the copy's settings change), with the next number and colour; not its results."""
+        with self.project_lock(name):
+            project_folder = self.open(name)
+            project_json = self.read_project_json(name)
+            source = find_study(project_json, study_id)
+            copied = append_study(project_json, source.metric, copy.deepcopy(source.settings), list(source.test_surface_files))
+            copied.name, copied.named_by_user = f"{source.name} copy", True
+            copied.target, copied.target_max = source.target, source.target_max
+            source_joined_path = project_folder / joined_study_surfaces_path(source.id)
+            if source_joined_path.is_file():
+                shutil.copyfile(source_joined_path, project_folder / joined_study_surfaces_path(copied.id))
+            self.write_project_json(name, project_json)
+            return copied
+
     def reorder_studies(self, name: str, ids: list[str]) -> None:
         """Put the studies in the order of *ids*, which names each study once; ProjectError 422 otherwise."""
         with self.project_lock(name):

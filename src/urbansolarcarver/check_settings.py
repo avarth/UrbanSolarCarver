@@ -138,7 +138,11 @@ class CheckSettings(BaseModel):
     ray_length: float = Field(3000.0, gt=0.0)
     # Simulate: the surfaces a study samples besides its own file, sorted and each once (solar_check.study_surfaces).
     surfaces_from: list[Literal["context", "terrain", "ground"]] = Field(
-        default_factory=list, description="Also sample the context, the terrain, or a flat ground around the maximum volume")
+        default_factory=list, description="Also sample the context, the terrain, or a flat ground disc around the site")
+    # Simulate: what stands on the plot in a study (solar_check.simulate_study), and whether its faces are sampled too.
+    geometry: Literal["none", "max_volume", "envelope", "massing"] = Field(
+        "max_volume", description="What stands on the plot and blocks: nothing, the maximum volume, the envelope or the massing")
+    sample_geometry: bool = Field(False, description="Also sample the faces of the geometry that stands (not for none)")
 
     @field_validator("sun_steps_per_hour")
     @classmethod

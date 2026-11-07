@@ -152,6 +152,101 @@ def test_choosing_or_dropping_a_source_makes_a_current_study_out_of_date(service
         assert state_of(store, "p", study) == ("out_of_date", None), sources
 
 
+def test_a_study_on_a_geometry_carve_has_not_built_waits_for_it_and_the_others_still_run(service):
+    _client, worker, engine = service
+    store = worker.store
+    on_envelope = add_study(store, "p", geometry="envelope")
+    on_massing = add_study(store, "p", geometry="massing")
+    on_max_volume = add_study(store, "p")
+    assert state_of(store, "p", on_envelope) == ("refused", "Build the envelope in Carve")
+    assert state_of(store, "p", on_massing) == ("refused", "Build the massing in Carve")
+    assert simulate_and_wait(worker)[-1]["type"] == "run_finished"
+    assert [request.out_dir.rsplit("\\", 1)[-1].rsplit("/", 1)[-1] for request in engine.requests] == [on_max_volume]
+
+
+def test_a_study_of_its_geometrys_faces_alone_runs_and_counts_them(service):
+    _client, worker, engine = service
+    store = worker.store
+    study = add_study(store, "p", files=(), sample_geometry=True)
+    assert state_of(store, "p", study) == ("not_run", None)
+    assert simulate_and_wait(worker)[-1]["type"] == "run_finished"
+    assert engine.requests[-1].test_surface_path is None and engine.requests[-1].settings["sample_geometry"] is True
+    summary = json.loads((store.open("p") / "simulate" / study / "check_summary.json").read_text(encoding="utf-8"))
+    assert summary["geometry_point_count"] == summary["point_count"] > 0
+    assert state_of(store, "p", study) == ("current", None)
+    # Nothing on the plot has no faces to sample.
+    store.update_study("p", study, values={"geometry": "none"})
+    assert state_of(store, "p", study) == ("refused", "Add study surfaces")
+
+
+def test_a_study_follows_the_carvings_spacing_until_it_has_its_own(service):
+    _client, worker, _engine = service
+    store = worker.store
+    following = add_study(store, "p")
+    own = add_study(store, "p", sample_spacing=2.0)
+    assert simulation.study_settings(store, "p", store.studies("p")[1]).sample_spacing == 2.0
+    assert simulate_and_wait(worker)[-1]["type"] == "run_finished"
+    store.write_shared_settings("p", {"voxel_size": 2.0})
+    assert state_of(store, "p", following) == ("out_of_date", None)
+    assert state_of(store, "p", own) == ("current", None)
+
+
+def test_a_study_on_the_maximum_volume_stays_current_when_the_envelope_is_rebuilt(service):
+    _client, worker, _engine = service
+    store = worker.store
+    project_folder = store.open("p")
+    write_fake_chain_run(store, "p", ["1"])
+    write_envelope_as_exported(project_folder)
+    study = add_study(store, "p")
+    assert simulate_and_wait(worker)[-1]["type"] == "run_finished"
+    write_envelope_as_exported(project_folder, extents=(7, 7, 5))
+    assert state_of(store, "p", study) == ("current", None)
+
+
+def test_the_ground_disc_is_the_compass_ring_and_a_wider_ring_makes_ground_studies_out_of_date(service):
+    _client, worker, engine = service
+    store = worker.store
+    on_ground = add_study(store, "p", surfaces_from=["ground"])
+    on_files = add_study(store, "p")
+    assert simulate_and_wait(worker)[-1]["type"] == "run_finished"
+    centre_x, centre_y, radius = simulation.scene_circle(store, "p")
+    # The app's rule (viewer/sky_dome.ts, sceneHemisphere) on the bounds of the maximum volume and the test surface files.
+    bounds = np.array(simulation.input_bounds(store, "p"))
+    (x0, y0, z0), (x1, y1, z1) = bounds
+    assert (centre_x, centre_y) == pytest.approx(((x0 + x1) / 2, (y0 + y1) / 2))
+    assert radius == pytest.approx(max(0.75 * max(x1 - x0, y1 - y0), z1 - z0))
+    request = next(request for request in engine.requests if request.out_dir.endswith(on_ground))
+    assert request.ground_disc == pytest.approx((centre_x, centre_y, radius))
+    assert next(request for request in engine.requests if request.out_dir.endswith(on_files)).ground_disc is None
+    store.add_criterion_test_surface("p", "1", "far.ply", plane_bytes(z=0.5, size=200.0))   # the ring grows
+    assert simulation.scene_circle(store, "p")[2] > radius
+    assert state_of(store, "p", on_ground) == ("out_of_date", None)
+    assert state_of(store, "p", on_files) == ("current", None)
+
+
+def test_the_scene_circle_reads_the_files_once_while_they_are_unchanged(service, monkeypatch):
+    _client, worker, _engine = service
+    store = worker.store
+    loads = []
+    real_load = trimesh.load
+    monkeypatch.setattr(trimesh, "load", lambda *args, **kwargs: loads.append(args[0]) or real_load(*args, **kwargs))
+    first = simulation.scene_circle(store, "p")
+    read = len(loads)
+    assert read > 0 and simulation.scene_circle(store, "p") == first and len(loads) == read     # the list asks again and again
+    store.add_criterion_test_surface("p", "1", "far.ply", plane_bytes(z=0.5, size=200.0))
+    assert simulation.scene_circle(store, "p")[2] > first[2] and len(loads) > read                 # a new file is read
+
+
+def test_scene_circle_follows_the_rings_rule_on_known_bounds(monkeypatch):
+    # A maximum volume 30 x 50 x 20 m from the origin and a test surface reaching x = 60: bounds x 0..60, y 0..50, z 0..20.
+    monkeypatch.setattr(simulation, "input_bounds", lambda _store, _name: [[0.0, 0.0, 0.0], [60.0, 50.0, 20.0]])
+    assert simulation.scene_circle(None, "p") == pytest.approx((30.0, 25.0, 45.0))
+    monkeypatch.setattr(simulation, "input_bounds", lambda _store, _name: [[0.0, 0.0, 0.0], [10.0, 10.0, 40.0]])
+    assert simulation.scene_circle(None, "p") == pytest.approx((5.0, 5.0, 40.0))      # at least the height
+    monkeypatch.setattr(simulation, "input_bounds", lambda _store, _name: None)
+    assert simulation.scene_circle(None, "p") is None
+
+
 def test_a_study_whose_metric_needs_the_missing_weather_file_is_refused(service):
     _client, worker, _engine = service
     store = worker.store
@@ -253,16 +348,17 @@ def test_an_unreadable_envelope_manifest_leaves_the_envelope_out_with_an_issue(s
     shutil.rmtree(project_folder / "run" / "massing")
     manifest_path = project_folder / "run" / "exporting" / "manifest.json"
     manifest_path.write_text("{not json", encoding="utf-8")
-    study = add_study(store, "p")
-    events = simulate_and_wait(worker)
-    assert events[-1]["type"] == "run_finished"
-    issues = [event for event in events if event["type"] == "issue" and event["code"] == "geometry_manifest_unusable"]
-    assert len(issues) == 1 and issues[0]["study"] == study
-    assert "Carved envelope" in issues[0]["message"] and str(manifest_path) in issues[0]["message"]
-    assert simulation.result_geometries(store, "p", study) == ["max_volume"]
+    on_envelope = add_study(store, "p", geometry="envelope")
+    on_max_volume = add_study(store, "p")
     with warnings.catch_warnings():
         warnings.simplefilter("error")      # the state of a study reports nothing and raises nothing
-        assert state_of(store, "p", study) == ("current", None)
+        assert state_of(store, "p", on_envelope) == ("refused", simulation.BUILD_ENVELOPE)
+    events = simulate_and_wait(worker)
+    assert events[-1]["type"] == "run_finished"
+    # The study on the maximum volume does not read the envelope's manifest, so nothing is reported about it.
+    assert not [event for event in events if event["type"] == "issue"]
+    assert simulation.result_geometries(store, "p", on_max_volume) == ["max_volume"]
+    assert state_of(store, "p", on_max_volume) == ("current", None)
 
 
 def test_a_result_traced_with_the_voxel_size_its_manifests_record_stays_current(service):
@@ -278,7 +374,7 @@ def test_a_result_traced_with_the_voxel_size_its_manifests_record_stays_current(
     (run_folder / "thresholding" / "manifest.json").write_text(json.dumps({"run_id": upstream, "upstream_run_id": "pre"}), encoding="utf-8")
     (run_folder / "preprocessing").mkdir()
     (run_folder / "preprocessing" / "manifest.json").write_text(json.dumps({"run_id": "pre", "voxel_size": 2.0}), encoding="utf-8")
-    study = add_study(store, "p")
+    study = add_study(store, "p", geometry="envelope")
     simulate_and_wait(worker)
     summary = json.loads((project_folder / "simulate" / study / "check_summary.json").read_text(encoding="utf-8"))
     assert summary["columns"]["envelope"]["surface_tolerance_m"] == 2.0 and simulation.tracing_voxel_size(store, "p") == 1.0
@@ -357,7 +453,8 @@ def test_a_study_is_out_of_date_after_its_settings_its_files_the_weather_the_con
     write_fake_chain_run(store, "p", ["1"])
     write_envelope_as_exported(project_folder)
     write_massing_as_built(project_folder)
-    study = add_study(store, "p", metric="sun_hours")
+    study = add_study(store, "p", metric="sun_hours", geometry="envelope")
+    on_massing = add_study(store, "p", metric="sun_hours", geometry="massing")
     assert state_of(store, "p", study) == ("not_run", None)
 
     def current_after_a_run():
@@ -393,9 +490,6 @@ def test_a_study_is_out_of_date_after_its_settings_its_files_the_weather_the_con
     def a_rebuilt_envelope():
         write_envelope_as_exported(project_folder, extents=(7, 7, 5))
 
-    def a_removed_massing():
-        shutil.rmtree(project_folder / "run" / "massing")
-
     def the_voxel_size_the_envelope_was_built_with():
         with store.project_lock("p"):
             project_json = store.read_project_json("p")
@@ -403,12 +497,16 @@ def test_a_study_is_out_of_date_after_its_settings_its_files_the_weather_the_con
             store.write_project_json("p", project_json)
 
     for change in (its_settings, a_shared_setting, its_files, the_weather, the_context, the_terrain, the_max_volume,
-                   a_rebuilt_envelope, a_removed_massing, the_voxel_size_the_envelope_was_built_with):
+                   a_rebuilt_envelope, the_voxel_size_the_envelope_was_built_with):
         changes_make_it_out_of_date(change)
     current_after_a_run()
+    assert state_of(store, "p", on_massing) == ("current", None)
+    shutil.rmtree(project_folder / "run" / "massing")                 # the massing removed: its study waits for it
+    assert state_of(store, "p", on_massing) == ("refused", simulation.BUILD_MASSING)
+    assert state_of(store, "p", study) == ("current", None)           # the envelope's study does not trace the massing
     write_fake_stage_output(project_folder / "run", "massing")       # the massing built again
     write_massing_as_built(project_folder)
-    assert state_of(store, "p", study) == ("out_of_date", None)
+    assert state_of(store, "p", on_massing) == ("out_of_date", None)
 
 
 def test_an_envelope_out_of_date_in_design_is_still_traced(service):
@@ -420,11 +518,11 @@ def test_an_envelope_out_of_date_in_design_is_still_traced(service):
     shutil.rmtree(project_folder / "run" / "massing")
     change_settings(store, "p", carve_fraction=0.3)
     assert stage_status_reply(store, "p").stages["exporting"] != "current"
-    study = add_study(store, "p")
+    study = add_study(store, "p", geometry="envelope")
     assert simulate_and_wait(worker)[-1]["type"] == "run_finished"
     assert engine.requests[-1].run_folder == str(project_folder / "run")
     listed = client.get("/api/projects/p/studies").json()["studies"]
-    assert listed[0]["entry"]["id"] == study and listed[0]["geometries"] == ["max_volume", "envelope"]
+    assert listed[0]["entry"]["id"] == study and listed[0]["geometries"] == ["envelope"]
     summary = json.loads((project_folder / "simulate" / study / "check_summary.json").read_text(encoding="utf-8"))
     assert summary["columns"]["envelope"]["surface_tolerance_m"] == 1.0
 
@@ -445,6 +543,7 @@ def test_values_route_packs_the_header_quads_and_columns(service):
     stored = solar_check.load_solar_check(store.open("p") / "simulate" / study)
     point_count = len(stored.points.points)
     assert header["point_count"] == point_count and header["columns"] == ["open", "max_volume"]
+    assert header["geometry_point_count"] == 0 and header["geometry"] == "max_volume"
     assert header["unit"] == "%" and np.allclose(header["frame"], stored.points.points.min(axis=0), atol=1e-4)
     offset = 4 + header_length
     quads = np.frombuffer(data, "<f4", point_count * 12, offset).reshape(point_count, 4, 3)

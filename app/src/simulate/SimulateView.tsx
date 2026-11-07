@@ -1,5 +1,5 @@
 // What Simulate puts over the 3D view: the studies panel (StudiesPanel) with the popover of a study's settings (StudyPopover) and
-// Run, and under it the Sun panel (SunPanel: the sun path, the shadows and the hours in shade of the sun tool); the geometry switch at the top centre, and for the selected study the target legend along the bottom and the result card in
+// Run, and under it the Sun panel (SunPanel: the sun path, the shadows and the hours in shade of the sun tool); for the selected study the target legend along the bottom and the result card in
 // the bottom right corner (use_study_view.ts; the view draws its values, ProjectWorkspace gives them to ViewerPane). The studies are read when Simulate opens and again whenever a run ends while it is open: a simulation's results, or a run of
 // Design that changed what the studies trace. The simulation is a run of the app's run loop (origin "simulate"), one job at a time
 // with the runs of Design: Run waits while one of those goes on, and the studies cannot be changed while a run of the project does.
@@ -12,7 +12,6 @@ import type { RunLoop } from "../common/run_state";
 import { inputProblemText } from "../common/InputBox";
 import { RunProgress } from "../common/RunProgress";
 import { TargetLegend } from "../viewer_overlays/TargetLegend";
-import { GeometrySwitch } from "./GeometrySwitch";
 import { ResultCard } from "./ResultCard";
 import { StudiesPanel } from "./StudiesPanel";
 import { StudyPopover } from "./StudyPopover";
@@ -31,10 +30,15 @@ interface SimulateViewProps {
   /** The project has surroundings files, and a terrain file: a study can sample them (the ground around the site without a terrain). */
   hasSurroundings: boolean;
   hasTerrain: boolean;
+  /** Carve has built the envelope, the massing: a study can account for them. */
+  envelopeBuilt: boolean;
+  massingBuilt: boolean;
+  /** The carving's test point spacing (m), which a study follows until it has its own. */
+  carvingSpacing: number;
   runs: RunLoop;
   /** A study let a file go, which the project may then no longer store: the stored files are asked for again. */
   onStoredFilesChange: () => void;
-  /** The selected study on the view: the geometry switch, the target legend and the result card. */
+  /** The selected study on the view: the target legend and the result card. */
   studyView: StudyViewHook;
   /** The sun tool: the Sun panel sets it, the view draws it. */
   sunStudy: SunStudyHook;
@@ -44,8 +48,8 @@ interface SimulateViewProps {
   notice?: ReactNode;
 }
 
-export function SimulateView({ studies, criteria, storedTestSurfaces, hasSurroundings, hasTerrain, runs, onStoredFilesChange, studyView, sunStudy,
-                               notice }: SimulateViewProps) {
+export function SimulateView({ studies, criteria, storedTestSurfaces, hasSurroundings, hasTerrain, envelopeBuilt, massingBuilt, carvingSpacing, runs,
+                               onStoredFilesChange, studyView, sunStudy, notice }: SimulateViewProps) {
   const { project, onServiceProblem } = useProjectSession();
   const [popoverStudyId, setPopoverStudyId] = useState<string | null>(null);
   const view = useRef<HTMLDivElement>(null);
@@ -104,14 +108,15 @@ export function SimulateView({ studies, criteria, storedTestSurfaces, hasSurroun
   const shown = studies.studies.find((study) => study.entry.id === popoverStudyId) ?? null;
   const popover = shown === null ? null : (
     <StudyPopover key={shown.entry.id} id={popoverId} study={shown} metrics={studies.metrics} storedFiles={storedTestSurfaces}
-                  hasSurroundings={hasSurroundings} hasTerrain={hasTerrain}
-                  disabledReason={editDisabledReason} onChange={(change) => attempt(() => studies.update(shown.entry.id, change))}
+                  hasSurroundings={hasSurroundings} hasTerrain={hasTerrain} envelopeBuilt={envelopeBuilt} massingBuilt={massingBuilt}
+                  carvingSpacing={carvingSpacing} disabledReason={editDisabledReason} onChange={(change) => attempt(() => studies.update(shown.entry.id, change))}
                   onAddFiles={(files) => addFiles(shown.entry.id, files)}
                   onUseFile={(fileName) => attempt(() => studies.useFile(shown.entry.id, fileName))}
                   onRemoveFile={(fileName) => attempt(async () => {
                     await studies.removeFile(shown.entry.id, fileName);
                     onStoredFilesChange();
                   })}
+                  onDuplicate={() => attempt(async () => setPopoverStudyId((await studies.duplicate(shown.entry.id)).id))}
                   onDelete={() => attempt(async () => {
                     await studies.remove(shown.entry.id);
                     setPopoverStudyId(null);
@@ -136,18 +141,13 @@ export function SimulateView({ studies, criteria, storedTestSurfaces, hasSurroun
                       runFeedback={<RunProgress runs={runs} project={project} origin="simulate" mode="" onGoToSetting={() => {}} studyNames={studyNames} foldWarnings />} />
         <SunPanel sunStudy={sunStudy} />
       </div>
-      <div className={`simulate-geometry-bar${shown === null ? "" : " simulate-geometry-bar-beside-popover"}`}>
-        <GeometrySwitch available={studyView.available} outOfDateInDesign={studyView.outOfDateInDesign} waitingForStudy={studyView.waitingForStudy}
-                        value={studyView.geometry}
-                        change={studyView.change} onChange={studyView.setGeometry} onChangeToggle={studyView.setChange} />
-      </div>
       {studyView.waitingForRun && <p className="viewer-overlay study-view-note" role="status">{messages.studyShownWhenRunEnds}</p>}
       {legend !== null && (
         <TargetLegend label={legend.label} unit={legend.unit} mode={legend.mode} scale={legend.scale} low={legend.low} high={legend.high}
-                      palette={legend.palette} hasLoss={legend.hasLoss} disabled={legend.disabled} onRangeEndChange={studyView.setRangeEnd}
+                      palette={legend.palette} disabled={legend.disabled} onRangeEndChange={studyView.setRangeEnd}
                       onColourByChange={studyView.setColourBy} />
       )}
-      {card !== null && <ResultCard geometry={card.geometry} unit={card.unit} statistics={card.statistics} baseline={card.baseline} />}
+      {card !== null && <ResultCard unit={card.unit} surroundings={card.surroundings} building={card.building} />}
     </>
   );
 }

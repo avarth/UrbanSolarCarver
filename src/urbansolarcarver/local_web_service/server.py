@@ -713,6 +713,12 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
             return store.update_study(name, study_id, name=request.name, metric=request.metric, values=request.values, target=target,
                                       target_max=target_max)
 
+    @router.post("/projects/{name}/studies/{study_id}/duplicate", responses=_STUDY_RESPONSES)
+    def duplicate_study(name: str, study_id: str) -> StudyEntry:
+        """Add a copy of a study (its metric, settings and test surface files, not its results) at the end of the list."""
+        with writable_project(name) as store:
+            return store.duplicate_study(name, study_id)
+
     @router.delete("/projects/{name}/studies/{study_id}", status_code=204, response_class=Response, responses=_STUDY_RESPONSES)
     def delete_study(name: str, study_id: str) -> Response:
         """Remove a study and move its results folder to the recycle bin; its id is not used again."""

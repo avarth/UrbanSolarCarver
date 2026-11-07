@@ -37,7 +37,7 @@ import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf } from "../settings_form/present
 import type { LayerName, ViewportTheme } from "../viewer/scene";
 import { sceneHemisphere } from "../viewer/sky_dome";
 import { SimulateView } from "../simulate/SimulateView";
-import type { StudyGeometry } from "../viewer/study_values";
+import type { StudyStand } from "../viewer/study_values";
 import { useStudies } from "../simulate/use_studies";
 import { useStudyView } from "../simulate/use_study_view";
 import { useSunStudy } from "../simulate/use_sun_study";
@@ -80,7 +80,8 @@ export const LAYERS_SHOWN_IN_STEP: Record<StepName, readonly LayerName[]> = {
   export: ["context", "terrain", "envelope", "building_massing"],
 };
 // The layers Simulate shows by default, for each geometry its study values are shown on.
-const LAYERS_SHOWN_IN_SIMULATE: Record<StudyGeometry, readonly LayerName[]> = {
+const LAYERS_SHOWN_IN_SIMULATE: Record<StudyStand, readonly LayerName[]> = {
+  none: ["max_volume", "context", "terrain", "study_values"],     // the maximum volume as a ghost, so the site still reads
   max_volume: ["max_volume", "context", "terrain", "study_values"],
   envelope: ["envelope", "context", "terrain", "study_values"],
   massing: ["building_massing", "context", "terrain", "study_values"],
@@ -228,6 +229,9 @@ function OpenProject(props: ProjectWorkspaceProps) {
   const { testSurfaceGroups, setTestSurfacesShown } = useTestSurfaceDrawing(criteria.criteria, criterion, testSurfacesMesh, testSurfaces);
   const sceneSphere = useMemo(() => (inputsBounds === null ? null : sceneHemisphere(inputsBounds)), [inputsBounds]);
   const northDegrees = Number(shownValue(form, "north_deg") ?? 0);
+  // The test point spacing of the carving (the grid step, else half the voxel size), which a study follows until it has its own.
+  const gridStep = shownValue(form, "grid_step");
+  const carvingSpacing = typeof gridStep === "number" && gridStep > 0 ? gridStep : Number(shownValue(form, "voxel_size") ?? 1) / 2;
 
   const reportSaveProblem = useEffectEvent((error: unknown) => reportServiceProblem(error, onServiceProblem));
   useEffect(() => {
@@ -441,20 +445,20 @@ function OpenProject(props: ProjectWorkspaceProps) {
     </div>
   );
 
-  // Simulate draws the selected study's values on the geometry it shows, with Design's layers of that geometry and its own choice of
-  // them: the maximum volume solid, the envelope see-through; the criteria's test surfaces off, the surroundings on. The sky dome is
-  // the selected study's, not Design's (none for sun hours). A study out of date is dimmed with the stamp, and its dome with it;
-  // Design's out of date parts are not (the geometry switch marks them).
+  // Simulate draws the selected study's values with the geometry the study stands on the plot, Design's layer of that geometry: the
+  // maximum volume solid (a ghost for a study on nothing), the envelope see-through; the criteria's test surfaces off, the surroundings
+  // on. The sky dome is the selected study's, not Design's (none for sun hours). A study out of date is dimmed with the stamp, and its
+  // dome with it; Design's out of date parts are not.
   const simulating = props.mode === "simulate";
   const designResults = resultSteps.viewer.results;
   const studyView = useStudyView({
-    studies, active: simulating, runs, envelopeBuilt: designResults?.envelope != null, massingBuilt: designResults?.massing != null,
-    envelopeStage: shownStages.exporting, massingStage: shownStages.massing, editDisabled: runActive,
+    studies, active: simulating, runs, northDegrees, editDisabled: runActive,
   });
   const sunStudy = useSunStudy({ active: simulating, hasWeatherFile });
   const simulateView = (theme: ViewportTheme) => (
     <SimulateView studies={studies} criteria={criteria.criteria} storedTestSurfaces={files.test_surfaces} runs={runs}
                   hasSurroundings={files.context.length > 0} hasTerrain={files.terrain.length > 0}
+                  envelopeBuilt={designResults?.envelope != null} massingBuilt={designResults?.massing != null} carvingSpacing={carvingSpacing}
                   onStoredFilesChange={() => { void testSurfaceCalls.reloadStoredFiles(); refreshStageStatus(); }} studyView={studyView} sunStudy={sunStudy}
                   theme={theme} notice={inputChangesNotice} />
   );
@@ -489,7 +493,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
         <ViewerPane maxVolume={maxVolume} testSurfaces={testSurfaceGroups} onTestSurfacesShownChange={setTestSurfacesShown}
                     criteria={active.map(({ id, name, colour }) => ({ id, name, colour }))} context={contextMesh.geometry} terrain={terrainMesh.geometry} sunPath={sunPath}
                     hemisphere={sceneSphere} skyDomeChoiceRemembered={props.mode === "design"}
-                    maxVolumeAppearance={!inspecting && (simulating || STEPS_WITH_SOLID_MAX_VOLUME.includes(viewStep)) ? "solid" : "ghost"}
+                    maxVolumeAppearance={!inspecting && (simulating ? studyView.geometry !== "none" : STEPS_WITH_SOLID_MAX_VOLUME.includes(viewStep)) ? "solid" : "ghost"}
                     shownByDefault={shownByDefault} northDegrees={northDegrees} framingRequest={framingRequest}
                     centreContent={props.mode === "design" && emptyViewContent} localOrigin={origin} mode={form.mode}
                     analysisCurrent={(ownStages ?? shownStages).preprocessing === "current"} {...resultSteps.viewer} inspect={inspectView}

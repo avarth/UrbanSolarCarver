@@ -111,10 +111,3 @@ test("while disabled the ends do not move", () => {
   press(mark("low")!, "ArrowRight", { focus: true });
   expect(onRangeEndChange).not.toHaveBeenCalled();
 });
-
-test("the change scale has no ends, and names losses when there are some", () => {
-  renderLegend({ mode: "change", scale: [0, 2], hasLoss: true });
-  expect(container().querySelector(".target-legend-title")!.textContent).toBe("Difference from max volume (h)");
-  expect(mark("low")).toBeNull();
-  expect(container().querySelector(".target-legend-loss")!.textContent).toBe("Loss");
-});

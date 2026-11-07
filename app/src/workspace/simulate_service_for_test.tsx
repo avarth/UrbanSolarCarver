@@ -43,7 +43,7 @@ export function study(id: string, metric: string, files: string[], state: StudyW
 
 /**
  * The service of a project with studies: it keeps each study with its state, answers the studies routes (list, add from a metric or
- * like a criterion, change, delete, order, the upload, use and removal of test surface files) and starts a simulation (POST simulate,
+ * like a criterion, change, duplicate, delete, order, the upload, use and removal of test surface files) and starts a simulation (POST simulate,
  * whose events the test sends); every other request goes to ChainService.
  */
 export class SimulateService extends ChainService {
@@ -131,6 +131,12 @@ export class SimulateService extends ChainService {
       const named = typeof body.name === "string";
       return replace({ ...found.entry, metric, settings, name: named ? String(body.name) : found.entry.named_by_user ? found.entry.name : defaultStudyName(metric, settings),
                        named_by_user: named || found.entry.named_by_user });
+    }
+    if (method === "POST" && part === "duplicate") {
+      const copyId = String(Math.max(0, ...this.studies.map((each) => Number(each.entry.id))) + 1);
+      const copy: StudyWithState = { ...found, entry: { ...found.entry, id: copyId, name: `${found.entry.name} copy`, named_by_user: true }, state: "not_run" };
+      this.studies = [...this.studies, copy];
+      return json<StudyEntry>(copy.entry);
     }
     if (method === "DELETE" && part === undefined) {
       this.studies = this.studies.filter((each) => each.entry.id !== id);

@@ -62,13 +62,15 @@ test("a study row shows its files, Not run yet, Out of date or the reason it can
   expect(onSelect).toHaveBeenCalledExactlyOnceWith("2");
 });
 
-test("the line of a current study names the project's surfaces it samples after its files", () => {
+test("the line of a current study names what it simulates: its geometry, its files, then the project's surfaces", () => {
   rendered = renderForTest(<StudiesPanel {...panelProps({ studies: [
     study("1", "Sun hours, 21 Dec", ["facades.obj"], "current", null, { surfaces_from: ["context", "ground"] }),
     study("2", "Sky view factor", [], "current", null, { surfaces_from: ["terrain"] }),
+    study("3", "Solar energy", [], "current", null, { geometry: "massing", sample_geometry: true, surfaces_from: ["context"] }),
+    study("4", "Cooling sky", ["roofs.obj"], "current", null, { geometry: "none", sample_geometry: true }),
   ] })} />);
   expect(rows().map((row) => row.querySelector(".study-row-line")!.textContent))
-    .toEqual(["facades.obj, the surroundings, the ground", "the terrain"]);
+    .toEqual(["facades.obj, the context, the ground", "the terrain", "the massing, the context", "roofs.obj"]);
 });
 
 test("each row's settings button opens its popover, and says whether it is open", () => {

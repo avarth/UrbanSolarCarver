@@ -10,7 +10,8 @@ import type { CriterionEntry, MetricInfo, StudySource, StudyWithState } from "..
 import { messages } from "../messages";
 import { RunAnalysisButton } from "../settings_form/SettingsStep";
 import { AddStudyMenu } from "./AddStudyMenu";
-import { surfacesFromOf } from "./StudyPopover";
+import { simulatesGeometry, surfacesFromOf } from "./StudyPopover";
+import { standOf } from "./use_study_view";
 import "./simulate.css";
 
 export interface StudiesPanelProps {
@@ -50,8 +51,12 @@ export interface StudiesPanelProps {
 /** The line under a study's name. */
 export function studyLine(study: StudyWithState): string {
   switch (study.state) {
-    case "current": return [...(study.entry.test_surface_files ?? []),
-                            ...surfacesFromOf(study.entry.settings ?? {}).map((source) => messages.studySurfacesFromInLine[source] ?? source)].join(", ");
+    case "current": {
+      const settings = study.entry.settings ?? {};
+      const stand = standOf(settings);
+      return [...(simulatesGeometry(settings) ? [messages.studyStandInLine[stand]] : []), ...(study.entry.test_surface_files ?? []),
+              ...surfacesFromOf(settings).map((source) => messages.studySurfacesFromInLine[source] ?? source)].join(", ");
+    }
     case "out_of_date": return messages.outOfDateSummary;
     case "not_run": return messages.notRunYet;
     case "refused": return study.reason ?? "";
