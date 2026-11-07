@@ -7,6 +7,30 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-07
+
+### Highlights
+
+- **North turns the sky of irradiance and Solar heating.** In 0.10.0 a North other than 0 left their sky unturned.
+- **Python 3.12 or newer, with new packages**: torch 2.14.1, Warp 1.19, numpy 2.5, trimesh 5.2, tested on Python 3.14.
+  The results of the examples are unchanged. `setup_env.py` now installs these tested versions by default.
+- **Scores count the angle of incidence** in irradiance and Solar heating, and the typical building's room **runs free**
+  (no heating or cooling; the sun counts by the degree-hours it removes below a comfort band).
+- **App**: the mode is chosen once per criterion, warnings in plain words with a link to their setting, skipped test
+  surfaces drawn in the 3D view, typed dates in the analysis period, the camera orbits the compass ring's centre,
+  Inspect's panel is named Geometries, and many smaller fixes.
+
+### Upgrading from 0.10.0
+
+- Python 3.10 and 3.11 are no longer supported: install Python 3.12 or newer and run `setup_env.py` again.
+- Irradiance and Solar heating scores fall to about 58 to 67 % of before, so a numeric threshold of these modes carves
+  less; a carve fraction is barely affected. Typical building weights are calculated again on the next run.
+- Projects whose North is not 0 that used irradiance or Solar heating are not marked out of date: run them again.
+- Projects made with development builds before 0.10.0 no longer open as chains; recreate them.
+- Grasshopper: USC_ZoneOperation has three new inputs (`free_running`, `vent_above`, `vent_ach`); run USC_SyncCanvas.
+
+The sections below list every change since 0.10.0.
+
 ### Added
 
 - **Skipped test surfaces** in the 3D view: a run saves the surfaces it left out and why (`skipped_surfaces.json`, `GET .../run/skipped-surfaces`), and the Layers menu draws them and says how many, as in "8 of 43 surfaces not protected: 8 not flat".
@@ -29,7 +53,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - **`setup_env.py` installs the tested versions.** It used to take the newest torch and packages `pyproject.toml` allows, so a
   fresh install could run a torch the tests had never seen. It now installs `requirements-lock.txt`, written by
   `tools/write_lockfile.py`, and so do the launchers on their first run. `--latest` gives the old behaviour; the locked versions
-  need Python 3.12 or older, and the script says so before it installs anything.
+  need Python 3.12 to 3.14, and the script says so before it installs anything.
 - **Developer checks.** `tools/check_references.py` reports routes, files and names in the docs that no longer exist
   (`tests/test_docs_references.py` runs it). Ruff runs in `tests/test_architecture.py`, with mistakes as its rules and no
   formatting. `tools/repo_state.py` prints where the repository stands, asking GitHub rather than the local tracking refs.

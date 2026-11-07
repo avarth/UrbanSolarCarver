@@ -3,8 +3,8 @@ message: "If you use Urban Solar Carver, please cite the paper below. To cite th
 title: "Urban Solar Carver"
 abstract: "GPU-accelerated generation of maximum buildable volumes that respect solar access, daylight, and thermal comfort constraints in urban environments."
 type: software
-version: "0.10.0"
-date-released: "2026-10-30"
+version: "0.11.0"
+date-released: "2026-11-07"
 authors:
   - family-names: "Vartholomaios"
     given-names: "Aristotelis"
