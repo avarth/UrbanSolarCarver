@@ -5,7 +5,7 @@ import { messages } from "../messages";
 import presentationFile from "./setting_presentation.json";
 
 /**
- * The parts of the form a setting belongs to (setting_presentation.json): "settings" (the analysis: Site and grid shows its shared
+ * The parts of the form a setting belongs to (setting_presentation.json): "settings" (the analysis: the project settings show its shared
  * settings, a criterion's panel its own), "carving" (a criterion's carving rule), and the Envelope and massing and Export steps.
  */
 export type StepName = "settings" | "carving" | "envelope_and_massing" | "export";
@@ -153,7 +153,7 @@ function foldLabelOf(title: string, essential: SettingView[]): string {
 }
 
 /** Whether a project with files in *inputRoles* has the inputs a setting needs (shown_with_inputs). */
-function hasInputsFor(name: string, inputRoles: readonly string[]): boolean {
+export function settingHasInputs(name: string, inputRoles: readonly string[]): boolean {
   const needed = SETTING_PRESENTATIONS[name]?.shown_with_inputs;
   return needed === undefined || needed.some((role) => inputRoles.includes(role));
 }
@@ -161,12 +161,13 @@ function hasInputsFor(name: string, inputRoles: readonly string[]): boolean {
 /**
  * The groups of *step* in *mode*, in the file's order, each with its essential and folded settings; empty groups are left out.
  * *inputRoles*: the input roles the project has files for; a setting that needs inputs (shown_with_inputs) shows only with them.
- * *settingShown*: which settings of the step to draw (the shared ones in Site and grid, a criterion's in its panel); absent, all.
+ * Null: every setting shows, with its inputs or not (the project settings window greys out those without).
+ * *settingShown*: which settings of the step to draw (the shared ones in the project settings, a criterion's in its panel); absent, all.
  */
-export function settingsForStep(step: StepName, mode: string, inputRoles: readonly string[] = [],
+export function settingsForStep(step: StepName, mode: string, inputRoles: readonly string[] | null = [],
                                 settingShown: (name: string) => boolean = () => true): SettingGroupView[] {
   const shownNames = Object.keys(SETTING_PRESENTATIONS).filter((name) =>
-    SETTING_PRESENTATIONS[name].step === step && settingIsShownIn(name, mode) && hasInputsFor(name, inputRoles) && fieldSettingOf(name) === name
+    SETTING_PRESENTATIONS[name].step === step && settingIsShownIn(name, mode) && (inputRoles === null || settingHasInputs(name, inputRoles)) && fieldSettingOf(name) === name
     && settingShown(name));
   return PRESENTATION.steps[step].flatMap((title) => {
     const names = shownNames.filter((name) => SETTING_PRESENTATIONS[name].group === title);

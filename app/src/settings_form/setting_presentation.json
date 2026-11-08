@@ -167,7 +167,7 @@
     },
     "min_voxels": {
       "label": "Drop pieces smaller than", "unit": "m³",
-      "help": "Loose pieces of the kept volume smaller than this are removed before meshing. The engine counts it in voxels: the volume shown is that count at the voxel size in Site and grid, and follows it when the voxel size changes.",
+      "help": "Loose pieces of the kept volume smaller than this are removed before meshing. The engine counts it in voxels: the volume shown is that count at the voxel size in Settings, and follows it when the voxel size changes.",
       "step": "envelope_and_massing", "group": "Envelope", "essential": false, "display": "voxel_volume"
     },
     "ground_floor_height": {

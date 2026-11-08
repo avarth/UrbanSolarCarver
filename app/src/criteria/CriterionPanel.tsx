@@ -1,7 +1,7 @@
 // A criterion's panel (spec 7.1, 7.2), in three folded sections (PanelSection): Test surfaces (ProtectsBox), Settings (the criterion's mode by name, a note on it,
 // the weather box and the values reset by the mode, then the analysis settings that are criterion keys, SettingsStep) and Carving rule
 // (CarvingStep, put together in result_steps.tsx). Run analysis is in the bar pinned under the steps
-// (CriteriaRunBar). The shared settings are in Site and grid. The open sections are the workspace's (usePanelSections); a section opens
+// (CriteriaRunBar). The shared settings are in the project settings window (ProjectSettingsDialog). The open sections are the workspace's (usePanelSections); a section opens
 // when something it shows appears: no test surfaces or the weather box (of a criterion that is on), a field with an
 // error of the criterion's save, or the values reset. A criterion just selected shows them all as new. A criterion
 // that is off needs neither test surfaces nor a weather file, and its closed Carving rule reads Off. The notice of a new weather file

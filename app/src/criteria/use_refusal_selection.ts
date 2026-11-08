@@ -1,7 +1,7 @@
 // A start refused because criteria that are on protect nothing (MissingInputsReply naming "test_surfaces:<id>", spec 7.2, 7.3):
 // the first of them is selected (unless one of them is selected already) and its editor is shown, and its panel asks for test
 // surfaces until its files change or another run is asked for. The Criteria bar's Run analysis and carving update say the refusal under their button, so
-// the panel asks only for a refusal of a button elsewhere (Site and grid), and never says it twice.
+// the panel asks only for a refusal of a button elsewhere (a build), and never says it twice.
 import { useEffect, useEffectEvent, useRef } from "react";
 import type { CriterionEntry } from "../api_client/client";
 import { useKeyedValue } from "../hooks/use_keyed_value";

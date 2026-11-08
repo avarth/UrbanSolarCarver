@@ -1,8 +1,9 @@
-// The one-line summary and the state mark of each step row (UX 4.1), from what the app knows of the open project.
+// The one-line summary and the state mark of each step row (UX 4.1), and the summary of the project settings that the Settings
+// button's tooltip gives, from what the app knows of the open project.
 import { messages } from "../messages";
 import { formatNumber, formatPercent, formattedNumber, withUnit } from "../format_numbers";
 import { plainModeName } from "../modes";
-import type { PipelineStage, StageState, StepMark, StepName } from "../stages";
+import type { PipelineStage, SettingPlace, StageState, StepMark, StepName } from "../stages";
 
 export interface ProjectViewState {
   maxVolumeFiles: number;
@@ -16,8 +17,11 @@ export interface ProjectViewState {
   criterionOff?: boolean;
   northDegrees: number;
   voxelSize: number;
-  /** Settings whose last save was refused, by the step that shows them (messages that name no setting count where they are shown). */
-  settingsToFix: Partial<Record<StepName, number>>;
+  /**
+   * Settings whose last save was refused, by the place that shows them, a step or the project settings window (messages that name
+   * no setting count where they are shown).
+   */
+  settingsToFix: Partial<Record<SettingPlace, number>>;
   stages: Record<PipelineStage, StageState>;
   /** From the run summary of the last carving; null before one. */
   keptPercent: number | null;
@@ -35,11 +39,12 @@ function inputsSummary(state: ProjectViewState): string {
   return messages.inputsSummary(state.maxVolumeFiles, state.hasWeatherFile, state.contextFiles ?? 0, (state.terrainFiles ?? 0) > 0);
 }
 
-const settingsToFixIn = (step: StepName, state: ProjectViewState) => state.settingsToFix[step] ?? 0;
+/** The settings to fix in a step, or in the project settings window. */
+export const settingsToFixIn = (place: SettingPlace, state: Pick<ProjectViewState, "settingsToFix">) => state.settingsToFix[place] ?? 0;
 
-/** "North 10°, 0.5 m voxels" */
-function siteAndGridSummary(state: ProjectViewState): string {
-  return messages.siteAndGridSummary(formattedNumber(state.northDegrees), messages.voxelsOfSize(withUnit(formattedNumber(state.voxelSize), "m")));
+/** The project settings in a line, for the Settings button's tooltip: "North 10°, 0.5 m voxels". */
+export function projectSettingsSummary(state: Pick<ProjectViewState, "northDegrees" | "voxelSize">): string {
+  return messages.projectSettingsSummary(formattedNumber(state.northDegrees), messages.voxelsOfSize(withUnit(formattedNumber(state.voxelSize), "m")));
 }
 
 function carvingSummary(state: ProjectViewState): string {
@@ -99,8 +104,6 @@ export function stepSummary(step: StepName, state: ProjectViewState): string {
   switch (step) {
     case "inputs":
       return inputsSummary(state);
-    case "site_and_grid":
-      return siteAndGridSummary(state);
     case "criteria":
       return criteriaSummary(state);
     case "envelope_and_massing":
@@ -112,13 +115,11 @@ export function stepSummary(step: StepName, state: ProjectViewState): string {
 
 /** A tick when the step is done, "!" when it has a setting to fix, an empty ring otherwise. */
 export function stepMark(step: StepName, state: ProjectViewState): StepMark {
-  const { preprocessing, thresholding, exporting, massing } = state.stages;
+  const { thresholding, exporting, massing } = state.stages;
   if (settingsToFixIn(step, state) > 0) return "error";
   switch (step) {
     case "inputs":
       return state.maxVolumeFiles > 0 ? "done" : "none";
-    case "site_and_grid":
-      return preprocessing === "current" ? "done" : "none";
     case "criteria":
       return thresholding === "current" ? "done" : "none";
     case "envelope_and_massing":

@@ -1,6 +1,6 @@
 // The criteria's part of the open project (ProjectWorkspace): the selection of a card and the requests that change the criteria
 // (use_criterion_selection.ts), a run refused for a criterion shown on that criterion (use_refusal_selection.ts), why Run analysis
-// cannot start in Criteria and in Site and grid, what the results need to know about the criteria (useResultSteps), and the cards'
+// cannot start (and where its setting to fix is), what the results need to know about the criteria (useResultSteps), and the cards'
 // lines and the chain line, which read the results (cardsOf).
 import {
   reportServiceProblem, updateCriterion, type CriterionEntry, type HealthReply, type ModeInfo, type RunSummary,
@@ -11,8 +11,8 @@ import { messages } from "../messages";
 import type { FormStart, FormState, SettingsForm } from "../settings_form/form_state";
 import { splitSettings, type StepFormAction } from "../settings_form/two_forms";
 import { criterionProgressOf, pipelineRecordOf, runningCriterion, type RunFailure, type RunLoop } from "../common/run_state";
-import { runAnalysisBlocker, stepOfSetting } from "../settings_form/SettingsStep";
-import type { StageState, StepName } from "../stages";
+import { placeOfSetting, runAnalysisBlockOf } from "../settings_form/SettingsStep";
+import type { SettingPlace, StageState } from "../stages";
 import {
   activeCriteria, cardLineOf, chainSummaryLine, criteriaProtectingNothing, criterionStatus, stagesDuringRun, type StagesByCriterion,
 } from "./criteria_state";
@@ -64,9 +64,9 @@ export interface WorkspaceCriteriaSource {
   followed: <Reply>(request: Promise<Reply>) => Promise<Reply>;
   /** Asks for the stored test surface files again (after a delete). */
   reloadTestSurfaces: () => Promise<void>;
-  /** Opens a step (and shows its layers). */
-  openStep: (step: StepName) => void;
-  /** Moves the focus to a setting's field in the panel. */
+  /** Opens a step (and shows its layers), or the project settings window. */
+  openPlace: (place: SettingPlace) => void;
+  /** Moves the focus to a setting's field in the panel or the project settings window. */
   focusSetting: (settingName: string) => void;
   /** A criterion is shown for a refused run or a link to one of its settings (showCriterion): the Criteria step shows its editor. */
   onShowCriterion: () => void;
@@ -122,9 +122,10 @@ export interface WorkspaceCriteria {
   selection: CriterionSelection;
   /** The criteria that are on, in chain order. */
   active: CriterionEntry[];
-  /** Why Run analysis cannot start, as Criteria says it and as Site and grid does; null when it can. */
+  /** Why Run analysis cannot start, as Criteria says it; null when it can. */
   runBlocker: string | null;
-  siteAndGridRunBlocker: string | null;
+  /** The place of the setting to fix that the run's reason names, when it is not Criteria (the project settings window); else null. */
+  runBlockerPlace: SettingPlace | null;
   /** The shown criterion's own analysis and carving stages, as shown; absent when the project lists none. */
   ownStages: CriterionStages | undefined;
   ofResults: CriteriaOfResults;
@@ -157,12 +158,12 @@ export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): Workspace
     latestForms.current.dispatch({ type: "save_rejected", reply: { field_errors: fieldErrors, grid_plan: latestForms.current.currentForm().gridPlan } });
   };
   const showRefusalOfCriterion = (id: string, fieldErrors: RunFailure["field_errors"]) => selection.showCriterion(id, () => markRunErrors(fieldErrors));
-  // A failed run's link to the setting it names: the step that holds the setting opens and the focus goes to its field. A setting
+  // A failed run's link to the setting it names: the place that holds the setting opens and the focus goes to its field. A setting
   // of the criterion the run named is focused in that criterion's panel, selected first, with the run's errors marked there again.
   const goToSetting = (settingName: string, criterionId: string | null = null) => {
-    const step = stepOfSetting(settingName, criterionKeys);
+    const step = placeOfSetting(settingName, criterionKeys);
     if (step === null) return;
-    source.openStep(step);
+    source.openPlace(step);
     const focusField = () => source.focusSetting(settingName);
     const known = criteria.criteria.some((entry) => entry.id === criterionId);
     if (step !== "criteria" || criterionId === null || criterionId === source.shownCriterionId || !known) {
@@ -176,7 +177,7 @@ export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): Workspace
     });
   };
 
-  // Run analysis is in Criteria and pinned in Site and grid: each names a setting to fix in another step with that step. Every
+  // Run analysis is pinned in Criteria: it names a setting to fix in another place with that place (Settings, a later step). Every
   // criterion that is on needs test surfaces (a bypassed one needs none), and a weather file when its mode reads one. With several
   // criteria every reason about a criterion names it, the shown one's too.
   const active = activeCriteria(criteria.criteria);
@@ -193,14 +194,11 @@ export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): Workspace
     otherCriterionNeedingWeatherFile: needingWeatherFile.find((entry) => entry.id !== criterion?.id)?.name ?? null,
     hasWeatherFile: source.hasWeatherFile, form, warmUpState: source.warmUpState, criterionKeys,
     shownCriterionName: severalCriteria ? criterion?.name ?? null : null,
-    stepErrorsByStep: { site_and_grid: source.sharedForm.form.stepErrors, criteria: source.criterionForm.form.stepErrors },
+    stepErrorsByPlace: { project_settings: source.sharedForm.form.stepErrors, criteria: source.criterionForm.form.stepErrors },
   };
-  const runBlocker = runAnalysisBlocker({ ...runConditions, shownIn: "criteria" });
-  // Site and grid shows no criterion: with several, the one without test surfaces or that needs a weather file is named, the shown one too.
-  const siteAndGridRunBlocker = runAnalysisBlocker(severalCriteria
-    ? { ...runConditions, shownIn: "site_and_grid", testSurfaceFiles: 1, otherCriterionWithoutTestSurfaces: protectingNothing[0]?.name ?? null,
-        modeNeedsWeatherFile: false, otherCriterionNeedingWeatherFile: needingWeatherFile[0]?.name ?? null }
-    : { ...runConditions, shownIn: "site_and_grid" });
+  const runBlock = runAnalysisBlockOf({ ...runConditions, shownIn: "criteria" });
+  const runBlocker = runBlock?.reason ?? null;
+  const runBlockerPlace = runBlock?.settingsElsewhere ?? null;
 
   // The shown criterion's own analysis and carving: its carving rule locks while its analysis is out of date; another criterion's
   // analysis out of date keeps a carving change from running (result_steps.tsx).
@@ -275,7 +273,7 @@ export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): Workspace
   };
 
   return {
-    selection, active, runBlocker, siteAndGridRunBlocker, ownStages,
+    selection, active, runBlocker, runBlockerPlace, ownStages,
     ofResults, goToSetting, panelProblem, cardsOf,
   };
 }

@@ -238,7 +238,7 @@ export function runProgressShare(state: RunState): number {
  * buttons of that step's two parts (R2 5). "simulate" is Simulate's Run: a simulation of the studies, which shares the engine with
  * the pipeline runs (one job at a time) but none of their stages.
  */
-export type RunOrigin = "settings_run_analysis" | "carving_run_analysis" | "carving_update" | "build" | "build_envelope" | "build_massing" | "export_format"
+export type RunOrigin = "carving_run_analysis" | "carving_update" | "build" | "build_envelope" | "build_massing" | "export_format"
   | "simulate";
 
 /** The run of *project* the steps of Design follow (the last run's record, unless it was a simulation); null otherwise. */

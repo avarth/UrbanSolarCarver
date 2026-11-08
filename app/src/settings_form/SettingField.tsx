@@ -30,6 +30,8 @@ export interface SettingFieldExtras {
   coldPeriod?: ColdPeriodState | null;
   /** The hemisphere of the weather file, for the period control's heating season preset; northern when absent. */
   hemisphere?: Hemisphere;
+  /** The field is greyed out whatever its group says (a setting whose inputs the project has no files for); its notes say why. */
+  disabled?: boolean;
 }
 
 export interface SettingFieldProps {
@@ -148,7 +150,8 @@ export function WarningIcon() {
   );
 }
 
-export function SettingField({ view, form, onChange, disabled = false, extras }: SettingFieldProps) {
+export function SettingField({ view, form, onChange, disabled: groupDisabled = false, extras }: SettingFieldProps) {
+  const disabled = groupDisabled || extras?.disabled === true;
   const inputId = useId();
   const labelId = `${inputId}-label`;
   const errorId = `${inputId}-error`;

@@ -31,6 +31,13 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - **The sun tool** moved from Simulate's Sun panel to a button in the view's toolbar, in Carve, Simulate and Inspect. It
   shows the sun path and the shadows at a time; the view's count of hours in shade is gone (a Sun hours study replaces it).
 
+### Carve
+
+- **Settings** in the top bar opens the project settings: north, Account for context blocking, the voxel size with its
+  grid, and the rays per batch. The **Site and grid** step is gone, so Carve has four steps. The button shows a red **!**
+  while one of these settings is to fix, and Run analysis (in Criteria) names Settings with an **Open settings** button.
+- Without surroundings or terrain, Account for context blocking is shown greyed out with what to add, not hidden.
+
 ### Fixed
 
 - The orbit point stays in the middle of the free part of the view when the window is resized or a panel opens, closes or

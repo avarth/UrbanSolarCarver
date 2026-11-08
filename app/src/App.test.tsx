@@ -528,7 +528,7 @@ test("a changed projects folder forgets the last run's record: a project of the 
   service.projectsOfOtherFolder = [{ name: "Plot 7", created: "2026-10-18T09:00:00", modified: "2026-10-18T09:00:00", mode: "time-based" }];
   await renderApp(service);
   await openPlot7();
-  await act(async () => { await workspaceSteps.runs!.start("Plot 7", ["thresholding"], "settings_run_analysis"); });
+  await act(async () => { await workspaceSteps.runs!.start("Plot 7", ["thresholding"], "carving_run_analysis"); });
   await settle();
   expect(page().querySelector(".fake-workspace")!.getAttribute("data-run-refusal")).toBe("The maximum volume is missing.");
   click(buttonNamed("UrbanSolarCarver"));

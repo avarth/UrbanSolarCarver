@@ -5,7 +5,8 @@
 // at a time as the engine runs them, so a run goes on being followed while the start screen or another project is open. The
 // projects folder and the project menus (on the start screen and on the project name in the top bar) send their requests here:
 // a rename keeps the open project open under its new name and on its open step, a delete of it returns to the start screen, a
-// reset opens it afresh. The product name at the left of the top bar returns to the start screen; leaving Inspect with turned
+// reset opens it afresh. Beside the project menu, the open project draws its Settings button (ProjectSettingsDialog) into a place the
+// top bar keeps for it. The product name at the left of the top bar returns to the start screen; leaving Inspect with turned
 // surfaces not saved, by it or by the switch, asks first (UnsavedTurnsDialog). The theme button at the right of the top bar
 // switches the whole app, the 3D view with it, between light and dark (theme/app_theme.tsx).
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -135,6 +136,8 @@ export function LastRunTime({ seconds }: { seconds: number | undefined }) {
 
 export function App() {
   const [theme, setTheme] = useState<AppTheme>(rememberedTheme);
+  // The place in the top bar where the open project draws its Settings button.
+  const [settingsButtonSlot, setSettingsButtonSlot] = useState<HTMLSpanElement | null>(null);
   const [health, setHealth] = useState<HealthReply | null>(null);
   const [problem, setProblem] = useState<ServiceProblem | null>(null);
   const [setup, setSetup] = useState<{ schema: Record<string, unknown>; modes: ModeInfo[]; criterionKeys: ReadonlySet<string> } | null>(null);
@@ -363,6 +366,7 @@ export function App() {
               <ProjectMenu projectName={openProject.name} exampleTitle={exampleTitleOf(openProject.example, examples)}
                            projectFolderPath={projectsFolder && projectFolderPath(projectsFolder.path, openProject.name)}
                            runActive={runActiveFor(openProject.name)} actions={projectActions} placement="top_bar" />
+              <span ref={setSettingsButtonSlot} className="top-bar-settings-slot" />
               <WorkspaceModeSwitch mode={workspaceMode} onChange={(mode) => {
                 if (mode !== workspaceMode) leavingInspect.leave(() => setWorkspaceMode(mode));
               }} />
@@ -390,7 +394,7 @@ export function App() {
                             onShowProjects={() => setOpenProject(null)} onSettingsSaverReady={(saver) => { openProjectSettings.current = saver; }}
                             startSteps={workspaceStartSteps} onStepsChange={(steps) => { openWorkspaceSteps.current = steps; }}
                             onInspectUnsavedChange={leavingInspect.onUnsavedChange} onInspectTurnsReady={leavingInspect.onTurnsReady}
-                            onGoToCarve={() => leavingInspect.leave(() => setWorkspaceMode("design"))} />
+                            onGoToCarve={() => leavingInspect.leave(() => setWorkspaceMode("design"))} settingsButtonSlot={settingsButtonSlot} />
         )}
         {leavingInspect.dialog}
       </div>

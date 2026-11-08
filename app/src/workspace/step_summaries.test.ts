@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
-import { stepMark, stepNotUsableYet, stepSummary, type ProjectViewState } from "./step_summaries";
-import { STEP_NAMES, type PipelineStage, type StageState, type StepName } from "../stages";
+import { projectSettingsSummary, settingsToFixIn, stepMark, stepNotUsableYet, stepSummary, type ProjectViewState } from "./step_summaries";
+import { STEP_NAMES, type PipelineStage, type SettingPlace, type StageState } from "../stages";
 
 const THIN = "\u202f";
 const NBSP = "\u00a0";
@@ -13,7 +13,7 @@ interface StateOverrides {
   mode?: string;
   north?: number;
   voxelSize?: number;
-  settingsToFix?: Partial<Record<StepName, number>>;
+  settingsToFix?: Partial<Record<SettingPlace, number>>;
   keptPercent?: number;
   totalFloorArea?: number;
   storeys?: number;
@@ -37,8 +37,8 @@ function stateWith(overrides: StateOverrides): ProjectViewState {
   };
 }
 
-test("the steps are Inputs, Site and grid, Criteria, Envelope and massing and Export", () => {
-  expect(STEP_NAMES).toEqual(["inputs", "site_and_grid", "criteria", "envelope_and_massing", "export"]);
+test("the steps are Inputs, Criteria, Envelope and massing and Export", () => {
+  expect(STEP_NAMES).toEqual(["inputs", "criteria", "envelope_and_massing", "export"]);
 });
 
 test("closed steps summarise their state in the UX spec's words", () => {
@@ -54,11 +54,13 @@ test("the inputs summary counts the site's files per role and names a missing ma
   expect(stepSummary("inputs", stateWith({ maxVolume: 0, weather: true }))).toBe("Maximum volume missing");
 });
 
-test("the site and grid summary gives the north and the voxel size, or the count of settings to fix", () => {
-  expect(stepSummary("site_and_grid", stateWith({ north: 10, voxelSize: 0.5 }))).toBe(`North 10°, 0.5${NBSP}m voxels`);
-  expect(stepSummary("site_and_grid", stateWith({}))).toBe(`North 0°, 1${NBSP}m voxels`);
-  expect(stepSummary("site_and_grid", stateWith({ north: 12.5, voxelSize: 2 }))).toBe(`North 12.5°, 2${NBSP}m voxels`);
-  expect(stepSummary("site_and_grid", stateWith({ settingsToFix: { site_and_grid: 1 } }))).toBe("1 setting to fix");
+test("the project settings in a line give the north and the voxel size; their settings to fix are counted apart from the steps", () => {
+  expect(projectSettingsSummary(stateWith({ north: 10, voxelSize: 0.5 }))).toBe(`North 10°, 0.5${NBSP}m voxels`);
+  expect(projectSettingsSummary(stateWith({}))).toBe(`North 0°, 1${NBSP}m voxels`);
+  expect(projectSettingsSummary(stateWith({ north: 12.5, voxelSize: 2 }))).toBe(`North 12.5°, 2${NBSP}m voxels`);
+  const state = stateWith({ settingsToFix: { project_settings: 1 } });
+  expect(settingsToFixIn("project_settings", state)).toBe(1);
+  for (const step of STEP_NAMES) expect(stepMark(step, state), step).not.toBe("error");
 });
 
 test("the criteria summary of one criterion joins its mode and its carving", () => {
@@ -123,7 +125,6 @@ test("Export can be used once either part is built, and says which is ready", ()
 
 test("Criteria can always be used, as it holds the mode and Run analysis; Envelope and massing waits for an analysis", () => {
   expect(stepNotUsableYet("criteria", stateWith({}))).toBeNull();
-  expect(stepNotUsableYet("site_and_grid", stateWith({}))).toBeNull();
   expect(stepNotUsableYet("envelope_and_massing", stateWith({}))).toBe("Run the analysis in Criteria before building the envelope and massing");
   expect(stepNotUsableYet("envelope_and_massing", stateWith({ stages: { thresholding: "out_of_date" } }))).toBeNull();
 });
@@ -131,9 +132,6 @@ test("Criteria can always be used, as it holds the mode and Run analysis; Envelo
 test("each step's mark: done, a setting to fix, or nothing yet", () => {
   expect(stepMark("inputs", stateWith({}))).toBe("done");
   expect(stepMark("inputs", stateWith({ maxVolume: 0 }))).toBe("none");
-  expect(stepMark("site_and_grid", stateWith({ stages: { preprocessing: "current" } }))).toBe("done");
-  expect(stepMark("site_and_grid", stateWith({}))).toBe("none");
-  expect(stepMark("site_and_grid", stateWith({ settingsToFix: { site_and_grid: 2 }, stages: { preprocessing: "current" } }))).toBe("error");
   expect(stepMark("criteria", stateWith({ stages: { preprocessing: "current", thresholding: "current" } }))).toBe("done");
   expect(stepMark("criteria", stateWith({ stages: { thresholding: "out_of_date" } }))).toBe("none");
   expect(stepMark("envelope_and_massing", stateWith({ stages: { exporting: "current", massing: "current" } }))).toBe("done");
@@ -146,8 +144,6 @@ test("a setting to fix is counted and marked on the step that holds it", () => {
   expect(stepMark("criteria", state)).toBe("error");
   expect(stepSummary("envelope_and_massing", state)).toBe("2 settings to fix");
   expect(stepMark("envelope_and_massing", state)).toBe("error");
-  expect(stepSummary("site_and_grid", state)).toBe(`North 0°, 1${NBSP}m voxels`);
-  expect(stepMark("site_and_grid", state)).toBe("done");
   expect(stepMark("export", stateWith({ settingsToFix: { export: 1 } }))).toBe("error");
   expect(stepSummary("export", stateWith({ settingsToFix: { export: 1 } }))).toBe("1 setting to fix");
 });

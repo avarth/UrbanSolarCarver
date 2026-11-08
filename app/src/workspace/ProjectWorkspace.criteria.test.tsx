@@ -1,4 +1,4 @@
-// The open project's steps for one criterion, against a fake service: Inputs hold the site, Site and grid the shared settings,
+// The open project's steps for one criterion, against a fake service: Inputs hold the site, the project settings the shared settings,
 // and Criteria opens straight on the criterion, whose test surfaces go through its own routes. The last tests are of what the
 // Criteria step shows, the list or the editor of one criterion: how it opens, what it keeps, and what leads to a criterion's settings.
 import { act } from "react";
@@ -9,7 +9,7 @@ import { FakeViewerScene } from "../viewer/fake_scene_for_test";
 import type { PipelineStage, StageState } from "../stages";
 import { FACADES, ROOFS, WINDOWS, deleteCriterion, openChain, select, service as chainService } from "./chain_service_for_test";
 import {
-  CARVED, CARVING, ENVELOPE, FakeService, MASSING, NOTHING_RUN, TRIANGLE_OBJ, buttonIn, container, criterionEntry, endWorkspaceTest, openStep,
+  CARVED, CARVING, ENVELOPE, FakeService, MASSING, NOTHING_RUN, TRIANGLE_OBJ, buttonIn, container, criterionEntry, endWorkspaceTest, openStep, closeProjectSettings, openProjectSettings, projectSettings, settingsButton,
   openPanelSection, openWorkspace, pinnedBar, pressRunAnalysis, project, reasonOf, settle, showCriterionCards, showCriterionEditor, startWorkspaceTest, stepIsOpen, stepRow, type,
   unmountWorkspace, voxelSizeField,
 } from "./project_workspace_for_test";
@@ -29,10 +29,11 @@ const protectedFiles = () => [...protectsBox().querySelectorAll(".input-file-nam
 const field = (setting: string) => container().querySelector(`[data-setting="${setting}"]`);
 const stepTitles = () => [...container().querySelectorAll(".step-title")].map((title) => title.textContent);
 
-test("the steps are Inputs, Site and grid, Criteria, Envelope and massing and Export", async () => {
+test("the steps are Inputs, Criteria, Envelope and massing and Export; the shared settings are behind the Settings button", async () => {
   service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, project(NOTHING_RUN));
-  expect(stepTitles()).toEqual(["Inputs", "Site and grid", "Criteria", "Envelope and massing", "Export"]);
+  expect(stepTitles()).toEqual(["Inputs", "Criteria", "Envelope and massing", "Export"]);
+  expect(settingsButton().textContent).toBe("Settings");
 });
 
 test("one criterion shows its row in the list, with the switch on and no drag handle", async () => {
@@ -109,8 +110,8 @@ test("build waits in the pinned bar until every criterion is carved", async () =
   // The settings shown differ from the analysis: its existing reason.
   service = new FakeService(CARVED, CARVING);
   await openWorkspace(service, project(CARVED));
-  openStep("Site and grid");
   type(voxelSizeField(), "2");
+  closeProjectSettings();
   openStep("Criteria");
   expect(reasonOf(build())).toBe("Settings changed: run the analysis again before building");
 });
@@ -146,7 +147,7 @@ test("an earlier project shows its test surfaces in the criterion", async () => 
   openPanelSection("Test surfaces");
   expect(protectedFiles()).toEqual(["roofs.ply", "windows.ply"]);
   expect(protectsBox().querySelector(".input-file-detail")!.textContent).toBe("20 triangles");
-  for (const title of ["Inputs", "Site and grid", "Criteria", "Envelope and massing", "Export"]) {
+  for (const title of ["Inputs", "Criteria", "Envelope and massing", "Export"]) {
     expect(stepRow(title).querySelector(".step-mark-done"), title).not.toBeNull();
   }
   expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);      // the 3D view still draws them
@@ -160,14 +161,16 @@ test("inputs hold only the site", async () => {
   expect(stepRow("Inputs").querySelector(".step-mark-done")).not.toBeNull();         // the maximum volume is there
 });
 
-test("site and grid shows only shared settings", async () => {
+test("the project settings show only shared settings, and no run button", async () => {
   service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, project(NOTHING_RUN, { north_deg: 10, voxel_size: 0.5 }));
-  expect(stepRow("Site and grid").querySelector(".step-summary")!.textContent).toBe("North 10°, 0.5 m voxels");
-  openStep("Site and grid");
-  expect(field("voxel_size")).not.toBeNull();
-  expect(field("start_month")).toBeNull();
-  expect(buttonIn(container().querySelector(".step-pinned-action")!, "Run analysis")).toBeDefined();
+  expect(settingsButton().title).toBe("North 10°, 0.5\u00a0m voxels. Opens the settings every criterion shares.");
+  openProjectSettings();
+  const inWindow = (setting: string) => projectSettings()!.querySelector(`[data-setting="${setting}"]`);
+  expect(inWindow("voxel_size")).not.toBeNull();
+  expect(inWindow("start_month")).toBeNull();
+  expect(buttonIn(projectSettings()!, "Run analysis")).toBeUndefined();
+  closeProjectSettings();
   openStep("Criteria");
   openPanelSection("Settings");
   expect(field("start_month")).not.toBeNull();
@@ -251,8 +254,9 @@ test("after All criteria, closing and opening the Criteria step shows the list a
 });
 
 test("a run that ends and opens the Criteria step keeps the list or the editor as it was", async () => {
-  async function runFromSiteAndGrid() {
-    openStep("Site and grid");
+  // Run analysis is pinned under Criteria: the step is closed first, so the end of the run opens it again.
+  async function runFromCriteria() {
+    openStep("Inputs");
     await pressRunAnalysis();
     service.stages = CARVED;
     FakeWebSocket.opened.at(-1)!.send({ type: "run_finished", stages: ["preprocessing", "thresholding"], files: [] });
@@ -263,7 +267,7 @@ test("a run that ends and opens the Criteria step keeps the list or the editor a
   await openWorkspace(service, project(NOTHING_RUN));
   openStep("Criteria");
   showCriterionCards();
-  await runFromSiteAndGrid();
+  await runFromCriteria();
   expect(listShown()).toBe(true);
   unmountWorkspace();
   FakeWebSocket.opened = [];
@@ -271,7 +275,7 @@ test("a run that ends and opens the Criteria step keeps the list or the editor a
   await openWorkspace(service, project(NOTHING_RUN));
   openStep("Criteria");
   expect(editorName()).not.toBeNull();
-  await runFromSiteAndGrid();
+  await runFromCriteria();
   expect(listShown()).toBe(false);
   expect(editorName()).not.toBeNull();
 });

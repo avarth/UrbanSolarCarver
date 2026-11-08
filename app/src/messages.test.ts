@@ -12,7 +12,7 @@ test("the reasons a run button or a carving change waits, which fill the same sl
   const oneSentence = [
     messages.runInProgress, messages.addMaxVolumeToRun, messages.addTestSurfacesToRun, messages.addMaxVolumeAndTestSurfacesToRun,
     messages.addTestSurfacesOfCriterionToRun("Daylight"), messages.turnOnCriterionToRun, messages.fixSettingsToRun,
-    messages.fixSettingsInStepToRun("Criteria"), messages.fixSettingToRun("Voxel size"), messages.fixSettingInStepToRun("Voxel size", "Site and grid"),
+    messages.fixSettingsInStepToRun("Criteria"), messages.fixSettingToRun("Voxel size"), messages.fixSettingInStepToRun("Voxel size", "Settings"),
     messages.weatherFileNeeded, messages.weatherFileNeededFor("Daylight"), messages.runButtonWaitsForGpu, messages.carvingWaitsForAnalysisOf("Daylight"),
     messages.addTestSurfacesFirst("Daylight"), messages.fixSettingOfCriterionToRun("Voxel size", "Daylight"),
     messages.fixSettingsOfCriterionToRun("Daylight"), messages.buildWaitsForAnalysis, messages.buildWaitsForFirstAnalysis, messages.buildWaitsForCarving,

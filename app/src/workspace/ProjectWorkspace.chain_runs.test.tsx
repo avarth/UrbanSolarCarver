@@ -10,8 +10,8 @@ import {
   type CriterionStages,
 } from "./chain_service_for_test";
 import {
-  buildPart, buttonIn, container, endWorkspaceTest, openStep, panelSectionOpen, pinnedBar, pressRunAnalysis, reasonOf, settle, showCriterionCards,
-  showCriterionEditor, startWorkspaceTest, stepRow, thresholdField, thresholdOf, togglePanelSection, typeAndLeave, voxelSizeField, waitForTheSave,
+  buildPart, buttonIn, container, endWorkspaceTest, openStep, closeProjectSettings, projectSettings, settingsButton, panelSectionOpen, pinnedBar, pressRunAnalysis, reasonOf, settle, showCriterionCards,
+  showCriterionEditor, startWorkspaceTest, thresholdField, thresholdOf, togglePanelSection, typeAndLeave, voxelSizeField, waitForTheSave,
 } from "./project_workspace_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
@@ -122,11 +122,15 @@ test("a run refused for missing test surfaces selects that criterion and asks fo
   expect(selectedCardName()).toBe("Spring sun on windows");
   expect(timesShown(pinnedBar(), refusal)).toBe(1);
   expect(timesShown(panelFrame(), refusal)).toBe(0);
-  // From Site and grid the refusal is said there; the panel of the criterion says it once too.
-  await select("Winter sun on facades");
+});
+
+test("a build refused for missing test surfaces is said in that criterion's panel, once", async () => {
+  await openChain([FACADES, WINDOWS]);
+  const refusal = "Add test surfaces to Spring sun on windows.";
+  chainService.runRefusal = { status: 422, body: { detail: refusal, missing_inputs: ["test_surfaces:2"] } };
   showCriterionCards();                                           // the list shown, so the refusal has to open the editor
-  openStep("Site and grid");
-  await pressRunAnalysis();
+  await act(async () => buttonIn(pinnedBar(), "Build envelope and massing").click());     // it opens Envelope and massing
+  await settle();
   openStep("Criteria");
   expect(editorName()).toBe("Spring sun on windows");
   expect(selectedCardName()).toBe("Spring sun on windows");
@@ -136,7 +140,7 @@ test("a run refused for missing test surfaces selects that criterion and asks fo
   expect(panelFrame().querySelector(".criterion-panel-problem")).toBeNull();
 });
 
-test("Run analysis waits for the test surfaces of every criterion that is on, and names the one without, in Criteria and in Site and grid", async () => {
+test("Run analysis waits for the test surfaces of every criterion that is on, and names the one without", async () => {
   await openChain([FACADES, { ...WINDOWS, test_surface_files: [] }], { 1: CURRENT, 2: NOT_RUN });
   const runButton = () => buttonIn(pinnedBar(), "Run analysis");
   expect(runButton().disabled).toBe(true);
@@ -147,9 +151,6 @@ test("Run analysis waits for the test surfaces of every criterion that is on, an
   // Shown, it is named too: with several criteria the bar says which one the reason is about.
   await select("Spring sun on windows");
   expect(reasonOf(runButton())).toBe("Add test surfaces to Spring sun on windows to run the analysis");
-  openStep("Site and grid");                                      // the button there, whichever criterion is shown
-  expect(reasonOf(runButton())).toBe("Add test surfaces to Spring sun on windows to run the analysis");
-  openStep("Criteria");
   await bypass("Spring sun on windows");
   expect(runButton()).toBeUndefined();                            // criterion 1, alone on, is current: nothing to run
   expect(buttonIn(pinnedBar(), "Build envelope and massing").disabled).toBe(false);
@@ -293,9 +294,6 @@ test("Run analysis asks for the weather file a criterion that is on needs, namin
   const withoutWeatherFile = (opened: ProjectDetail): ProjectDetail => ({ ...opened, inputs: { ...opened.inputs, weather: [] } });
   await openChain([{ ...ROOFS, id: "1" }, { ...FACADES, id: "2" }], { 1: CURRENT, 2: OUT_OF_DATE }, undefined, [], withoutWeatherFile);
   expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Add a weather file to run Winter sun on facades");
-  openStep("Site and grid");
-  expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Add a weather file to run Winter sun on facades");
-  openStep("Criteria");
   await select("Winter sun on facades");
   expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Add a weather file to run Winter sun on facades");
 });
@@ -309,49 +307,43 @@ test("a criterion that is off is not flagged for a missing weather file", async 
   expect(pinnedBar().textContent).not.toContain("weather file");
 });
 
-test("a shared setting refused by another criterion's settings is said in Site and grid with that criterion's name, on no criterion field", async () => {
+test("a shared setting refused by another criterion's settings is said in the project settings with that criterion's name, on no criterion field", async () => {
   await openChain([FACADES, WINDOWS], undefined, (chain) => {
     chain.configErrorsOf = (values) => (values.voxel_size === 3 ? [{ field: "max_slope_deg", message: "Input should be less than 90" }] : null);
     chain.sharedRefusalCriterion = "2";
   });
-  openStep("Site and grid");
   typeAndLeave(voxelSizeField(), "3");
   await waitForTheSave();
   await settle();
-  expect(stepRow("Site and grid").textContent).toContain("Spring sun on windows: Steepest slope of the envelope: Input should be less than 90");
-  openStep("Criteria");
+  expect(projectSettings()!.textContent).toContain("Spring sun on windows: Steepest slope of the envelope: Input should be less than 90");
+  expect(settingsButton().getAttribute("aria-label")).toBe("Settings, 1 setting to fix");
+  closeProjectSettings();
   expect(container().querySelector('[data-setting="max_slope_deg"] .setting-error')).toBeNull();     // criterion 1's own field is fine
 });
 
 const barButtons = () => [...pinnedBar().querySelectorAll<HTMLButtonElement>(".criteria-run-buttons button")].map((button) => button.textContent);
 const updatedLine = () => pinnedBar().querySelector(".run-outcome")?.textContent ?? null;
 
-test("with every criterion current the bar offers only the build, as its primary button; Site and grid offers no run", async () => {
+test("with every criterion current the bar offers only the build, as its primary button", async () => {
   await openChain([FACADES, WINDOWS]);
   expect(barButtons()).toEqual(["Build envelope and massing"]);
   expect(buttonIn(pinnedBar(), "Build envelope and massing").className).toBe("primary-button");
   showCriterionCards();
   expect(barButtons()).toEqual(["Build envelope and massing"]);
-  openStep("Site and grid");
-  expect(buttonIn(pinnedBar(), "Run analysis")).toBeUndefined();
-  expect(pinnedBar().textContent).toBe("");
 });
 
-test("with an analysis out of date the bar and Site and grid offer Run analysis, with the build secondary", async () => {
+test("with an analysis out of date the bar offers Run analysis, with the build secondary", async () => {
   await openChain([FACADES, WINDOWS], { 1: CURRENT, 2: OUT_OF_DATE });
   expect(barButtons()).toEqual(["Run analysis", "Build envelope and massing"]);
   expect(buttonIn(pinnedBar(), "Build envelope and massing").className).toBe("secondary-button");
-  openStep("Site and grid");
   expect(buttonIn(pinnedBar(), "Run analysis").disabled).toBe(false);
 });
 
-test("with only a carving out of date the bar offers Update carving, also in the list, and Site and grid offers no run", async () => {
+test("with only a carving out of date the bar offers Update carving, also in the list", async () => {
   await openChain([FACADES, WINDOWS], { 1: CURRENT, 2: THRESHOLD_OUT_OF_DATE });
   expect(barButtons()).toEqual(["Update carving", "Build envelope and massing"]);
   expect(reasonOf(buttonIn(pinnedBar(), "Build envelope and massing"))).toBe("Update the carving before building");
-  openStep("Site and grid");
   expect(buttonIn(pinnedBar(), "Run analysis")).toBeUndefined();
-  openStep("Criteria");
   showCriterionCards();
   chainService.runCriterionStages = { 1: [], 2: ["thresholding"] };
   await act(async () => buttonIn(pinnedBar(), "Update carving").click());
@@ -377,9 +369,8 @@ test("a threshold change offers no run while it carves; then a line names the cr
   expect(barButtons()).toEqual(["Build envelope and massing"]);
   expect(updatedLine()).toBe("Carving updated: Winter sun on facades, Spring sun on windows.");
 
-  openStep("Site and grid");
   typeAndLeave(voxelSizeField(), "2");
-  openStep("Criteria");
+  closeProjectSettings();
   await settle();
   expect(barButtons()).toEqual(["Run analysis", "Build envelope and massing"]);
   expect(updatedLine()).toBeNull();

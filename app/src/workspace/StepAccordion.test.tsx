@@ -11,7 +11,7 @@ afterEach(() => {
 
 const STEPS: AccordionStep[] = [
   { name: "inputs", title: "Inputs", summary: "1 volume, weather", mark: "done", notUsableYet: null, content: <p>inputs content</p> },
-  { name: "site_and_grid", title: "Site and grid", summary: "1 setting to fix", mark: "error", notUsableYet: null, content: <p>site and grid content</p> },
+  { name: "criteria", title: "Criteria", summary: "1 setting to fix", mark: "error", notUsableYet: null, content: <p>criteria content</p> },
   { name: "envelope_and_massing", title: "Envelope and massing", summary: "Not built yet", mark: "none", notUsableYet: "Run the analysis in Criteria before building the envelope and massing",
     content: <p>envelope content</p> },
 ];
@@ -36,13 +36,13 @@ test("closed steps show their summary, the open one its content; a click opens a
 test("each row starts with its state mark: a tick, a red !, an accent ring on the open step", () => {
   rendered = renderForTest(<StepAccordion steps={STEPS} openStep="envelope_and_massing" onOpenStep={() => {}} pinnedAction={null} />);
   expect(rowOf(rendered.container, "Inputs").querySelector(".step-mark-done svg")).not.toBeNull();
-  expect(rowOf(rendered.container, "Site and grid").querySelector(".step-mark-error")!.textContent).toBe("!");
+  expect(rowOf(rendered.container, "Criteria").querySelector(".step-mark-error")!.textContent).toBe("!");
   expect(rowOf(rendered.container, "Envelope and massing").querySelector(".step-mark-open")).not.toBeNull();
 });
 
 test("a setting to fix stays in the summary while its step is open, in the error style", () => {
-  rendered = renderForTest(<StepAccordion steps={STEPS} openStep="site_and_grid" onOpenStep={() => {}} pinnedAction={null} />);
-  const summary = rowOf(rendered.container, "Site and grid").querySelector(".step-summary")!;
+  rendered = renderForTest(<StepAccordion steps={STEPS} openStep="criteria" onOpenStep={() => {}} pinnedAction={null} />);
+  const summary = rowOf(rendered.container, "Criteria").querySelector(".step-summary")!;
   expect(summary.textContent).toBe("1 setting to fix");
   expect(summary.classList.contains("step-summary-error")).toBe(true);
 });

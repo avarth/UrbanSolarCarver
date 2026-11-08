@@ -66,7 +66,7 @@ function splitFieldErrors(fieldErrors: readonly FieldError[], mode: string, crit
 /**
  * A refused save of the shared settings (PUT shared-settings) as the shared form is to show it. The service checks the shared values
  * with each criterion that is on and names the one that refused them (ConfigErrorReply.criterion): an error on a setting of that
- * criterion is not the shared form's, nor the shown criterion's, so it becomes a message of Site and grid with the setting's label,
+ * criterion is not the shared form's, nor the shown criterion's, so it becomes a message of the project settings with the setting's label,
  * and with the criterion's name when the project has several. *criterionOf* finds a criterion by id. Any other failure is unchanged.
  */
 export function sharedRefusalShown(error: unknown, criterionKeys: ReadonlySet<string>, criterionOf: (id: string) => CriterionEntry | null,

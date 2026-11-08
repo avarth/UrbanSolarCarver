@@ -11,7 +11,7 @@ import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
 import { click } from "../viewer_overlays/render_for_test";
 import {
-  CARVED, FILE_CHANGED_SINCE_READ, FILE_CHANGED_SINCE_TURNED, NOTHING_RUN, FakeService, buttonIn, container, endWorkspaceTest, openStep, openWorkspace,
+  CARVED, FILE_CHANGED_SINCE_READ, FILE_CHANGED_SINCE_TURNED, NOTHING_RUN, FakeService, buttonIn, container, endWorkspaceTest, openWorkspace,
   packedInspectGeometry, pressRunAnalysis, project, reasonOf, settle, startWorkspaceTest, switchMode,
 } from "./project_workspace_for_test";
 
@@ -321,7 +321,6 @@ test("a file closed as a whole cannot be flipped: Flip mode and Flip all are dis
 
 test("during a run of the project the surfaces can be turned but Save is disabled with the reason, until the run ends", async () => {
   await openInspect(async () => {
-    openStep("Site and grid");
     await pressRunAnalysis();
   });
   expect(FakeWebSocket.opened).toHaveLength(1);

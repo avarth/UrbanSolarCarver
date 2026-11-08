@@ -246,7 +246,6 @@ export const messages = {
   // The steps and their summary lines (4.1)
   stepTitles: {
     inputs: "Inputs",
-    site_and_grid: "Site and grid",
     criteria: "Criteria",
     envelope_and_massing: "Envelope and massing",
     export: "Export",
@@ -258,8 +257,21 @@ export const messages = {
     (hasTerrain ? ", terrain" : "") +
     (hasWeatherFile === true ? ", weather" : ""),
   maxVolumeMissing: "Maximum volume missing",
-  // Site and grid: "North 10°, 0.5 m voxels"
-  siteAndGridSummary: (northText: string, voxelsText: string) => `North ${northText}°, ${voxelsText}`,
+  // The project settings, in the Settings button's tooltip: "North 10°, 0.5 m voxels"
+  projectSettingsSummary: (northText: string, voxelsText: string) => `North ${northText}°, ${voxelsText}`,
+  // The project settings window (the settings every criterion shares), opened from the Settings button in the top bar
+  projectSettingsButton: "Settings",
+  // Where a setting to fix is, in "Fix the voxel size in Settings to run the analysis"
+  projectSettingsPlace: "Settings",
+  projectSettingsTitle: "Project settings",
+  projectSettingsHint: (summaryText: string) => `${summaryText}. Opens the settings every criterion shares.`,
+  projectSettingsButtonWithFixes: (count: number) => `Settings, ${count} ${count === 1 ? "setting" : "settings"} to fix`,
+  projectSettingsIntro: "These settings apply to every criterion. A change puts every criterion out of date.",
+  projectSettingsElsewhere: "The settings of the envelope, the building massing and the export are in their steps:",
+  closeProjectSettings: "Close",
+  openProjectSettings: "Open settings",
+  // A setting that needs the surroundings or the terrain, shown greyed out in the window without them
+  needsSurroundingsOrTerrain: "Add existing surroundings or terrain in Inputs to use this.",
   // Criteria with one criterion: its mode and its carving, "Solar heating, 56 % kept"
   criterionSummary: (modeName: string, carvingText: string) => `${modeName}, ${carvingText}`,
   // The analysis period in words (R2 4.3), in the step summary and in the period's tooltip: "21 Dec, 10 to 14 h", "21 to 22 Dec,
@@ -419,7 +431,7 @@ export const messages = {
   addFiles: "Add files",
   orTryAnExample: "or try an example",
   weatherFileNeeded: "Add a weather file to run this mode",
-  // A criterion that is on, not the one shown, has a mode that needs a weather file (Site and grid names the shown one too)
+  // A criterion that is on has a mode that needs a weather file (with several criteria the shown one is named too)
   weatherFileNeededFor: (criterionName: string) => `Add a weather file to run ${criterionName}`,
   fixSettingToRun: (settingLabel: string) => `Fix the ${String(settingLabel).toLowerCase()} to run the analysis`,
   fixSettingInStepToRun: (settingLabel: string, stepTitle: string) => `Fix the ${String(settingLabel).toLowerCase()} in ${stepTitle} to run the analysis`,

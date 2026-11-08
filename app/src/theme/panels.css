@@ -378,6 +378,11 @@
 .criteria-run-buttons { display: flex; flex-wrap: wrap; align-items: flex-start; gap: calc(var(--space-unit) * 2); }
 .criteria-run-buttons .run-button-area { flex: 1 1 10rem; min-width: 0; }     /* two rows when the bar is too narrow for 2 x 10rem */
 .run-button-reason { margin: var(--space-unit) 0 0; color: var(--colour-muted); font-size: var(--text-secondary); }
+.run-button-reason-action { align-self: flex-start; font-size: var(--text-secondary); }
+
+/* The project settings window (ProjectSettingsDialog): its line on what the settings apply to, the settings, the links to the steps. */
+.project-settings { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); }
+.project-settings-intro, .project-settings-elsewhere { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
 
 /* Inputs ---------------------------------------------------------------------------------------------------------------- */
 

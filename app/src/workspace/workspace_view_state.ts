@@ -3,7 +3,7 @@
 import type { CriterionEntry, InputFileInfo, RunSummary } from "../api_client/client";
 import { shownValue, type FormState } from "../settings_form/form_state";
 import type { InputRole } from "../common/InputBox";
-import { settingsToFixByStep } from "../settings_form/SettingsStep";
+import { settingsToFixByPlace } from "../settings_form/SettingsStep";
 import { type ProjectViewState } from "./step_summaries";
 import { plainModeName } from "../modes";
 import { type PipelineStage, type StageState } from "../stages";
@@ -36,7 +36,7 @@ export function projectViewStateOf(inputs: ProjectViewInputs): ProjectViewState 
     mode: form.mode,
     northDegrees: inputs.northDegrees,
     voxelSize: Number(shownValue(form, "voxel_size")),
-    settingsToFix: settingsToFixByStep(inputs.sharedForm, inputs.criterionForm, inputs.criterionKeys),
+    settingsToFix: settingsToFixByPlace(inputs.sharedForm, inputs.criterionForm, inputs.criterionKeys),
     stages: inputs.stages,
     keptPercent: summary?.carving?.retention_pct ?? null,
     criterionOff: criteria.length === 1 && criteria[0].bypassed,

@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { initialFormState, type FormState } from "../settings_form/form_state";
 import { CRITERION_KEYS, MODES, SCHEMA } from "../workspace/project_workspace_for_test";
-import { settingsToFixByStep } from "../settings_form/SettingsStep";
+import { settingsToFixByPlace } from "../settings_form/SettingsStep";
 import {
   carvingRuleSummary, criterionSettingsSummary, DEFAULT_OPEN_SECTIONS, sectionOfSetting, settingsToFixBySection, testSurfacesSummary,
 } from "./section_summaries";
@@ -24,7 +24,7 @@ test("the settings in one line: the analysis period of a mode that reads one", (
 
 test("the settings in one line of a mode without a period: its starting values, or how many of the criterion's settings changed", () => {
   expect(criterionSettingsSummary(formFor({ mode: "daylight" }), CRITERION_KEYS)).toBe("Starting values");
-  // A shared setting is Site and grid's: it changes nothing here.
+  // A shared setting is the project settings': it changes nothing here.
   expect(criterionSettingsSummary(formFor({ mode: "daylight", voxel_size: 2 }), CRITERION_KEYS)).toBe("Starting values");
   // A carving setting is the carving rule's.
   expect(criterionSettingsSummary(formFor({ mode: "daylight", max_slope_deg: 45 }), CRITERION_KEYS)).toBe("Starting values");
@@ -60,8 +60,8 @@ test("the settings to fix by section: the criterion's fields with an error, one 
     stepErrors: ["Add a weather file to run this mode"] };
   expect(settingsToFixBySection(form, CRITERION_KEYS)).toEqual({ settings: 3, carving: 1 });
   expect(settingsToFixBySection(formFor({ mode: "daylight" }), CRITERION_KEYS)).toEqual({});
-  // Counted as the steps count them: the mode in Criteria, the shared voxel size in Site and grid.
-  expect(settingsToFixByStep({ fieldErrors: {}, stepErrors: [] }, form, CRITERION_KEYS)).toEqual({ criteria: 4, site_and_grid: 1 });
+  // Counted as the places count them: the mode in Criteria, the shared voxel size in the project settings.
+  expect(settingsToFixByPlace({ fieldErrors: {}, stepErrors: [] }, form, CRITERION_KEYS)).toEqual({ criteria: 4, project_settings: 1 });
 });
 
 test("the angle rule's settings in one line: its angle, or one per direction", () => {

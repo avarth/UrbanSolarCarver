@@ -1,7 +1,8 @@
-// An open project (UX 4, spec 7.1): the step accordion in the left panel (Inputs, Site and grid, Criteria, Envelope and massing,
-// Export) and the 3D view beside it. It holds what the steps share: the input files and their meshes (use_input_files.ts), the
-// criteria (useCriteria) and their cards' requests, the two settings forms (the shared settings, shown in Site and grid, and the
-// selected criterion's, shown in its panel; the steps read them as one), the stage status the step summaries read
+// An open project (UX 4, spec 7.1): the step accordion in the left panel (Inputs, Criteria, Envelope and massing, Export) and the 3D
+// view beside it. It holds what the steps share: the input files and their meshes (use_input_files.ts), the criteria (useCriteria)
+// and their cards' requests, the two settings forms (the shared settings, shown in the project settings window that the Settings
+// button in the top bar opens, ProjectSettingsDialog, and the selected criterion's, shown in its panel; the steps read them as one),
+// the stage status the step summaries read
 // (use_stage_status.ts, workspace_view_state.ts), and the sun path (sun_path_request.ts) the 3D view draws. The criteria's selection,
 // run conditions and cards are in use_workspace_criteria.ts. The parts that start runs and show their results (the criterion's
 // carving rule, Envelope and massing, Export) are put together in result_steps.tsx from these and the app's run loop. In Simulate the
@@ -11,6 +12,7 @@
 // before Inspect is left. The project's typical building (use_typical_building.ts) is read once the shown criterion counts its hours
 // by it (Energy-weighted, in Solar heating).
 import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   failureTextOf, markModeChosen, reportServiceProblem, type HealthReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
@@ -47,14 +49,14 @@ import { useColdPeriod } from "../settings_form/cold_period_request";
 import { boundsOf } from "../steps/input_meshes";
 import { carvedByNote, InputsStep } from "../steps/InputsStep";
 import { InputBox, type InputRole } from "../common/InputBox";
-import { ANALYSIS_STAGES, useResultSteps } from "./result_steps";
+import { useResultSteps } from "./result_steps";
 import type { RunLoop } from "../common/run_state";
-import { RunAnalysisButton, runAnalysisAfterSaving, SaveFailureNotice, saveFailureTextOf, SettingsToFix, stepOfSetting } from "../settings_form/SettingsStep";
-import { SiteAndGridStep } from "../steps/SiteAndGridStep";
+import { placeOfSetting, SaveFailureNotice, saveFailureTextOf, SettingsToFix } from "../settings_form/SettingsStep";
+import { ProjectSettingsButton, ProjectSettingsDialog } from "./ProjectSettingsDialog";
 import { StepAccordion, type AccordionStep } from "./StepAccordion";
-import { stepMark, stepNotUsableYet, stepSummary } from "./step_summaries";
+import { projectSettingsSummary, settingsToFixIn, stepMark, stepNotUsableYet, stepSummary } from "./step_summaries";
 import { plainModeName } from "../modes";
-import { STEP_NAMES, type StepName } from "../stages";
+import { STEP_NAMES, type SettingPlace, type StepName } from "../stages";
 import { analysisPeriodOf, useSunPathOfStoredPeriod } from "../steps/sun_path_request";
 import { useInputFiles } from "./use_input_files";
 import { InputChangesNotice } from "./InputChangesNotice";
@@ -69,13 +71,12 @@ import type { WorkspaceMode } from "../common/WorkspaceModeSwitch";
 
 // The id the service gives the first criterion of a project (a new one's, or an earlier version's made a chain of one).
 const FIRST_CRITERION_ID = "1";
-const STEPS_WITH_SOLID_MAX_VOLUME: readonly StepName[] = ["inputs", "site_and_grid"];
+const STEPS_WITH_SOLID_MAX_VOLUME: readonly StepName[] = ["inputs"];
 // The layers each step shows by default (UX 8.2); the later steps add their result layers. The carved voxels start hidden, as
 // they cover the kept ones; the Layers menu shows them. Criteria shows what the Mode and Carving steps showed together, the maximum
 // volume as a ghost.
 export const LAYERS_SHOWN_IN_STEP: Record<StepName, readonly LayerName[]> = {
   inputs: ["max_volume", "test_surfaces", "context", "terrain"],
-  site_and_grid: ["max_volume", "test_surfaces", "context", "terrain", "sun_path"],
   criteria: ["max_volume", "test_surfaces", "context", "terrain", "sun_path", "kept_voxels", "sky_dome"],
   envelope_and_massing: ["test_surfaces", "context", "terrain", "envelope", "building_massing"],
   export: ["context", "terrain", "envelope", "building_massing"],
@@ -123,6 +124,8 @@ interface ProjectWorkspaceProps {
   onInspectTurnsReady?: (turns: InspectTurns | null) => void;
   /** Goes from Inspect to Carve, as the switch in the header does. */
   onGoToCarve?: () => void;
+  /** The place in the top bar where the Settings button is drawn; null or absent: no button (the window still opens from a run's reason). */
+  settingsButtonSlot?: HTMLElement | null;
 }
 
 /**
@@ -214,9 +217,20 @@ function OpenProject(props: ProjectWorkspaceProps) {
   const keepScroll = useKeptScroll(panel, props.mode === "design");
   const [addFilesRequest, setAddFilesRequest] = useState(0);
   const [settingToFocus, setSettingToFocus] = useState<{ name: string } | null>(null);
-  // A criterion's setting to focus is in its editor: the editor is shown in the same render that asks for the focus, so its field is there.
+  // The project settings window, opened from the Settings button or from a reason or link that names one of its settings.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsButton = useRef<HTMLButtonElement>(null);
+  const settingsContent = useRef<HTMLDivElement>(null);
+  const closeSettings = () => {
+    setSettingsOpen(false);
+    settingsButton.current?.focus();
+  };
+  // A criterion's setting to focus is in its editor, a shared one in the project settings window: either is shown in the same render
+  // that asks for the focus, so its field is there.
   const focusSettingInPanel = (settingName: string) => {
-    if (stepOfSetting(settingName, criterionKeys) === "criteria") setCriteriaShows("editor");
+    const place = placeOfSetting(settingName, criterionKeys);
+    if (place === "criteria") setCriteriaShows("editor");
+    if (place === "project_settings") setSettingsOpen(true);
     setSettingToFocus({ name: settingName });
   };
 
@@ -283,17 +297,22 @@ function OpenProject(props: ProjectWorkspaceProps) {
     setOpenStep(step);
     if (step !== null) setViewStep(step);
   };
+  const openPlace = (place: SettingPlace) => {
+    if (place === "project_settings") setSettingsOpen(true);
+    else openTheStep(place);
+  };
 
   useEffect(() => {
     if (settingToFocus === null) return;
     // The input the field's label targets: the number field of a slider, the balance temperature's number of the balance widget.
-    const field = panel.current?.querySelector<HTMLElement>(`[data-setting="${settingToFocus.name}"]`);
+    const selector = `[data-setting="${settingToFocus.name}"]`;
+    const field = settingsContent.current?.querySelector<HTMLElement>(selector) ?? panel.current?.querySelector<HTMLElement>(selector);
     const labelled = field?.dataset.inputId === undefined ? null : document.getElementById(field.dataset.inputId);
     (labelled ?? field?.querySelector<HTMLElement>(":is(input, select)"))?.focus();
   }, [settingToFocus]);
   // The criterion panel's open sections, kept here so they outlast the Criteria step while it is closed (not stored). A setting of
   // the panel to focus opens the section that holds it first, in the same render.
-  const openSectionRequest = useMemo(() => (settingToFocus === null || stepOfSetting(settingToFocus.name, criterionKeys) !== "criteria" ? null
+  const openSectionRequest = useMemo(() => (settingToFocus === null || placeOfSetting(settingToFocus.name, criterionKeys) !== "criteria" ? null
     : { section: sectionOfSetting(settingToFocus.name) }), [settingToFocus, criterionKeys]);
   const panelSections = usePanelSections(openSectionRequest);
 
@@ -308,7 +327,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
     criteria, shownCriterionId, setShownCriterionId, criterion, resultsCriterionId, sharedForm, criterionForm, form, dispatch,
     currentForm, schema: props.schema, modes, criterionKeys, runs, warmUpState, maxVolumeFiles: files.max_volume.length,
     testSurfaceFiles: files.test_surfaces.length, hasWeatherFile, modeNeedsWeatherFile, criterionStages, shownAs, refreshStageStatus,
-    followed: followedInputChange, reloadTestSurfaces: testSurfaceCalls.reloadStoredFiles, openStep: openTheStep,
+    followed: followedInputChange, reloadTestSurfaces: testSurfaceCalls.reloadStoredFiles, openPlace,
     focusSetting: (settingName) => focusSettingInPanel(fieldSettingOf(settingName)), onShowCriterion: () => setCriteriaShows("editor"),
   });
   // The first time the Criteria step opens, before the first paint of it.
@@ -326,6 +345,14 @@ function OpenProject(props: ProjectWorkspaceProps) {
     criterionId: resultsCriterionId, criterionKeys,
     form, currentForm, dispatch, flushSave, changeAndSave, isWeightedMode: modeInfo?.score_kind === "weighted_sum", stages: shownStages,
     refreshStageStatus, runs, runBlocker: workspaceCriteria.runBlocker, everyCriterionCarved, projectRunActive: runActive, origin, openStep: openTheStep,
+    // A reason that names a setting of the project settings leads there: the window opens on that field.
+    runBlockerAction: workspaceCriteria.runBlockerPlace === "project_settings" && (
+      <button type="button" className="link-button run-button-reason-action" onClick={() => {
+        const firstShared = Object.keys(sharedForm.form.fieldErrors)[0];
+        if (firstShared === undefined) setSettingsOpen(true);
+        else focusSettingInPanel(fieldSettingOf(firstShared));
+      }}>{messages.openProjectSettings}</button>
+    ),
     goToSetting: workspaceCriteria.goToSetting,
   });
   const cards = workspaceCriteria.cardsOf(resultSteps, inputsDisabledReason);
@@ -370,10 +397,6 @@ function OpenProject(props: ProjectWorkspaceProps) {
                   onRemoveFile={removeFile} disabledReason={inputsDisabledReason} maxVolumeNote={carvedByNote(project.carving_chain ?? [])}
                   drawingProblems={{ max_volume: maxVolumeMesh.drawingProblems, context: contextMesh.drawingProblems, terrain: terrainMesh.drawingProblems }} />
     ),
-    site_and_grid: (
-      <SiteAndGridStep form={form} stepErrors={sharedForm.form.stepErrors} criterionKeys={criterionKeys} onChange={changeSettings}
-                       disabledReason={inputsDisabledReason} inputRoles={inputRolesWithFiles} />
-    ),
     criteria: (
       <CriteriaStep list={cards.list} load={selection.load} chainLine={cards.chainLine} shows={criteriaShows ?? firstCriteriaShows(criteriaCount)} onShowsChange={setCriteriaShows}
                     firstMode={modeToChoose ? <FirstMode onChoose={chooseFirstMode} disabledReason={inputsDisabledReason} /> : null}
@@ -414,16 +437,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
     ),
   }));
 
-  const runAnalysis = () => void runAnalysisAfterSaving(flushSave, () => {
-    void resultSteps.startRun(ANALYSIS_STAGES, "settings_run_analysis").then((outcome) => { if (outcome === "finished") openTheStep("criteria"); });
-  });
-  const pinnedActions: Partial<Record<StepName, ReactNode>> = {
-    // Offered while an analysis is missing or out of date; how the last run from here ended stays when none is.
-    site_and_grid: shownStages.preprocessing === "current" ? resultSteps.feedback("settings_run_analysis") : (
-      <RunAnalysisButton blocker={workspaceCriteria.siteAndGridRunBlocker} onRunAnalysis={runAnalysis} feedback={resultSteps.feedback("settings_run_analysis")} />
-    ),
-    ...resultSteps.pinnedAction,
-  };
+  const pinnedActions: Partial<Record<StepName, ReactNode>> = resultSteps.pinnedAction;
   const openStepUsable = openStep !== null && stepNotUsableYet(openStep, viewState) === null;
   const openStepAction = openStep !== null && openStepUsable ? (pinnedActions[openStep] ?? null) : null;
   // A save that failed without field errors leaves the form showing values the service did not store: said whichever step is open.
@@ -485,8 +499,26 @@ function OpenProject(props: ProjectWorkspaceProps) {
   };
   const shownByDefault = simulating ? LAYERS_SHOWN_IN_SIMULATE[studyView.geometry] : inspecting ? LAYERS_SHOWN_IN_INSPECT : LAYERS_SHOWN_IN_STEP[viewStep];
 
+  // The Settings button, drawn in the top bar, and its window.
+  const settingsButtonElement = props.settingsButtonSlot != null && createPortal(
+    <ProjectSettingsButton summary={projectSettingsSummary(viewState)} settingsToFix={settingsToFixIn("project_settings", viewState)} open={settingsOpen}
+                           onOpen={() => setSettingsOpen(true)} buttonRef={settingsButton} />,
+    props.settingsButtonSlot,
+  );
+  const settingsDialog = settingsOpen && (
+    <ProjectSettingsDialog form={form} stepErrors={sharedForm.form.stepErrors} criterionKeys={criterionKeys} onChange={changeSettings}
+                           disabledReason={inputsDisabledReason} inputRoles={inputRolesWithFiles} onClose={closeSettings} contentRef={settingsContent}
+                           onOpenStep={(step) => {
+                             setSettingsOpen(false);
+                             if (props.mode !== "design") props.onGoToCarve?.();
+                             openTheStep(step);
+                           }} />
+  );
+
   return (
     <div className="workspace">
+      {settingsButtonElement}
+      {settingsDialog}
       <aside ref={panel} className="workspace-panel" hidden={props.mode !== "design"} onScrollCapture={keepScroll}>
         {inputChangesNotice}
         <StepAccordion steps={steps} openStep={openStep} onOpenStep={openTheStep}

@@ -43,7 +43,7 @@ test("the panel holds the test surfaces, the criterion's settings and the carvin
   expect(find(".input-file-name")!.textContent).toBe("windows.ply");
 });
 
-test("the criterion's settings leave out the shared ones, which Site and grid shows", () => {
+test("the criterion's settings leave out the shared ones, which the project settings show", () => {
   rendered = renderForTest(<CriterionPanel {...panelProps()} />);
   expect(find('[data-setting="start_month"]')).not.toBeNull();
   for (const shared of ["voxel_size", "north_deg", "ray_batch_size", "context_blocks_rays"]) expect(find(`[data-setting="${shared}"]`), shared).toBeNull();

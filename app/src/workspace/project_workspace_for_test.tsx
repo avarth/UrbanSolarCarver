@@ -331,11 +331,14 @@ export async function openWorkspace(
     // As the app's switch: leaving Inspect with turns not saved asks first (UnsavedTurnsDialog).
     const leaving = useLeavingInspect(mode, runs.activeRun?.project === opened.name ? "A run is in progress" : null);
     changeMode = (next) => leaving.leave(() => setMode(next));
+    // The top bar's place for the Settings button, as the app keeps it.
+    const [settingsSlot, setSettingsSlot] = useState<HTMLSpanElement | null>(null);
     return (
       <>
+        <span ref={setSettingsSlot} className="top-bar-settings-slot" />
         <ProjectWorkspace token="token" project={opened} schema={schema} modes={modes} criterionKeys={CRITERION_KEYS} warmUpState="ready" runs={runs}
                           mode={mode} onServiceProblem={(error) => reportedServiceProblems.push(error)} onShowProjects={() => {}} onInspectUnsavedChange={leaving.onUnsavedChange}
-                          onInspectTurnsReady={leaving.onTurnsReady} {...steps} />
+                          onInspectTurnsReady={leaving.onTurnsReady} onGoToCarve={() => leaving.leave(() => setMode("design"))} settingsButtonSlot={settingsSlot} {...steps} />
         {leaving.dialog}
       </>
     );
@@ -362,6 +365,23 @@ export const stepIsOpen = (title: string) => stepRow(title).querySelector(".step
 
 export function openStep(title: string) {
   act(() => stepRow(title).querySelector<HTMLButtonElement>(".step-header")!.click());
+}
+
+/** The Settings button of the top bar, which the open project draws into the place kept for it. */
+export const settingsButton = () => container().querySelector<HTMLButtonElement>(".top-bar-settings-button")!;
+/** The project settings window, drawn into the page's body; null while it is closed. */
+export const projectSettings = () => [...document.body.querySelectorAll<HTMLElement>("[role='dialog']")]
+  .find((dialog) => dialog.querySelector("h2")?.textContent === "Project settings") ?? null;
+
+/** Opens the project settings window with the Settings button (nothing when it is open). */
+export function openProjectSettings() {
+  if (projectSettings() === null) act(() => settingsButton().click());
+}
+
+/** Closes the project settings window with Done (nothing when it is closed). */
+export function closeProjectSettings() {
+  const dialog = projectSettings();
+  if (dialog !== null) act(() => [...dialog.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Done")!.click());
 }
 
 /**
@@ -401,11 +421,13 @@ export function openPanelSection(title: string) {
   if (!panelSectionOpen(title)) togglePanelSection(title);
 }
 
-/** The bar pinned under the steps: Run analysis in Site and grid; Run analysis and Build envelope and massing in Criteria. */
+/** The bar pinned under the steps: Run analysis and Build envelope and massing in Criteria. */
 export const pinnedBar = () => container().querySelector<HTMLElement>(".step-pinned-action")!;
 
-/** Presses Run analysis, pinned under the steps. */
+/** Presses Run analysis, pinned under the Criteria step (the window is closed and the step opened first when they are not). */
 export async function pressRunAnalysis() {
+  closeProjectSettings();
+  if (!stepIsOpen("Criteria")) openStep("Criteria");
   const button = [...pinnedBar().querySelectorAll<HTMLButtonElement>("button")].find((candidate) => candidate.textContent === "Run analysis")!;
   await act(async () => button.click());
   await settle();
@@ -423,6 +445,7 @@ export function buttonIn(root: Element, text: string): HTMLButtonElement {
 /** Why a disabled button is disabled: the text its aria-describedby names. */
 export const reasonOf = (button: HTMLButtonElement) => document.getElementById(button.getAttribute("aria-describedby")!)!.textContent;
 
-export const voxelSizeField = () => container().querySelector<HTMLInputElement>('[data-setting="voxel_size"] input[type="number"]')!;
+/** The voxel size's number field, in the project settings window (opened first when it is closed). */
+export const voxelSizeField = () => (openProjectSettings(), projectSettings()!.querySelector<HTMLInputElement>('[data-setting="voxel_size"] input[type="number"]')!);
 export const thresholdField = () => (showCriterionEditor(), container().querySelector<HTMLInputElement>(".threshold-control input[type=number]")!);
 export const thresholdOf = (values: Record<string, unknown>) => (values.threshold as { value: number }).value;

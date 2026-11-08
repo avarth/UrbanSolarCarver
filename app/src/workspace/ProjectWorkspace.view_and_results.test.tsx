@@ -8,7 +8,7 @@ import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
 import type { PipelineStage, StageState } from "../stages";
 import {
-  CARVED, CARVING, ENVELOPE, FakeService, MASSING, NOTHING_RUN, buildPart, buttonIn, container, endWorkspaceTest, openStep,
+  CARVED, CARVING, ENVELOPE, FakeService, MASSING, NOTHING_RUN, buildPart, buttonIn, container, endWorkspaceTest, openStep, openProjectSettings, projectSettings,
   openWorkspace, project, reasonOf, settle, startWorkspaceTest, type, waitForTheSave,
 } from "./project_workspace_for_test";
 
@@ -91,8 +91,8 @@ test("a North not saved yet turns the drawn sun path with the compass ring, so t
     return first.sub(new THREE.Vector3(...FakeViewerScene.latest!.sceneHemisphere!.centre)).normalize();
   };
   expect(towardFirstSun().y).toBeCloseTo(1);
-  openStep("Site and grid");
-  type(container().querySelector<HTMLInputElement>('[data-setting="north_deg"] input[type="number"]')!, "90");
+  openProjectSettings();
+  type(projectSettings()!.querySelector<HTMLInputElement>('[data-setting="north_deg"] input[type="number"]')!, "90");
   expect(service.savedValues).toEqual([]);
   expect(towardFirstSun().x).toBeCloseTo(1);
   expect(towardFirstSun().y).toBeCloseTo(0);

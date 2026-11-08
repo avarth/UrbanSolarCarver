@@ -1,9 +1,10 @@
-// The analysis settings (UX 5.4, 11), drawn by Site and grid (the shared ones) and by a criterion's panel (its own): the settings in
-// their groups, the grid under Voxel size, the grid-over-budget message in place of the engine's, and messages that name no single
-// setting. Run analysis (RunAnalysisButton) is pinned at the bottom of the panel, in Site and grid and, with Build envelope and massing,
-// in Criteria (CriteriaRunBar): disabled with the first reason that blocks the run, its run's progress under it. Above the groups, after a weather file is added
-// or replaced in this session, the notice of the period it may call for (weather_change_notice.ts); a criterion's panel shows it
-// under the header of its Settings section instead, open or closed (WeatherChangeRegion).
+// The analysis settings (UX 5.4, 11), drawn by the project settings window (the shared ones, ProjectSettingsDialog) and by a
+// criterion's panel (its own): the settings in their groups, the grid under Voxel size, the grid-over-budget message in place of the
+// engine's, and messages that name no single setting. Run analysis (RunAnalysisButton) is pinned at the bottom of the panel in
+// Criteria, with Build envelope and massing (CriteriaRunBar): disabled with the first reason that blocks the run, its run's progress
+// under it. Above the groups, after a weather file is added or replaced in this session, the notice of the period it may call for
+// (weather_change_notice.ts); a criterion's panel shows it under the header of its Settings section instead, open or closed
+// (WeatherChangeRegion).
 import { useId, type ReactNode } from "react";
 import { ApiError, refusalDetailOf, serviceProblemOf, type HealthReply } from "../api_client/client";
 import { messages } from "../messages";
@@ -11,11 +12,14 @@ import {
   changedPeriodSettings, periodInWords, type AnalysisPeriodField, type ColdPeriodState, type Hemisphere,
 } from "./analysis_period";
 import { shownValue, type FormState, type SaveOutcome } from "./form_state";
-import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf, SETTING_PRESENTATIONS, settingIsShownIn, settingsForStep, settingView, type StepName as FormStepName } from "./presentation";
+import {
+  ANALYSIS_PERIOD_FIELDS, fieldSettingOf, SETTING_PRESENTATIONS, settingHasInputs, settingIsShownIn, settingsForStep, settingView,
+  type StepName as FormStepName,
+} from "./presentation";
 import { fieldErrorOf, gridLineOf, SettingField, WarningIcon, type SettingFieldExtras } from "./SettingField";
 import { SettingGroup } from "./SettingGroup";
 import { gridIsOverBudget, smallestVoxelSizeWithinBudget } from "./grid_budget";
-import type { StepName } from "../stages";
+import type { SettingPlace, StepName } from "../stages";
 import type { WeatherChangeSuggestion } from "./weather_change_notice";
 import "../theme/panels.css";
 
@@ -35,12 +39,12 @@ export interface RunAnalysisConditions {
   otherCriterionNeedingWeatherFile?: string | null;
   hasWeatherFile: boolean;
   form: Pick<FormState, "mode" | "fieldErrors">;
-  /** The messages that name no setting, by the step that shows them (the shared form's in Site and grid, the criterion's in Criteria). */
-  stepErrorsByStep: Partial<Record<StepName, readonly string[]>>;
+  /** The messages that name no setting, by the place that shows them (the shared form's in the project settings, the criterion's in Criteria). */
+  stepErrorsByPlace: Partial<Record<SettingPlace, readonly string[]>>;
   warmUpState: HealthReply["warm_up"]["state"] | null;
-  /** The settings that belong to a criterion (GET criterion-keys), for the step that shows a setting to fix. */
+  /** The settings that belong to a criterion (GET criterion-keys), for the place that shows a setting to fix. */
   criterionKeys: ReadonlySet<string>;
-  /** The step whose button says the reason: a setting to fix in another step is named with that step. */
+  /** The step whose button says the reason: a setting to fix in another place is named with that place. */
   shownIn: StepName;
   /**
    * The shown criterion's name, with several criteria: in Criteria the reasons about it (its test surfaces, its weather file, its
@@ -50,16 +54,21 @@ export interface RunAnalysisConditions {
 }
 
 /**
- * The step that draws a setting's field: Site and grid for a shared analysis setting, Criteria for a criterion's, the mode and the carving,
- * Envelope and massing and Export for theirs; null for a name the form does not show.
+ * The place that draws a setting's field: the project settings window for a shared analysis setting, Criteria for a criterion's, the
+ * mode and the carving, Envelope and massing and Export for theirs; null for a name the form does not show.
  */
-export function stepOfSetting(name: string, criterionKeys: ReadonlySet<string>): StepName | null {
+export function placeOfSetting(name: string, criterionKeys: ReadonlySet<string>): SettingPlace | null {
   if (name === "mode") return "criteria";
   const shownName = fieldSettingOf(name);
   const formStep = SETTING_PRESENTATIONS[shownName]?.step;
   if (formStep === undefined) return null;
-  if (formStep === "settings") return criterionKeys.has(shownName) ? "criteria" : "site_and_grid";
+  if (formStep === "settings") return criterionKeys.has(shownName) ? "criteria" : "project_settings";
   return formStep === "carving" ? "criteria" : formStep;
+}
+
+/** The name of a place in the run's reasons: the step's title, or Settings for the project settings window. */
+export function placeTitleOf(place: SettingPlace): string {
+  return place === "project_settings" ? messages.projectSettingsPlace : messages.stepTitles[place];
 }
 
 /**
@@ -70,36 +79,50 @@ export function shownLabelOf(settingName: string, mode: string): string {
   return settingName === "mode" ? messages.modeGroupLabel : settingView(fieldSettingOf(settingName), mode).label;
 }
 
+/** Why Run analysis cannot start, and the place of the settings to fix when they are not in the button's step. */
+export interface RunAnalysisBlock {
+  reason: string;
+  /** The place that holds the setting to fix, when it is not the step of the button (the project settings window, a later step); else null. */
+  settingsElsewhere: SettingPlace | null;
+}
+
 /** Why Run analysis cannot start, the first of: a run, the inputs, the weather file, a setting, the warm-up; null when it can. */
 export function runAnalysisBlocker(conditions: RunAnalysisConditions): string | null {
+  return runAnalysisBlockOf(conditions)?.reason ?? null;
+}
+
+/** As runAnalysisBlocker, with the place of a setting to fix that the reason names, so the button can lead there. */
+export function runAnalysisBlockOf(conditions: RunAnalysisConditions): RunAnalysisBlock | null {
+  const plain = (reason: string): RunAnalysisBlock => ({ reason, settingsElsewhere: null });
   const { form } = conditions;
-  if (conditions.runActive) return conditions.simulationActive === true ? messages.simulationInProgress : messages.runInProgress;
-  if (conditions.noCriterionOn === true) return messages.turnOnCriterionToRun;
+  if (conditions.runActive) return plain(conditions.simulationActive === true ? messages.simulationInProgress : messages.runInProgress);
+  if (conditions.noCriterionOn === true) return plain(messages.turnOnCriterionToRun);
   const hasMaxVolume = conditions.maxVolumeFiles > 0, hasTestSurfaces = conditions.testSurfaceFiles > 0;
   const criterionName = conditions.shownIn === "criteria" ? conditions.shownCriterionName ?? null : null;
-  if (!hasMaxVolume && !hasTestSurfaces) return messages.addMaxVolumeAndTestSurfacesToRun;
-  if (!hasMaxVolume) return messages.addMaxVolumeToRun;
-  if (!hasTestSurfaces) return criterionName === null ? messages.addTestSurfacesToRun : messages.addTestSurfacesOfCriterionToRun(criterionName);
-  if (conditions.otherCriterionWithoutTestSurfaces != null) return messages.addTestSurfacesOfCriterionToRun(conditions.otherCriterionWithoutTestSurfaces);
+  if (!hasMaxVolume && !hasTestSurfaces) return plain(messages.addMaxVolumeAndTestSurfacesToRun);
+  if (!hasMaxVolume) return plain(messages.addMaxVolumeToRun);
+  if (!hasTestSurfaces) return plain(criterionName === null ? messages.addTestSurfacesToRun : messages.addTestSurfacesOfCriterionToRun(criterionName));
+  if (conditions.otherCriterionWithoutTestSurfaces != null) return plain(messages.addTestSurfacesOfCriterionToRun(conditions.otherCriterionWithoutTestSurfaces));
   if (conditions.modeNeedsWeatherFile && !conditions.hasWeatherFile) {
-    return criterionName === null ? messages.weatherFileNeeded : messages.weatherFileNeededFor(criterionName);
+    return plain(criterionName === null ? messages.weatherFileNeeded : messages.weatherFileNeededFor(criterionName));
   }
   const otherNeedingWeatherFile = conditions.otherCriterionNeedingWeatherFile;
-  if (otherNeedingWeatherFile != null && !conditions.hasWeatherFile) return messages.weatherFileNeededFor(otherNeedingWeatherFile);
+  if (otherNeedingWeatherFile != null && !conditions.hasWeatherFile) return plain(messages.weatherFileNeededFor(otherNeedingWeatherFile));
   const firstFieldWithError = Object.keys(form.fieldErrors)[0];
   if (firstFieldWithError !== undefined) {
-    // A setting of another step is named with its step, so the user knows where to find it.
-    const step = stepOfSetting(firstFieldWithError, conditions.criterionKeys) ?? conditions.shownIn;
+    // A setting of another place is named with its place, so the user knows where to find it.
+    const place = placeOfSetting(firstFieldWithError, conditions.criterionKeys) ?? conditions.shownIn;
     const label = shownLabelOf(firstFieldWithError, form.mode);
-    if (step !== conditions.shownIn) return messages.fixSettingInStepToRun(label, messages.stepTitles[step]);
-    return criterionName === null ? messages.fixSettingToRun(label) : messages.fixSettingOfCriterionToRun(label, criterionName);
+    if (place !== conditions.shownIn) return { reason: messages.fixSettingInStepToRun(label, placeTitleOf(place)), settingsElsewhere: place };
+    return plain(criterionName === null ? messages.fixSettingToRun(label) : messages.fixSettingOfCriterionToRun(label, criterionName));
   }
-  // A message that names no setting is shown above the settings of its step: "above" there, the step named elsewhere.
-  const stepsWithMessages = (Object.keys(conditions.stepErrorsByStep) as StepName[]).filter((step) => (conditions.stepErrorsByStep[step] ?? []).length > 0);
-  if (stepsWithMessages.includes(conditions.shownIn)) return criterionName === null ? messages.fixSettingsToRun : messages.fixSettingsOfCriterionToRun(criterionName);
-  if (stepsWithMessages.length > 0) return messages.fixSettingsInStepToRun(messages.stepTitles[stepsWithMessages[0]]);
+  // A message that names no setting is shown above the settings of its place: "above" there, the place named elsewhere.
+  const placesWithMessages = (Object.keys(conditions.stepErrorsByPlace) as SettingPlace[])
+    .filter((place) => (conditions.stepErrorsByPlace[place] ?? []).length > 0);
+  if (placesWithMessages.includes(conditions.shownIn)) return plain(criterionName === null ? messages.fixSettingsToRun : messages.fixSettingsOfCriterionToRun(criterionName));
+  if (placesWithMessages.length > 0) return { reason: messages.fixSettingsInStepToRun(placeTitleOf(placesWithMessages[0])), settingsElsewhere: placesWithMessages[0] };
   // A warm-up that failed blocks nothing: a run then reports the problem itself (the service's warm-up says the same).
-  if (conditions.warmUpState === null || conditions.warmUpState === "not_started" || conditions.warmUpState === "running") return messages.runButtonWaitsForGpu;
+  if (conditions.warmUpState === null || conditions.warmUpState === "not_started" || conditions.warmUpState === "running") return plain(messages.runButtonWaitsForGpu);
   return null;
 }
 
@@ -146,23 +169,24 @@ export function SaveFailureNotice({ text, onSaveAgain }: { text: SaveFailureText
 type FormErrors = Pick<FormState, "fieldErrors" | "stepErrors">;
 
 /**
- * The settings to fix of each step (UX 4.1, 11): the fields with an error of either form, counted in the step that draws them (the
+ * The settings to fix of each place (UX 4.1, 11): the fields with an error of either form, counted in the place that draws them (the
  * six period settings are one field, as are the balance temperature and its dead band), and the messages that name no field,
- * counted where they are shown: the shared settings' in Site and grid, the criterion's in Criteria.
+ * counted where they are shown: the shared settings' in the project settings window, the criterion's in Criteria. The step rows
+ * and the Settings button in the top bar read them.
  */
-export function settingsToFixByStep(shared: FormErrors, criterion: FormErrors, criterionKeys: ReadonlySet<string>): Partial<Record<StepName, number>> {
+export function settingsToFixByPlace(shared: FormErrors, criterion: FormErrors, criterionKeys: ReadonlySet<string>): Partial<Record<SettingPlace, number>> {
   const fields = fieldsWithErrors({ ...shared.fieldErrors, ...criterion.fieldErrors });
-  const counts: Partial<Record<StepName, number>> = {};
-  const count = (step: StepName, added: number) => { if (added > 0) counts[step] = (counts[step] ?? 0) + added; };
-  for (const name of fields) count(stepOfSetting(name, criterionKeys) ?? "site_and_grid", 1);
-  count("site_and_grid", shared.stepErrors.length);
+  const counts: Partial<Record<SettingPlace, number>> = {};
+  const count = (place: SettingPlace, added: number) => { if (added > 0) counts[place] = (counts[place] ?? 0) + added; };
+  for (const name of fields) count(placeOfSetting(name, criterionKeys) ?? "project_settings", 1);
+  count("project_settings", shared.stepErrors.length);
   count("criteria", criterion.stepErrors.length);
   return counts;
 }
 
 /**
  * The fields that hold an error, each counted once by the setting that draws it: the six period settings are one field, as are the
- * balance temperature and its dead band; the mode is one (its tiles). The steps (settingsToFixByStep) and a criterion's sections
+ * balance temperature and its dead band; the mode is one (its tiles). The places (settingsToFixByPlace) and a criterion's sections
  * (settingsToFixBySection) count these.
  */
 export function fieldsWithErrors(fieldErrors: FormState["fieldErrors"]): Set<string> {
@@ -276,12 +300,17 @@ interface SettingsStepProps {
   hemisphere?: Hemisphere;
   /**
    * The notice of a weather file added or replaced in this session; null when there is none to show; absent: the notice is not
-   * shown here (Site and grid, or a criterion's panel, which shows it over its folded settings, WeatherChangeRegion).
+   * shown here (the project settings, or a criterion's panel, which shows it over its folded settings, WeatherChangeRegion).
    */
   weatherChangeNotice?: WeatherChangeNoticeContent | null;
-  /** The input roles the project has files for: Account for context blocking shows only with surroundings or terrain. */
+  /** The input roles the project has files for: Account for context blocking needs surroundings or terrain. */
   inputRoles?: readonly string[];
-  /** Which settings to draw: the shared ones (Site and grid) or a criterion's (its panel); absent, all. */
+  /**
+   * A setting whose inputs the project has no files for: left out ("hidden", a criterion's panel), or drawn greyed out with the
+   * reason under it ("disabled", the project settings window, where a missing field of four would read as lost).
+   */
+  withoutInputs?: "hidden" | "disabled";
+  /** Which settings to draw: the shared ones (the project settings) or a criterion's (its panel); absent, all. */
   settingShown?: (name: string) => boolean;
   /** The messages that name no setting to show here (those of the form these settings are saved by); absent, the form's. */
   stepErrors?: readonly string[];
@@ -309,9 +338,14 @@ function edgeStripOutsideItsField(form: FormState): number | null {
 }
 
 export function SettingsStep({ form, onChange, disabledReason, coldPeriod = null, hemisphere = "northern",
-                               weatherChangeNotice, inputRoles = NO_INPUT_ROLES, settingShown, stepErrors = form.stepErrors,
+                               weatherChangeNotice, inputRoles = NO_INPUT_ROLES, withoutInputs = "hidden", settingShown, stepErrors = form.stepErrors,
                                showsDisabledReason = true }: SettingsStepProps) {
-  const fieldExtras = { voxel_size: voxelSizeExtras(form), [ANALYSIS_PERIOD_FIELDS[0]]: { coldPeriod, hemisphere } };
+  const groups = settingsForStep("settings", form.mode, withoutInputs === "hidden" ? inputRoles : null, settingShown);
+  const fieldExtras: Record<string, SettingFieldExtras> = { voxel_size: voxelSizeExtras(form), [ANALYSIS_PERIOD_FIELDS[0]]: { coldPeriod, hemisphere } };
+  // Drawn without its inputs ("disabled"): greyed out, with the reason under it.
+  for (const view of groups.flatMap((group) => [...group.essential, ...group.folded])) {
+    if (!settingHasInputs(view.name, inputRoles)) fieldExtras[view.name] = { ...fieldExtras[view.name], disabled: true, notes: [messages.needsSurroundingsOrTerrain] };
+  }
   const edgeStripCarriedOver = edgeStripOutsideItsField(form);
   return (
     <div className="settings-step">
@@ -320,7 +354,7 @@ export function SettingsStep({ form, onChange, disabledReason, coldPeriod = null
         <WeatherChangeRegion notice={weatherChangeNotice} form={form} onChange={onChange} disabled={disabledReason !== null} />
       )}
       {stepErrors.map((error) => <p key={error} className="setting-error step-error"><WarningIcon /><span>{error}</span></p>)}
-      {settingsForStep("settings", form.mode, inputRoles, settingShown).map((group) => (
+      {groups.map((group) => (
         <SettingGroup key={group.title} group={group} form={form} onChange={onChange} disabled={disabledReason !== null} fieldExtras={fieldExtras} />
       ))}
       {edgeStripCarriedOver !== null && (settingShown?.("edge_taper") ?? true) && <p className="step-reason">{messages.edgeStripCarriedOver(edgeStripCarriedOver)}</p>}
@@ -339,10 +373,13 @@ interface RunAnalysisButtonProps {
   secondary?: boolean;
   /** The id of a line that gives the reason for both of two buttons (CriteriaRunBar): the button names it and does not write its own. */
   sharedReasonId?: string;
+  /** Drawn after the reason the button writes (Open settings, for a setting to fix in the project settings). */
+  reasonAction?: ReactNode;
 }
 
 /** A step's run button, pinned under the step list, with the reason it is disabled and the progress of its run under it. */
-export function RunAnalysisButton({ blocker, onRunAnalysis, label = messages.runAnalysis, feedback, secondary = false, sharedReasonId }: RunAnalysisButtonProps) {
+export function RunAnalysisButton({ blocker, onRunAnalysis, label = messages.runAnalysis, feedback, secondary = false, sharedReasonId,
+                                   reasonAction }: RunAnalysisButtonProps) {
   const ownReasonId = useId();
   const reasonId = sharedReasonId ?? ownReasonId;
   return (
@@ -352,6 +389,7 @@ export function RunAnalysisButton({ blocker, onRunAnalysis, label = messages.run
         {label}
       </button>
       {blocker !== null && sharedReasonId === undefined && <p id={reasonId} className="run-button-reason">{blocker}</p>}
+      {blocker !== null && sharedReasonId === undefined && reasonAction}
       {feedback}
     </div>
   );

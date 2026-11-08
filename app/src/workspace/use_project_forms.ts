@@ -1,4 +1,4 @@
-// The two settings forms of an open project: the shared settings, shown in Site and grid, and the selected criterion's, shown in its
+// The two settings forms of an open project: the shared settings, shown in the project settings window, and the selected criterion's, shown in its
 // panel. The steps read them as one (useBothForms); each save goes to where its settings are kept.
 import { useState } from "react";
 import { putSharedSettings, updateCriterion, type ModeInfo, type ProjectDetail } from "../api_client/client";
@@ -34,7 +34,7 @@ export function useProjectForms({ token, project, schema, modes, criterionKeys, 
     criteria.applyReply(entry);
     return entry;
   };
-  // A shared value refused by a criterion's own setting is said in Site and grid, with that criterion's name (sharedRefusalShown).
+  // A shared value refused by a criterion's own setting is said in the project settings, with that criterion's name (sharedRefusalShown).
   const saveSharedSettings: SettingsSend = (formToken, projectName, values) => putSharedSettings(formToken, projectName, values).catch((error: unknown) => {
     const now = criteria.current().criteria;
     throw sharedRefusalShown(error, criterionKeys, (id) => now.find((entry) => entry.id === id) ?? null, now.length >= 2);

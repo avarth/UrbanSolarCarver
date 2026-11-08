@@ -318,8 +318,8 @@ function runs(record: RunRecord | null, notice: RunLoop["notice"] = null) {
 test("under the button that started it: the stages with their states, the batches, the elapsed time and Cancel", () => {
   let state = initialRunState(["preprocessing", "thresholding"]);
   state = runReducer(state, { type: "stage_progress", stage: "preprocessing", criterion: null, done: 3, total: 10 });
-  const loop = runs({ serial: 1, project: "p", origin: "settings_run_analysis", runId: "r", state, refusal: null });
-  rendered = renderForTest(<RunProgress runs={loop} project="p" origin="settings_run_analysis" mode="time-based" onGoToSetting={vi.fn()} />);
+  const loop = runs({ serial: 1, project: "p", origin: "carving_run_analysis", runId: "r", state, refusal: null });
+  rendered = renderForTest(<RunProgress runs={loop} project="p" origin="carving_run_analysis" mode="time-based" onGoToSetting={vi.fn()} />);
   expect([...rendered.container.querySelectorAll(".run-stage")].map((row) => row.textContent)).toEqual(["Sun analysis3 of 10 batches", "Carvingwaiting"]);
   expect(rendered.container.textContent).toMatch(/Elapsed \d+\.\d s/);
   click([...rendered.container.querySelectorAll("button")].find((button) => button.textContent === "Cancel")!);

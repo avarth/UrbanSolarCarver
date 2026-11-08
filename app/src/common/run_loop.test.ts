@@ -88,14 +88,14 @@ test("nothing to run shows Results are up to date at the button for three second
 test("a start refused for invalid settings is a failed run naming its fields; another refusal keeps the service's words", async () => {
   vi.stubGlobal("fetch", replyWith({ field_errors: [{ field: "voxel_size", message: "too small" }], grid_plan: null }, 422));
   const { loop, unmount } = renderedLoop();
-  await act(async () => { await loop().start("p", ["thresholding"], "settings_run_analysis"); });
+  await act(async () => { await loop().start("p", ["thresholding"], "carving_run_analysis"); });
   expect(loop().current!.state.final).toBe("failed");
   expect(loop().current!.state.failure!.field_errors).toEqual([{ field: "voxel_size", message: "too small" }]);
   vi.stubGlobal("fetch", replyWith({ detail: "A run of project 'q' is active." }, 409));
-  await act(async () => { await loop().start("p", ["thresholding"], "settings_run_analysis"); });
+  await act(async () => { await loop().start("p", ["thresholding"], "carving_run_analysis"); });
   expect(loop().current!.refusal).toBe("A run of project 'q' is active.");
   vi.stubGlobal("fetch", vi.fn(async () => new Response("Internal Server Error", { status: 500 })));
-  await act(async () => { await loop().start("p", ["thresholding"], "settings_run_analysis"); });
+  await act(async () => { await loop().start("p", ["thresholding"], "carving_run_analysis"); });
   expect(loop().current!.refusal).toBe("The USC engine refused the request and gave no reason (status 500). Try again.");
   unmount();
 });
@@ -105,7 +105,7 @@ test("a connection lost during a run is passed on as a stopped engine, or a lost
     vi.stubGlobal("fetch", replyWith({ status: "started", run_id: "r1", stages: ["preprocessing"] }));
     const { loop, onServiceProblem, unmount } = renderedLoop();
     let outcome: Promise<RunOutcome> | null = null;
-    await act(async () => { outcome = loop().start("p", ["thresholding"], "settings_run_analysis"); });
+    await act(async () => { outcome = loop().start("p", ["thresholding"], "carving_run_analysis"); });
     act(() => FakeWebSocket.opened[0].onclose?.({ code, reason: "" }));
     expect(await outcome).toBe("connection_lost");
     const problem = onServiceProblem.mock.calls[0][0];
@@ -118,7 +118,7 @@ test("a connection lost during a run is passed on as a stopped engine, or a lost
 test("forget drops the record of a project renamed, reset or deleted, and only that project's, and never during a run", async () => {
   vi.stubGlobal("fetch", replyWith({ detail: "Add a maximum volume first." }, 409));
   const { loop, unmount } = renderedLoop();
-  await act(async () => { await loop().start("Plot 7", ["thresholding"], "settings_run_analysis"); });
+  await act(async () => { await loop().start("Plot 7", ["thresholding"], "carving_run_analysis"); });
   expect(loop().current!.refusal).toBe("Add a maximum volume first.");
   act(() => loop().forget("Other"));
   expect(loop().current).not.toBeNull();

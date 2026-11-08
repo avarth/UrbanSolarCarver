@@ -35,6 +35,27 @@
 
 .top-bar-home:hover { background: var(--colour-chrome); color: var(--colour-accent); }
 
+/* The Settings button of an open project, after the project menu: a gear, or the "!" of a step row while a shared setting is to fix. */
+.top-bar-settings-slot { display: contents; }
+
+.top-bar-settings-button {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--space-unit) * 1.5);
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  margin-left: calc(var(--space-unit) * -2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--colour-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.top-bar-settings-button:hover,
+.top-bar-settings-button[aria-expanded="true"] { border-color: var(--colour-line); background: var(--colour-chrome); }
+.top-bar-settings-button .step-mark { width: 16px; height: 16px; margin-top: 0; font-size: 11px; }
+
 /* The device status, then the time of the last run, which is dropped on a narrow page. */
 .top-bar-device {
   position: relative;

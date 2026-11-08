@@ -44,7 +44,6 @@ const ANALYSIS_OF_CRITERION: readonly PipelineStage[] = ["preprocessing", "thres
 
 /** The step whose summary counts the warnings of a run started by each button (a simulation's are Simulate's). */
 const STEP_OF_ORIGIN: Record<Exclude<RunOrigin, "simulate">, StepName> = {
-  settings_run_analysis: "site_and_grid",
   carving_run_analysis: "criteria",
   carving_update: "criteria",
   build: "envelope_and_massing",
@@ -165,6 +164,8 @@ export interface ResultStepsContext extends CriteriaOfResults {
   runs: RunLoop;
   /** Why no run can start now (a run, the inputs, a setting, the warm-up), as Criteria says it; null when one can. */
   runBlocker: string | null;
+  /** What leads to a setting to fix that *runBlocker* names in another place (Open settings); absent: nothing. */
+  runBlockerAction?: ReactNode;
   /** Every criterion that is on has a current carving: Build envelope and massing, pinned in Criteria, waits until then. */
   everyCriterionCarved: boolean;
   /** A run of this project is starting or in progress: the service refuses to save its settings. */
@@ -415,7 +416,8 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
                       context.openStep("envelope_and_massing");
                       void startAfterSaving(BUILD_STAGES, "build");
                     }}
-                    feedback={<>{feedback("carving_run_analysis", true)}{feedback("carving_update", true, carvingUpdatedNote)}</>} />
+                    feedback={<>{feedback("carving_run_analysis", true)}{feedback("carving_update", true, carvingUpdatedNote)}</>}
+                    runBlockerAction={runBlocker === null ? undefined : context.runBlockerAction} />
   );
   const content = {
     envelope_and_massing: (
