@@ -111,6 +111,13 @@ interface Press {
   time: number;
 }
 
+/** A click on the view: pixels from its top left corner, and whether Shift was held. */
+export interface ViewClick {
+  x: number;
+  y: number;
+  shift: boolean;
+}
+
 interface CameraMove {
   startTime: number;
   fromTarget: THREE.Vector3;
@@ -167,6 +174,7 @@ export class ViewerScene {
   private pendingHover: { x: number; y: number } | null = null;
   private press: Press | null = null;
   private readonly clickListeners = new Map<LayerName, Set<(intersection: THREE.Intersection) => void>>();
+  private readonly viewClickListeners = new Set<(click: ViewClick) => void>();
   private readonly sunShading: SunShading;
 
   constructor(container: HTMLElement) {
@@ -375,6 +383,33 @@ export class ViewerScene {
     listeners.add(listener);
     this.clickListeners.set(name, listeners);
     return () => { listeners.delete(listener); };
+  }
+
+  /**
+   * Calls *listener* whenever the view is clicked (as onLayerClick counts a click), wherever: with the place in pixels from the
+   * view's top left corner and whether Shift was held. Returns the function that stops the calls.
+   */
+  onViewClick(listener: (click: ViewClick) => void): () => void {
+    this.viewClickListeners.add(listener);
+    return () => { this.viewClickListeners.delete(listener); };
+  }
+
+  /** Where the local point *point* is drawn, in pixels from the view's top left corner; null when it is behind the camera. */
+  toScreen(point: Point3): [number, number] | null {
+    this.camera.updateMatrixWorld();
+    const projected = new THREE.Vector3(...point).project(this.camera);
+    if (projected.z > 1 || projected.z < -1) return null;
+    return [((projected.x + 1) / 2) * this.container.clientWidth, ((1 - projected.y) / 2) * this.container.clientHeight];
+  }
+
+  /** The local point on the level plane z = *levelZ* under the pixel (x, y) of the view; null when the ray misses it (looking up). */
+  pointOnLevel(x: number, y: number, levelZ: number): Point3 | null {
+    const width = Math.max(1, this.container.clientWidth), height = Math.max(1, this.container.clientHeight);
+    this.camera.updateMatrixWorld();
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(new THREE.Vector2((x / width) * 2 - 1, -(y / height) * 2 + 1), this.camera);
+    const hit = raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 0, 1), -levelZ), new THREE.Vector3());
+    return hit ? [hit.x, hit.y, levelZ] : null;
   }
 
   describe(): string {
@@ -632,6 +667,8 @@ export class ViewerScene {
     if (moved > CLICK_MAX_PIXELS || performance.now() - press.time > CLICK_MAX_MILLISECONDS) return;
     const bounds = this.renderer.domElement.getBoundingClientRect();
     if (bounds.width === 0 || bounds.height === 0) return;
+    const click: ViewClick = { x: event.clientX - bounds.left, y: event.clientY - bounds.top, shift: event.shiftKey };
+    for (const listener of [...this.viewClickListeners]) listener(click);
     this.camera.updateMatrixWorld();          // the camera may have moved since the last frame
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(((event.clientX - bounds.left) / bounds.width) * 2 - 1, -((event.clientY - bounds.top) / bounds.height) * 2 + 1), this.camera);

@@ -34,7 +34,7 @@ from ..errors import ConfigError
 from ..mode_registry import MODES
 from ..pydantic_schemas import UserConfig
 from ..stage_settings import PIPELINE_STAGES
-from . import folder_picker, inspection, simulation, sun_study, typical_building, user_preferences
+from . import folder_picker, inspection, simulation, site_input, sun_study, typical_building, user_preferences
 from .api_models import (
     NEW_PROJECT_MODE,
     CancelRunReply, ColdPeriodReply, ConfigErrorReply, ConfigReply, ConfigValuesRequest, CreateCriterionRequest, CreateProjectRequest,
@@ -42,7 +42,7 @@ from .api_models import (
     ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkippedSurfaces, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, StoredFileChangedReply, SunChart, SunPath, SunPositions, TurnSurfacesRequest,
     UpdateCriterionRequest, AddStudyRequest, ReorderStudiesRequest, StudiesReply, StudyEntry, StudyWithState, UpdateStudyRequest,
     NewLibraryEntryRequest, TypicalBuildingLibraryEntry, TypicalBuildingReply, TypicalBuildingRequest, TypicalBuildingWeightsReply,
-    TypicalBuildingProgressReply, UpdateLibraryEntryRequest,
+    TypicalBuildingProgressReply, UpdateLibraryEntryRequest, MaxVolumeSourceRequest, SitesReply, SitesRequest,
 )
 from .criteria import active_criteria, find_criterion
 from .example_catalog import EXAMPLE_PROJECTS_FOLDER, EXAMPLE_WEATHER_FILE_NAME, read_examples
@@ -546,6 +546,30 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         with store.project_lock(name):
             refuse_while_running(name)
             return store.remove_input(name, role, file_name)
+
+    @router.get("/projects/{name}/sites", responses=_ERROR_RESPONSES)
+    def sites(name: str) -> SitesReply:
+        """What the maximum volume is made from (the mesh files or the sites), the sites, and the joined max volume's bounds and grid."""
+        return site_input.sites_reply(folder_in_use.store, name)
+
+    @router.get("/projects/{name}/max-volume", responses=_ERROR_RESPONSES)
+    def joined_max_volume(name: str) -> FileResponse:
+        """The joined max volume the engine carves (built from the mesh files or from the sites); 404 before there is one."""
+        path = site_input.joined_max_volume_path(folder_in_use.store, name)
+        return FileResponse(path, headers=NO_CACHE)
+
+    @router.put("/projects/{name}/sites", responses=_ERROR_RESPONSES)
+    def save_sites(name: str, request: SitesRequest) -> SitesReply:
+        """Store the whole list of sites; while the maximum volume is made from them, it is built again (the criteria go out of date).
+        422 names every site that cannot make a volume, and nothing is stored."""
+        with writable_project(name) as store:
+            return site_input.save_sites(store, name, request.sites)
+
+    @router.put("/projects/{name}/max-volume-source", responses=_ERROR_RESPONSES)
+    def set_max_volume_source(name: str, request: MaxVolumeSourceRequest) -> SitesReply:
+        """Make the maximum volume from the mesh files or from the sites; the other input's data is kept."""
+        with writable_project(name) as store:
+            return site_input.set_max_volume_source(store, name, request.source)
 
     @router.put("/projects/{name}/shared-settings", responses={409: _ERROR_RESPONSES[409], 422: _CONFIG_OR_MESSAGE_ERROR})
     def save_shared_settings(name: str, request: ConfigValuesRequest) -> ConfigReply:

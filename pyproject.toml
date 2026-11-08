@@ -114,7 +114,7 @@ layers = [
   "local_web_service",
   "engine_requests",
   "api",
-  "api_core | solar_check | access_evaluation",
+  "api_core | solar_check | access_evaluation | sites",
   "carving : scoring : context_geometry : voxelization : floor_plates : meshing : surface_sampling : sun : sky_patches : simulated_weights : ray_tracing : warp_kernels : io : column_postprocessing : cold_period : session : check_files",
   "chain_config : load_config : check_settings : stage_settings : pydantic_schemas : mode_registry : run_context : errors : compute_device : weather_file : archetype_defaults : grid_planning : daemon_client",
 ]

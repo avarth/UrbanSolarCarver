@@ -40,7 +40,7 @@ layer above. The layers, top first:
 | 2. Browser UI service | `local_web_service/`: projects, criteria, studies, runs and the HTTP routes the app calls |
 | 3. Requests | `engine_requests`: one entry point that runs a stage chain or a simulation for the service and the daemon |
 | 4. API | `api`: the public Python API (`run_pipeline`, `run_chain` and the stage functions) |
-| 5. Stages and checks | `api_core/` (preprocessing, thresholding, exporting, massing, chains), `solar_check` (Simulate), `access_evaluation` |
+| 5. Stages and checks | `api_core/` (preprocessing, thresholding, exporting, massing, chains), `solar_check` (Simulate), `access_evaluation`, `sites` (the volume of a site, built by the service) |
 | 6. Engine | voxels, test points, rays and kernels, sky and sun weights, scoring, meshing, floor plates, file reading |
 | 7. Settings and basics | config models and loading, the mode registry, errors, run context, the compute device, the weather file reader |
 

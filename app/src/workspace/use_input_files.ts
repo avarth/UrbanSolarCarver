@@ -2,11 +2,12 @@
 // latitude and the notice about a new weather file, the local origin the meshes are drawn around, the meshes themselves
 // (input_meshes.ts), and the requests that add or remove a file. The uploads and removals under way are followed, so the app can
 // wait for them before a rename, reset or delete of the project.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  addInput, getInputFiles, getProject, removeInput, reportServiceProblem, type InputFileInfo, type InputFilesReply, type ModeInfo,
-  type ProjectDetail,
+  addInput, failureTextOf, getInputFiles, getProject, getSites, joinedMaxVolumeUrl, removeInput, reportServiceProblem, saveSites, setMaxVolumeSource,
+  type InputFileInfo, type InputFilesReply, type MaxVolumeSource, type ModeInfo, type ProjectDetail, type SitesReply,
 } from "../api_client/client";
+import type { Site } from "../sites/site_geometry";
 import { useProjectSession } from "../api_client/project_session";
 import { hemisphereOfLatitude, seasonsOfLatitude, type Hemisphere } from "../settings_form/analysis_period";
 import type { FormState, SettingsForm } from "../settings_form/form_state";
@@ -64,7 +65,27 @@ export interface InputFiles {
   /** Resolves once the uploads and removals of input files under way have ended. */
   waitForInputChanges: () => Promise<void>;
   meshes: Record<MeshRole, InputGeometry>;
+  sites: SitesInput;
 }
+
+/** The sites of the project and what its maximum volume is made from (design/site-input.md). */
+export interface SitesInput {
+  /** Null until the service has said. */
+  source: MaxVolumeSource | null;
+  sites: Site[];
+  /** Store the whole list; resolves to null once saved, or the service's reason it was refused (the sites shown go back). */
+  save: (sites: Site[]) => Promise<string | null>;
+  setSource: (source: MaxVolumeSource) => Promise<void>;
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  /** The service's reason the last change was refused, until the next change. */
+  refusal: string | null;
+}
+
+const UNDO_DEPTH = 50;
+const MAX_VOLUME_FILE = [{ name: "max_volume.ply", triangle_count: 0 }];
 
 export function useInputFiles(context: InputFilesContext): InputFiles {
   const { token, onServiceProblem } = useProjectSession();
@@ -94,8 +115,30 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
   // or without a latitude: what the period was likely chosen for.
   const hemisphereOfLastWeatherFile = useRef<Hemisphere>(hemisphereOfLatitude(project.weather_latitude));
 
+  const [source, setSourceState] = useState<MaxVolumeSource | null>(null);
+  const [sites, setSites] = useState<Site[]>([]);
+  const [undoStack, setUndoStack] = useState<Site[][]>([]);
+  const [redoStack, setRedoStack] = useState<Site[][]>([]);
+  const [refusal, setRefusal] = useState<string | null>(null);
+  useEffect(() => {
+    let stale = false;
+    getSites(token, project.name).then((reply) => {
+      if (stale) return;
+      setSourceState(reply.source);
+      setSites(reply.sites as Site[]);
+    }).catch((error) => {
+      // Lost access is reported; another failure leaves the project on its mesh files, as before sites
+      if (!stale && !reportServiceProblem(error, onServiceProblem)) setSourceState("mesh");
+    });
+    return () => {
+      stale = true;
+    };
+  }, [token, project.name, onServiceProblem]);
+
   const origin = joinedBounds === null ? NO_SHIFT : localOrigin(joinedBounds);
-  const maxVolume = useInputGeometry("max_volume", files.max_volume, origin, inputRevisions.max_volume, onInputsLoaded);
+  const fromSites = source === "sites";
+  const maxVolume = useInputGeometry("max_volume", fromSites ? (joinedBounds === null ? [] : MAX_VOLUME_FILE) : files.max_volume, origin,
+                                     inputRevisions.max_volume, onInputsLoaded, fromSites ? () => joinedMaxVolumeUrl(project.name) : undefined);
   const testSurfaces = useInputGeometry("test_surfaces", files.test_surfaces, origin, inputRevisions.test_surfaces, onInputsLoaded);
   const contextMesh = useInputGeometry("context", files.context, origin, inputRevisions.context, onInputsLoaded);
   const terrain = useInputGeometry("terrain", files.terrain, origin, inputRevisions.terrain, onInputsLoaded);
@@ -189,7 +232,64 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
     }
   };
 
+  const applySitesReply = (reply: SitesReply) => {
+    setSourceState(reply.source);
+    setSites(reply.sites as Site[]);
+    setJoinedBounds(reply.joined_bounds as Bounds3 | null);
+    setInputRevisions((current) => ({ ...current, max_volume: current.max_volume + 1 }));
+  };
+  // A change of the sites: shown at once, then stored; a refusal brings back what was shown before
+  const storeSites = async (next: Site[], previous: Site[]): Promise<string | null> => {
+    setSites(next);
+    setRefusal(null);
+    try {
+      applySitesReply(await followedInputChange(saveSites(token, project.name, next)));
+      if (source === "sites") afterInputsChanged("max_volume");
+      return null;
+    } catch (error) {
+      if (reportServiceProblem(error, onServiceProblem)) return null;
+      setSites(previous);
+      const reason = failureTextOf(error);
+      setRefusal(reason);
+      return reason;
+    }
+  };
+  const saveSitesUndoable = async (next: Site[]) => {
+    const previous = sites;
+    const refused = await storeSites(next, previous);
+    if (refused === null) {
+      setUndoStack((stack) => [...stack.slice(-(UNDO_DEPTH - 1)), previous]);
+      setRedoStack([]);
+    }
+    return refused;
+  };
+  const undo = () => {
+    if (!undoStack.length) return;
+    const previous = undoStack[undoStack.length - 1];
+    const current = sites;
+    setUndoStack((stack) => stack.slice(0, -1));
+    setRedoStack((stack) => [...stack, current]);
+    void storeSites(previous, current);
+  };
+  const redo = () => {
+    if (!redoStack.length) return;
+    const next = redoStack[redoStack.length - 1];
+    const current = sites;
+    setRedoStack((stack) => stack.slice(0, -1));
+    setUndoStack((stack) => [...stack, current]);
+    void storeSites(next, current);
+  };
+  const setSource = async (next: MaxVolumeSource) => {
+    try {
+      applySitesReply(await followedInputChange(setMaxVolumeSource(token, project.name, next)));
+      afterInputsChanged("max_volume");
+    } catch (error) {
+      reportServiceProblem(error, onServiceProblem);
+    }
+  };
+
   return {
+    sites: { source, sites, save: saveSitesUndoable, setSource, undo, redo, canUndo: undoStack.length > 0, canRedo: redoStack.length > 0, refusal },
     files, joinedBounds, origin,
     weather: { location: weatherLocation, latitude: weatherLatitude, fileRevision: weatherFileRevision, fileChange: weatherFileChange,
                setFileChange: setWeatherFileChange },

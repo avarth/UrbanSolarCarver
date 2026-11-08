@@ -5,7 +5,7 @@
 import type * as THREE from "three";
 import { vi } from "vitest";
 import type { Point3 } from "./local_origin";
-import type { CameraState, GroundAid, LayerName, ViewerScene, ViewportTheme } from "./scene";
+import type { CameraState, GroundAid, LayerName, ViewClick, ViewerScene, ViewportTheme } from "./scene";
 import type { Hemisphere } from "./sky_dome";
 
 /** Makes the canvas give a WebGL context, as a browser with WebGL does (jsdom gives none); vi.restoreAllMocks undoes it. */
@@ -147,6 +147,23 @@ export class FakeViewerScene implements Pick<ViewerScene, keyof ViewerScene> {
   }
   viewTop(): void {
     this.viewsFromTheTop += 1;
+  }
+
+  // A plain top view for the site tools: 10 pixels a metre, the local origin at pixel (400, 300), y up the screen
+  private readonly viewClickListeners = new Set<(click: ViewClick) => void>();
+  onViewClick(listener: (click: ViewClick) => void): () => void {
+    this.viewClickListeners.add(listener);
+    return () => { this.viewClickListeners.delete(listener); };
+  }
+  /** Clicks the view at the pixel (x, y), as the user would. */
+  clickView(x: number, y: number, shift = false): void {
+    for (const listener of [...this.viewClickListeners]) listener({ x, y, shift });
+  }
+  toScreen(point: Point3): [number, number] | null {
+    return [400 + point[0] * 10, 300 - point[1] * 10];
+  }
+  pointOnLevel(x: number, y: number, levelZ: number): Point3 | null {
+    return [(x - 400) / 10, (300 - y) / 10, levelZ];
   }
 
   /** The layers with an object, as the scene's accessible name would list them. */

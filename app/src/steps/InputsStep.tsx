@@ -3,6 +3,7 @@
 // a remove button per file; under the boxes the size of all inputs together and the warning when it does not look like metres.
 // The boxes are common/InputBox.tsx; the test surfaces belong to the criteria (ProtectsBox).
 // While a run of the project is active the service refuses uploads and removals, so both are disabled with the reason.
+import type { ReactNode } from "react";
 import type { InputFileInfo } from "../api_client/client";
 import { InputBox, type AddInputFiles, type InputRole, type RemoveInputFile } from "../common/InputBox";
 import { messages } from "../messages";
@@ -46,18 +47,22 @@ interface InputsStepProps {
   drawingProblems?: Partial<Record<InputRole, string[]>>;
   /** How carving further made the maximum volume; null for one the user added. */
   maxVolumeNote?: string | null;
+  /** In place of the maximum volume's box: the choice between a maximum volume and a site, or the Site card (sites/SiteInput.tsx). */
+  maxVolumeBox?: ReactNode;
+  /** At the end of the maximum volume's box: the link to a site instead. */
+  maxVolumeFooter?: ReactNode;
 }
 
 export function InputsStep({ files, weatherLocation, weatherHint, inputsBounds, onAddFiles, onRemoveFile, disabledReason, drawingProblems = {},
-                             maxVolumeNote = null }: InputsStepProps) {
+                             maxVolumeNote = null, maxVolumeBox, maxVolumeFooter = null }: InputsStepProps) {
   const warning = inputsBounds === null ? null : sizeWarning(inputsBounds);
   return (
     <div className="inputs-step">
-      {INPUT_ROLES.map((role) => (
+      {INPUT_ROLES.map((role) => (role === "max_volume" && maxVolumeBox !== undefined ? <div key={role}>{maxVolumeBox}</div> : (
         <InputBox key={role} role={role} files={files[role] ?? NO_FILES} weatherLocation={weatherLocation} weatherHint={weatherHint}
                   onAddFiles={onAddFiles} onRemoveFile={onRemoveFile} disabledReason={disabledReason} drawingProblems={drawingProblems[role]}
-                  note={role === "max_volume" ? maxVolumeNote : null} />
-      ))}
+                  note={role === "max_volume" ? maxVolumeNote : null} footer={role === "max_volume" ? maxVolumeFooter : null} />
+      )))}
       {inputsBounds !== null && (
         <div className="inputs-size">
           <div className="inputs-size-title">{messages.inputsSizeTitle}</div>

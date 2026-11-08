@@ -11,6 +11,9 @@ export type ProjectSummary = Schemas["ProjectSummary"];
 export type ProjectDetail = Schemas["ProjectDetail"];
 export type InputFilesReply = Schemas["InputFilesReply"];
 export type InputFileInfo = Schemas["InputFileInfo"];
+export type SiteJson = Schemas["SiteJson"];
+export type SitesReply = Schemas["SitesReply"];
+export type MaxVolumeSource = SitesReply["source"];
 export type ConfigReply = Schemas["ConfigReply"];
 export type ConfigErrorReply = Schemas["ConfigErrorReply"];
 export type FieldErrorReply = Schemas["FieldErrorReply"];
@@ -229,6 +232,22 @@ export async function addInput(token: string, project: string, role: string, fil
 
 export const removeInput = (token: string, project: string, role: string, fileName: string) =>
   requestJson<InputFilesReply>(token, inputFileUrl(project, role, fileName), "DELETE");
+
+/** The address of the joined maximum volume the engine carves (from the mesh files or the sites). Needs the token header. */
+export function joinedMaxVolumeUrl(project: string): string {
+  return `${projectPath(project)}/max-volume`;
+}
+
+/** What the maximum volume is made from, the sites, and the joined maximum volume's bounds and grid. */
+export const getSites = (token: string, project: string) => requestJson<SitesReply>(token, `${projectPath(project)}/sites`);
+
+/** Store the whole list of sites; a site that cannot make a volume is refused (422) with every such site named. */
+export const saveSites = (token: string, project: string, sites: SiteJson[]) =>
+  requestJson<SitesReply>(token, `${projectPath(project)}/sites`, "PUT", { sites });
+
+/** Make the maximum volume from the mesh files or from the sites; the other input's data is kept. */
+export const setMaxVolumeSource = (token: string, project: string, source: MaxVolumeSource) =>
+  requestJson<SitesReply>(token, `${projectPath(project)}/max-volume-source`, "PUT", { source });
 
 /** The stored files of a role (for the test surfaces, every criterion's), with their triangle counts. */
 export const getInputFiles = (token: string, project: string, role: string) =>

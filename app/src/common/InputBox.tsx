@@ -2,7 +2,7 @@
 // "Add files" by the picker or by dropping files onto the box. The Inputs step draws one per role of the site, a criterion's
 // and a study's test surfaces one each (ProtectsBox). While a run is active the service refuses uploads and removals, so both
 // are disabled with the reason.
-import { useId, useRef, useState, type DragEvent } from "react";
+import { useId, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { ApiError, failureTextOf, type InputFileInfo } from "../api_client/client";
 import { messages } from "../messages";
 import { WarningIcon } from "../settings_form/SettingField";
@@ -53,6 +53,8 @@ interface InputBoxProps {
   addLabel?: string;
   /** Whether the reason things are disabled is written here; false where another part says it (a criterion's Run analysis). */
   showsDisabledReason?: boolean;
+  /** At the end of the box: the maximum volume's link to a site instead (sites/SiteInput.tsx). */
+  footer?: ReactNode;
 }
 
 const TITLES: Record<InputRole, string> = {
@@ -83,7 +85,7 @@ const NO_PROBLEMS: string[] = [];
 
 export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles, onRemoveFile, disabledReason, weatherNeeded = false,
                            drawingProblems = NO_PROBLEMS, note = null, title, titleHidden = false, hint: hintGiven, addLabel,
-                           showsDisabledReason = true }: InputBoxProps) {
+                           showsDisabledReason = true, footer = null }: InputBoxProps) {
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -171,6 +173,7 @@ export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles
       {filled && note !== null && <p className="input-box-hint">{note}</p>}
       {disabledReason !== null && showsDisabledReason && <p className="input-box-reason">{disabledReason}</p>}
       {[...problems, ...drawingProblems].map((problem) => <p key={problem} className="input-box-problem"><WarningIcon />{problem}</p>)}
+      {footer}
     </section>
   );
 }

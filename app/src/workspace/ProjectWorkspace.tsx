@@ -36,7 +36,7 @@ import { listedWithAnd, messages } from "../messages";
 import { hemisphereOfLatitude } from "../settings_form/analysis_period";
 import { shownValue, type SaveOutcome } from "../settings_form/form_state";
 import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf } from "../settings_form/presentation";
-import type { LayerName, ViewportTheme } from "../viewer/scene";
+import type { LayerName, ViewerScene, ViewportTheme } from "../viewer/scene";
 import { sceneHemisphere } from "../viewer/sky_dome";
 import { SimulateView } from "../simulate/SimulateView";
 import type { StudyStand } from "../viewer/study_values";
@@ -59,6 +59,10 @@ import { plainModeName } from "../modes";
 import { STEP_NAMES, type SettingPlace, type StepName } from "../stages";
 import { analysisPeriodOf, useSunPathOfStoredPeriod } from "../steps/sun_path_request";
 import { useInputFiles } from "./use_input_files";
+import { InputChoice, SiteBox, SwitchInputLink } from "../sites/SiteInput";
+import { SiteEditor, SitePicker, type SiteTool } from "../sites/SiteEditor";
+import { drawingLevel } from "../sites/site_drawing";
+import { nextSiteName, outlinePoints, planArea, type Site, type SitePoint } from "../sites/site_geometry";
 import { InputChangesNotice } from "./InputChangesNotice";
 import { useProjectForms } from "./use_project_forms";
 import { useTestSurfaceDrawing } from "./use_test_surface_drawing";
@@ -71,6 +75,7 @@ import type { WorkspaceMode } from "../common/WorkspaceModeSwitch";
 
 // The id the service gives the first criterion of a project (a new one's, or an earlier version's made a chain of one).
 const FIRST_CRITERION_ID = "1";
+const DEFAULT_SITE_HEIGHT = 30;     // m, the height of a project's first site
 const STEPS_WITH_SOLID_MAX_VOLUME: readonly StepName[] = ["inputs"];
 // The layers each step shows by default (UX 8.2); the later steps add their result layers. The carved voxels start hidden, as
 // they cover the kept ones; the Layers menu shows them. Criteria shows what the Mode and Carving steps showed together, the maximum
@@ -190,9 +195,13 @@ function OpenProject(props: ProjectWorkspaceProps) {
   });
   const [framingRequest, setFramingRequest] = useState(0);
   const frameAllInputs = () => setFramingRequest((count) => count + 1);
-  const { files, origin, weather, meshes, addFiles, removeFile, storeTestSurfaceFiles, reloadRoles, followedInputChange, waitForInputChanges } = useInputFiles({
+  const { files, origin, weather, meshes, addFiles, removeFile, storeTestSurfaceFiles, reloadRoles, followedInputChange, waitForInputChanges,
+          sites: siteInput } = useInputFiles({
     project, modes, currentForm, sharedForm, refreshStageStatus, onInputsLoaded: frameAllInputs,
   });
+  // A site as the input (design/site-input.md): the tool drawing or editing a site in the view, and the tile chosen before any content
+  const [siteTool, setSiteTool] = useState<SiteTool | null>(null);
+  const [maxVolumeChosen, setMaxVolumeChosen] = useState(false);
   const inputChangesNotice = <InputChangesNotice changes={inputChanges} onDismiss={dismissChanges} />;
   const tellSettingsSaver = useEffectEvent((open: boolean) => {
     props.onSettingsSaverReady?.(open ? { flush: flushSave, cancel: cancelSave, waitForInputChanges } : null);
@@ -325,7 +334,8 @@ function OpenProject(props: ProjectWorkspaceProps) {
   // The criteria's part: the selection, the requests of the cards, why a run cannot start, and what the results and cards read.
   const workspaceCriteria = useWorkspaceCriteria({
     criteria, shownCriterionId, setShownCriterionId, criterion, resultsCriterionId, sharedForm, criterionForm, form, dispatch,
-    currentForm, schema: props.schema, modes, criterionKeys, runs, warmUpState, maxVolumeFiles: files.max_volume.length,
+    currentForm, schema: props.schema, modes, criterionKeys, runs, warmUpState,
+    maxVolumeFiles: siteInput.source === "sites" ? siteInput.sites.length : files.max_volume.length, maxVolumeFromSites: siteInput.source === "sites",
     testSurfaceFiles: files.test_surfaces.length, hasWeatherFile, modeNeedsWeatherFile, criterionStages, shownAs, refreshStageStatus,
     followed: followedInputChange, reloadTestSurfaces: testSurfaceCalls.reloadStoredFiles, openPlace,
     focusSetting: (settingName) => focusSettingInPanel(fieldSettingOf(settingName)), onShowCriterion: () => setCriteriaShows("editor"),
@@ -359,6 +369,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
   const viewState = projectViewStateOf({
     files, form, sharedForm: sharedForm.form, criterionForm: criterionForm.form, criterionKeys, northDegrees, stages: shownStages,
     summary: resultSteps.results.summary, criteria: criteria.criteria, active,
+    sites: siteInput.source === "sites" ? { count: siteInput.sites.length, area: siteInput.sites.reduce((sum, site) => sum + planArea(outlinePoints(site.points)), 0) } : null,
   });
 
   const weatherHint = messages.weatherNeededFor(listedWithAnd(modes.filter((mode) => mode.needs_epw).map((mode) => plainModeName(mode.name))));
@@ -391,10 +402,49 @@ function OpenProject(props: ProjectWorkspaceProps) {
       return reportServiceProblem(error, onServiceProblem) ? null : failureTextOf(error);
     }
   };
+  const usesSites = siteInput.source === "sites";
+  const choosingInput = siteInput.source === "mesh" && files.max_volume.length === 0 && siteInput.sites.length === 0 && !maxVolumeChosen
+    && (project.carving_chain ?? []).length === 0;
+  const lastHeight = siteInput.sites.length ? siteInput.sites[siteInput.sites.length - 1].height : DEFAULT_SITE_HEIGHT;
+  const surroundings = boundsOf([contextMesh.geometry, terrainMesh.geometry]);
+  const siteLevel = drawingLevel(siteInput.sites.map((site) => site.points), surroundings === null ? null : surroundings[0][2] + origin[2]);
+  const changeSite = (index: number, site: Site) => siteInput.save(siteInput.sites.map((other, at) => (at === index ? site : other)));
+  const deleteSite = (index: number) => {
+    if (siteTool?.kind === "edit") setSiteTool(null);
+    void siteInput.save(siteInput.sites.filter((_, at) => at !== index));
+  };
+  const finishDrawing = (points: SitePoint[]) => {
+    const height = Math.max(lastHeight, Math.ceil(Math.max(...points.map((point) => point[2])) - Math.min(...points.map((point) => point[2])) + 1));
+    const added = [...siteInput.sites, { name: nextSiteName(siteInput.sites), points, height }];
+    void siteInput.save(added).then((refused) => { if (refused === null) setSiteTool({ kind: "edit", index: added.length - 1 }); });
+  };
+  const maxVolumeBox = siteInput.source === null ? undefined : choosingInput ? (
+    <InputChoice disabledReason={inputsDisabledReason} onChooseMaxVolume={() => setMaxVolumeChosen(true)}
+                 onChooseSite={() => { void siteInput.setSource("sites"); }} />
+  ) : usesSites ? (
+    <SiteBox sites={siteInput.sites} tool={siteTool} refusal={siteInput.refusal} disabledReason={inputsDisabledReason}
+             onDraw={() => setSiteTool({ kind: "draw" })} onEdit={(index) => setSiteTool({ kind: "edit", index })}
+             onChangeSite={changeSite} onDeleteSite={deleteSite}
+             onSwitch={() => { setSiteTool(null); setMaxVolumeChosen(true); void siteInput.setSource("mesh"); }} />
+  ) : undefined;
+  const maxVolumeFooter = siteInput.source === "mesh" && !choosingInput ? (
+    <SwitchInputLink toSite asks={files.max_volume.length > 0} disabledReason={inputsDisabledReason} onSwitch={() => { void siteInput.setSource("sites"); }} />
+  ) : null;
+  // The site tools work while Inputs is open in Carve; a run in progress stops them
+  const siteToolShown = props.mode === "design" && openStep === "inputs" && usesSites && inputsDisabledReason === null ? siteTool : null;
+  const sceneTool = props.mode !== "design" || openStep !== "inputs" || !usesSites || inputsDisabledReason !== null ? null
+    : siteToolShown !== null ? (scene: ViewerScene) => (
+      <SiteEditor scene={scene} origin={origin} sites={siteInput.sites} tool={siteToolShown} level={siteLevel} newSiteName={nextSiteName(siteInput.sites)}
+                  onFinishDrawing={finishDrawing} onChangeSite={(index, site) => { void changeSite(index, site); }} onClose={() => setSiteTool(null)}
+                  onUndo={siteInput.undo} onRedo={siteInput.redo} canUndo={siteInput.canUndo} canRedo={siteInput.canRedo} refusal={siteInput.refusal} />
+    ) : (scene: ViewerScene) => (
+      <SitePicker scene={scene} origin={origin} sites={siteInput.sites} onPick={(index) => setSiteTool({ kind: "edit", index })} />
+    );
   const stepContent: Record<StepName, ReactNode> = {
     inputs: (
       <InputsStep files={files} weatherLocation={weather.location} weatherHint={weatherHint} inputsBounds={inputsBounds} onAddFiles={addFiles}
                   onRemoveFile={removeFile} disabledReason={inputsDisabledReason} maxVolumeNote={carvedByNote(project.carving_chain ?? [])}
+                  maxVolumeBox={maxVolumeBox} maxVolumeFooter={maxVolumeFooter}
                   drawingProblems={{ max_volume: maxVolumeMesh.drawingProblems, context: contextMesh.drawingProblems, terrain: terrainMesh.drawingProblems }} />
     ),
     criteria: (
@@ -449,7 +499,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
     if (addFilesRequest > 0) panel.current?.querySelector<HTMLButtonElement>(".inputs-step .input-add")?.focus();
   }, [addFilesRequest]);
   // Shown in Design only: its "Add files" leads to the Inputs step, which Simulate hides.
-  const hasNoMeshInputs = files.max_volume.length === 0 && files.test_surfaces.length === 0;
+  const hasNoMeshInputs = files.max_volume.length === 0 && files.test_surfaces.length === 0 && siteInput.sites.length === 0 && siteInput.source !== "sites";
   const emptyViewContent = hasNoMeshInputs && (
     <div className="viewer-empty-state">
       <p>{messages.noInputsYet}</p>
@@ -533,7 +583,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
                     shownByDefault={shownByDefault} northDegrees={northDegrees} framingRequest={framingRequest}
                     centreContent={props.mode === "design" && emptyViewContent} localOrigin={origin} mode={form.mode}
                     analysisCurrent={(ownStages ?? shownStages).preprocessing === "current"} {...resultSteps.viewer} inspect={inspectView}
-                    {...(simulating ? simulateViewer : {})} {...(inspecting ? inspectViewer : {})} />
+                    {...(simulating ? simulateViewer : {})} {...(inspecting ? inspectViewer : {})} sceneTool={sceneTool} />
       </section>
     </div>
   );

@@ -94,6 +94,8 @@ def refresh_changed_inputs(store, name: str) -> bool:
                     for file_name in files:     # the kept original of a saved flip is older than the file now in the folder
                         with contextlib.suppress(OSError):
                             test_surfaces.original_path(project_folder, file_name).unlink(missing_ok=True)
+                elif role == "max_volume" and project_json.max_volume_source == "sites":
+                    changed_names = []          # the maximum volume is made from the sites: its files are kept, not joined
                 else:
                     changed_names = _join_mesh_role_again(store, name, project_folder, project_json, role, sorted(files))
             except (ProjectError, OSError) as error:

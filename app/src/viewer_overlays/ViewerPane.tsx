@@ -225,6 +225,8 @@ export interface ViewerPaneProps {
   sunStudy?: SunStudyView | null;
   /** The sun tool's button in the toolbar and, while open, its panel under it; null: no sun tool (no project open). */
   sunTool?: { open: boolean; onToggle: () => void; panel: ReactNode } | null;
+  /** A tool drawn over the view that needs the scene (drawing and editing sites, sites/SiteEditor.tsx); null: none. */
+  sceneTool?: ((scene: ViewerScene) => ReactNode) | null;
 }
 
 const NO_CAMERA: CameraState = { yawDegrees: 0, elevationDegrees: 90, metresPerPixel: 0 };
@@ -260,7 +262,8 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
                              maxVolumeAppearance, shownByDefault,
                              northDegrees, framingRequest, centreContent, results = NO_VIEWER_RESULTS, localOrigin = NO_SHIFT, dimmedLayers = NO_LAYERS,
                              missingLayers = NO_LAYERS, missingLayerNotes, runProgress = null, overlayContent, mode = null,
-                             analysisCurrent = false, skyDomeTitle, skyDomeChoiceRemembered = true, study = null, studyOutOfDate = false, envelopeSeeThrough = false, inspect = null, sunStudy = null, sunTool = null }: ViewerPaneProps) {
+                             analysisCurrent = false, skyDomeTitle, skyDomeChoiceRemembered = true, study = null, studyOutOfDate = false, envelopeSeeThrough = false, inspect = null, sunStudy = null, sunTool = null,
+                             sceneTool = null }: ViewerPaneProps) {
   const container = useRef<HTMLDivElement>(null);
   const [scene, setScene] = useState<ViewerScene | null>(null);
   const [sceneUnavailable] = useState(() => !browserHasWebGl());
@@ -526,6 +529,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
       )}
       {centreContent && <div className="viewer-centre" data-viewport-theme={theme}>{centreContent}</div>}
       {overlay}
+      {scene !== null && sceneTool !== null && sceneTool(scene)}
     </div>
   );
 }
