@@ -28,7 +28,7 @@ from ..grid_planning import MAX_GRID_VOXELS, VoxelGridPlan, check_voxel_grid_bud
 from ..io import load_mesh, save_mesh
 from ..load_config import build_config, build_config_from_mode_starting_values
 from ..pydantic_schemas import UserConfig
-from . import stored_files, test_surfaces, uploads
+from . import site_input, stored_files, test_surfaces, uploads
 from .api_models import (
     ColdPeriodDates, ColdPeriodReply, ConfigReply, CriterionEntry, ExampleProject, GridPlanReply, InputFileInfo, InputFilesReply,
     ProjectJson, ProjectSummary, StudyEntry,
@@ -1044,6 +1044,7 @@ class ProjectStore:
         extension = Path(clean_name).suffix.lower()
         with self.project_lock(name):
             project_json = self.read_project_json(name)
+            site_input.refuse_mesh_files_while_sites(project_json, role)
             project_folder = self.open(name)
             if role == WEATHER_ROLE:
                 if extension != WEATHER_EXTENSION:
@@ -1074,6 +1075,7 @@ class ProjectStore:
             project_folder = self.open(name)
             if file_name not in project_json.input_files.get(role, {}):
                 raise ProjectError(f"There is no {role} file named '{file_name}'.", status_code=404)
+            site_input.refuse_mesh_files_while_sites(project_json, role)
             remaining_names = [other for other in project_json.input_files[role] if other != file_name]
             joined_temporary_path = None
             try:

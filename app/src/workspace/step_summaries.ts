@@ -6,6 +6,8 @@ import type { PipelineStage, StageState, StepMark, StepName } from "../stages";
 
 export interface ProjectViewState {
   maxVolumeFiles: number;
+  /** A project whose maximum volume is made from its sites: how many and their plan area; absent or null for one made from files. */
+  sites?: { count: number; area: number } | null;
   hasWeatherFile: boolean;
   /** The files of the optional existing surroundings and terrain; absent: none. */
   contextFiles?: number;
@@ -31,6 +33,10 @@ export interface ProjectViewState {
 }
 
 function inputsSummary(state: ProjectViewState): string {
+  if (state.sites) {
+    if (state.sites.count === 0) return messages.siteMissing;
+    return messages.sitesInputsSummary(state.sites.count, state.sites.area, state.hasWeatherFile, state.contextFiles ?? 0, (state.terrainFiles ?? 0) > 0);
+  }
   if (state.maxVolumeFiles === 0) return messages.maxVolumeMissing;
   return messages.inputsSummary(state.maxVolumeFiles, state.hasWeatherFile, state.contextFiles ?? 0, (state.terrainFiles ?? 0) > 0);
 }
@@ -116,7 +122,7 @@ export function stepMark(step: StepName, state: ProjectViewState): StepMark {
   if (settingsToFixIn(step, state) > 0) return "error";
   switch (step) {
     case "inputs":
-      return state.maxVolumeFiles > 0 ? "done" : "none";
+      return (state.sites ? state.sites.count : state.maxVolumeFiles) > 0 ? "done" : "none";
     case "site_and_grid":
       return preprocessing === "current" ? "done" : "none";
     case "criteria":

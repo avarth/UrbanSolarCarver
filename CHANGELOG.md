@@ -7,6 +7,15 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Inputs
+
+- **A site as the input.** A project makes its maximum volume from mesh files or from **sites**, chosen with two tiles in
+  Inputs: closed outlines drawn in the 3D view, each with its own height. The vertices carry the ground's elevation (typed
+  after drawing); the ground inside is a smooth membrane on the boundary, and the top is flat at the lowest vertex plus the
+  height. Drawing snaps to the first point and to other sites, Shift holds 15 degree steps; vertices are dragged, added on an
+  edge and removed; Ctrl+Z undoes. The engine module `sites.py` builds the volume; carving is unchanged.
+- Service: `GET`/`PUT /projects/{name}/sites`, `PUT /projects/{name}/max-volume-source`, `GET /projects/{name}/max-volume`.
+
 ### Simulate
 
 - **Simulate the resulting volumes.** A study accounts for one geometry (**Account for**: nothing, the max volume, the

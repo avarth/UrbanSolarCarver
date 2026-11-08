@@ -87,6 +87,23 @@ class ChangedFileNotice(BaseModel):
     noticed: str                # ISO 8601, UTC: when the service found the change
 
 
+MaxVolumeSource = Literal["mesh", "sites"]
+
+
+class SiteJson(BaseModel):
+    """A site (sites.py): a closed outline whose vertices carry the ground's elevation, in the input files' coordinates, and its
+    height above its lowest vertex."""
+    name: str = Field(min_length=1, max_length=80)
+    points: list[list[float]] = Field(min_length=3, max_length=2000)    # [[x, y, z], ...], not repeated at the end
+    height: float = Field(gt=0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def _points_are_xyz(self):
+        if any(len(point) != 3 for point in self.points):
+            raise ValueError("every point is [x, y, z]")
+        return self
+
+
 class ProjectJson(BaseModel):
     """The content of a project's project.json."""
     name: str
@@ -107,6 +124,9 @@ class ProjectJson(BaseModel):
     next_study_id: int = 1      # the id the next study gets
     typical_building: TypicalBuildingEntry | None = None    # None: none chosen yet (typical_building.building_of)
     mode_to_choose: bool = False    # a new project: its one criterion stands in NEW_PROJECT_MODE until the user chooses a mode
+    # What the maximum volume is made from: the mesh files of the max_volume role, or the sites (site_input.py); one or the other
+    max_volume_source: MaxVolumeSource = "mesh"
+    sites: list[SiteJson] = Field(default_factory=list)     # kept while the source is "mesh", so switching back restores them
 
 
 StageState = Literal["current", "out_of_date", "missing"]
@@ -185,6 +205,23 @@ class InputFilesReply(BaseModel):
     joined_bounds: list[list[float]] | None   # [[xmin, ymin, zmin], [xmax, ymax, zmax]] of the joined max volume, whatever the role
     weather_location: str | None              # "<city>, <country>" from the weather file, None without one
     weather_latitude: float | None            # degrees north, negative in the southern hemisphere; None without a usable weather file
+
+
+class SitesRequest(BaseModel):
+    """The whole list of a project's sites, as it is to be stored."""
+    sites: list[SiteJson] = Field(max_length=200)
+
+
+class MaxVolumeSourceRequest(BaseModel):
+    source: MaxVolumeSource
+
+
+class SitesReply(BaseModel):
+    """What the maximum volume is made from, the sites, and what the joined max volume came out as."""
+    source: MaxVolumeSource
+    sites: list[SiteJson]
+    joined_bounds: list[list[float]] | None     # of the joined max volume; None without one
+    grid_plan: "GridPlanReply | None"           # the grid of the stored settings on it; None without a max volume
 
 
 class ProjectSummary(BaseModel):

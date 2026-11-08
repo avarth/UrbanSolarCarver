@@ -52,8 +52,10 @@ export interface InputGeometry {
 
 const NOTHING_LOADED: InputGeometry = { geometry: null, byFile: {}, drawingProblems: [] };
 
-/** The joined mesh of a role's files in local coordinates; reloaded when the files, their contents or the local origin change. */
-export function useInputGeometry(role: MeshRole, files: InputFileInfo[], origin: Point3, revision: number, onLoaded: () => void): InputGeometry {
+/** The joined mesh of a role's files in local coordinates; reloaded when the files, their contents or the local origin change. *urlOf*
+ *  gives the address of a file when it is not the role's stored file (the joined maximum volume of a project that uses its sites). */
+export function useInputGeometry(role: MeshRole, files: InputFileInfo[], origin: Point3, revision: number, onLoaded: () => void,
+                                 urlOf?: (fileName: string) => string): InputGeometry {
   const { token, project, onServiceProblem } = useProjectSession();
   const [loaded, setLoaded] = useState<InputGeometry>(NOTHING_LOADED);
   if (files.length === 0 && loaded !== NOTHING_LOADED) setLoaded(NOTHING_LOADED);
@@ -62,7 +64,7 @@ export function useInputGeometry(role: MeshRole, files: InputFileInfo[], origin:
   const load = useEffectEvent(() => {
     if (files.length === 0) return;
     let stale = false;
-    Promise.allSettled(files.map((file) => loadMesh(inputFileUrl(project, role, file.name), token, extensionOf(file.name), origin)))
+    Promise.allSettled(files.map((file) => loadMesh(urlOf ? urlOf(file.name) : inputFileUrl(project, role, file.name), token, extensionOf(file.name), origin)))
       .then((outcomes) => {
         if (stale) return;
         const byFile: Record<string, THREE.BufferGeometry> = {};

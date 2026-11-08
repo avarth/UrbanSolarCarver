@@ -258,6 +258,14 @@ export const messages = {
     (hasTerrain ? ", terrain" : "") +
     (hasWeatherFile === true ? ", weather" : ""),
   maxVolumeMissing: "Maximum volume missing",
+  siteMissing: "Site missing",
+  // A project that uses its sites: "2 sites, 3,450 m², weather"
+  sitesInputsSummary: (siteCount: number, area: number, hasWeatherFile: boolean, contextCount = 0, hasTerrain = false) =>
+    `${siteCount} ${siteCount === 1 ? "site" : "sites"}, ${groupedDigits(Math.round(area))}\u00a0m²` +
+    (contextCount > 0 ? `, ${contextCount} ${contextCount === 1 ? "surroundings file" : "surroundings files"}` : "") +
+    (hasTerrain ? ", terrain" : "") +
+    (hasWeatherFile === true ? ", weather" : ""),
+  addSiteToRun: "Draw a site to run the analysis",
   // Site and grid: "North 10°, 0.5 m voxels"
   siteAndGridSummary: (northText: string, voxelsText: string) => `North ${northText}°, ${voxelsText}`,
   // Criteria with one criterion: its mode and its carving, "Solar heating, 56 % kept"
@@ -366,6 +374,54 @@ export const messages = {
   useFileOfOtherCriterion: "Use a file from another criterion",
   useFile: "Use",
   useFileNamed: (fileName: string) => `Use ${fileName}`,
+  // A site as the input (design/site-input.md): the choice between a maximum volume and a site, the Site card, drawing and editing
+  inputChoiceTitle: "Start from",
+  inputChoiceMaxVolume: "Maximum volume",
+  inputChoiceMaxVolumeLine: "Add mesh files of the largest volume a building may take",
+  inputChoiceSite: "Site",
+  inputChoiceSiteLine: "Draw the site boundaries in the view and give each a height",
+  useSiteInstead: "Use a site instead",
+  useMaxVolumeInstead: "Use a maximum volume instead",
+  switchInputTitle: (toSite: boolean) => (toSite ? "Use a site instead?" : "Use a maximum volume instead?"),
+  switchInputText: (toSite: boolean) => `The results will go out of date. Your ${toSite ? "maximum volume files are" : "sites are"} kept, so `
+    + "you can switch back.",
+  switchInput: "Switch",
+  siteTitle: "Site",
+  drawSite: "Draw site",
+  siteEmptyHint: "Draw the site boundary in the 3D view, then click its vertices to set their elevations.",
+  siteName: (number: number) => `Site ${number}`,
+  siteHeight: "Height",
+  siteHeightOf: (siteName: string) => `Height of ${siteName}`,
+  siteNameOf: (siteName: string) => `Name of ${siteName}`,
+  siteArea: (area: number) => `${groupedDigits(Math.round(area))}\u00a0m²`,
+  siteElevations: (rise: number) => (rise < 0.005 ? "Flat" : `Elevations 0 to ${formattedNumber(rise)}\u00a0m`),
+  siteActions: (siteName: string) => `Actions for ${siteName}`,
+  renameSite: "Rename",
+  editSite: "Edit outline",
+  deleteSite: "Delete",
+  sitesSummary: (count: number, area: number) => `${count} ${count === 1 ? "site" : "sites"}, ${groupedDigits(Math.round(area))}\u00a0m²`,
+  siteNoNumber: "a vertex has no number for a coordinate",
+  siteTooFewVertices: "an outline needs at least 3 vertices",
+  siteCrossesItself: "the outline crosses itself",
+  siteTooSmall: (area: number) => `the site's area is ${area.toFixed(2)}\u00a0m², less than 1\u00a0m²`,
+  siteHeightNotPositive: "the height must be more than 0\u00a0m",
+  siteTooLow: (rise: number) => `this site rises ${rise.toFixed(2)}\u00a0m, so its height must be more than ${rise.toFixed(2)}\u00a0m`,
+  siteNotSaved: (reason: string) => `Not saved: ${reason}.`,
+  drawingSite: (siteName: string) => `Drawing ${siteName}`,
+  drawingSteps: "Click to add points · click the first point or press Enter to close · Backspace removes the last · Esc cancels",
+  editingSite: (siteName: string) => `Editing ${siteName}`,
+  editingSteps: "Drag a vertex to move it · click it to type its elevation · double click an edge to add a vertex · Delete removes the "
+    + "selected vertex",
+  doneDrawing: "Done",
+  cancelDrawing: "Cancel",
+  undoSiteChange: "Undo",
+  redoSiteChange: "Redo",
+  segmentLength: (length: number) => `${formattedNumber(length)}\u00a0m`,
+  vertexElevation: "Elevation",
+  vertexElevationHelp: "In the coordinates of the input files",
+  relativeElevation: (value: number) => `${value >= 0 ? "+" : ""}${formattedNumber(value)}\u00a0m above the lowest point`,
+  vertexHandle: (index: number) => `Vertex ${index}`,
+  siteCannotBeDrawnWhileRunning: "Sites cannot change while the analysis runs.",
   inputsSizeTitle: "Size of all inputs together",
   inputsSize: (sideX: string, sideY: string, sideZ: string) => `${sideX} × ${sideY} × ${sideZ}\u00a0m`,
 

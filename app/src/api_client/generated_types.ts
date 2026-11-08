@@ -410,6 +410,71 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/sites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sites
+         * @description What the maximum volume is made from (the mesh files or the sites), the sites, and the joined max volume's bounds and grid.
+         */
+        get: operations["sites"];
+        /**
+         * Save Sites
+         * @description Store the whole list of sites; while the maximum volume is made from them, it is built again (the criteria go out of date).
+         *     422 names every site that cannot make a volume, and nothing is stored.
+         */
+        put: operations["save_sites"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/max-volume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Joined Max Volume
+         * @description The joined max volume the engine carves (built from the mesh files or from the sites); 404 before there is one.
+         */
+        get: operations["joined_max_volume"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/max-volume-source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Max Volume Source
+         * @description Make the maximum volume from the mesh files or from the sites; the other input's data is kept.
+         */
+        put: operations["set_max_volume_source"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}/shared-settings": {
         parameters: {
             query?: never;
@@ -1641,6 +1706,14 @@ export interface components {
             /** Storeys Built */
             storeys_built: number;
         };
+        /** MaxVolumeSourceRequest */
+        MaxVolumeSourceRequest: {
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "mesh" | "sites";
+        };
         /**
          * MetricInfo
          * @description One metric the Simulate workspace can show, with what the page needs to offer it.
@@ -1840,6 +1913,43 @@ export interface components {
             /** Criteria */
             criteria?: components["schemas"]["CriterionCarvingSummary"][];
             chain?: components["schemas"]["ChainSummary"] | null;
+        };
+        /**
+         * SiteJson
+         * @description A site (sites.py): a closed outline whose vertices carry the ground's elevation, in the input files' coordinates, and its
+         *     height above its lowest vertex.
+         */
+        SiteJson: {
+            /** Name */
+            name: string;
+            /** Points */
+            points: number[][];
+            /** Height */
+            height: number;
+        };
+        /**
+         * SitesReply
+         * @description What the maximum volume is made from, the sites, and what the joined max volume came out as.
+         */
+        SitesReply: {
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "mesh" | "sites";
+            /** Sites */
+            sites: components["schemas"]["SiteJson"][];
+            /** Joined Bounds */
+            joined_bounds: number[][] | null;
+            grid_plan: components["schemas"]["GridPlanReply"] | null;
+        };
+        /**
+         * SitesRequest
+         * @description The whole list of a project's sites, as it is to be stored.
+         */
+        SitesRequest: {
+            /** Sites */
+            sites: components["schemas"]["SiteJson"][];
         };
         /**
          * SkippedSurface
@@ -3173,6 +3283,174 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InputFilesReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    sites: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SitesReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    save_sites: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SitesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SitesReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    joined_max_volume: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    set_max_volume_source: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaxVolumeSourceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SitesReply"];
                 };
             };
             /** @description A run of this project is active. */

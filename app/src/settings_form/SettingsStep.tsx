@@ -24,6 +24,8 @@ export interface RunAnalysisConditions {
   /** The run under way is a simulation (Simulate's Run), which the reason names; absent: false. */
   simulationActive?: boolean;
   maxVolumeFiles: number;
+  /** The maximum volume is made from the sites (maxVolumeFiles then counts them): the reason asks for a site; absent: false. */
+  maxVolumeFromSites?: boolean;
   /** The test surface files of the criterion shown. */
   testSurfaceFiles: number;
   /** The name of another criterion that is on and protects nothing (the run refuses to start then); absent or null: none. */
@@ -78,7 +80,7 @@ export function runAnalysisBlocker(conditions: RunAnalysisConditions): string | 
   const hasMaxVolume = conditions.maxVolumeFiles > 0, hasTestSurfaces = conditions.testSurfaceFiles > 0;
   const criterionName = conditions.shownIn === "criteria" ? conditions.shownCriterionName ?? null : null;
   if (!hasMaxVolume && !hasTestSurfaces) return messages.addMaxVolumeAndTestSurfacesToRun;
-  if (!hasMaxVolume) return messages.addMaxVolumeToRun;
+  if (!hasMaxVolume) return conditions.maxVolumeFromSites === true ? messages.addSiteToRun : messages.addMaxVolumeToRun;
   if (!hasTestSurfaces) return criterionName === null ? messages.addTestSurfacesToRun : messages.addTestSurfacesOfCriterionToRun(criterionName);
   if (conditions.otherCriterionWithoutTestSurfaces != null) return messages.addTestSurfacesOfCriterionToRun(conditions.otherCriterionWithoutTestSurfaces);
   if (conditions.modeNeedsWeatherFile && !conditions.hasWeatherFile) {

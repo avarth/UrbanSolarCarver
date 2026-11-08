@@ -9,6 +9,7 @@ import { flushSync } from "react-dom";
 import { vi } from "vitest";
 import type {
   ColdPeriodReply, ConfigErrorReply, ConfigReply, CriterionEntry, InputFileChange, InputFileInfo, InputFilesReply, InspectedFile, InspectReply, ModeInfo,
+  SiteJson, SitesReply,
   ProjectDetail, RunSummary, StageStatusReply, StartRunReply, SunChart, SunPath, SunPositions,
 } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
@@ -46,6 +47,10 @@ export const CARVED: Record<PipelineStage, StageState> = { ...NOTHING_RUN, prepr
 export function json<Reply = unknown>(body: NoInfer<Reply>, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
+
+// One triangle as an ASCII PLY file: the joined maximum volume a project that uses its sites is drawn from (GET max-volume)
+const TRIANGLE_PLY = ["ply", "format ascii 1.0", "element vertex 3", "property float x", "property float y", "property float z", "element face 1",
+  "property list uchar int vertex_indices", "end_header", "0 0 0", "10 0 0", "0 10 30", "3 0 1 2", ""].join("\n");
 
 /**
  * The local service as the open project "p" uses it: it stores the shared settings (PUT shared-settings) and those of criterion
@@ -112,6 +117,12 @@ export class FakeService {
   /** While set, a POST inspect/test_surfaces/{file}/turn gets its reply only once this promise resolves. */
   turnsAnswerWhen: Promise<void> | null = null;
 
+  /** What GET sites answers, and what PUT sites and PUT max-volume-source change. */
+  siteSource: "mesh" | "sites" = "mesh";
+  sites: SiteJson[] = [];
+  /** The bodies of every PUT sites. */
+  readonly savedSites: SiteJson[][] = [];
+
   constructor(stages: Record<PipelineStage, StageState>, carving: typeof CARVING | null) {
     this.stages = stages;
     this.summary = { carving, envelope: null, massing: null };
@@ -161,6 +172,16 @@ export class FakeService {
       return json<CriterionEntry>(criterionEntry(this.criterionSettings, this.criterionTestSurfaceFiles));
     }
     if (method === "GET" && path === "/inputs/test_surfaces") return json<InputFileInfo[]>(this.storedTestSurfaces);
+    if (path === "/sites" || path === "/max-volume-source") {
+      if (method === "PUT" && path === "/sites") {
+        this.sites = (JSON.parse(String(init!.body)) as { sites: SiteJson[] }).sites;
+        this.savedSites.push(this.sites);
+      }
+      if (method === "PUT" && path === "/max-volume-source") this.siteSource = (JSON.parse(String(init!.body)) as { source: "mesh" | "sites" }).source;
+      const bounds = this.siteSource === "sites" && this.sites.length ? [[0, 0, 0], [10, 10, 30]] : null;
+      return json<SitesReply>({ source: this.siteSource, sites: this.sites, joined_bounds: bounds, grid_plan: null });
+    }
+    if (path === "/max-volume") return new Response(TRIANGLE_PLY);
     if (path === "/stage-status") {
       return json<StageStatusReply>({ stages: this.stages, criteria: { 1: { preprocessing: this.stages.preprocessing, thresholding: this.stages.thresholding } },
                     input_changes: this.inputChanges });

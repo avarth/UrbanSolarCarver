@@ -23,6 +23,8 @@ export interface ProjectViewInputs {
   criteria: CriterionEntry[];
   /** The criteria that are on, in carving order. */
   active: CriterionEntry[];
+  /** A project whose maximum volume is made from its sites: how many and their plan area; null otherwise. */
+  sites?: { count: number; area: number } | null;
 }
 
 export function projectViewStateOf(inputs: ProjectViewInputs): ProjectViewState {
@@ -30,6 +32,7 @@ export function projectViewStateOf(inputs: ProjectViewInputs): ProjectViewState 
   const carvingSummaryOf = (entry: CriterionEntry) => summary?.criteria?.find((criterionSummary) => criterionSummary.id === entry.id);
   return {
     maxVolumeFiles: files.max_volume.length,
+    sites: inputs.sites ?? null,
     hasWeatherFile: files.weather.length > 0,
     contextFiles: files.context.length,
     terrainFiles: files.terrain.length,

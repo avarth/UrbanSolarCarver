@@ -50,6 +50,8 @@ export interface WorkspaceCriteriaSource {
   runs: RunLoop;
   warmUpState: HealthReply["warm_up"]["state"] | null;
   maxVolumeFiles: number;
+  /** The maximum volume is made from the sites (maxVolumeFiles then counts them). */
+  maxVolumeFromSites?: boolean;
   /** The stored test surface files (every criterion's). */
   testSurfaceFiles: number;
   hasWeatherFile: boolean;
@@ -185,7 +187,7 @@ export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): Workspace
   const modeOf = (entry: CriterionEntry) => (entry.id === criterion?.id ? form.mode : entry.settings?.mode);
   const needingWeatherFile = active.filter((entry) => source.modes.find((mode) => mode.name === modeOf(entry))?.needs_epw);
   const runConditions = {
-    runActive: runs.activeRun !== null, simulationActive: runs.activeRun?.origin === "simulate", maxVolumeFiles: source.maxVolumeFiles,
+    runActive: runs.activeRun !== null, simulationActive: runs.activeRun?.origin === "simulate", maxVolumeFiles: source.maxVolumeFiles, maxVolumeFromSites: source.maxVolumeFromSites,
     testSurfaceFiles: criterion === null ? source.testSurfaceFiles : criterion.bypassed ? 1 : (criterion.test_surface_files ?? []).length,
     otherCriterionWithoutTestSurfaces: protectingNothing.find((entry) => entry.id !== criterion?.id)?.name ?? null,
     noCriterionOn: criteria.criteria.length > 0 && active.length === 0,
