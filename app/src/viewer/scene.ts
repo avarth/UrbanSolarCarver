@@ -62,8 +62,8 @@ const EMPTY_SCENE_HEMISPHERE: Hemisphere = { centre: [0, 0, 0], radius: EMPTY_SC
 // The layers drawn after the hours in shade, over them: the sun path and the sky dome, and the compass ring (three.js layer 1; the
 // rest is layer 0).
 // The layers whose meshes cast and catch the sun's shadows, and those that make up the site the shadow camera covers.
-const SHADOW_LAYERS: readonly LayerName[] = ["max_volume", "test_surfaces", "context", "terrain", "envelope", "building_massing", "inspect_surfaces"];
-const SITE_LAYERS: readonly LayerName[] = ["max_volume", "test_surfaces", "envelope", "building_massing", "inspect_surfaces"];
+const SHADOW_LAYERS: readonly LayerName[] = ["max_volume", "base_volume", "test_surfaces", "context", "terrain", "envelope", "building_massing", "inspect_surfaces"];
+const SITE_LAYERS: readonly LayerName[] = ["max_volume", "base_volume", "test_surfaces", "envelope", "building_massing", "inspect_surfaces"];
 
 const toDegrees = (radians: number) => (radians / Math.PI) * 180;
 const normalisedDegrees = (angle: number) => ((angle % 360) + 360) % 360;

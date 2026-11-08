@@ -189,6 +189,7 @@ export class FakeService {
       return json<SitesReply>({ source: this.siteSource, sites: this.sites, joined_bounds: bounds, grid_plan: null, heights: this.heights });
     }
     if (path === "/max-volume") return new Response(TRIANGLE_PLY);
+    if (path === "/base-volume") return new Response(TRIANGLE_PLY);
     if (path === "/stage-status") {
       return json<StageStatusReply>({ stages: this.stages, criteria: { 1: { preprocessing: this.stages.preprocessing, thresholding: this.stages.thresholding } },
                     input_changes: this.inputChanges });

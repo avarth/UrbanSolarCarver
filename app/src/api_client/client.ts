@@ -239,6 +239,11 @@ export function joinedMaxVolumeUrl(project: string): string {
   return `${projectPath(project)}/max-volume`;
 }
 
+/** The part of the maximum volume below the base heights, which the view draws solid (design/base-height.md). Needs the token header. */
+export function baseVolumeUrl(project: string): string {
+  return `${projectPath(project)}/base-volume`;
+}
+
 /** What the maximum volume is made from, the sites, and the joined maximum volume's bounds and grid. */
 export const getSites = (token: string, project: string) => requestJson<SitesReply>(token, `${projectPath(project)}/sites`);
 

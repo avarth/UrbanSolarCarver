@@ -21,7 +21,7 @@ import tempfile
 from pathlib import Path
 
 from ..io import save_mesh
-from ..sites import Site, check_site, outline_points, site_base_volume, sites_volume
+from ..sites import Site, check_site, outline_points, site_base_volume, site_volume, sites_volume
 from .api_models import HeightsJson, MaxVolumeSource, ProjectJson, SiteJson, SitesReply
 from .criteria import KEPT_VOLUME_GLOB, KEPT_VOLUME_PATH
 from .project_names import ProjectError
@@ -32,6 +32,8 @@ MAX_VOLUME_ROLE = "max_volume"
 SITE_GROUND_SPACING = 1.0
 # The kept volume starts this far below the lowest point of the maximum volume, so it holds the lowest voxels whole.
 KEPT_VOLUME_BELOW = 2.0
+# The part of the maximum volume below the base heights, for the view (the kept volume itself is a prism reaching below the ground)
+BASE_VOLUME_PATH = "inputs/joined/base_volume.ply"
 
 
 def uses_sites(project_json: ProjectJson) -> bool:
@@ -44,8 +46,10 @@ def max_height_of(entry: SiteJson, heights: HeightsJson) -> float:
 
 
 def base_height_of(entry: SiteJson, heights: HeightsJson) -> float | None:
-    """The site's base height: the project's while the base height is one for all sites, else its own; None for no lower limit."""
-    return heights.base.value if heights.base.for_all_sites else entry.base_height
+    """The site's base height: the project's while the base height is one for all sites, else its own; None for no lower limit
+    (none, or 0)."""
+    value = heights.base.value if heights.base.for_all_sites else entry.base_height
+    return value if value else None
 
 
 def site_of(entry: SiteJson, heights: HeightsJson | None = None) -> Site:
@@ -67,6 +71,14 @@ def sites_reply(store, name: str) -> SitesReply:
     project_json = store.read_project_json(name)
     return SitesReply(source=project_json.max_volume_source, sites=project_json.sites, joined_bounds=store.joined_bounds(name),
                       grid_plan=store.stored_grid_plan(name), heights=project_json.heights)
+
+
+def base_volume_path(store, name: str) -> Path:
+    """The part of the maximum volume below the base heights (the view draws it solid); ProjectError 404 without a base height."""
+    path = store.open(name) / BASE_VOLUME_PATH
+    if not path.is_file():
+        raise ProjectError("The project has no base height.", status_code=404)
+    return path
 
 
 def joined_max_volume_path(store, name: str) -> Path:
@@ -182,17 +194,63 @@ def _kept_volume_mesh(project_folder: Path, project_json: ProjectJson):
         return trimesh.util.concatenate([site_base_volume(site_of(entry, heights), base, bottom) for entry, base in entries])
     base = heights.base.value
     joined = project_folder / "inputs" / "joined" / "max_volume.ply"
-    if base is None or not joined.is_file():
+    if not base or not joined.is_file():
         return None
     low, high = trimesh.load(str(joined), force="mesh").bounds
     box = trimesh.creation.box(bounds=[[low[0] - 1.0, low[1] - 1.0, low[2] - KEPT_VOLUME_BELOW], [high[0] + 1.0, high[1] + 1.0, low[2] + base]])
     return box
 
 
+def _base_volume_mesh(project_folder: Path, project_json: ProjectJson):
+    """The maximum volume cut at the base levels, capped (a trimesh), or None without a base height."""
+    import trimesh
+
+    heights = project_json.heights
+    if uses_sites(project_json):
+        parts = []
+        for entry in project_json.sites:
+            base = base_height_of(entry, heights)
+            if base is None or check_site(site_of(entry, heights)):
+                continue
+            site = site_of(entry, heights)
+            level = float(outline_points(site)[:, 2].min()) + base
+            parts.append(site_volume(site, SITE_GROUND_SPACING).slice_plane([0.0, 0.0, level], [0.0, 0.0, -1.0], cap=True))
+        parts = [part for part in parts if len(part.faces)]
+        return trimesh.util.concatenate(parts) if parts else None
+    joined = project_folder / "inputs" / "joined" / "max_volume.ply"
+    if not heights.base.value or not joined.is_file():
+        return None
+    mesh = trimesh.load(str(joined), force="mesh")
+    cut = mesh.slice_plane([0.0, 0.0, float(mesh.bounds[0][2]) + heights.base.value], [0.0, 0.0, -1.0], cap=True)
+    return cut if len(cut.faces) else None
+
+
+def _write_base_volume(project_folder: Path, project_json: ProjectJson) -> None:
+    """Write the base volume for the view, or remove it; a cut that fails leaves none (the view then draws the maximum volume alone)."""
+    path = project_folder / BASE_VOLUME_PATH
+    try:
+        mesh = _base_volume_mesh(project_folder, project_json)
+    except Exception:       # noqa: BLE001 - only the view's picture depends on it; the kept volume is what the engine reads
+        mesh = None
+    if mesh is None:
+        path.unlink(missing_ok=True)
+        return
+    descriptor, temporary_name = tempfile.mkstemp(dir=path.parent, prefix="base-", suffix=".tmp.ply")
+    os.close(descriptor)
+    try:
+        save_mesh(mesh, temporary_name)
+        os.replace(temporary_name, path)
+    finally:
+        Path(temporary_name).unlink(missing_ok=True)
+
+
 def update_kept_volume(project_folder: Path, project_json: ProjectJson) -> bool:
     """Write the kept volume of *project_json* (named by a digest of its content) and remove any other, or remove it when there is
-    none; whether the file the config names changed. The caller writes config.yaml (ProjectStore._update_optional_paths)."""
+    none, and the base volume the view draws; whether the file the config names changed. The caller writes config.yaml
+    (ProjectStore._update_optional_paths)."""
     joined_folder = project_folder / "inputs" / "joined"
+    if joined_folder.is_dir():
+        _write_base_volume(project_folder, project_json)
     earlier = sorted(joined_folder.glob(KEPT_VOLUME_GLOB))
     mesh = _kept_volume_mesh(project_folder, project_json)
     if mesh is None:

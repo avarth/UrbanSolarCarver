@@ -30,8 +30,8 @@ from ..load_config import build_config, build_config_from_mode_starting_values
 from ..pydantic_schemas import UserConfig
 from . import site_input, stored_files, test_surfaces, uploads
 from .api_models import (
-    ColdPeriodDates, ColdPeriodReply, ConfigReply, CriterionEntry, ExampleProject, GridPlanReply, InputFileInfo, InputFilesReply,
-    ProjectJson, ProjectSummary, StudyEntry,
+    ColdPeriodDates, ColdPeriodReply, ConfigReply, CriterionEntry, ExampleProject, GridPlanReply, HeightsJson, InputFileInfo, InputFilesReply,
+    NEW_PROJECT_HEIGHTS, ProjectJson, ProjectSummary, StudyEntry,
 )
 from .criteria import (
     kept_volume_service_path,
@@ -203,7 +203,8 @@ class ProjectStore:
         for sub_folder in (*INPUT_ROLE_FOLDERS, RUN_FOLDER):
             (project_folder / sub_folder).mkdir(parents=True)
         created = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        self.write_project_json(project_name, ProjectJson(name=project_name, created=created, example=example, mode_to_choose=mode_to_choose))
+        self.write_project_json(project_name, ProjectJson(name=project_name, created=created, example=example, mode_to_choose=mode_to_choose,
+                                                          heights=HeightsJson.model_validate(NEW_PROJECT_HEIGHTS)))
         try:
             self.write_config_from_values(project_name, {"mode": mode})
         except BaseException:

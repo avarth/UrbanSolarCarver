@@ -42,7 +42,7 @@ export function maxHeightOf(site: Site, heights: Heights): number {
 /** The site's base height: the project's while it is one for all sites, else its own; null for no lower limit. */
 export function baseHeightOf(site: Site, heights: Heights): number | null {
   const value = heights.base.for_all_sites ? heights.base.value : site.base_height;
-  return typeof value === "number" ? value : null;
+  return typeof value === "number" && value > 0 ? value : null;      // 0 is no lower limit, as none is
 }
 
 const SAME_POINT = 1e-6;    // m

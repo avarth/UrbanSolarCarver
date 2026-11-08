@@ -196,7 +196,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
   });
   const [framingRequest, setFramingRequest] = useState(0);
   const frameAllInputs = () => setFramingRequest((count) => count + 1);
-  const { files, origin, weather, meshes, addFiles, removeFile, storeTestSurfaceFiles, reloadRoles, followedInputChange, waitForInputChanges,
+  const { files, origin, weather, meshes, baseVolume, addFiles, removeFile, storeTestSurfaceFiles, reloadRoles, followedInputChange, waitForInputChanges,
           sites: siteInput } = useInputFiles({
     project, modes, currentForm, sharedForm, refreshStageStatus, onInputsLoaded: frameAllInputs,
   });
@@ -441,8 +441,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
                   onUndo={siteInput.undo} onRedo={siteInput.redo} canUndo={siteInput.canUndo} canRedo={siteInput.canRedo} refusal={siteInput.refusal}
                   heights={siteInput.heights} />
     ) : (scene: ViewerScene) => (
-      <SitePicker scene={scene} origin={origin} sites={siteInput.sites} onPick={(index) => setSiteTool({ kind: "edit", index })}
-                  heights={siteInput.heights} />
+      <SitePicker scene={scene} origin={origin} sites={siteInput.sites} onPick={(index) => setSiteTool({ kind: "edit", index })} />
     );
   const stepContent: Record<StepName, ReactNode> = {
     inputs: (
@@ -578,7 +577,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
                        pinnedAction={saveFailureNotice === null && openStepAction === null ? null : <>{saveFailureNotice}{openStepAction}</>} />
       </aside>
       <section className="workspace-view">
-        <ViewerPane maxVolume={maxVolume} testSurfaces={testSurfaceGroups} onTestSurfacesShownChange={setTestSurfacesShown}
+        <ViewerPane maxVolume={maxVolume} baseVolume={baseVolume.geometry} testSurfaces={testSurfaceGroups} onTestSurfacesShownChange={setTestSurfacesShown}
                     sunStudy={sunStudy.view} sunTool={sunTool}
                     criteria={active.map(({ id, name, colour }) => ({ id, name, colour }))} context={contextMesh.geometry} terrain={terrainMesh.geometry} sunPath={sunPath}
                     hemisphere={sceneSphere} skyDomeChoiceRemembered={props.mode === "design"}

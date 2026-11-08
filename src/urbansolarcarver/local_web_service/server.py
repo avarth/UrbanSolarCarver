@@ -558,6 +558,12 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         path = site_input.joined_max_volume_path(folder_in_use.store, name)
         return FileResponse(path, headers=NO_CACHE)
 
+    @router.get("/projects/{name}/base-volume", responses=_ERROR_RESPONSES)
+    def base_volume(name: str) -> FileResponse:
+        """The part of the maximum volume below the base heights, which the view draws solid; 404 without a base height."""
+        path = site_input.base_volume_path(folder_in_use.store, name)
+        return FileResponse(path, headers=NO_CACHE)
+
     @router.put("/projects/{name}/sites", responses=_ERROR_RESPONSES)
     def save_sites(name: str, request: SitesRequest) -> SitesReply:
         """Store the whole list of sites; while the maximum volume is made from them, it is built again (the criteria go out of date).

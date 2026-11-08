@@ -406,24 +406,29 @@ export const messages = {
   drawSite: "Draw site",
   siteEmptyHint: "Draw the site boundary in the 3D view, then click its vertices to set their elevations.",
   siteName: (number: number) => `Site ${number}`,
-  siteHeight: "Max",
   siteHeightOf: (siteName: string) => `Max height of ${siteName}`,
-  siteBase: "Base",
   siteBaseOf: (siteName: string) => `Base height of ${siteName}`,
   siteNoBase: "none",
-  heightSetInSettings: (valueText: string) => `${valueText} · set in Settings`,
-  heightSetInSettingsHint: "One for all sites: change it in Settings",
+  doubleClickToRename: "Double click to rename",
+  // The heights set for all sites, once above the table of sites; undefined for a height set per site.
+  sharedHeights: (base: number | null | undefined, max: number | null | undefined) => {
+    const parts = [];
+    if (base !== undefined) parts.push(`base ${base === null ? "none" : `${formattedNumber(base)}\u00a0m`}`);
+    if (max !== undefined) parts.push(`max ${max === null ? "none" : `${formattedNumber(max)}\u00a0m`}`);
+    return `Global: ${parts.join(", ")}.`;
+  },
+  changeInSettings: "Change in Settings",
   siteBaseNotBelowMax: (base: number, top: number) =>
     `its base height (${formattedNumber(base)} m) must be less than its max height (${formattedNumber(top)} m)`,
   heightsGroup: "Heights",
   baseHeight: "Base height",
   maxHeight: "Max height",
-  forAllSites: "One for all sites",
+  forAllSites: "Global",
   perSite: "Per site",
-  heightsHelp: "Measured from each site's lowest vertex. Nothing below the base height is carved; the carving decides the volume between "
-    + "the two. Leave the base height empty for no lower limit.",
-  meshBaseHelp: "Measured from the lowest point of the maximum volume, which is the upper limit. Nothing below the base height is "
-    + "carved. Leave it empty for no lower limit.",
+  heightsHelp: "Base height protects the volume up to this height: use it for existing or permitted buildings to see how much more can "
+    + "be built. Max height is the most that can be built. Both are measured from each site's lowest corner.",
+  meshBaseHelp: "Base height protects the volume up to this height: use it for existing or permitted buildings to see how much more can "
+    + "be built above them. Measured from the lowest point of the maximum volume.",
   heightNeedsValue: "Give the max height for all sites.",
   heightNotPositive: "A height must be more than 0 m.",
   siteNameOf: (siteName: string) => `Name of ${siteName}`,
@@ -831,6 +836,7 @@ export const messages = {
   // The 3D view (8)
   layerNames: {
     max_volume: "Maximum volume",
+    base_volume: "Base volume",
     test_surfaces: "Test surfaces",
     skipped_surfaces: "Skipped test surfaces",
     context: "Existing surroundings",

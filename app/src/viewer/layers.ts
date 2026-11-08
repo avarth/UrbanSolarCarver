@@ -19,12 +19,12 @@ import type { SunPathObjects } from "./sun_path";
 import type { SunStudyObjects } from "./sun_study";
 import { recolourTextSprite, textSprite, type TextSprite } from "./text_sprite";
 
-export type LayerName = "max_volume" | "test_surfaces" | "skipped_surfaces" | "context" | "terrain" | "kept_voxels" | "carved_voxels" | "carved_by_criterion" | "sun_path" |
+export type LayerName = "max_volume" | "base_volume" | "test_surfaces" | "skipped_surfaces" | "context" | "terrain" | "kept_voxels" | "carved_voxels" | "carved_by_criterion" | "sun_path" |
   "sky_dome" | "envelope" | "building_massing" | "study_values" | "inspect_surfaces" | "sun_study";
 
 /** The layers in the order of UX 8.2, which the layers menu and the accessible name follow; then the study of Simulate, the surface
  * orientation of Inspect and the sun path of Simulate's sun tool. */
-export const LAYER_NAMES: readonly LayerName[] = ["max_volume", "test_surfaces", "skipped_surfaces", "context", "terrain", "kept_voxels", "carved_voxels", "carved_by_criterion",
+export const LAYER_NAMES: readonly LayerName[] = ["max_volume", "base_volume", "test_surfaces", "skipped_surfaces", "context", "terrain", "kept_voxels", "carved_voxels", "carved_by_criterion",
   "sun_path", "sky_dome", "envelope", "building_massing", "study_values", "inspect_surfaces", "sun_study"];
 
 /** The layers that can reach far beyond the site (a city model, a terrain kilometres wide): the camera frames the rest. */
@@ -34,6 +34,7 @@ export type MaxVolumeAppearance = "solid" | "ghost";
 
 const GHOST_OPACITY = 0.15;
 const SOFT_EDGE_OPACITY = 0.15;
+const DOTTED_EDGE_OPACITY = 0.45;       // the maximum volume above a base height
 const GHOST_EDGE_OPACITY = 0.3;
 const SEE_THROUGH_ENVELOPE_OPACITY = 0.3;
 const SEE_THROUGH_EDGE_OPACITY = 0.2;
@@ -147,8 +148,29 @@ function solidWithEdges(geometry: THREE.BufferGeometry, bodyOpacity: number, edg
   return { group, body, edges };
 }
 
-/** The maximum volume: a light solid, or in later steps a see-through ghost. */
+/** Dotted feature edges: the maximum volume above a base height. */
+function dottedEdges(geometry: THREE.BufferGeometry, colour: string, baseOpacity: number): THREE.LineSegments {
+  const material = layerMaterial(new THREE.LineDashedMaterial({ color: colour, transparent: true, depthWrite: false, dashSize: 0.6, gapSize: 0.6 }),
+                                 baseOpacity);
+  const lines = new THREE.LineSegments(new THREE.EdgesGeometry(geometry, FEATURE_EDGE_DEGREES), material);
+  lines.computeLineDistances();
+  return lines;
+}
+
+/**
+ * The maximum volume: dotted edges, fainter in the later steps (user, 2026-11-08). The solid is the base volume's layer
+ * (baseVolumeLayer, design/base-height.md).
+ */
 export function maxVolumeLayer(geometry: THREE.BufferGeometry, appearance: MaxVolumeAppearance): THREE.Object3D {
+  const lines = dottedEdges(geometry, colourToken("ink"), appearance === "ghost" ? GHOST_EDGE_OPACITY : DOTTED_EDGE_OPACITY);
+  const group = new THREE.Group();
+  group.add(lines);
+  layerHooks(group).applyTheme = (theme: ViewportTheme) => (lines.material as THREE.LineDashedMaterial).color.set(inkColour(theme));
+  return group;
+}
+
+/** The part of the maximum volume below the base heights: the light solid of the maximum volume, or its ghost in later steps. */
+export function baseVolumeLayer(geometry: THREE.BufferGeometry, appearance: MaxVolumeAppearance): THREE.Object3D {
   const ghost = appearance === "ghost";
   return solidWithEdges(geometry, ghost ? GHOST_OPACITY : 1, ghost ? GHOST_EDGE_OPACITY : SOFT_EDGE_OPACITY).group;
 }

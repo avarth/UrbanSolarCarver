@@ -4,10 +4,10 @@
 // wait for them before a rename, reset or delete of the project.
 import { useEffect, useRef, useState } from "react";
 import {
-  addInput, failureTextOf, getInputFiles, getProject, getSites, joinedMaxVolumeUrl, removeInput, reportServiceProblem, saveSites, setHeights as storeHeights, setMaxVolumeSource,
+  addInput, failureTextOf, getInputFiles, getProject, baseVolumeUrl, getSites, joinedMaxVolumeUrl, removeInput, reportServiceProblem, saveSites, setHeights as storeHeights, setMaxVolumeSource,
   type InputFileInfo, type InputFilesReply, type MaxVolumeSource, type ModeInfo, type ProjectDetail, type SitesReply,
 } from "../api_client/client";
-import { NO_HEIGHTS, heightsOf, type Heights, type Site } from "../sites/site_geometry";
+import { NO_HEIGHTS, baseHeightOf, heightsOf, type Heights, type Site } from "../sites/site_geometry";
 import { useProjectSession } from "../api_client/project_session";
 import { hemisphereOfLatitude, seasonsOfLatitude, type Hemisphere } from "../settings_form/analysis_period";
 import type { FormState, SettingsForm } from "../settings_form/form_state";
@@ -65,6 +65,8 @@ export interface InputFiles {
   /** Resolves once the uploads and removals of input files under way have ended. */
   waitForInputChanges: () => Promise<void>;
   meshes: Record<MeshRole, InputGeometry>;
+  /** The part of the maximum volume below the base heights (none without one): the view draws it solid and the rest dotted. */
+  baseVolume: InputGeometry;
   sites: SitesInput;
 }
 
@@ -90,6 +92,7 @@ export interface SitesInput {
 
 const UNDO_DEPTH = 50;
 const MAX_VOLUME_FILE = [{ name: "max_volume.ply", triangle_count: 0 }];
+const BASE_VOLUME_FILE = [{ name: "base_volume.ply", triangle_count: 0 }];
 
 export function useInputFiles(context: InputFilesContext): InputFiles {
   const { token, onServiceProblem } = useProjectSession();
@@ -145,6 +148,10 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
   const fromSites = source === "sites";
   const maxVolume = useInputGeometry("max_volume", fromSites ? (joinedBounds === null ? [] : MAX_VOLUME_FILE) : files.max_volume, origin,
                                      inputRevisions.max_volume, onInputsLoaded, fromSites ? () => joinedMaxVolumeUrl(project.name) : undefined);
+  const hasBase = source === "sites" ? sites.some((site) => baseHeightOf(site, heights) !== null)
+    : source === "mesh" && typeof heights.base.value === "number" && files.max_volume.length > 0;
+  const baseVolume = useInputGeometry("max_volume", hasBase ? BASE_VOLUME_FILE : [], origin, inputRevisions.max_volume, () => {},
+                                      () => baseVolumeUrl(project.name));
   const testSurfaces = useInputGeometry("test_surfaces", files.test_surfaces, origin, inputRevisions.test_surfaces, onInputsLoaded);
   const contextMesh = useInputGeometry("context", files.context, origin, inputRevisions.context, onInputsLoaded);
   const terrain = useInputGeometry("terrain", files.terrain, origin, inputRevisions.terrain, onInputsLoaded);
@@ -315,6 +322,6 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
     weather: { location: weatherLocation, latitude: weatherLatitude, fileRevision: weatherFileRevision, fileChange: weatherFileChange,
                setFileChange: setWeatherFileChange },
     inputRevisions, addFiles, removeFile, storeTestSurfaceFiles, reloadRoles, followedInputChange, inputChangesUnderWay, waitForInputChanges,
-    meshes: { max_volume: maxVolume, test_surfaces: testSurfaces, context: contextMesh, terrain },
+    meshes: { max_volume: maxVolume, test_surfaces: testSurfaces, context: contextMesh, terrain }, baseVolume,
   };
 }

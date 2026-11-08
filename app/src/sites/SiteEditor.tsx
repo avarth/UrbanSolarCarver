@@ -14,7 +14,6 @@ import type { Point3 } from "../viewer/local_origin";
 import type { ViewerScene } from "../viewer/scene";
 import { nearestOnSegment, placePoint, type PlacedPoint, type ScreenPoint } from "./site_drawing";
 import { containsPoint, elevationRange, pointAlong, siteProblems, type Heights, type Site, type SitePoint } from "./site_geometry";
-import { BaseOutlines } from "./BaseOutlines";
 import "./sites.css";
 
 export type SiteTool = { kind: "draw" } | { kind: "edit"; index: number };
@@ -352,16 +351,14 @@ function ElevationField({ at, value, othersLowest, vertexNumber, onCommit, onCan
 }
 
 interface SitePickerProps {
-  scene: Pick<ViewerScene, "onViewClick" | "pointOnLevel" | "onCameraChange" | "toScreen">;
+  scene: Pick<ViewerScene, "onViewClick" | "pointOnLevel">;
   origin: Point3;
   sites: Site[];
   onPick: (index: number) => void;
-  /** With heights, the base level of each site that has one is drawn (BaseOutlines). */
-  heights?: Heights;
 }
 
 /** While the Site card is open and no site is drawn or edited: a click on the view inside a site's outline edits that site. */
-export function SitePicker({ scene, origin, sites, onPick, heights }: SitePickerProps) {
+export function SitePicker({ scene, origin, sites, onPick }: SitePickerProps) {
   const clicked = useEffectEvent((x: number, y: number) => {
     const index = sites.findIndex((site) => {
       const local = scene.pointOnLevel(x, y, elevationRange(site.points)[0] - origin[2]);
@@ -370,5 +367,5 @@ export function SitePicker({ scene, origin, sites, onPick, heights }: SitePicker
     if (index >= 0) onPick(index);
   });
   useEffect(() => scene.onViewClick(({ x, y }) => clicked(x, y)), [scene]);
-  return heights === undefined ? null : <BaseOutlines scene={scene} origin={origin} sites={sites} heights={heights} />;
+  return null;
 }

@@ -96,7 +96,7 @@ class SiteJson(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     points: list[list[float]] = Field(min_length=3, max_length=2000)    # [[x, y, z], ...], not repeated at the end
     height: float = Field(gt=0, allow_inf_nan=False)     # the site's own max height, used while the max height is Per site
-    base_height: float | None = Field(None, gt=0, allow_inf_nan=False)    # its own base height (Per site); None: no lower limit
+    base_height: float | None = Field(None, ge=0, allow_inf_nan=False)    # its own base height (Per site); None or 0: no lower limit
 
     @model_validator(mode="after")
     def _points_are_xyz(self):
@@ -106,9 +106,10 @@ class SiteJson(BaseModel):
 
 
 class HeightSetting(BaseModel):
-    """One of the two heights of the sites (design/base-height.md): the same for all sites (*value*, in m) or each site's own."""
+    """One of the two heights of the sites (design/base-height.md): the same for all sites (*value*, in m) or each site's own. A base
+    height of 0 is no lower limit, as none is."""
     for_all_sites: bool
-    value: float | None = Field(None, gt=0, allow_inf_nan=False)
+    value: float | None = Field(None, ge=0, allow_inf_nan=False)
 
 
 class HeightsJson(BaseModel):
@@ -122,7 +123,14 @@ class HeightsJson(BaseModel):
     def _max_for_all_has_a_value(self):
         if self.max.for_all_sites and self.max.value is None:
             raise ValueError("a max height for all sites needs a value")
+        if self.max.value is not None and self.max.value <= 0:
+            raise ValueError("a max height must be more than 0 m")
         return self
+
+
+# The heights a new project starts with (user, 2026-11-08): global, a base of 0 m (no lower limit) and a max of 50 m. A project.json
+# without heights (made before there were any) reads as HeightsJson(): each site's own max height, no base.
+NEW_PROJECT_HEIGHTS = {"max": {"for_all_sites": True, "value": 50.0}, "base": {"for_all_sites": True, "value": 0.0}}
 
 
 class ProjectJson(BaseModel):

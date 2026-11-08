@@ -2,7 +2,7 @@ import { expect, test, vi } from "vitest";
 import * as THREE from "three";
 import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import {
-  applyLayerAppearance, buildingMassingLayer, dimmedAppearance, carvedByCriterionLayer, carvedOutlineSegments, contextLayer, inspectSurfacesLayer, LAYER_NAMES, maxVolumeLayer,
+  applyLayerAppearance, baseVolumeLayer, buildingMassingLayer, dimmedAppearance, carvedByCriterionLayer, carvedOutlineSegments, contextLayer, inspectSurfacesLayer, LAYER_NAMES, maxVolumeLayer,
   keptColumnTops, pointSizeForVoxel, splitScorePoints, type InspectLayerFile,
   storeyOfPart, studyValuesLayer, sunStudyLayer, testSurfacesLayer, volumeOutline,
   skippedSurfacesLayer,
@@ -155,7 +155,7 @@ test("test surfaces are drawn in front of a context or maximum volume face they 
   const geometry = () => new THREE.BoxGeometry(1, 1, 1);
   const surfaces = (testSurfacesLayer([{ name: "1", colour: "#4477aa", geometry: geometry() }]).children[0] as THREE.Mesh).material as THREE.Material;
   const context = (contextLayer(geometry()).children[0] as THREE.Mesh).material as THREE.Material;
-  const maxVolume = (maxVolumeLayer(geometry(), "solid").children[0] as THREE.Mesh).material as THREE.Material;
+  const maxVolume = (baseVolumeLayer(geometry(), "solid").children[0] as THREE.Mesh).material as THREE.Material;
   expect(surfaces.polygonOffset).toBe(true);
   for (const other of [context, maxVolume]) {
     expect(surfaces.polygonOffsetFactor).toBeLessThan(other.polygonOffsetFactor);
@@ -462,4 +462,15 @@ test("the skipped surfaces are drawn relative to the local origin", () => {
   const layer = skippedSurfacesLayer([{ vertices: [[10, 20, 3], [11, 20, 3], [10, 21, 3]] }], [10, 20, 0]) as THREE.Mesh;
   expect([...layer.geometry.getAttribute("position").array]).toEqual([0, 0, 3, 1, 0, 3, 0, 1, 3]);
   expect(layerHooks(layer).summary).toBe("1 surface");
+});
+
+test("the maximum volume layer is always dotted edges, and the base volume layer is the solid", () => {
+  const box = new THREE.BoxGeometry(10, 10, 30), base = new THREE.BoxGeometry(10, 10, 8);
+  const dotted = maxVolumeLayer(box, "solid");
+  expect(dotted.children.some((child) => child instanceof THREE.Mesh)).toBe(false);
+  expect(dotted.children.some((child) => child instanceof THREE.LineSegments && child.material instanceof THREE.LineDashedMaterial)).toBe(true);
+  layerHooks(dotted).applyTheme?.("dark");
+  expect(maxVolumeLayer(box, "ghost").children.some((child) => child instanceof THREE.Mesh)).toBe(false);
+  const solid = baseVolumeLayer(base, "solid");
+  expect(solid.children.find((child): child is THREE.Mesh => child instanceof THREE.Mesh)!.geometry).toBe(base);
 });

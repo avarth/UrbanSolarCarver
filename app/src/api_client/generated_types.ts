@@ -455,6 +455,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/base-volume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Base Volume
+         * @description The part of the maximum volume below the base heights, which the view draws solid; 404 without a base height.
+         */
+        get: operations["base_volume"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}/heights": {
         parameters: {
             query?: never;
@@ -1626,7 +1646,8 @@ export interface components {
         };
         /**
          * HeightSetting
-         * @description One of the two heights of the sites (design/base-height.md): the same for all sites (*value*, in m) or each site's own.
+         * @description One of the two heights of the sites (design/base-height.md): the same for all sites (*value*, in m) or each site's own. A base
+         *     height of 0 is no lower limit, as none is.
          */
         HeightSetting: {
             /** For All Sites */
@@ -3449,6 +3470,46 @@ export interface operations {
         };
     };
     joined_max_volume: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    base_volume: {
         parameters: {
             query?: never;
             header?: never;

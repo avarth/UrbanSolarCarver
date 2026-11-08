@@ -23,7 +23,7 @@ import type { StudyView } from "../viewer/study_values";
 import { patchCorners } from "../viewer/study_values_decoder";
 import {
   buildingMassingLayer, carvedByCriterionLayer, carvedVoxelsLayer, contextLayer, envelopeLayer, inspectSurfacesLayer, keptColumnTops, keptVoxelsLayer, maxVolumeLayer,
-  skippedSurfacesLayer, skyDomeLayer, splitScorePoints, storeyOfPart, studyValuesLayer, sunPathLayer, sunStudyLayer, terrainLayer, testSurfacesLayer, volumeOutline, type InspectLayerFile, type MaxVolumeAppearance,
+  skippedSurfacesLayer, skyDomeLayer, baseVolumeLayer, splitScorePoints, storeyOfPart, studyValuesLayer, sunPathLayer, sunStudyLayer, terrainLayer, testSurfacesLayer, volumeOutline, type InspectLayerFile, type MaxVolumeAppearance,
   type VolumeOutline,
 } from "../viewer/layers";
 import { layerHooks } from "../viewer/layer_hooks";
@@ -165,6 +165,8 @@ export interface InspectView {
 
 export interface ViewerPaneProps {
   maxVolume: THREE.BufferGeometry | null;
+  /** The part of the maximum volume below the base heights: drawn solid, the rest dotted (design/base-height.md). */
+  baseVolume?: THREE.BufferGeometry | null;
   /** The test surfaces by criterion, in chain order; a project without criteria has one group without a colour. */
   testSurfaces: readonly TestSurfaceGroup[];
   /** The groups whose entries were checked or unchecked in the layers menu (the pane does not keep which are shown). */
@@ -258,7 +260,7 @@ function storeyCountOf(massing: THREE.BufferGeometry): number {
   return partNames.reduce((count, name) => Math.max(count, (storeyOfPart(name) ?? 0) + 1), 0);
 }
 
-export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange, criteria = NO_CRITERIA, context = null, terrain = null, sunPath, hemisphere,
+export function ViewerPane({ maxVolume, baseVolume = null, testSurfaces, onTestSurfacesShownChange, criteria = NO_CRITERIA, context = null, terrain = null, sunPath, hemisphere,
                              maxVolumeAppearance, shownByDefault,
                              northDegrees, framingRequest, centreContent, results = NO_VIEWER_RESULTS, localOrigin = NO_SHIFT, dimmedLayers = NO_LAYERS,
                              missingLayers = NO_LAYERS, missingLayerNotes, runProgress = null, overlayContent, mode = null,
@@ -310,7 +312,9 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
 
   // The objects of the layers, each made again when what it is drawn from changes (and for a new scene), and only once there is a
   // scene. Every layer gets its own copy of the geometry: the scene disposes a layer's objects when the layer is replaced.
+  const hasBaseVolume = baseVolume !== null;
   const maxVolumeObject = useMemo(() => scene && maxVolume && maxVolumeLayer(maxVolume.clone(), maxVolumeAppearance), [scene, maxVolume, maxVolumeAppearance]);
+  const baseVolumeObject = useMemo(() => scene && baseVolume && baseVolumeLayer(baseVolume.clone(), maxVolumeAppearance), [scene, baseVolume, maxVolumeAppearance]);
   const testSurfacesObject = useMemo(() => {
     if (scene === null) return null;
     const parts = testSurfaces.flatMap(({ id, colour, shown, geometry }) => (shown && geometry !== null ? [{ name: id, colour, geometry: geometry.clone() }] : []));
@@ -338,8 +342,12 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   // Each carved voxel in the colour of the criterion that removed it, whose id the layer names; the layer is drawn again when a colour
   // changes. It is a layer of up to a million cubes that starts hidden: it is built (and the voxels listed, thinned to the cap of the
   // score points) only while it is shown, and dropped when it is hidden again.
+  // With a base volume (design/base-height.md) it is shown where the maximum volume is, and the maximum volume, then dotted edges, starts
+  // hidden where it would be the solid
+  const shownAtFirst = (name: LayerName) => (name === "base_volume" ? shownByDefault.includes("max_volume")
+    : name === "max_volume" && hasBaseVolume && maxVolumeAppearance === "solid" ? false : shownByDefault.includes(name));
   const isVisible = (name: LayerName) => visibleByChoice[name]
-    ?? (name === "inspect_surfaces" || (shownByDefault.includes(name) && !(name === "sky_dome" && skyDomeChoiceRemembered && skyDomeHidden)));
+    ?? (name === "inspect_surfaces" || (shownAtFirst(name) && !(name === "sky_dome" && skyDomeChoiceRemembered && skyDomeHidden)));
   const showsCarvedByCriterion = carvedByCriterion !== null && isVisible("carved_by_criterion");
   const carvedVoxelsOfCriteria = useMemo(() => (carvedByCriterion !== null && showsCarvedByCriterion ? carvedVoxelsByCriterion(carvedByCriterion, origin) : null),
                                          [carvedByCriterion, showsCarvedByCriterion, origin]);
@@ -383,6 +391,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   });
   const layers = [
     layer("max_volume", maxVolume !== null, maxVolumeObject),
+    layer("base_volume", baseVolume !== null, baseVolumeObject),
     layer("test_surfaces", !inspecting && testSurfaces.some(({ geometry, shown }) => geometry !== null || !shown), testSurfacesObject,
           inspecting ? false : undefined),
     layer("skipped_surfaces", skippedSurfaces !== null, skippedSurfacesObject),

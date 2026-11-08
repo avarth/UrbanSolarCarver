@@ -1,5 +1,5 @@
 // The Heights group of the project settings window (design/base-height.md): the base height, below which nothing is carved, and the
-// max height of the sites. Each has a switch, One for all sites (its value here) or Per site (set in each site's row of the Site
+// max height of the sites. Each has a switch, Global (its value here) or Per site (set in each site's row of the Site
 // card). A project with a mesh maximum volume has only the base height, one level above the mesh's lowest point. Each change is
 // stored at once; a change the service refuses (a site whose max height would not be above its base) goes back, with the reason.
 import { useId, useState } from "react";
@@ -14,7 +14,7 @@ interface HeightsSettingsProps {
   /** Whether the maximum volume is made from sites; with a mesh only the base height is shown. */
   fromSites: boolean;
   heights: Heights;
-  /** The max height a switch to One for all sites starts from when there is none yet (the first site's). */
+  /** The max height a switch to Global starts from when there is none yet (the first site's). */
   startingMax: number;
   onChange: (heights: Heights) => Promise<string | null>;
   disabledReason: string | null;
@@ -51,7 +51,7 @@ interface HeightRowProps {
   withSwitch: boolean;
   /** Whether the value may be empty (the base height: no lower limit). */
   optional: boolean;
-  /** The value a switch to One for all sites takes when there is none (the max height needs one). */
+  /** The value a switch to Global takes when there is none (the max height needs one). */
   startingValue?: number;
   disabledReason: string | null;
   onProblem: (problem: string | null) => void;
@@ -76,7 +76,7 @@ function HeightRow({ name, label, setting, withSwitch, optional, startingValue, 
       return;
     }
     const value = Number(trimmed.replace(",", "."));
-    if (!Number.isFinite(value) || value <= 0) {
+    if (!Number.isFinite(value) || value < 0 || (value === 0 && !optional)) {
       onProblem(messages.heightNotPositive);
       return;
     }

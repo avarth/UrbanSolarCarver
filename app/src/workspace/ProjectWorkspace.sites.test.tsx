@@ -137,7 +137,7 @@ const typeIn = async (field: HTMLInputElement, text: string) => {
 };
 const FLAT_SITE = { name: "Site 1", points: [[0, 0, 0], [20, 0, 0], [20, 10, 0]], height: 30 };
 
-test("a base height for all sites is typed in Settings, shown read-only in each row, and the row opens Settings on it", async () => {
+test("a base height for all sites is typed in Settings, said once above the sites, and its link opens Settings on it", async () => {
   const service = new FakeService(NOTHING_RUN, null);
   service.siteSource = "sites";
   service.sites = [FLAT_SITE];
@@ -151,8 +151,9 @@ test("a base height for all sites is typed in Settings, shown read-only in each 
   expect(service.savedHeights.at(-1)).toEqual({ max: { for_all_sites: false, value: null }, base: { for_all_sites: true, value: 8 } });
   closeProjectSettings();
   await settle();
-  const row = buttonIn(panel(), "8 m · set in Settings");
-  act(() => { row.click(); });
+  expect(panel().querySelector(".site-shared-heights")!.textContent).toContain("Global: base 8 m.");
+  expect(panel().querySelector('[aria-label="Base height of Site 1"]')).toBeNull();      // no column for a height set for all sites
+  act(() => { buttonIn(panel(), "Change in Settings").click(); });
   await settle();
   expect(projectSettings()).not.toBeNull();
   expect(document.activeElement).toBe(projectSettings()!.querySelector('[data-setting="base_height"] input'));
@@ -180,12 +181,13 @@ test("a max height for all sites starts from the first site's height when switch
   openProjectSettings();
   await settle();
   const maxRow = projectSettings()!.querySelector('[data-setting="max_height"]')!;
-  act(() => { buttonIn(maxRow as HTMLElement, "One for all sites").click(); });
+  act(() => { buttonIn(maxRow as HTMLElement, "Global").click(); });
   await settle();
   expect(service.savedHeights.at(-1)!.max).toEqual({ for_all_sites: true, value: 30 });
   closeProjectSettings();
   await settle();
-  expect(panel().textContent).toContain("30 m · set in Settings");
+  expect(panel().querySelector(".site-shared-heights")!.textContent).toContain("Global: base none, max 30 m.");
+  expect(panel().querySelector('[aria-label="Max height of Site 1"]')).toBeNull();
 });
 
 test("a project with a mesh maximum volume has the base height only", async () => {
@@ -197,4 +199,69 @@ test("a project with a mesh maximum volume has the base height only", async () =
   expect(heights.querySelector('[data-setting="max_height"]')).toBeNull();
   expect(heights.querySelector('[data-setting="base_height"] .segmented-switch')).toBeNull();
   expect(heights.textContent).toContain("Measured from the lowest point of the maximum volume");
+});
+
+test("each site is one line: its name, a column for each height set per site, and its menu; the area is in the name's tooltip", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.siteSource = "sites";
+  service.sites = [FLAT_SITE, { ...FLAT_SITE, name: "Site 2" }];
+  service.heights = { max: { for_all_sites: false, value: null }, base: { for_all_sites: false, value: null } };
+  await openWorkspace(service, newProject());
+  const head = panel().querySelector(".site-table-head")!;
+  expect([...head.children].map((cell) => cell.textContent)).toEqual(["", "Base heightm", "Max heightm", ""]);
+  const rows = [...panel().querySelectorAll(".site-row")];
+  expect(rows).toHaveLength(2);
+  expect(rows[0].querySelector(".site-row-details")).toBeNull();
+  expect(rows[0].querySelector<HTMLElement>(".site-row-name")!.title).toBe("Site 1: 100 m² · Flat. Double click to rename");
+  expect(rows[0].querySelector(".action-menu")).not.toBeNull();
+  expect(panel().querySelector(".site-shared-heights")).toBeNull();
+});
+
+test("a double click on a site's name renames it in place", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.siteSource = "sites";
+  service.sites = [FLAT_SITE];
+  await openWorkspace(service, newProject());
+  act(() => { panel().querySelector(".site-row-name")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); });
+  await settle();
+  const field = container().querySelector<HTMLInputElement>('[aria-label="Name of Site 1"]')!;
+  expect(document.activeElement).toBe(field);
+  await typeIn(field, "Corner plot");
+  expect(service.savedSites.at(-1)![0].name).toBe("Corner plot");
+});
+
+test("with both heights set for all sites each row is the name and the menu on one line", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.siteSource = "sites";
+  service.sites = [FLAT_SITE];
+  service.heights = { max: { for_all_sites: true, value: 100 }, base: { for_all_sites: true, value: 10 } };
+  await openWorkspace(service, newProject());
+  expect(panel().querySelector(".site-table-head")).toBeNull();
+  const table = panel().querySelector<HTMLElement>(".site-table")!;
+  expect(table.style.getPropertyValue("--site-table-columns")).toBe("minmax(0, 1fr) 1.8em");
+  expect(service.count("GET /base-volume")).toBeGreaterThan(0);
+});
+
+test("with a base height the base volume is a layer of its own, shown, and the maximum volume starts hidden", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.siteSource = "sites";
+  service.sites = [FLAT_SITE];
+  service.heights = { max: { for_all_sites: true, value: 50 }, base: { for_all_sites: true, value: 10 } };
+  await openWorkspace(service, project(NOTHING_RUN));
+  const scene = FakeViewerScene.latest!;
+  expect(scene.layersWithObjects()).toEqual(expect.arrayContaining(["max_volume", "base_volume"]));
+  expect(scene.visibleLayers.has("base_volume")).toBe(true);
+  expect(scene.visibleLayers.has("max_volume")).toBe(false);
+});
+
+test("without a base height there is no base volume layer and the maximum volume is shown", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.siteSource = "sites";
+  service.sites = [FLAT_SITE];
+  service.heights = { max: { for_all_sites: true, value: 50 }, base: { for_all_sites: true, value: 0 } };
+  await openWorkspace(service, project(NOTHING_RUN));
+  const scene = FakeViewerScene.latest!;
+  expect(scene.layersWithObjects()).not.toContain("base_volume");
+  expect(scene.visibleLayers.has("max_volume")).toBe(true);
+  expect(service.count("GET /base-volume")).toBe(0);
 });
