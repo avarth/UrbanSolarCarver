@@ -185,6 +185,10 @@ def _join_mesh_role_again(store, name: str, project_folder: Path, project_json: 
         project_json.inputs_revision += 1
         store.write_project_json(name, project_json)
         store._replace_joined_file(project_folder, role, joined_temporary_path)
+        if role == "max_volume":        # a base height's level follows the mesh's lowest point
+            from .site_input import update_kept_volume
+            if update_kept_volume(project_folder, project_json):
+                store._update_optional_paths(project_folder, name)
     finally:
         if joined_temporary_path is not None:
             joined_temporary_path.unlink(missing_ok=True)

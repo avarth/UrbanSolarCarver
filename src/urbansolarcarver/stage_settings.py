@@ -154,12 +154,14 @@ class ThresholdingSettings(_StageSettings):
     carve_above: bool
     carve_above_min_consecutive: int
     max_slope_deg: Optional[float]
+    # Shared by every criterion (not in CRITERION_KEYS); compared by path, so a changed file needs a new path.
+    kept_volume_path: Optional[str]
 
     def effective_values(self, mode: str, voxel_size: float) -> dict:
         """What thresholding applies for *mode* and *voxel_size*: the resolved
         threshold, the smoothing radius in meters after clipping and the
-        resolved slope limit."""
-        return {
+        resolved slope limit; the kept volume only when there is one."""
+        values = {
             "threshold": resolve_threshold(mode, self.threshold, self.carve_fraction).model_dump(),
             "score_smoothing_m": applied_smoothing_radius_m(
                 MODES[mode].score_kind, voxel_size, self.score_smoothing),
@@ -167,6 +169,9 @@ class ThresholdingSettings(_StageSettings):
             "carve_above": self.carve_above,
             "carve_above_min_consecutive": self.carve_above_min_consecutive,
         }
+        if self.kept_volume_path is not None:
+            values["kept_volume_path"] = self.kept_volume_path
+        return values
 
 
 class ExportingSettings(_StageSettings):

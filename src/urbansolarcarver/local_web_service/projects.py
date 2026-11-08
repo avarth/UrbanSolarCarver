@@ -34,6 +34,7 @@ from .api_models import (
     ProjectJson, ProjectSummary, StudyEntry,
 )
 from .criteria import (
+    kept_volume_service_path,
     CRITERIA_FOLDER, OPTIONAL_SERVICE_PATHS, SERVICE_PATHS, active_criteria, append_criterion, chain_config_document, chain_config_text, checked_colour,
     checked_criterion_name, criterion_run_folder, find_criterion, flat_settings, joined_test_surfaces_path, reads_weather_file,
     set_criterion_settings, split_settings,
@@ -62,7 +63,7 @@ JOINED_FOLDER = "inputs/joined"
 # Settings the service decides, whatever the browser sends: every file location (the service takes no path from the browser;
 # simulated_weights_path is set for an energy-weighted criterion, see criteria.engine_settings) and the compute device.
 SERVICE_OWNED_SETTINGS = ("max_volume_path", "test_surface_path", "context_path", "terrain_path", "epw_path", "out_dir", "device",
-                          "simulated_weights_path")
+                          "simulated_weights_path", "kept_volume_path")
 # Settings the browser does not set, left to the engine's own value: the sample spacing on the test surfaces (half the voxel
 # size). One stored by an earlier version, or sent by an older page, is left out when the settings are read and written.
 SETTINGS_LEFT_TO_THE_ENGINE = ("grid_step",)
@@ -996,7 +997,8 @@ class ProjectStore:
     @staticmethod
     def _optional_service_paths(project_folder: Path) -> dict:
         """The paths of the optional mesh roles whose joined file exists (context_path, terrain_path)."""
-        return {key: path for key, path in OPTIONAL_SERVICE_PATHS.values() if (project_folder / path).is_file()}
+        return {**{key: path for key, path in OPTIONAL_SERVICE_PATHS.values() if (project_folder / path).is_file()},
+                **kept_volume_service_path(project_folder)}
 
     def _update_optional_paths(self, project_folder: Path, name: str) -> None:
         """Rewrite config.yaml so it carries each optional path exactly when the role's joined file exists.
@@ -1056,7 +1058,9 @@ class ProjectStore:
                 if extension not in MESH_EXTENSIONS:
                     raise ProjectError(f"A mesh file must be one of {', '.join(MESH_EXTENSIONS)}.", status_code=422)
                 self._add_mesh_file(project_folder, project_json, role, clean_name, data)
-                if role in OPTIONAL_MESH_ROLES:
+                if role == site_input.MAX_VOLUME_ROLE:
+                    site_input.update_kept_volume(project_folder, project_json)     # a base level above the new mesh's lowest point
+                if role in OPTIONAL_MESH_ROLES or role == site_input.MAX_VOLUME_ROLE:
                     self._update_optional_paths(project_folder, name)
             project_json.inputs_revision += 1
             self.write_project_json(name, project_json)
@@ -1090,7 +1094,9 @@ class ProjectStore:
                     joined_temporary_path.unlink(missing_ok=True)
             del project_json.input_files[role][file_name]
             project_json.stored_files.get(role, {}).pop(file_name, None)
-            if role in OPTIONAL_MESH_ROLES:
+            if role == site_input.MAX_VOLUME_ROLE:
+                site_input.update_kept_volume(project_folder, project_json)
+            if role in OPTIONAL_MESH_ROLES or role == site_input.MAX_VOLUME_ROLE:
                 self._update_optional_paths(project_folder, name)
             project_json.inputs_revision += 1
             self.write_project_json(name, project_json)

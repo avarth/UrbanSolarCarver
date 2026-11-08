@@ -260,6 +260,12 @@ class UserConfig(BaseModel):
         None,
         description="Path to a terrain mesh (an open sheet is fine): it blocks rays, and the voxels below the ground are "
                     "removed. Optional")
+    kept_volume_path: Optional[str] = Field(
+        None,
+        description="Path to a closed mesh of a volume that is never carved, for example everything below a base height: "
+                    "the occupied voxels whose centres lie inside it are kept by every criterion, and the threshold is taken "
+                    "over the other voxels only. Read by thresholding, so a change re-runs thresholding and not the analysis. "
+                    "Optional")
     context_blocks_rays: bool = Field(
         True,
         description="Whether rays from the test surfaces that hit the context or the terrain are dropped before scoring "
@@ -825,6 +831,8 @@ class ThresholdingManifest(BaseModel):
     # decided only among the voxels it kept; None for a first or only criterion.
     after_manifest: Optional[str] = None
     after_run_id: Optional[str] = None
+    # The kept volume this run never carved (kept_volume_path), None for none.
+    kept_volume_path: Optional[str] = None
 
 class ExportingManifest(BaseModel):
     """Manifest written by exporting."""

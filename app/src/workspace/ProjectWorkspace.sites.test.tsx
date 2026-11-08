@@ -2,7 +2,10 @@
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
-import { buttonIn, container, endWorkspaceTest, FakeService, NOTHING_RUN, openWorkspace, project, settle, startWorkspaceTest } from "./project_workspace_for_test";
+import {
+  buttonIn, closeProjectSettings, container, endWorkspaceTest, FakeService, NOTHING_RUN, openProjectSettings, openWorkspace, project, projectSettings, settle,
+  startWorkspaceTest,
+} from "./project_workspace_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../viewer/scene")>()), ViewerScene: (await import("../viewer/fake_scene_for_test")).FakeViewerScene,
@@ -98,7 +101,7 @@ test("a height not above the site's rise is refused in its row and not sent", as
   service.siteSource = "sites";
   service.sites = [{ name: "Site 1", points: [[0, 0, 0], [20, 0, 6], [20, 10, 0]], height: 30 }];
   await openWorkspace(service, newProject());
-  const height = container().querySelector<HTMLInputElement>('[aria-label="Height of Site 1"]')!;
+  const height = container().querySelector<HTMLInputElement>('[aria-label="Max height of Site 1"]')!;
   act(() => {
     const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
     setValue.call(height, "5");
@@ -120,4 +123,78 @@ test("a click inside a site in the view edits it; Escape ends the editing", asyn
   expect(editor()!.textContent).toContain("Editing Plot A");
   await key("Escape");
   expect(editor()).toBeNull();
+});
+
+// Heights (design/base-height.md)
+
+const typeIn = async (field: HTMLInputElement, text: string) => {
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, text);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => { field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
+  await settle();
+};
+const FLAT_SITE = { name: "Site 1", points: [[0, 0, 0], [20, 0, 0], [20, 10, 0]], height: 30 };
+
+test("a base height for all sites is typed in Settings, shown read-only in each row, and the row opens Settings on it", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.siteSource = "sites";
+  service.sites = [FLAT_SITE];
+  await openWorkspace(service, newProject());
+  openProjectSettings();
+  await settle();
+  const heights = projectSettings()!.querySelector(".heights-settings")!;
+  expect(heights.textContent).toContain("Base height");
+  expect(heights.textContent).toContain("Max height");
+  await typeIn(heights.querySelector<HTMLInputElement>('[data-setting="base_height"] input')!, "8");
+  expect(service.savedHeights.at(-1)).toEqual({ max: { for_all_sites: false, value: null }, base: { for_all_sites: true, value: 8 } });
+  closeProjectSettings();
+  await settle();
+  const row = buttonIn(panel(), "8 m · set in Settings");
+  act(() => { row.click(); });
+  await settle();
+  expect(projectSettings()).not.toBeNull();
+  expect(document.activeElement).toBe(projectSettings()!.querySelector('[data-setting="base_height"] input'));
+});
+
+test("with Per site each row takes its own base height, and one not below the max is refused in the row and not sent", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.siteSource = "sites";
+  service.sites = [FLAT_SITE];
+  service.heights = { max: { for_all_sites: false, value: null }, base: { for_all_sites: false, value: null } };
+  await openWorkspace(service, newProject());
+  const base = container().querySelector<HTMLInputElement>('[aria-label="Base height of Site 1"]')!;
+  await typeIn(base, "40");
+  expect(panel().textContent).toContain("its base height (40 m) must be less than its max height (30 m)");
+  expect(service.savedSites).toHaveLength(0);
+  await typeIn(base, "12");
+  expect(service.savedSites.at(-1)![0].base_height).toBe(12);
+});
+
+test("a max height for all sites starts from the first site's height when switched on", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.siteSource = "sites";
+  service.sites = [FLAT_SITE];
+  await openWorkspace(service, newProject());
+  openProjectSettings();
+  await settle();
+  const maxRow = projectSettings()!.querySelector('[data-setting="max_height"]')!;
+  act(() => { buttonIn(maxRow as HTMLElement, "One for all sites").click(); });
+  await settle();
+  expect(service.savedHeights.at(-1)!.max).toEqual({ for_all_sites: true, value: 30 });
+  closeProjectSettings();
+  await settle();
+  expect(panel().textContent).toContain("30 m · set in Settings");
+});
+
+test("a project with a mesh maximum volume has the base height only", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  await openWorkspace(service, project(NOTHING_RUN));
+  openProjectSettings();
+  await settle();
+  const heights = projectSettings()!.querySelector(".heights-settings")!;
+  expect(heights.querySelector('[data-setting="max_height"]')).toBeNull();
+  expect(heights.querySelector('[data-setting="base_height"] .segmented-switch')).toBeNull();
+  expect(heights.textContent).toContain("Measured from the lowest point of the maximum volume");
 });

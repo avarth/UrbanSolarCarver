@@ -208,6 +208,27 @@ def site_volume(site: Site, spacing: float):
     return mesh
 
 
+def site_base_volume(site: Site, base: float, bottom: float):
+    """The prism of the site's outline from *bottom* up to its lowest vertex plus *base* (a trimesh): the volume a base height keeps.
+
+    *bottom* is below every site's ground, so the prism holds every voxel of the site up to the base level; the voxels below the
+    ground are not part of the maximum volume, so the prism needs no ground. ValueError when the outline is refused, *base* is not
+    more than 0 or *bottom* is not below the base level.
+    """
+    from .floor_plates import prism_mesh
+
+    reasons = check_site(Site(site.name, site.points, site_rise(site) + 1.0))     # the outline's reasons only
+    if reasons:
+        raise ValueError(f"site {site.name!r}: " + "; ".join(reasons))
+    if not base > 0:
+        raise ValueError(f"site {site.name!r}: the base height must be more than 0 m")
+    points = outline_points(site)
+    level = float(points[:, 2].min()) + base
+    if not bottom < level:
+        raise ValueError(f"site {site.name!r}: the bottom {bottom} is not below the base level {level}")
+    return prism_mesh(Polygon(points[:, :2]), bottom, level)
+
+
 def sites_volume(sites: list[Site], spacing: float):
     """The volumes of all the sites joined into one mesh, as several maximum volume files are joined."""
     import trimesh

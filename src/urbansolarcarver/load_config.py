@@ -25,7 +25,7 @@ from .pydantic_schemas import expand_analysis_period, threshold_reads_carve_frac
 # are resolved against the YAML's own folder, so a config means the same
 # thing whichever directory the CLI, the daemon or Grasshopper runs from.
 PATH_FIELDS = ("max_volume_path", "test_surface_path", "context_path", "terrain_path", "epw_path", "out_dir",
-               "simulated_weights_path")
+               "simulated_weights_path", "kept_volume_path")
 
 
 def parse_override_value(raw: str) -> Any:

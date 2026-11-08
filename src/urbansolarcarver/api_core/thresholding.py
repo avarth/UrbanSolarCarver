@@ -18,6 +18,9 @@ from ..run_context import Issue, RunContext, report_issue, stage_context
 from ..scoring import carve_fraction_threshold, headtail_threshold
 from ..column_postprocessing import carve_above_scores, limit_column_slope
 from ..mode_registry import MODES
+from ..compute_device import resolve_compute_device
+from ..context_geometry import context_occupancy
+from ..io import load_optional_mesh
 
 if TYPE_CHECKING:
     from .preprocessing import PreprocessingResult
@@ -114,6 +117,35 @@ def _apply_score_smoothing(raw, kind, voxel_size, score_smoothing, occ=None):
     den = gaussian_filter(w, sigma=sigma_voxels)
     smoothed = np.where(occ, num / np.maximum(den, 1e-12), 0.0)
     return np.where(occ & ~finite, raw, smoothed).astype(np.float32), True, radius_m, sigma_voxels
+
+
+def _kept_voxels(path, origin, voxel_size: float, grid_shape, device_name: str):
+    """The cells of the grid whose centre lies inside the kept volume mesh at *path*, or None without one.
+
+    *origin* is the grid's lowest corner in the files' coordinates (the preprocessing manifest's ``origin``). The mesh is
+    moved by it before voxelizing, so far-off coordinates keep their precision. An empty file counts as none.
+    """
+    if path is None:
+        return None
+    mesh = load_optional_mesh(path, "kept_volume")
+    if mesh is None:
+        return None
+    if not mesh.is_watertight:
+        report_issue(
+            "kept_volume_not_closed",
+            "thresholding: the kept volume mesh is not closed (watertight), so the voxels kept where an open body "
+            "meets the grid may be too few or too many",
+        )
+    resolution = int(grid_shape[0])
+    if tuple(grid_shape) != (resolution,) * 3:
+        raise StageChainError(f"thresholding: a kept volume needs a cubic grid, not {tuple(grid_shape)}")
+    # Each body on its own: the parity rule would count the overlap of two bodies (two sites' prisms) as outside.
+    device = resolve_compute_device(device_name)
+    inside = np.zeros((resolution,) * 3, dtype=bool)
+    for body in mesh.split(only_watertight=False):
+        vertices = np.asarray(body.vertices, dtype=np.float64) - np.asarray(origin, dtype=np.float64)
+        inside |= context_occupancy(vertices, np.asarray(body.faces), np.zeros(3), voxel_size, resolution, device)
+    return inside
 
 
 def _resolve_threshold(scores, spec, removal_scores=None):
@@ -399,6 +431,19 @@ def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstr
             "thresholding: the previous criterion kept no voxel, so this criterion has nothing to "
             "decide; the mask is empty",
         )
+    # The kept volume: its voxels are never carved, and the cutoff is taken over the others (`decide`).
+    kept_cells = _kept_voxels(settings.kept_volume_path, pre_manifest.origin, pre_manifest.voxel_size, grid_shape,
+                              options.device)
+    kept_voxels = np.zeros(grid_shape, dtype=bool) if kept_cells is None else occ & kept_cells
+    decide = occ & ~kept_voxels
+    all_kept = bool(kept_voxels.any()) and not decide.any()
+    if all_kept:
+        report_issue(
+            "nothing_left_to_decide",
+            "thresholding: the kept volume holds every occupied voxel, so there is nothing left to decide; "
+            "the mask is the whole maximum volume",
+        )
+    no_decision = nothing_left or all_kept
 
     raw, _smooth_applied, _smooth_radius_m, _sigma_voxels = _apply_score_smoothing(
         raw, kind, pre_manifest.voxel_size, settings.score_smoothing, occ=occ
@@ -406,6 +451,7 @@ def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstr
 
     scores = raw.astype(np.float32, copy=False)
     occ_scores = scores[occ]
+    decided_scores = scores[decide]
     effective = settings.effective_values(pre_manifest.mode, pre_manifest.voxel_size)
     spec = ThresholdSpec.model_validate(effective["threshold"])
     if kind == "violation_count" and spec.method != "cutoff":
@@ -420,12 +466,15 @@ def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstr
     # mask after carve_above, and lets carve_fraction count what it removes.
     # With no voxel left to decide about there is nothing to resolve a cutoff
     # from or to carve: the mask stays empty.
-    carve_above = effective["carve_above"] and not nothing_left
-    removal_scores = (carve_above_scores(scores.reshape(grid_shape), occ,
-                                         effective["carve_above_min_consecutive"])
+    # A kept voxel never starts a carved run: its score is -inf for the column scan.
+    carve_above = effective["carve_above"] and not no_decision
+    run_scores = scores.reshape(grid_shape)
+    if kept_voxels.any():
+        run_scores = np.where(kept_voxels, np.float32(-np.inf), run_scores)
+    removal_scores = (carve_above_scores(run_scores, occ, effective["carve_above_min_consecutive"])
                       if carve_above else None)
-    thr_val = 0.0 if nothing_left else _resolve_threshold(
-        occ_scores, spec, None if removal_scores is None else removal_scores[occ])
+    thr_val = 0.0 if no_decision else _resolve_threshold(
+        decided_scores, spec, None if removal_scores is None else removal_scores[decide])
 
     # The values the cutoff is applied to, for tools that show the cutoff
     # against them (the UI histogram). Saved before the slope limit, which
@@ -436,16 +485,16 @@ def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstr
     np.save(compared_with_cutoff_path, compared_with_cutoff, allow_pickle=False)
 
     # Threshold to mask. Empty cells are False: there is nothing to keep.
-    mask = occ & (scores <= thr_val).reshape(grid_shape)
-    if nothing_left:
+    mask = (occ if all_kept else occ & (scores <= thr_val).reshape(grid_shape)) | kept_voxels
+    if no_decision:
         pass    # already reported
-    elif mask.sum() == occ.sum():
+    elif (mask & decide).sum() == decide.sum():
         report_issue(
             "nothing_carved",
             f"Thresholding produced an all-True mask (nothing carved). "
             f"Threshold value {thr_val:.4g} may be too high.",
         )
-    elif not mask.any():
+    elif not (mask & decide).any():
         report_issue(
             "everything_carved",
             f"Thresholding produced an all-False mask (everything carved). "
@@ -456,13 +505,13 @@ def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstr
     carve_above_removed = 0
     if carve_above:
         kept_before = int(mask.sum())
-        mask = occ & (removal_scores <= thr_val)
+        mask = (occ & (removal_scores <= thr_val)) | kept_voxels
         carve_above_removed = kept_before - int(mask.sum())
     # Slope limit: turns cliffs and spires left by per-voxel cutoffs into ramps.
     max_slope = effective["max_slope_deg"]
     mask_before_slope = mask
-    if max_slope is not None and not nothing_left:
-        mask = limit_column_slope(mask, occ, max_slope)
+    if max_slope is not None and not no_decision:
+        mask = limit_column_slope(mask, occ, max_slope) | kept_voxels
     slope_removed = int(mask_before_slope.sum()) - int(mask.sum())
 
     mask_path = out_path / "mask.npy"
@@ -496,6 +545,17 @@ def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstr
         "score_smooth_applied": _smooth_applied,
         "score_smoothing_m": _smooth_radius_m,
         "score_smoothing_sigma_voxels": _sigma_voxels,
+        # The voxels the kept volume held (never carved) and the ones decided; None without a kept volume.
+        "kept_volume": None if kept_cells is None else {
+            "path": settings.kept_volume_path,
+            "voxels": int(kept_voxels.sum()),
+            "volume_m3": float(kept_voxels.sum()) * float(pre_manifest.voxel_size) ** 3,
+            "score_mass_share": round(float(scores[kept_voxels].sum()) / max(float(occ_scores.sum()), 1e-30), 4),
+            "decided_voxels": int(decide.sum()),
+            "decided_voxels_kept": int((mask & decide).sum()),
+            "decided_volume_m3": float(decide.sum()) * float(pre_manifest.voxel_size) ** 3,
+            "decided_volume_kept_m3": float((mask & decide).sum()) * float(pre_manifest.voxel_size) ** 3,
+        },
         # Scores the threshold was compared with: occupied voxels only, after
         # score smoothing when it is applied.
         "occupied_score_stats": score_statistics(nn, detailed=options.diagnostics),
@@ -553,6 +613,7 @@ def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstr
         max_slope_deg=max_slope,
         after_manifest=None if previous is None else stored_path(previous.manifest_path, out_path),
         after_run_id=None if previous is None else previous.manifest.run_id,
+        kept_volume_path=settings.kept_volume_path if kept_cells is not None else None,
     ))
 
     return ThresholdingResult(

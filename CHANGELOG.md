@@ -15,6 +15,13 @@ versioning follows [Semantic Versioning](https://semver.org/).
   height. Drawing snaps to the first point and to other sites, Shift holds 15 degree steps; vertices are dragged, added on an
   edge and removed; Ctrl+Z undoes. The engine module `sites.py` builds the volume; carving is unchanged.
 - Service: `GET`/`PUT /projects/{name}/sites`, `PUT /projects/{name}/max-volume-source`, `GET /projects/{name}/max-volume`.
+- **Base height and max height.** A base height keeps everything below it: no criterion carves there, and the carving decides
+  only the volume between the base and the max height, so a result reads as what can be built above the current or
+  permissible height. In Settings › Heights each height is one for all sites or set per site; a mesh maximum volume takes a
+  base height as one level above its lowest point. A criterion's card gives the volume kept and the volume built above it. A
+  base height change re-runs the carving only.
+- Engine: `kept_volume_path`, a shared setting read by thresholding: the voxels inside the mesh are kept, and the threshold
+  and `carve_fraction` act on the other voxels. Service: `PUT /projects/{name}/heights`.
 
 ### Simulate
 

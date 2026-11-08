@@ -298,6 +298,11 @@ export const messages = {
   // A weighted mode reports the share of the obstruction it removed; the others the share of the volume that reached the criterion.
   criterionScoreCarved: (percentText: string) => `Removes ${percentText} of the obstruction`,
   criterionVolumeCarved: (percentText: string) => `Removes ${percentText} of what reached it`,
+  // With a base height (design/base-height.md): what the base kept and what was built above it.
+  builtAboveBase: (keptText: string, builtText: string, studiedText: string, percentText: string) =>
+    `Base kept: ${keptText} m³. Built above it: ${builtText} m³ of ${studiedText} m³ (${percentText})`,
+  baseHoldsObstruction: (percentText: string) =>
+    `The base alone holds ${percentText} of the obstruction of the test surfaces; carving above it cannot remove that`,
   // Under the cards of two or more criteria (7.2): the share of the maximum volume the chain kept.
   chainKept: (percentText: string) => `After all criteria: kept ${percentText} of the maximum volume`,
   criterionOutOfDate: "Out of date",
@@ -401,8 +406,26 @@ export const messages = {
   drawSite: "Draw site",
   siteEmptyHint: "Draw the site boundary in the 3D view, then click its vertices to set their elevations.",
   siteName: (number: number) => `Site ${number}`,
-  siteHeight: "Height",
-  siteHeightOf: (siteName: string) => `Height of ${siteName}`,
+  siteHeight: "Max",
+  siteHeightOf: (siteName: string) => `Max height of ${siteName}`,
+  siteBase: "Base",
+  siteBaseOf: (siteName: string) => `Base height of ${siteName}`,
+  siteNoBase: "none",
+  heightSetInSettings: (valueText: string) => `${valueText} · set in Settings`,
+  heightSetInSettingsHint: "One for all sites: change it in Settings",
+  siteBaseNotBelowMax: (base: number, top: number) =>
+    `its base height (${formattedNumber(base)} m) must be less than its max height (${formattedNumber(top)} m)`,
+  heightsGroup: "Heights",
+  baseHeight: "Base height",
+  maxHeight: "Max height",
+  forAllSites: "One for all sites",
+  perSite: "Per site",
+  heightsHelp: "Measured from each site's lowest vertex. Nothing below the base height is carved; the carving decides the volume between "
+    + "the two. Leave the base height empty for no lower limit.",
+  meshBaseHelp: "Measured from the lowest point of the maximum volume, which is the upper limit. Nothing below the base height is "
+    + "carved. Leave it empty for no lower limit.",
+  heightNeedsValue: "Give the max height for all sites.",
+  heightNotPositive: "A height must be more than 0 m.",
   siteNameOf: (siteName: string) => `Name of ${siteName}`,
   siteArea: (area: number) => `${groupedDigits(Math.round(area))}\u00a0m²`,
   siteElevations: (rise: number) => (rise < 0.005 ? "Flat" : `Elevations 0 to ${formattedNumber(rise)}\u00a0m`),

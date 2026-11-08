@@ -1,5 +1,6 @@
 """A site as the input: the sites routes, the source of the maximum volume and the joined file built from the sites."""
 import trimesh
+import yaml
 
 from local_web_test_support import VOLUME, read_events, start_run, upload
 
@@ -50,7 +51,7 @@ def test_a_change_of_the_sites_builds_the_maximum_volume_again_and_switching_bac
     assert client.put("/api/projects/p/sites", json={"sites": [taller]}).status_code == 200
     assert joined_max_volume(projects_folder).bounds[1][2] == 130
     reply = client.put("/api/projects/p/max-volume-source", json={"source": "mesh"})
-    assert reply.json()["sites"] == [taller] and reply.json()["source"] == "mesh"
+    assert reply.json()["sites"] == [{**taller, "base_height": None}] and reply.json()["source"] == "mesh"
     assert joined_max_volume(projects_folder).bounds.tolist() == mesh_bounds
 
 
@@ -106,3 +107,79 @@ def test_a_changed_maximum_volume_file_in_the_folder_is_not_joined_while_the_sit
     box.export(str(stored))
     assert client.get("/api/projects/p").status_code == 200       # the open looks for changed files
     assert joined_max_volume(projects_folder).bounds.tolist() == [[0, 0, 100], [40, 30, 120]]
+
+
+# Heights (design/base-height.md)
+
+def kept_files(projects_folder, name="p"):
+    return sorted((projects_folder / name / "inputs" / "joined").glob("kept_volume_*.ply"))
+
+
+def config_of(projects_folder, name="p") -> dict:
+    return yaml.safe_load((projects_folder / name / "config.yaml").read_text(encoding="utf-8"))
+
+
+def test_a_project_starts_with_each_site_s_own_max_height_and_no_base(client_with_inputs, projects_folder):
+    heights = client_with_inputs.get("/api/projects/p/sites").json()["heights"]
+    assert heights == {"max": {"for_all_sites": False, "value": None}, "base": {"for_all_sites": True, "value": None}}
+    assert kept_files(projects_folder) == [] and "kept_volume_path" not in config_of(projects_folder)
+
+
+def test_a_base_height_keeps_a_volume_and_puts_only_thresholding_out_of_date(client_with_inputs, projects_folder):
+    client = client_with_inputs
+    client.put("/api/projects/p/sites", json={"sites": [SITE, FLAT]})
+    client.put("/api/projects/p/max-volume-source", json={"source": "sites"})
+    assert read_events(client, start_run(client, produce=["thresholding"])["run_id"])[-1]["type"] == "run_finished"
+    reply = client.put("/api/projects/p/heights", json={"max": {"for_all_sites": False}, "base": {"for_all_sites": True, "value": 8}})
+    assert reply.status_code == 200, reply.text
+    assert reply.json()["heights"]["base"] == {"for_all_sites": True, "value": 8}
+    [kept] = kept_files(projects_folder)
+    mesh = trimesh.load(str(kept), force="mesh")
+    assert mesh.bounds[1][2] == 108 and mesh.bounds[0][2] < 100        # each site's lowest vertex is at 100
+    assert config_of(projects_folder)["kept_volume_path"] == f"inputs/joined/{kept.name}"
+    status = client.get("/api/projects/p/stage-status").json()["criteria"]["1"]
+    assert status["preprocessing"] == "current" and status["thresholding"] == "out_of_date"
+    assert read_events(client, start_run(client, produce=["thresholding"])["run_id"])[-1]["type"] == "run_finished"
+    status = client.get("/api/projects/p/stage-status").json()["criteria"]["1"]
+    assert status["preprocessing"] == "current" and status["thresholding"] == "current"
+    client.put("/api/projects/p/heights", json={"max": {"for_all_sites": False}, "base": {"for_all_sites": True, "value": 9}})
+    assert [path.name for path in kept_files(projects_folder)] != [kept.name] and len(kept_files(projects_folder)) == 1
+    client.put("/api/projects/p/heights", json={"max": {"for_all_sites": False}, "base": {"for_all_sites": True, "value": None}})
+    assert kept_files(projects_folder) == [] and "kept_volume_path" not in config_of(projects_folder)
+
+
+def test_a_max_height_not_above_the_base_is_refused_by_site_name_and_nothing_is_stored(client_with_inputs):
+    client = client_with_inputs
+    client.put("/api/projects/p/sites", json={"sites": [SITE, FLAT]})
+    client.put("/api/projects/p/max-volume-source", json={"source": "sites"})
+    reply = client.put("/api/projects/p/heights", json={"max": {"for_all_sites": False}, "base": {"for_all_sites": True, "value": 15}})
+    assert reply.status_code == 422
+    assert reply.json()["detail"] == "Site 2: its base height (15 m) must be less than its max height (12 m)."
+    assert client.get("/api/projects/p/sites").json()["heights"]["base"]["value"] is None
+    per_site = {**FLAT, "base_height": 12}
+    stored = client.put("/api/projects/p/sites", json={"sites": [SITE, per_site]})
+    assert stored.status_code == 200      # the base is one for all sites (none), so the site's own base does not count
+    per_site_base = client.put("/api/projects/p/heights", json={"max": {"for_all_sites": False}, "base": {"for_all_sites": False}})
+    assert per_site_base.status_code == 422 and per_site_base.json()["detail"].startswith("Site 2: its base height (12 m)")
+
+
+def test_a_max_height_for_all_sites_builds_them_at_that_height_and_keeps_their_own(client_with_inputs, projects_folder):
+    client = client_with_inputs
+    client.put("/api/projects/p/sites", json={"sites": [SITE, FLAT]})
+    client.put("/api/projects/p/max-volume-source", json={"source": "sites"})
+    reply = client.put("/api/projects/p/heights", json={"max": {"for_all_sites": True, "value": 40}, "base": {"for_all_sites": True}})
+    assert reply.status_code == 200, reply.text
+    assert joined_max_volume(projects_folder).bounds[1][2] == 140
+    assert [site["height"] for site in reply.json()["sites"]] == [20, 12]
+    back = client.put("/api/projects/p/heights", json={"max": {"for_all_sites": False}, "base": {"for_all_sites": True}})
+    assert back.status_code == 200 and joined_max_volume(projects_folder).bounds[1][2] == 120
+    assert client.put("/api/projects/p/heights", json={"max": {"for_all_sites": True}, "base": {"for_all_sites": True}}).status_code == 422
+
+
+def test_a_base_height_with_a_mesh_maximum_volume_is_one_level_above_its_lowest_point(client_with_inputs, projects_folder):
+    client = client_with_inputs
+    low = joined_max_volume(projects_folder).bounds[0][2]
+    client.put("/api/projects/p/heights", json={"max": {"for_all_sites": False}, "base": {"for_all_sites": True, "value": 5}})
+    [kept] = kept_files(projects_folder)
+    assert trimesh.load(str(kept), force="mesh").bounds[1][2] == low + 5
+    assert config_of(projects_folder)["kept_volume_path"].endswith(kept.name)

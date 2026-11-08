@@ -4,10 +4,10 @@
 // wait for them before a rename, reset or delete of the project.
 import { useEffect, useRef, useState } from "react";
 import {
-  addInput, failureTextOf, getInputFiles, getProject, getSites, joinedMaxVolumeUrl, removeInput, reportServiceProblem, saveSites, setMaxVolumeSource,
+  addInput, failureTextOf, getInputFiles, getProject, getSites, joinedMaxVolumeUrl, removeInput, reportServiceProblem, saveSites, setHeights as storeHeights, setMaxVolumeSource,
   type InputFileInfo, type InputFilesReply, type MaxVolumeSource, type ModeInfo, type ProjectDetail, type SitesReply,
 } from "../api_client/client";
-import type { Site } from "../sites/site_geometry";
+import { NO_HEIGHTS, heightsOf, type Heights, type Site } from "../sites/site_geometry";
 import { useProjectSession } from "../api_client/project_session";
 import { hemisphereOfLatitude, seasonsOfLatitude, type Hemisphere } from "../settings_form/analysis_period";
 import type { FormState, SettingsForm } from "../settings_form/form_state";
@@ -76,6 +76,10 @@ export interface SitesInput {
   /** Store the whole list; resolves to null once saved, or the service's reason it was refused (the sites shown go back). */
   save: (sites: Site[]) => Promise<string | null>;
   setSource: (source: MaxVolumeSource) => Promise<void>;
+  /** The max height and base height of the sites (design/base-height.md). */
+  heights: Heights;
+  /** Store the heights; resolves to null once saved, or the service's reason it refused them (the heights shown go back). */
+  setHeights: (heights: Heights) => Promise<string | null>;
   undo: () => void;
   redo: () => void;
   canUndo: boolean;
@@ -117,6 +121,7 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
 
   const [source, setSourceState] = useState<MaxVolumeSource | null>(null);
   const [sites, setSites] = useState<Site[]>([]);
+  const [heights, setHeightsState] = useState<Heights>(NO_HEIGHTS);
   const [undoStack, setUndoStack] = useState<Site[][]>([]);
   const [redoStack, setRedoStack] = useState<Site[][]>([]);
   const [refusal, setRefusal] = useState<string | null>(null);
@@ -126,6 +131,7 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
       if (stale) return;
       setSourceState(reply.source);
       setSites(reply.sites as Site[]);
+      setHeightsState(heightsOf(reply.heights));
     }).catch((error) => {
       // Lost access is reported; another failure leaves the project on its mesh files, as before sites
       if (!stale && !reportServiceProblem(error, onServiceProblem)) setSourceState("mesh");
@@ -235,6 +241,7 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
   const applySitesReply = (reply: SitesReply) => {
     setSourceState(reply.source);
     setSites(reply.sites as Site[]);
+    setHeightsState(heightsOf(reply.heights));
     setJoinedBounds(reply.joined_bounds as Bounds3 | null);
     setInputRevisions((current) => ({ ...current, max_volume: current.max_volume + 1 }));
   };
@@ -288,8 +295,22 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
     }
   };
 
+  const setHeights = async (next: Heights): Promise<string | null> => {
+    const previous = heights;
+    setHeightsState(next);
+    try {
+      applySitesReply(await followedInputChange(storeHeights(token, project.name, next)));
+      afterInputsChanged("max_volume");
+      return null;
+    } catch (error) {
+      if (reportServiceProblem(error, onServiceProblem)) return null;
+      setHeightsState(previous);
+      return failureTextOf(error);
+    }
+  };
+
   return {
-    sites: { source, sites, save: saveSitesUndoable, setSource, undo, redo, canUndo: undoStack.length > 0, canRedo: redoStack.length > 0, refusal },
+    sites: { source, sites, save: saveSitesUndoable, setSource, heights, setHeights, undo, redo, canUndo: undoStack.length > 0, canRedo: redoStack.length > 0, refusal },
     files, joinedBounds, origin,
     weather: { location: weatherLocation, latitude: weatherLatitude, fileRevision: weatherFileRevision, fileChange: weatherFileChange,
                setFileChange: setWeatherFileChange },

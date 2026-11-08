@@ -2,7 +2,7 @@
 // line, where the selection goes when a card is removed, the order after a card is moved, and the files of the other criteria.
 import type { ChainSummary, CriterionCarvingSummary, CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
-import { formatPercent } from "../format_numbers";
+import { formatPercent, groupedDigits } from "../format_numbers";
 import type { StageRunState } from "../common/run_state";
 import type { StageState } from "../stages";
 
@@ -127,9 +127,21 @@ export function cardStatusText(status: CardStatus): string | null {
 export function cardResultLine(summary: CriterionCarvingSummary): string | null {
   const carving = summary.carving;
   if (carving === null) return null;
-  if (carving.obstruction_fraction_carved !== null) return messages.criterionScoreCarved(formatPercent(carving.obstruction_fraction_carved * 100));
-  return messages.criterionVolumeCarved(formatPercent(100 - Math.round(carving.retention_pct)));
+  const removed = carving.obstruction_fraction_carved !== null
+    ? messages.criterionScoreCarved(formatPercent(carving.obstruction_fraction_carved * 100))
+    : messages.criterionVolumeCarved(formatPercent(100 - Math.round(carving.retention_pct)));
+  const kept = carving.kept_volume;
+  if (!kept) return removed;
+  // With a base height (design/base-height.md) the result reads as what was built above the base
+  const studied = kept.decided_volume_m3;
+  const lines = [messages.builtAboveBase(groupedDigits(Math.round(kept.volume_m3)), groupedDigits(Math.round(kept.decided_volume_kept_m3)),
+    groupedDigits(Math.round(studied)), formatPercent(studied > 0 ? Math.round((100 * kept.decided_volume_kept_m3) / studied) : 0))];
+  if (kept.score_mass_share >= BASE_OBSTRUCTION_NOTED) lines.push(messages.baseHoldsObstruction(formatPercent(Math.round(kept.score_mass_share * 100))));
+  return `${removed}. ${lines.join(". ")}.`;
 }
+
+/** The share of the obstruction a base holds from which the card says that carving above it cannot remove it. */
+export const BASE_OBSTRUCTION_NOTED = 0.25;
 
 /**
  * "After all criteria: kept 61 % of the maximum volume"; null without a chain, with fewer than two criteria on (the card says it)

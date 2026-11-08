@@ -8,7 +8,41 @@ export type SitePoint = [number, number, number];
 export interface Site {
   name: string;
   points: SitePoint[];
+  /** The site's own max height, used while the max height is Per site. */
   height: number;
+  /** The site's own base height (Per site); null or absent: no lower limit. */
+  base_height?: number | null;
+}
+
+/** One of the two heights (design/base-height.md): the same for all sites (value, m), or each site's own. */
+export interface HeightSetting {
+  for_all_sites: boolean;
+  value?: number | null;
+}
+
+/** The max height and the base height of the sites, as the service stores them. */
+export interface Heights {
+  max: HeightSetting;
+  base: HeightSetting;
+}
+
+/** The heights of a project that has not set them: each site's own max height, no base height. */
+export const NO_HEIGHTS: Heights = { max: { for_all_sites: false, value: null }, base: { for_all_sites: true, value: null } };
+
+/** The heights a reply carries, with the defaults for a part it leaves out. */
+export function heightsOf(reply: { max?: HeightSetting; base?: HeightSetting }): Heights {
+  return { max: reply.max ?? NO_HEIGHTS.max, base: reply.base ?? NO_HEIGHTS.base };
+}
+
+/** The site's max height: the project's while it is one for all sites, else its own. */
+export function maxHeightOf(site: Site, heights: Heights): number {
+  return heights.max.for_all_sites && typeof heights.max.value === "number" ? heights.max.value : site.height;
+}
+
+/** The site's base height: the project's while it is one for all sites, else its own; null for no lower limit. */
+export function baseHeightOf(site: Site, heights: Heights): number | null {
+  const value = heights.base.for_all_sites ? heights.base.value : site.base_height;
+  return typeof value === "number" ? value : null;
 }
 
 const SAME_POINT = 1e-6;    // m
@@ -74,8 +108,15 @@ export function crossesItself(points: readonly SitePoint[]): boolean {
   return false;
 }
 
-/** The plain reasons the site cannot make a volume (as the engine gives them); empty when it can. */
-export function siteProblems(site: Site): string[] {
+/** The plain reasons the site cannot make a volume (as the engine gives them, and the service for a base height); empty when it can.
+ * With *heights*, the site's max and base heights are the ones they give it. */
+export function siteProblems(site: Site, heights?: Heights): string[] {
+  if (heights !== undefined) {
+    const problems = siteProblems({ ...site, height: maxHeightOf(site, heights) });
+    const base = baseHeightOf(site, heights), top = maxHeightOf(site, heights);
+    if (base !== null && base >= top) problems.push(messages.siteBaseNotBelowMax(base, top));
+    return problems;
+  }
   const points = outlinePoints(site.points);
   if (points.some((point) => point.some((value) => !Number.isFinite(value)))) return [messages.siteNoNumber];
   if (points.length < 3) return [messages.siteTooFewVertices];

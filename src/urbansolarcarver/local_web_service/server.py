@@ -42,7 +42,7 @@ from .api_models import (
     ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkippedSurfaces, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, StoredFileChangedReply, SunChart, SunPath, SunPositions, TurnSurfacesRequest,
     UpdateCriterionRequest, AddStudyRequest, ReorderStudiesRequest, StudiesReply, StudyEntry, StudyWithState, UpdateStudyRequest,
     NewLibraryEntryRequest, TypicalBuildingLibraryEntry, TypicalBuildingReply, TypicalBuildingRequest, TypicalBuildingWeightsReply,
-    TypicalBuildingProgressReply, UpdateLibraryEntryRequest, MaxVolumeSourceRequest, SitesReply, SitesRequest,
+    TypicalBuildingProgressReply, UpdateLibraryEntryRequest, MaxVolumeSourceRequest, SitesReply, SitesRequest, HeightsJson,
 )
 from .criteria import active_criteria, find_criterion
 from .example_catalog import EXAMPLE_PROJECTS_FOLDER, EXAMPLE_WEATHER_FILE_NAME, read_examples
@@ -564,6 +564,13 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         422 names every site that cannot make a volume, and nothing is stored."""
         with writable_project(name) as store:
             return site_input.save_sites(store, name, request.sites)
+
+    @router.put("/projects/{name}/heights", responses=_ERROR_RESPONSES)
+    def set_heights(name: str, request: HeightsJson) -> SitesReply:
+        """Store the max height and the base height of the sites, each one for all sites or each site's own (design/base-height.md).
+        422 names every site the heights refuse, and nothing is stored. A base height change puts thresholding out of date only."""
+        with writable_project(name) as store:
+            return site_input.set_heights(store, name, request)
 
     @router.put("/projects/{name}/max-volume-source", responses=_ERROR_RESPONSES)
     def set_max_volume_source(name: str, request: MaxVolumeSourceRequest) -> SitesReply:

@@ -60,6 +60,7 @@ import { STEP_NAMES, type SettingPlace, type StepName } from "../stages";
 import { analysisPeriodOf, useSunPathOfStoredPeriod } from "../steps/sun_path_request";
 import { useInputFiles } from "./use_input_files";
 import { InputChoice, SiteBox, SwitchInputLink } from "../sites/SiteInput";
+import { HeightsSettings } from "../sites/HeightsSettings";
 import { SiteEditor, SitePicker, type SiteTool } from "../sites/SiteEditor";
 import { drawingLevel } from "../sites/site_drawing";
 import { nextSiteName, outlinePoints, planArea, type Site, type SitePoint } from "../sites/site_geometry";
@@ -422,7 +423,8 @@ function OpenProject(props: ProjectWorkspaceProps) {
     <InputChoice disabledReason={inputsDisabledReason} onChooseMaxVolume={() => setMaxVolumeChosen(true)}
                  onChooseSite={() => { void siteInput.setSource("sites"); }} />
   ) : usesSites ? (
-    <SiteBox sites={siteInput.sites} tool={siteTool} refusal={siteInput.refusal} disabledReason={inputsDisabledReason}
+    <SiteBox sites={siteInput.sites} heights={siteInput.heights} tool={siteTool} refusal={siteInput.refusal} disabledReason={inputsDisabledReason}
+             onOpenSettings={(name) => { setSettingsOpen(true); setSettingToFocus({ name }); }}
              onDraw={() => setSiteTool({ kind: "draw" })} onEdit={(index) => setSiteTool({ kind: "edit", index })}
              onChangeSite={changeSite} onDeleteSite={deleteSite}
              onSwitch={() => { setSiteTool(null); setMaxVolumeChosen(true); void siteInput.setSource("mesh"); }} />
@@ -436,9 +438,11 @@ function OpenProject(props: ProjectWorkspaceProps) {
     : siteToolShown !== null ? (scene: ViewerScene) => (
       <SiteEditor scene={scene} origin={origin} sites={siteInput.sites} tool={siteToolShown} level={siteLevel} newSiteName={nextSiteName(siteInput.sites)}
                   onFinishDrawing={finishDrawing} onChangeSite={(index, site) => { void changeSite(index, site); }} onClose={() => setSiteTool(null)}
-                  onUndo={siteInput.undo} onRedo={siteInput.redo} canUndo={siteInput.canUndo} canRedo={siteInput.canRedo} refusal={siteInput.refusal} />
+                  onUndo={siteInput.undo} onRedo={siteInput.redo} canUndo={siteInput.canUndo} canRedo={siteInput.canRedo} refusal={siteInput.refusal}
+                  heights={siteInput.heights} />
     ) : (scene: ViewerScene) => (
-      <SitePicker scene={scene} origin={origin} sites={siteInput.sites} onPick={(index) => setSiteTool({ kind: "edit", index })} />
+      <SitePicker scene={scene} origin={origin} sites={siteInput.sites} onPick={(index) => setSiteTool({ kind: "edit", index })}
+                  heights={siteInput.heights} />
     );
   const stepContent: Record<StepName, ReactNode> = {
     inputs: (
@@ -557,7 +561,11 @@ function OpenProject(props: ProjectWorkspaceProps) {
   );
   const settingsDialog = settingsOpen && (
     <ProjectSettingsDialog form={form} stepErrors={sharedForm.form.stepErrors} criterionKeys={criterionKeys} onChange={changeSettings}
-                           disabledReason={inputsDisabledReason} inputRoles={inputRolesWithFiles} onClose={closeSettings} contentRef={settingsContent} />
+                           disabledReason={inputsDisabledReason} inputRoles={inputRolesWithFiles} onClose={closeSettings} contentRef={settingsContent}
+                           heights={siteInput.source === null ? undefined : (
+                             <HeightsSettings fromSites={siteInput.source === "sites"} heights={siteInput.heights} onChange={siteInput.setHeights}
+                                              startingMax={siteInput.sites[0]?.height ?? DEFAULT_SITE_HEIGHT} disabledReason={inputsDisabledReason} />
+                           )} />
   );
 
   return (

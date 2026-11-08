@@ -5,6 +5,7 @@ import {
   activeCriteria, cardLineOf, cardResultLine, cardStatusText, carvingUpdatedText, chainSummaryLine, criterionStatus, filesOfOtherCriteria, orderAfterDropping, orderAfterMoving,
   runActionOf, selectionAfterRemoving, criteriaProtectingNothing, stagesByCriterionOf, stagesDuringRun,
 } from "./criteria_state";
+import { formatPercent, groupedDigits } from "../format_numbers";
 
 function entry(id: string, overrides: Partial<CriterionEntry> = {}): CriterionEntry {
   return { id, name: `Criterion ${id}`, named_by_user: false, colour: "#336699", bypassed: false, energy_weighted: false, test_surface_files: ["roofs.obj"], settings: {}, ...overrides };
@@ -202,4 +203,13 @@ test("the run a project needs: the analysis when it is not current, else the car
   expect(runActionOf({ preprocessing: "current", thresholding: "out_of_date" })).toBe("carving");
   expect(runActionOf({ preprocessing: "current", thresholding: "missing" })).toBe("carving");
   expect(runActionOf({ preprocessing: "current", thresholding: "current" })).toBeNull();
+});
+
+test("with a base height the result line adds what the base kept and what was built above it, and a base that holds much obstruction", () => {
+  const kept = { volume_m3: 54000, score_mass_share: 0.1, decided_volume_m3: 31000, decided_volume_kept_m3: 12400 };
+  expect(cardResultLine(summary({ ...CARVING, obstruction_fraction_carved: 0.7, kept_volume: kept }, null)))
+    .toBe(`Removes ${formatPercent(70)} of the obstruction. Base kept: ${groupedDigits(54000)} m³. Built above it: ${groupedDigits(12400)} m³ of `
+      + `${groupedDigits(31000)} m³ (${formatPercent(40)}).`);
+  expect(cardResultLine(summary({ ...CARVING, obstruction_fraction_carved: 0.7, kept_volume: { ...kept, score_mass_share: 0.35 } }, null)))
+    .toContain(`The base alone holds ${formatPercent(35)} of the obstruction of the test surfaces; carving above it cannot remove that.`);
 });

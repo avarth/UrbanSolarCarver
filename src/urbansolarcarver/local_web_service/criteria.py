@@ -36,6 +36,10 @@ OPTIONAL_SERVICE_PATHS = {
     "context": ("context_path", "inputs/joined/context.ply"),
     "terrain": ("terrain_path", "inputs/joined/terrain.ply"),
 }
+# The volume the base heights keep (site_input.update_kept_volume), named by a digest of its content so that config.yaml names a
+# new path at every change: thresholding then goes out of date, not the analysis. Set in config.yaml exactly when the file exists.
+KEPT_VOLUME_PATH = "inputs/joined/kept_volume_{digest}.ply"
+KEPT_VOLUME_GLOB = "kept_volume_*.ply"
 JOINED_TEST_SURFACES_PATH = "inputs/joined/test_surfaces_{id}.ply"     # the joined test surfaces of one criterion
 # The folder of the criteria's stage folders in a run folder: run/criteria/<id>/<stage>, the layout of the engine's run_chain
 # (api_core/chain.py, which the service does not import: it pulls in torch).
@@ -186,6 +190,12 @@ def split_settings(values: Mapping[str, Any]) -> tuple[dict, dict]:
     return shared, criterion
 
 
+def kept_volume_service_path(project_folder: Path) -> dict:
+    """{"kept_volume_path": <relative path>} when the project has a kept volume file, else {}."""
+    found = sorted((project_folder / "inputs" / "joined").glob(KEPT_VOLUME_GLOB))
+    return {"kept_volume_path": found[0].relative_to(project_folder).as_posix()} if found else {}
+
+
 def chain_config_document(shared: dict, criteria: list[CriterionEntry], project_folder: Path) -> dict:
     """The config.yaml mapping: the service paths and *shared* settings at the top, then one entry per criterion that is on.
 
@@ -198,7 +208,8 @@ def chain_config_document(shared: dict, criteria: list[CriterionEntry], project_
     paths = {key: path for key, path in SERVICE_PATHS.items()
              if key != "epw_path" or any(reads_weather_file(criterion.settings.get("mode")) for criterion in active)}
     paths.update({key: path for key, path in OPTIONAL_SERVICE_PATHS.values() if (project_folder / path).is_file()})
-    path_keys = {*SERVICE_PATHS, *(key for key, _path in OPTIONAL_SERVICE_PATHS.values())}
+    paths.update(kept_volume_service_path(project_folder))
+    path_keys = {*SERVICE_PATHS, *(key for key, _path in OPTIONAL_SERVICE_PATHS.values()), "kept_volume_path"}
     document = {**paths, **{key: value for key, value in shared.items() if key not in path_keys}}
     document["criteria"] = [
         {"id": criterion.id, "name": criterion.name, **engine_settings(criterion),

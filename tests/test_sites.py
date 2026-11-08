@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from urbansolarcarver.sites import (
-    Site, check_site, ground_spacing, site_from_dict, site_ground, site_rise, site_to_dict, site_volume, sites_volume,
+    Site, check_site, ground_spacing, site_base_volume, site_from_dict, site_ground, site_rise, site_to_dict, site_volume, sites_volume,
 )
 
 SQUARE = ((0, 0, 100), (40, 0, 100), (40, 30, 100), (0, 30, 100))
@@ -90,3 +90,14 @@ def test_a_site_round_trips_through_a_dict_and_reports_its_rise():
     site = Site("b", SLOPED, 20.5)
     assert site_from_dict(site_to_dict(site)) == Site("b", tuple(tuple(float(c) for c in p) for p in SLOPED), 20.5)
     assert site_rise(site) == pytest.approx(6)
+
+
+def test_the_base_volume_is_the_outline_from_the_bottom_to_the_lowest_vertex_plus_the_base():
+    mesh = site_base_volume(Site("b", SLOPED, 20), 8, 90)
+    assert mesh.is_watertight and mesh.is_volume
+    assert mesh.bounds.tolist() == [[0, 0, 90], [40, 30, 108]]
+    assert mesh.volume == pytest.approx(40 * 30 * 18)
+    low = site_base_volume(Site("b", SLOPED, 20), 2, 90)            # below the uphill ground: still the whole outline
+    assert low.bounds[1][2] == 102
+    with pytest.raises(ValueError, match="more than 0"):
+        site_base_volume(Site("b", SLOPED, 20), 0, 90)

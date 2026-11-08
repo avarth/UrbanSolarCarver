@@ -888,7 +888,8 @@ def validate(
         typer.echo(f"    threshold:  {cfg.resolved_threshold()}")
         typer.echo(f"    device:     {cfg.device}")
         typer.echo(f"    out_dir:    {cfg.out_dir}")
-        check_files(cfg, ("max_volume_path", "test_surface_path", "epw_path", "context_path", "terrain_path"))
+        check_files(cfg, ("max_volume_path", "test_surface_path", "epw_path", "context_path", "terrain_path",
+                          "kept_volume_path"))
         check_weights(cfg)
     else:
         typer.secho(f"  Chain OK: {len(chain.criteria)} criteria", fg="green", bold=True)
@@ -898,7 +899,7 @@ def validate(
         for criterion in chain.criteria:
             typer.echo(f"    criterion {criterion.id}: {criterion.name} "
                        f"({criterion.config.mode}, threshold {criterion.config.resolved_threshold()})")
-        check_files(cfg, ("max_volume_path", "context_path", "terrain_path"))
+        check_files(cfg, ("max_volume_path", "context_path", "terrain_path", "kept_volume_path"))
         for criterion in chain.criteria:
             prefix = f"criterion {criterion.id}: "
             check_files(criterion.config, ("test_surface_path", "epw_path"), prefix)

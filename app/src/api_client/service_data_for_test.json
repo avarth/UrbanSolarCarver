@@ -72,6 +72,19 @@
         "description": "Path to a terrain mesh (an open sheet is fine): it blocks rays, and the voxels below the ground are removed. Optional",
         "title": "Terrain Path"
       },
+      "kept_volume_path": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Path to a closed mesh of a volume that is never carved, for example everything below a base height: the occupied voxels whose centres lie inside it are kept by every criterion, and the threshold is taken over the other voxels only. Read by thresholding, so a change re-runs thresholding and not the analysis. Optional",
+        "title": "Kept Volume Path"
+      },
       "context_blocks_rays": {
         "default": true,
         "description": "Whether rays from the test surfaces that hit the context or the terrain are dropped before scoring (ray-based modes). Off: the context and terrain still remove their voxels and count as solid, but block no ray, to compare with the carving that ignores them",

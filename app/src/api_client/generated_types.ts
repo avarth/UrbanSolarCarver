@@ -455,6 +455,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/heights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Heights
+         * @description Store the max height and the base height of the sites, each one for all sites or each site's own (design/base-height.md).
+         *     422 names every site the heights refuse, and nothing is stored. A base height change puts thresholding out of date only.
+         */
+        put: operations["set_heights"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}/max-volume-source": {
         parameters: {
             query?: never;
@@ -1363,6 +1384,7 @@ export interface components {
             carve_above_extra_voxels_removed: number;
             /** Slope Limit Extra Voxels Removed */
             slope_limit_extra_voxels_removed: number;
+            kept_volume?: components["schemas"]["KeptVolumeSummary"] | null;
         };
         /**
          * ChainSummary
@@ -1603,6 +1625,26 @@ export interface components {
             warm_up: components["schemas"]["WarmUpState"];
         };
         /**
+         * HeightSetting
+         * @description One of the two heights of the sites (design/base-height.md): the same for all sites (*value*, in m) or each site's own.
+         */
+        HeightSetting: {
+            /** For All Sites */
+            for_all_sites: boolean;
+            /** Value */
+            value?: number | null;
+        };
+        /**
+         * HeightsJson
+         * @description The max height and the base height of the sites. The max height is each site's own by default (as before there was a choice);
+         *     the base height is one for all sites, with no value: no lower limit. A project with a mesh maximum volume reads only the base
+         *     height's value, as one level above the mesh's lowest point.
+         */
+        HeightsJson: {
+            max?: components["schemas"]["HeightSetting"];
+            base?: components["schemas"]["HeightSetting"];
+        };
+        /**
          * InputFileChange
          * @description A stored input file changed in the project folder (a notice not dismissed yet) or missing from it.
          */
@@ -1691,6 +1733,20 @@ export interface components {
              * @default
              */
             version: string;
+        };
+        /**
+         * KeptVolumeSummary
+         * @description What a base height kept (thresholding's kept_volume): never carved, and what the carving decided above it.
+         */
+        KeptVolumeSummary: {
+            /** Volume M3 */
+            volume_m3: number;
+            /** Score Mass Share */
+            score_mass_share: number;
+            /** Decided Volume M3 */
+            decided_volume_m3: number;
+            /** Decided Volume Kept M3 */
+            decided_volume_kept_m3: number;
         };
         /**
          * MassingSummary
@@ -1926,6 +1982,8 @@ export interface components {
             points: number[][];
             /** Height */
             height: number;
+            /** Base Height */
+            base_height?: number | null;
         };
         /**
          * SitesReply
@@ -1942,6 +2000,7 @@ export interface components {
             /** Joined Bounds */
             joined_bounds: number[][] | null;
             grid_plan: components["schemas"]["GridPlanReply"] | null;
+            heights: components["schemas"]["HeightsJson"];
         };
         /**
          * SitesRequest
@@ -3407,6 +3466,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    set_heights: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeightsJson"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SitesReply"];
                 };
             };
             /** @description A run of this project is active. */

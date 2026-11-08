@@ -14,6 +14,7 @@ export type InputFileInfo = Schemas["InputFileInfo"];
 export type SiteJson = Schemas["SiteJson"];
 export type SitesReply = Schemas["SitesReply"];
 export type MaxVolumeSource = SitesReply["source"];
+export type Heights = Schemas["HeightsJson"];
 export type ConfigReply = Schemas["ConfigReply"];
 export type ConfigErrorReply = Schemas["ConfigErrorReply"];
 export type FieldErrorReply = Schemas["FieldErrorReply"];
@@ -244,6 +245,10 @@ export const getSites = (token: string, project: string) => requestJson<SitesRep
 /** Store the whole list of sites; a site that cannot make a volume is refused (422) with every such site named. */
 export const saveSites = (token: string, project: string, sites: SiteJson[]) =>
   requestJson<SitesReply>(token, `${projectPath(project)}/sites`, "PUT", { sites });
+
+/** Store the max height and the base height of the sites (design/base-height.md); 422 names every site they refuse. */
+export const setHeights = (token: string, project: string, heights: Heights) =>
+  requestJson<SitesReply>(token, `${projectPath(project)}/heights`, "PUT", heights);
 
 /** Make the maximum volume from the mesh files or from the sites; the other input's data is kept. */
 export const setMaxVolumeSource = (token: string, project: string, source: MaxVolumeSource) =>

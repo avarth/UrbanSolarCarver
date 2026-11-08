@@ -9,7 +9,7 @@ import { messages } from "../messages";
 import { Subheading } from "../settings_form/Subheading";
 import { WarningIcon } from "../settings_form/SettingField";
 import { formattedNumber } from "../format_numbers";
-import { outlinePoints, planArea, siteProblems, siteRise, type Site } from "./site_geometry";
+import { baseHeightOf, maxHeightOf, outlinePoints, planArea, siteProblems, siteRise, type Heights, type Site } from "./site_geometry";
 import type { SiteTool } from "./SiteEditor";
 import "./sites.css";
 
@@ -77,6 +77,9 @@ export function SwitchInputLink({ toSite, asks, onSwitch, disabledReason }: Swit
 
 interface SiteBoxProps {
   sites: Site[];
+  /** The max and base heights: a height for all sites is shown read-only, and a click opens Settings on it. */
+  heights: Heights;
+  onOpenSettings: (settingName: "max_height" | "base_height") => void;
   tool: SiteTool | null;
   onDraw: () => void;
   onEdit: (index: number) => void;
@@ -89,7 +92,7 @@ interface SiteBoxProps {
 }
 
 /** The Site card: one row per site, Draw site, and the link back to a maximum volume. */
-export function SiteBox({ sites, tool, onDraw, onEdit, onChangeSite, onDeleteSite, onSwitch, refusal, disabledReason }: SiteBoxProps) {
+export function SiteBox({ sites, heights, onOpenSettings, tool, onDraw, onEdit, onChangeSite, onDeleteSite, onSwitch, refusal, disabledReason }: SiteBoxProps) {
   const titleId = useId();
   const [renaming, setRenaming] = useState<number | null>(null);
   return (
@@ -101,12 +104,14 @@ export function SiteBox({ sites, tool, onDraw, onEdit, onChangeSite, onDeleteSit
       {sites.length === 0 ? <p className="input-box-hint">{messages.siteEmptyHint}</p> : (
         <ul className="site-list">
           {sites.map((site, index) => (
-            <SiteRow key={`${index}-${site.name}`} site={site} editing={tool?.kind === "edit" && tool.index === index} renaming={renaming === index}
+            <SiteRow key={`${index}-${site.name}`} site={site} heights={heights} onOpenSettings={onOpenSettings}
+                     editing={tool?.kind === "edit" && tool.index === index} renaming={renaming === index}
                      disabledReason={disabledReason} onRenamed={(name) => {
                        setRenaming(null);
                        if (name && name !== site.name) void onChangeSite(index, { ...site, name });
                      }}
                      onHeight={(height) => onChangeSite(index, { ...site, height })}
+                     onBase={(base) => onChangeSite(index, { ...site, base_height: base })}
                      onChoose={(key) => {
                        if (key === "rename") setRenaming(index);
                        else if (key === "edit") onEdit(index);
@@ -127,30 +132,28 @@ export function SiteBox({ sites, tool, onDraw, onEdit, onChangeSite, onDeleteSit
 
 interface SiteRowProps {
   site: Site;
+  heights: Heights;
+  onOpenSettings: (settingName: "max_height" | "base_height") => void;
   editing: boolean;
   renaming: boolean;
   disabledReason: string | null;
   onRenamed: (name: string) => void;
   onHeight: (height: number) => Promise<string | null>;
+  onBase: (base: number | null) => Promise<string | null>;
   onChoose: (key: string) => void;
 }
 
-function SiteRow({ site, editing, renaming, disabledReason, onRenamed, onHeight, onChoose }: SiteRowProps) {
+function SiteRow({ site, heights, onOpenSettings, editing, renaming, disabledReason, onRenamed, onHeight, onBase, onChoose }: SiteRowProps) {
   const points = outlinePoints(site.points);
-  const [heightText, setHeightText] = useState(formattedNumber(site.height));
-  const [shownHeight, setShownHeight] = useState(site.height);
-  if (shownHeight !== site.height) {
-    setShownHeight(site.height);
-    setHeightText(formattedNumber(site.height));
-  }
-  const typedHeight = Number(heightText.replace(",", "."));
-  const heightProblems = Number.isFinite(typedHeight) ? siteProblems({ ...site, height: typedHeight }) : [messages.siteHeightNotPositive];
-  const commitHeight = () => {
-    if (!Number.isFinite(typedHeight) || typedHeight === site.height) return;
-    if (heightProblems.length) return;
-    void onHeight(typedHeight);
+  const [typedProblems, setTypedProblems] = useState<string[]>([]);
+  // A typed height is checked as the site would be with it; a problem keeps it unsaved and is shown in the row
+  const check = (changed: Site) => {
+    const problems = siteProblems(changed, heights);
+    setTypedProblems(problems);
+    return problems.length === 0;
   };
-  const problems = siteProblems(site);
+  const problems = siteProblems(site, heights);
+  const disabled = disabledReason !== null;
   return (
     <li className={`site-row${editing ? " site-row-editing" : ""}`}>
       <span className="site-row-name">
@@ -163,21 +166,92 @@ function SiteRow({ site, editing, renaming, disabledReason, onRenamed, onHeight,
                  }} />
         ) : site.name}
       </span>
-      <label className="site-row-height">
-        <span>{messages.siteHeight}</span>
-        <input type="text" inputMode="decimal" value={heightText} aria-label={messages.siteHeightOf(site.name)} aria-invalid={heightProblems.length > 0}
-               disabled={disabledReason !== null} onChange={(event) => setHeightText(event.target.value)} onBlur={commitHeight}
-               onKeyDown={(event) => { if (event.key === "Enter") commitHeight(); }} />
-        <span>m</span>
-      </label>
       <ActionMenu label={messages.siteActions(site.name)} symbol={<span aria-hidden="true">⋯</span>} onChoose={onChoose}
                   items={[
                     { key: "rename", label: messages.renameSite, disabledReason },
                     { key: "edit", label: messages.editSite, disabledReason },
                     { key: "delete", label: messages.deleteSite, disabledReason },
                   ]} />
+      <span className="site-row-heights">
+        {heights.base.for_all_sites ? (
+          <SetInSettings label={messages.siteBase} value={baseHeightOf(site, heights)} onOpen={() => onOpenSettings("base_height")} />
+        ) : (
+          <HeightField label={messages.siteBase} ariaLabel={messages.siteBaseOf(site.name)} value={site.base_height ?? null} optional
+                       invalid={typedProblems.length > 0} disabled={disabled}
+                       onCommit={(base) => {
+                         if (base === undefined) setTypedProblems([messages.heightNotPositive]);
+                         else if (check({ ...site, base_height: base })) void onBase(base);
+                       }} />
+        )}
+        {heights.max.for_all_sites ? (
+          <SetInSettings label={messages.siteHeight} value={maxHeightOf(site, heights)} onOpen={() => onOpenSettings("max_height")} />
+        ) : (
+          <HeightField label={messages.siteHeight} ariaLabel={messages.siteHeightOf(site.name)} value={site.height} optional={false}
+                       invalid={typedProblems.length > 0} disabled={disabled}
+                       onCommit={(height) => {
+                         if (height === null || height === undefined) setTypedProblems([messages.siteHeightNotPositive]);
+                         else if (check({ ...site, height })) void onHeight(height);
+                       }} />
+        )}
+      </span>
       <span className="site-row-details">{messages.siteArea(planArea(points))} · {messages.siteElevations(siteRise(points))}</span>
-      {(heightProblems.length > 0 ? heightProblems : problems).map((problem) => <span key={problem} className="site-row-problem">{problem}</span>)}
+      {(typedProblems.length > 0 ? typedProblems : problems).map((problem) => <span key={problem} className="site-row-problem">{problem}</span>)}
     </li>
+  );
+}
+
+/** A height set for all sites in Settings: its value, read-only, and a click that opens Settings on it. */
+function SetInSettings({ label, value, onOpen }: { label: string; value: number | null; onOpen: () => void }) {
+  const valueText = value === null ? messages.siteNoBase : `${formattedNumber(value)}\u00a0m`;
+  return (
+    <span className="site-row-height">
+      <span>{label}</span>
+      <button type="button" className="link-button site-row-set-in-settings" title={messages.heightSetInSettingsHint} onClick={onOpen}>
+        {messages.heightSetInSettings(valueText)}
+      </button>
+    </span>
+  );
+}
+
+interface HeightFieldProps {
+  label: string;
+  ariaLabel: string;
+  value: number | null;
+  /** Whether it may be left empty (the base height: no lower limit). Empty commits null, a typed value that is no positive number
+   * undefined. */
+  optional: boolean;
+  invalid: boolean;
+  disabled: boolean;
+  onCommit: (value: number | null | undefined) => void;
+}
+
+/** A site's own height, typed; committed on Enter or when the field is left, when it changed. */
+function HeightField({ label, ariaLabel, value, optional, invalid, disabled, onCommit }: HeightFieldProps) {
+  const shown = value === null ? "" : formattedNumber(value);
+  const [text, setText] = useState(shown);
+  const [lastShown, setLastShown] = useState(shown);
+  if (lastShown !== shown) {
+    setLastShown(shown);
+    setText(shown);
+  }
+  const commit = () => {
+    const trimmed = text.trim();
+    if (trimmed === shown) return;
+    if (trimmed === "") {
+      onCommit(null);
+      return;
+    }
+    const typed = Number(trimmed.replace(",", "."));
+    onCommit(Number.isFinite(typed) && typed > 0 ? typed : undefined);
+  };
+  return (
+    <label className="site-row-height">
+      <span>{label}</span>
+      <input type="text" inputMode="decimal" value={text} aria-label={ariaLabel} aria-invalid={invalid} disabled={disabled}
+             placeholder={optional ? messages.siteNoBase : undefined}
+             onChange={(event) => setText(event.target.value)} onBlur={commit}
+             onKeyDown={(event) => { if (event.key === "Enter") commit(); }} />
+      <span>m</span>
+    </label>
   );
 }

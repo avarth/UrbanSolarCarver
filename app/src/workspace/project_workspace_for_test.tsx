@@ -9,7 +9,7 @@ import { flushSync } from "react-dom";
 import { vi } from "vitest";
 import type {
   ColdPeriodReply, ConfigErrorReply, ConfigReply, CriterionEntry, InputFileChange, InputFileInfo, InputFilesReply, InspectedFile, InspectReply, ModeInfo,
-  SiteJson, SitesReply,
+  Heights, SiteJson, SitesReply,
   ProjectDetail, RunSummary, StageStatusReply, StartRunReply, SunChart, SunPath, SunPositions,
 } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
@@ -120,6 +120,9 @@ export class FakeService {
   /** What GET sites answers, and what PUT sites and PUT max-volume-source change. */
   siteSource: "mesh" | "sites" = "mesh";
   sites: SiteJson[] = [];
+  /** What PUT heights stored (design/base-height.md). */
+  heights: Heights = { max: { for_all_sites: false, value: null }, base: { for_all_sites: true, value: null } };
+  savedHeights: Heights[] = [];
   /** The bodies of every PUT sites. */
   readonly savedSites: SiteJson[][] = [];
 
@@ -172,14 +175,18 @@ export class FakeService {
       return json<CriterionEntry>(criterionEntry(this.criterionSettings, this.criterionTestSurfaceFiles));
     }
     if (method === "GET" && path === "/inputs/test_surfaces") return json<InputFileInfo[]>(this.storedTestSurfaces);
-    if (path === "/sites" || path === "/max-volume-source") {
+    if (path === "/sites" || path === "/max-volume-source" || path === "/heights") {
+      if (method === "PUT" && path === "/heights") {
+        this.heights = JSON.parse(String(init!.body)) as Heights;
+        this.savedHeights.push(this.heights);
+      }
       if (method === "PUT" && path === "/sites") {
         this.sites = (JSON.parse(String(init!.body)) as { sites: SiteJson[] }).sites;
         this.savedSites.push(this.sites);
       }
       if (method === "PUT" && path === "/max-volume-source") this.siteSource = (JSON.parse(String(init!.body)) as { source: "mesh" | "sites" }).source;
       const bounds = this.siteSource === "sites" && this.sites.length ? [[0, 0, 0], [10, 10, 30]] : null;
-      return json<SitesReply>({ source: this.siteSource, sites: this.sites, joined_bounds: bounds, grid_plan: null });
+      return json<SitesReply>({ source: this.siteSource, sites: this.sites, joined_bounds: bounds, grid_plan: null, heights: this.heights });
     }
     if (path === "/max-volume") return new Response(TRIANGLE_PLY);
     if (path === "/stage-status") {

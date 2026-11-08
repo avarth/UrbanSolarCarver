@@ -24,7 +24,7 @@ from .stage_settings import ThresholdingSettings
 # top level. The weather file is mode specific but shared: one file serves every criterion that reads it.
 CRITERION_KEYS = frozenset(
     {"name", "id", "mode", "test_surface_path"}
-    | set(ThresholdingSettings.model_fields)
+    | (set(ThresholdingSettings.model_fields) - {"kept_volume_path"})
     | (_MODE_SPECIFIC_FIELDS - {"epw_path"})
     | {"edge_taper"}
 )

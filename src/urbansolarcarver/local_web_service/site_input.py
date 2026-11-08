@@ -7,36 +7,66 @@ sites (sites.py), built again at every change of the sites; the engine carves it
 builds the joined file from the other input and keeps the data of the one left.
 
 Every change that touches the joined file raises inputs_revision, so the criteria go out of date as they do after an upload.
+
+The heights (design/base-height.md): a max height and a base height, each one for all sites or each site's own (project.json
+``heights``). A base height keeps everything below it: the service writes the kept volume (inputs/joined/kept_volume_<digest>.ply,
+the engine's kept_volume_path), named by its content, so a change of the base gives config.yaml a new path and puts thresholding out of
+date, not the analysis. With a mesh maximum volume the base height's value is one level above the mesh's lowest point.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import tempfile
 from pathlib import Path
 
 from ..io import save_mesh
-from ..sites import Site, check_site, sites_volume
-from .api_models import MaxVolumeSource, ProjectJson, SiteJson, SitesReply
+from ..sites import Site, check_site, outline_points, site_base_volume, sites_volume
+from .api_models import HeightsJson, MaxVolumeSource, ProjectJson, SiteJson, SitesReply
+from .criteria import KEPT_VOLUME_GLOB, KEPT_VOLUME_PATH
 from .project_names import ProjectError
 
 MAX_VOLUME_ROLE = "max_volume"
 # The ground inside a site is computed on points this far apart (finer on a small site, sites.ground_spacing); fixed rather than the
 # voxel size, so a change of the voxel size does not build the maximum volume again
 SITE_GROUND_SPACING = 1.0
+# The kept volume starts this far below the lowest point of the maximum volume, so it holds the lowest voxels whole.
+KEPT_VOLUME_BELOW = 2.0
 
 
 def uses_sites(project_json: ProjectJson) -> bool:
     return project_json.max_volume_source == "sites"
 
 
-def site_of(entry: SiteJson) -> Site:
-    return Site(entry.name, tuple(tuple(point) for point in entry.points), entry.height)
+def max_height_of(entry: SiteJson, heights: HeightsJson) -> float:
+    """The site's max height: the project's while the max height is one for all sites, else its own."""
+    return heights.max.value if heights.max.for_all_sites and heights.max.value is not None else entry.height
+
+
+def base_height_of(entry: SiteJson, heights: HeightsJson) -> float | None:
+    """The site's base height: the project's while the base height is one for all sites, else its own; None for no lower limit."""
+    return heights.base.value if heights.base.for_all_sites else entry.base_height
+
+
+def site_of(entry: SiteJson, heights: HeightsJson | None = None) -> Site:
+    """The engine's site of *entry*, with its max height (its own without *heights*)."""
+    height = entry.height if heights is None else max_height_of(entry, heights)
+    return Site(entry.name, tuple(tuple(point) for point in entry.points), height)
+
+
+def site_reasons(entry: SiteJson, heights: HeightsJson) -> list[str]:
+    """Why the site cannot make a volume with *heights*: the outline and max height (check_site) and a base not below the max."""
+    reasons = check_site(site_of(entry, heights))
+    base, top = base_height_of(entry, heights), max_height_of(entry, heights)
+    if base is not None and base >= top:
+        reasons.append(f"its base height ({base:g} m) must be less than its max height ({top:g} m)")
+    return reasons
 
 
 def sites_reply(store, name: str) -> SitesReply:
     project_json = store.read_project_json(name)
     return SitesReply(source=project_json.max_volume_source, sites=project_json.sites, joined_bounds=store.joined_bounds(name),
-                      grid_plan=store.stored_grid_plan(name))
+                      grid_plan=store.stored_grid_plan(name), heights=project_json.heights)
 
 
 def joined_max_volume_path(store, name: str) -> Path:
@@ -47,28 +77,62 @@ def joined_max_volume_path(store, name: str) -> Path:
     return path
 
 
-def refused_sites(entries: list[SiteJson]) -> list[str]:
+def refused_sites(entries: list[SiteJson], heights: HeightsJson | None = None) -> list[str]:
     """One sentence for each site that cannot make a volume, naming it ("Site 2: the outline crosses itself.")."""
-    return [f"{entry.name}: {'; '.join(reasons)}." for entry in entries if (reasons := check_site(site_of(entry)))]
+    heights = HeightsJson() if heights is None else heights
+    return [f"{entry.name}: {'; '.join(reasons)}." for entry in entries if (reasons := site_reasons(entry, heights))]
+
+
+def _volumes_of(entries: list[SiteJson], heights: HeightsJson) -> list[Site]:
+    return [site_of(entry, heights) for entry in entries]
 
 
 def save_sites(store, name: str, entries: list[SiteJson]) -> SitesReply:
-    """Store the whole list of sites; while the project uses them, build the joined max volume again. ProjectError 422 names every
+    """Store the whole list of sites; while the project uses them, build the joined max volume again when a site's volume changed
+    (a change of base heights alone keeps it, and the analysis stays current) and write the kept volume. ProjectError 422 names every
     site that cannot make a volume, and then nothing changes."""
-    refused = refused_sites(entries)
-    if refused:
-        raise ProjectError(" ".join(refused), status_code=422)
     with store.project_lock(name):
         project_json = store.read_project_json(name)
+        refused = refused_sites(entries, project_json.heights)
+        if refused:
+            raise ProjectError(" ".join(refused), status_code=422)
         project_folder = store.open(name)
         if [entry.model_dump() for entry in entries] == [entry.model_dump() for entry in project_json.sites]:
             return sites_reply(store, name)
+        volumes_before = _volumes_of(project_json.sites, project_json.heights)
         project_json.sites = list(entries)
-        if uses_sites(project_json):
-            _build_joined_from_sites(store, project_folder, project_json)
-            project_json.inputs_revision += 1
-        store.write_project_json(name, project_json)
+        _apply(store, name, project_folder, project_json, volumes_changed=volumes_before != _volumes_of(entries, project_json.heights))
     return sites_reply(store, name)
+
+
+def set_heights(store, name: str, heights: HeightsJson) -> SitesReply:
+    """Store the max height and the base height of the sites; ProjectError 422 names every site the new heights refuse, and then
+    nothing changes. A change of the max height builds the maximum volume again (everything goes out of date); a change of the base
+    height writes the kept volume only (thresholding goes out of date)."""
+    with store.project_lock(name):
+        project_json = store.read_project_json(name)
+        if heights.model_dump() == project_json.heights.model_dump():
+            return sites_reply(store, name)
+        if uses_sites(project_json):
+            refused = refused_sites(project_json.sites, heights)
+            if refused:
+                raise ProjectError(" ".join(refused), status_code=422)
+        project_folder = store.open(name)
+        volumes_before = _volumes_of(project_json.sites, project_json.heights)
+        project_json.heights = heights
+        _apply(store, name, project_folder, project_json,
+               volumes_changed=volumes_before != _volumes_of(project_json.sites, heights))
+    return sites_reply(store, name)
+
+
+def _apply(store, name: str, project_folder: Path, project_json: ProjectJson, *, volumes_changed: bool) -> None:
+    """Build what the stored sites and heights make while the project uses them, and write project.json and config.yaml."""
+    if uses_sites(project_json) and volumes_changed:
+        _build_joined_from_sites(store, project_folder, project_json)
+        project_json.inputs_revision += 1
+    update_kept_volume(project_folder, project_json)
+    store.write_project_json(name, project_json)
+    store._update_optional_paths(project_folder, name)
 
 
 def set_max_volume_source(store, name: str, source: MaxVolumeSource) -> SitesReply:
@@ -92,7 +156,9 @@ def set_max_volume_source(store, name: str, source: MaxVolumeSource) -> SitesRep
                 if temporary_path is not None:
                     temporary_path.unlink(missing_ok=True)
         project_json.inputs_revision += 1
+        update_kept_volume(project_folder, project_json)
         store.write_project_json(name, project_json)
+        store._update_optional_paths(project_folder, name)
     return sites_reply(store, name)
 
 
@@ -101,6 +167,54 @@ def refuse_mesh_files_while_sites(project_json: ProjectJson, role: str) -> None:
     if role == MAX_VOLUME_ROLE and uses_sites(project_json):
         raise ProjectError("This project makes its maximum volume from its sites: choose the maximum volume input first to add files.",
                            status_code=422)
+
+
+def _kept_volume_mesh(project_folder: Path, project_json: ProjectJson):
+    """The volume the base heights keep (a trimesh), or None when there is no base height or nothing to keep it on."""
+    import trimesh
+
+    heights = project_json.heights
+    if uses_sites(project_json):
+        entries = [(entry, base) for entry in project_json.sites if (base := base_height_of(entry, heights)) is not None]
+        if not entries:
+            return None
+        bottom = min(float(outline_points(site_of(entry))[:, 2].min()) for entry in project_json.sites) - KEPT_VOLUME_BELOW
+        return trimesh.util.concatenate([site_base_volume(site_of(entry, heights), base, bottom) for entry, base in entries])
+    base = heights.base.value
+    joined = project_folder / "inputs" / "joined" / "max_volume.ply"
+    if base is None or not joined.is_file():
+        return None
+    low, high = trimesh.load(str(joined), force="mesh").bounds
+    box = trimesh.creation.box(bounds=[[low[0] - 1.0, low[1] - 1.0, low[2] - KEPT_VOLUME_BELOW], [high[0] + 1.0, high[1] + 1.0, low[2] + base]])
+    return box
+
+
+def update_kept_volume(project_folder: Path, project_json: ProjectJson) -> bool:
+    """Write the kept volume of *project_json* (named by a digest of its content) and remove any other, or remove it when there is
+    none; whether the file the config names changed. The caller writes config.yaml (ProjectStore._update_optional_paths)."""
+    joined_folder = project_folder / "inputs" / "joined"
+    earlier = sorted(joined_folder.glob(KEPT_VOLUME_GLOB))
+    mesh = _kept_volume_mesh(project_folder, project_json)
+    if mesh is None:
+        for path in earlier:
+            path.unlink(missing_ok=True)
+        return bool(earlier)
+    joined_folder.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(dir=joined_folder, prefix="kept-", suffix=".tmp.ply")
+    os.close(descriptor)
+    temporary_path = Path(temporary_name)
+    try:
+        save_mesh(mesh, str(temporary_path))
+        digest = hashlib.sha256(temporary_path.read_bytes()).hexdigest()[:12]
+        target = project_folder / KEPT_VOLUME_PATH.format(digest=digest)
+        if target in earlier:
+            return False
+        os.replace(temporary_path, target)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+    for path in earlier:
+        path.unlink(missing_ok=True)
+    return True
 
 
 def _build_joined_from_sites(store, project_folder: Path, project_json: ProjectJson) -> None:
@@ -114,7 +228,7 @@ def _build_joined_from_sites(store, project_folder: Path, project_json: ProjectJ
     temporary_path = Path(temporary_name)
     try:
         try:
-            save_mesh(sites_volume([site_of(entry) for entry in project_json.sites], SITE_GROUND_SPACING), str(temporary_path))
+            save_mesh(sites_volume(_volumes_of(project_json.sites, project_json.heights), SITE_GROUND_SPACING), str(temporary_path))
         except Exception as error:
             raise ProjectError(f"The maximum volume could not be built from the sites: {error}", status_code=500) from error
         store._replace_joined_file(project_folder, MAX_VOLUME_ROLE, temporary_path)

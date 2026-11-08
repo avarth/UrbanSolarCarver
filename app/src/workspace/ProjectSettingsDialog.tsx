@@ -7,7 +7,7 @@
 // terrain) is greyed out with the reason. Run analysis is in the Criteria step; its reason names Settings when a setting here is to
 // fix, with Open settings beside it. The button's symbol is a gear: the sun already marks the theme button and the sun tool.
 import { createPortal } from "react-dom";
-import type { Ref } from "react";
+import type { ReactNode, Ref } from "react";
 import { messages } from "../messages";
 import type { FormState } from "../settings_form/form_state";
 import { SettingsStep } from "../settings_form/SettingsStep";
@@ -58,9 +58,11 @@ interface ProjectSettingsDialogProps {
   onClose: () => void;
   /** The element of the window's content, where a setting to focus is looked for. */
   contentRef?: Ref<HTMLDivElement>;
+  /** The Heights group (HeightsSettings), drawn after the shared settings. */
+  heights?: ReactNode;
 }
 
-export function ProjectSettingsDialog({ form, stepErrors, criterionKeys, onChange, disabledReason, inputRoles, onClose, contentRef }: ProjectSettingsDialogProps) {
+export function ProjectSettingsDialog({ form, stepErrors, criterionKeys, onChange, disabledReason, inputRoles, onClose, contentRef, heights }: ProjectSettingsDialogProps) {
   // Drawn into the page's body, as the typical building's window: inside the panel its backdrop could not cover the view's overlays.
   return createPortal(
     <DialogFrame title={messages.projectSettingsTitle} busy={false} onClose={onClose} closeLabel={messages.closeProjectSettings} titleTakesFocus>
@@ -68,6 +70,7 @@ export function ProjectSettingsDialog({ form, stepErrors, criterionKeys, onChang
         <p className="project-settings-intro">{messages.projectSettingsIntro}</p>
         <SettingsStep form={form} stepErrors={stepErrors} onChange={onChange} disabledReason={disabledReason} inputRoles={inputRoles}
                       withoutInputs="disabled" settingShown={(name) => !criterionKeys.has(name)} />
+        {heights}
       </div>
       <div className="project-dialog-buttons">
         <button type="button" className="primary-button" onClick={onClose}>{messages.done}</button>

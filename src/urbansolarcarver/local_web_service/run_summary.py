@@ -15,7 +15,8 @@ from ..mode_registry import canonical_mode_name
 from ..pydantic_schemas import ExportingManifest, MassingManifest, PreprocessingManifest, UserConfig
 from ..stage_settings import stage_folder
 from .api_models import (
-    CarvingSummary, ChainSummary, CriterionCarvingSummary, CriterionEntry, EnvelopeSummary, MassingSummary, RunSummary, SkippedSurfaces, SkyDome,
+    CarvingSummary, ChainSummary, CriterionCarvingSummary, CriterionEntry, EnvelopeSummary, KeptVolumeSummary, MassingSummary, RunSummary,
+    SkippedSurfaces, SkyDome,
     SunMarker, SunPath, SunPathDay,
 )
 from .project_names import ProjectError
@@ -94,6 +95,9 @@ def _carving_summary(diagnostic: dict) -> CarvingSummary:
         obstruction_fraction_carved=diagnostic.get("obstruction_fraction_carved"),
         carve_above_extra_voxels_removed=diagnostic["carve_above_extra_voxels_removed"],
         slope_limit_extra_voxels_removed=diagnostic["slope_limit_extra_voxels_removed"],
+        kept_volume=None if not (kept := diagnostic.get("kept_volume")) else KeptVolumeSummary(
+            volume_m3=kept["volume_m3"], score_mass_share=kept["score_mass_share"], decided_volume_m3=kept["decided_volume_m3"],
+            decided_volume_kept_m3=kept["decided_volume_kept_m3"]),
     )
 
 

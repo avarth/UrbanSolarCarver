@@ -1,6 +1,6 @@
 # Configuration
 
-USC uses YAML configuration files. Mode-specific templates are in `configs/`. Relative paths inside a config file (meshes, including `context_path` and `terrain_path`, EPW, `out_dir`, `simulated_weights_path`) are resolved against the folder that contains the YAML file.
+USC uses YAML configuration files. Mode-specific templates are in `configs/`. Relative paths inside a config file (meshes, including `context_path`, `terrain_path` and `kept_volume_path`, EPW, `out_dir`, `simulated_weights_path`) are resolved against the folder that contains the YAML file.
 
 From Python, `load_config(path, overrides)` reads a file and `build_config(values)` validates values you already hold; both raise `ConfigError`, which lists the field and message of every problem. A client with no YAML file (the Grasshopper components, through the daemon) starts from the starting values of the chosen mode and applies its overrides. The starting values are the analysis period for `time-based` (21 Dec, 10:00 to 14:00), `irradiance` (the full year) and `benefit` (15 Oct 07:00 to 15 Apr 19:00), `tilted_plane_angle_deg: 45` for `tilted_plane` and `carve_fraction: 0.35` for `radiative_cooling`; the templates in `configs/` repeat them. They do not change the schema defaults.
 
@@ -117,6 +117,7 @@ terrain_path: "path/to/terrain.ply"        # optional
 | `mode` | `"time-based"` | Carving mode (see [Modes](../modes.md)) |
 | `context_path` | `null` | Optional mesh of the existing surroundings that stay (buildings, large trees). Rays that hit it are dropped before scoring, and every voxel column of the maximum volume it overlaps is removed. Not for balconies or shading devices |
 | `terrain_path` | `null` | Optional terrain mesh. Rays that hit it are dropped, and only the voxels below the ground are removed, so the site stays buildable above it |
+| `kept_volume_path` | `null` | Optional closed mesh of a volume that is never carved, for example everything below a base height. The occupied voxels whose centres lie inside it are kept by every criterion, and the threshold (and `carve_fraction`) is taken over the other voxels only. Read by thresholding, so a change re-runs thresholding and not the analysis. Each closed body counts on its own, so overlapping bodies are fine |
 | `context_blocks_rays` | true | With context or terrain, in the ray-based modes: drop the rays that hit them before scoring. `false` keeps the voxels they remove and their solid mass, but drops no ray, to compare with the carving that ignores them |
 | `voxel_size` | 1.0 | Voxel edge length in meters (0.01-100) |
 | `grid_step` | `null` | Surface sampling spacing in meters; `null` = half the voxel size. An explicit value must be <= voxel_size |

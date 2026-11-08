@@ -95,12 +95,33 @@ class SiteJson(BaseModel):
     height above its lowest vertex."""
     name: str = Field(min_length=1, max_length=80)
     points: list[list[float]] = Field(min_length=3, max_length=2000)    # [[x, y, z], ...], not repeated at the end
-    height: float = Field(gt=0, allow_inf_nan=False)
+    height: float = Field(gt=0, allow_inf_nan=False)     # the site's own max height, used while the max height is Per site
+    base_height: float | None = Field(None, gt=0, allow_inf_nan=False)    # its own base height (Per site); None: no lower limit
 
     @model_validator(mode="after")
     def _points_are_xyz(self):
         if any(len(point) != 3 for point in self.points):
             raise ValueError("every point is [x, y, z]")
+        return self
+
+
+class HeightSetting(BaseModel):
+    """One of the two heights of the sites (design/base-height.md): the same for all sites (*value*, in m) or each site's own."""
+    for_all_sites: bool
+    value: float | None = Field(None, gt=0, allow_inf_nan=False)
+
+
+class HeightsJson(BaseModel):
+    """The max height and the base height of the sites. The max height is each site's own by default (as before there was a choice);
+    the base height is one for all sites, with no value: no lower limit. A project with a mesh maximum volume reads only the base
+    height's value, as one level above the mesh's lowest point."""
+    max: HeightSetting = Field(default_factory=lambda: HeightSetting(for_all_sites=False))
+    base: HeightSetting = Field(default_factory=lambda: HeightSetting(for_all_sites=True))
+
+    @model_validator(mode="after")
+    def _max_for_all_has_a_value(self):
+        if self.max.for_all_sites and self.max.value is None:
+            raise ValueError("a max height for all sites needs a value")
         return self
 
 
@@ -127,6 +148,7 @@ class ProjectJson(BaseModel):
     # What the maximum volume is made from: the mesh files of the max_volume role, or the sites (site_input.py); one or the other
     max_volume_source: MaxVolumeSource = "mesh"
     sites: list[SiteJson] = Field(default_factory=list)     # kept while the source is "mesh", so switching back restores them
+    heights: HeightsJson = Field(default_factory=HeightsJson)
 
 
 StageState = Literal["current", "out_of_date", "missing"]
@@ -222,6 +244,7 @@ class SitesReply(BaseModel):
     sites: list[SiteJson]
     joined_bounds: list[list[float]] | None     # of the joined max volume; None without one
     grid_plan: "GridPlanReply | None"           # the grid of the stored settings on it; None without a max volume
+    heights: HeightsJson
 
 
 class ProjectSummary(BaseModel):
@@ -284,6 +307,14 @@ class ConfigErrorReply(BaseModel):
     criterion: str | None = None        # the id of the criterion whose settings are invalid (a run start, a criterion change); None for shared ones
 
 
+class KeptVolumeSummary(BaseModel):
+    """What a base height kept (thresholding's kept_volume): never carved, and what the carving decided above it."""
+    volume_m3: float                    # the kept voxels
+    score_mass_share: float             # their share of the obstruction score of the maximum volume
+    decided_volume_m3: float            # the voxels above the base (the studied band)
+    decided_volume_kept_m3: float       # of those, the ones kept: what is built above the base
+
+
 class CarvingSummary(BaseModel):
     """The numbers thresholding reports for the run summary of the carving screen."""
     threshold_value: float
@@ -294,6 +325,7 @@ class CarvingSummary(BaseModel):
     obstruction_fraction_carved: float | None   # weighted modes only
     carve_above_extra_voxels_removed: int
     slope_limit_extra_voxels_removed: int
+    kept_volume: KeptVolumeSummary | None = None     # with a base height only
 
 
 class EnvelopeSummary(BaseModel):

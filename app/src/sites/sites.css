@@ -14,7 +14,7 @@
 
 .site-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-unit); }
 .site-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: calc(var(--space-unit) * 2);
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: calc(var(--space-unit) * 2);
   padding: var(--space-unit) 0; border-bottom: 1px solid var(--colour-line);
 }
 .site-row-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -63,3 +63,15 @@
 .site-editor-field input { width: 7em; font: inherit; text-align: right; }
 .site-editor-field input[aria-invalid="true"] { border-color: var(--colour-error); }
 .site-editor-relative { color: var(--colour-muted); }
+
+/* The Heights group of the project settings window and the heights of a site row (design/base-height.md). */
+.height-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-unit) calc(var(--space-unit) * 2); margin-bottom: calc(var(--space-unit) * 2); }
+.height-row-label { min-width: 7em; }
+.height-row-value { display: flex; align-items: center; gap: var(--space-unit); }
+.height-row-value input { width: 5.5em; font: inherit; text-align: right; }
+.heights-help { color: var(--colour-muted); font-size: var(--text-secondary); margin: 0; }
+.site-row-heights { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: flex-start; gap: var(--space-unit) calc(var(--space-unit) * 2); }
+.site-row-set-in-settings { font-size: var(--text-secondary); white-space: nowrap; }
+.site-base-outlines { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.site-base-outlines polygon { fill: none; stroke: var(--colour-accent); stroke-width: 1.5; stroke-dasharray: 6 4; stroke-linejoin: round; }
+.site-base-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 1; }

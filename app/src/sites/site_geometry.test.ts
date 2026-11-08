@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { constrainedToAngle, drawingLevel, placePoint, type ToScreen } from "./site_drawing";
 import {
-  containsPoint, crossesItself, nextSiteName, outlinePoints, planArea, pointAlong, siteProblems, siteRise, type SitePoint,
+  baseHeightOf, containsPoint, crossesItself, maxHeightOf, nextSiteName, outlinePoints, planArea, pointAlong, siteProblems, siteRise, type SitePoint,
 } from "./site_geometry";
 
 const SQUARE: SitePoint[] = [[0, 0, 100], [40, 0, 102], [40, 30, 106], [0, 30, 101]];
@@ -68,4 +68,14 @@ describe("drawing", () => {
     expect(drawingLevel([], 20)).toBe(20);
     expect(drawingLevel([], null)).toBe(0);
   });
+});
+
+test("with heights a site's max and base are the project's or its own, and a base not below the max is a problem", () => {
+  const site = { name: "A", points: [[0, 0, 0], [10, 0, 0], [10, 10, 0]] as SitePoint[], height: 20, base_height: 25 };
+  const perSite = { max: { for_all_sites: false }, base: { for_all_sites: false } };
+  expect(siteProblems(site, perSite)).toEqual(["its base height (25 m) must be less than its max height (20 m)"]);
+  expect(siteProblems(site, { max: { for_all_sites: true, value: 30 }, base: { for_all_sites: false } })).toEqual([]);
+  expect(siteProblems(site, { max: { for_all_sites: false }, base: { for_all_sites: true, value: null } })).toEqual([]);
+  expect(baseHeightOf(site, { max: { for_all_sites: false }, base: { for_all_sites: true, value: 8 } })).toBe(8);
+  expect(maxHeightOf(site, perSite)).toBe(20);
 });

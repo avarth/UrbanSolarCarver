@@ -142,6 +142,7 @@ def test_load_config_points_a_chain_file_to_load_chain(tmp_path):
 def test_the_criterion_keys_are_the_settings_one_criterion_decides():
     assert {"name", "id", "mode", "test_surface_path", "edge_taper", "carve_fraction", "threshold",
             "tilted_plane_angle_deg", "start_month", "min_altitude"} <= CRITERION_KEYS
-    assert set(ThresholdingSettings.model_fields) <= CRITERION_KEYS
-    assert not {"epw_path", "voxel_size", "max_volume_path", "out_dir", "context_path", "final_mesh_format"} & CRITERION_KEYS
+    assert set(ThresholdingSettings.model_fields) - {"kept_volume_path"} <= CRITERION_KEYS     # the kept volume is shared
+    assert not {"epw_path", "voxel_size", "max_volume_path", "out_dir", "context_path", "final_mesh_format",
+                "kept_volume_path"} & CRITERION_KEYS
     assert CRITERION_KEYS - {"name", "id"} <= set(UserConfig.model_fields)
