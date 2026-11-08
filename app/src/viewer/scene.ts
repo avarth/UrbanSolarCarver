@@ -323,6 +323,19 @@ export class ViewerScene {
     this.leftInset = source;
   }
 
+  /**
+   * Shifts the picture again for what the floating panels cover now (a panel opened, closed or resized, the window resized), so the
+   * point the camera orbits about stays in the middle of the free part of the view; the camera does not move. A camera move under
+   * way keeps the shift it set out with.
+   */
+  fitPictureToPanels(): void {
+    if (this.cameraMove) return;
+    const shift = this.insetPixels() / 2;
+    if (Math.abs(shift - this.pictureShift) < 0.5) return;
+    this.setPictureShift(shift);
+    this.cameraChanged();
+  }
+
   /** Moves the camera, in its current direction, so every visible layer fits the view. */
   frameAll(instant = false): void {
     const { centre, radius } = this.contentSphere();
@@ -566,7 +579,7 @@ export class ViewerScene {
     const width = Math.max(1, this.container.clientWidth), height = Math.max(1, this.container.clientHeight);
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
-    this.setPictureShift(this.pictureShift);
+    this.setPictureShift(this.cameraMove ? this.pictureShift : this.insetPixels() / 2);
     this.camera.updateProjectionMatrix();
     this.fitPixelSizedObjects();
     this.cameraChanged();

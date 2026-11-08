@@ -110,6 +110,11 @@ export class FakeViewerScene implements Pick<ViewerScene, keyof ViewerScene> {
   setLeftInsetSource(source: () => number): void {
     this.leftInsetSource = source;
   }
+  /** How many times the pane asked to shift the picture again for the panels. */
+  picturesFitted = 0;
+  fitPictureToPanels(): void {
+    this.picturesFitted += 1;
+  }
   /** How many times the pane asked to frame everything, and to look from the top. */
   framedAll = 0;
   viewsFromTheTop = 0;

@@ -31,6 +31,12 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - **The sun tool** moved from Simulate's Sun panel to a button in the view's toolbar, in Carve, Simulate and Inspect. It
   shows the sun path and the shadows at a time; the view's count of hours in shade is gone (a Sun hours study replaces it).
 
+### Fixed
+
+- The orbit point stays in the middle of the free part of the view when the window is resized or a panel opens, closes or
+  changes size (another workspace). It used to keep the place it had at the last framing, so the camera seemed to turn
+  about a point off centre, by up to half the panel's width.
+
 ## [0.11.0] - 2026-11-07
 
 ### Highlights

@@ -244,6 +244,30 @@ test("framing beside a panel: the free part of the view sets the distance, the m
   expect(framedWith(VIEW_WIDTH * 0.9)).toBeCloseTo(framedWith(VIEW_WIDTH * 0.5), 9);
 });
 
+test("the picture follows the panels: a panel that goes away after framing brings the orbit point back to the middle, the camera unmoved", () => {
+  const { scene, canvas, cube } = viewerWithACube();
+  let insetPixels = VIEW_WIDTH * 0.375;
+  scene.setLeftInsetSource(() => insetPixels);
+  scene.frameAll(true);
+  const { camera } = scene as unknown as { camera: THREE.PerspectiveCamera };
+  const placed = camera.position.clone();
+  const clicked: THREE.Intersection[] = [];
+  scene.onLayerClick("inspect_surfaces", (intersection) => clicked.push(intersection));
+  const clickAt = (x: number) => {
+    pointer(canvas, "pointerdown", x, VIEW_HEIGHT / 2);
+    pointer(canvas, "pointerup", x, VIEW_HEIGHT / 2);
+  };
+  insetPixels = 0;                                           // the panel now lies beside the view (a wider window)
+  scene.fitPictureToPanels();
+  expect(camera.position.toArray()).toEqual(placed.toArray());
+  clickAt(VIEW_WIDTH / 2);
+  expect(clicked.map((hit) => hit.object)).toEqual([cube]);  // drawn in the middle of the whole view
+  insetPixels = VIEW_WIDTH * 0.375;                          // and back over it
+  scene.fitPictureToPanels();
+  clickAt(VIEW_WIDTH * 0.375 + (VIEW_WIDTH * 0.625) / 2);
+  expect(clicked).toHaveLength(2);
+});
+
 test("framing orbits about the maximum volume, however far the other visible layers reach, and still fits them", () => {
   const { scene } = viewerWithACube();
   const box = (centre: [number, number, number], side: number) => {

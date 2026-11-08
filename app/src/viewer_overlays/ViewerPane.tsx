@@ -11,6 +11,7 @@
 // panel (given by the workspace) under it, in every workspace.
 // Without WebGL (a remote desktop, a blocked graphics card) the scene cannot start: the view says so, and the steps go on working.
 // Framing leaves out the part of the view a panel lies over (leftInsetOf), so the model is never hidden behind it; the picture shifts and the camera still orbits about the centre of the compass ring.
+// The shift follows the panels as they open, close or resize, and the window as it resizes (watchPanelsCoveringView), so that point stays in the middle of the free part of the view.
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from "react";
 import type * as THREE from "three";
 import type { RunSummary, SkippedSurfaces, SkyDome } from "../api_client/client";
@@ -44,6 +45,8 @@ import { useSceneLayers } from "./use_scene_layers";
 import { rememberedGroundAid, ViewToolbar } from "./ViewToolbar";
 import "./overlays.css";
 
+const PANELS_COVERING_VIEW = "[data-covers-view-left], .workspace-panel";
+
 /**
  * How many pixels of *view*'s left side a panel lies over: a floating panel marked data-covers-view-left (Simulate's studies, Inspect's
  * files), or the step panel when a narrow window lays it over the view. A panel beside the view, or in its right half, covers nothing.
@@ -51,13 +54,43 @@ import "./overlays.css";
 export function leftInsetOf(view: HTMLElement): number {
   const viewRect = view.getBoundingClientRect();
   let inset = 0;
-  for (const panel of document.querySelectorAll<HTMLElement>("[data-covers-view-left], .workspace-panel")) {
+  for (const panel of document.querySelectorAll<HTMLElement>(PANELS_COVERING_VIEW)) {
     if (panel.hidden) continue;
     const rect = panel.getBoundingClientRect();
     if (rect.width === 0 || rect.bottom <= viewRect.top || rect.top >= viewRect.bottom || rect.left > viewRect.left + viewRect.width / 2) continue;
     inset = Math.max(inset, rect.right - viewRect.left);
   }
   return inset;
+}
+
+/**
+ * Calls *changed*, at most once a frame, when what the panels cover of *view* may have changed: the view or a panel resized, a panel
+ * opened, closed or shown (another workspace). Returns the function that stops watching.
+ */
+export function watchPanelsCoveringView(view: HTMLElement, changed: () => void): () => void {
+  let frame: number | null = null;
+  const queue = () => {
+    if (frame === null) frame = requestAnimationFrame(() => { frame = null; changed(); });
+  };
+  // Every browser the app supports has ResizeObserver; the test environment (jsdom) does not, and there only the mutations are watched
+  const resizes = typeof ResizeObserver === "function" ? new ResizeObserver(queue) : null;
+  const watched = new Set<Element>();
+  const watchPanels = () => {
+    for (const panel of document.querySelectorAll(PANELS_COVERING_VIEW)) {
+      if (watched.has(panel)) continue;
+      watched.add(panel);
+      resizes?.observe(panel);
+    }
+  };
+  resizes?.observe(view);
+  watchPanels();
+  const mutations = new MutationObserver(() => { watchPanels(); queue(); });
+  mutations.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
+  return () => {
+    mutations.disconnect();
+    resizes?.disconnect();
+    if (frame !== null) cancelAnimationFrame(frame);
+  };
 }
 
 const SKY_DOME_HIDDEN_KEY = "usc.skyDomeHidden";
@@ -256,8 +289,10 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
     }
     const stopListening = viewer.onCameraChange(setCamera);
     viewer.setLeftInsetSource(() => leftInsetOf(container.current!));
+    const stopWatchingPanels = watchPanelsCoveringView(container.current!, () => viewer.fitPictureToPanels());
     setScene(viewer);
     return () => {
+      stopWatchingPanels();
       stopListening();
       viewer.dispose();
       setScene(null);
