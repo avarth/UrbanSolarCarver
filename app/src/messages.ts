@@ -267,7 +267,6 @@ export const messages = {
   projectSettingsHint: (summaryText: string) => `${summaryText}. Opens the settings every criterion shares.`,
   projectSettingsButtonWithFixes: (count: number) => `Settings, ${count} ${count === 1 ? "setting" : "settings"} to fix`,
   projectSettingsIntro: "These settings apply to every criterion. A change puts every criterion out of date.",
-  projectSettingsElsewhere: "The settings of the envelope, the building massing and the export are in their steps:",
   closeProjectSettings: "Close",
   openProjectSettings: "Open settings",
   // A setting that needs the surroundings or the terrain, shown greyed out in the window without them

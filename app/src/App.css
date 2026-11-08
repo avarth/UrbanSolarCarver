@@ -49,12 +49,13 @@
   background: transparent;
   color: var(--colour-ink);
   font: inherit;
+  font-size: var(--text-secondary);     /* as the Carve | Simulate | Inspect switch beside it */
   cursor: pointer;
 }
 
 .top-bar-settings-button:hover,
 .top-bar-settings-button[aria-expanded="true"] { border-color: var(--colour-line); background: var(--colour-chrome); }
-.top-bar-settings-button .step-mark { width: 16px; height: 16px; margin-top: 0; font-size: 11px; }
+.top-bar-settings-button .step-mark { width: 14px; height: 14px; margin-top: 0; font-size: 10px; }
 
 /* The device status, then the time of the last run, which is dropped on a narrow page. */
 .top-bar-device {

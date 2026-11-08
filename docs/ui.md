@@ -44,7 +44,7 @@ A small footer under the cards gives the version and the GPU's name, or why the 
 
 ### Project settings
 
-The **Settings** button in the top bar opens the settings every criterion shares, in a window over the page. It is there in Carve, Simulate and Inspect. Its tooltip gives north and the voxel size, "North 10°, 0.5 m voxels". While one of these settings has to be fixed, the button shows the red **!** of a step row, and a screen reader hears "Settings, 1 setting to fix".
+The **Settings** button in the top bar (a gear) opens the settings every criterion shares, in a window over the page. It is there in Carve, Simulate and Inspect. Its tooltip gives north and the voxel size, "North 10°, 0.5 m voxels". While one of these settings has to be fixed, the button shows the red **!** of a step row, and a screen reader hears "Settings, 1 setting to fix".
 
 The window holds four settings, with plain labels, units and a help text for each:
 
@@ -53,7 +53,7 @@ The window holds four settings, with plain labels, units and a help text for eac
 - **Voxel size** (m), with the size of the voxel grid and the sample spacing on the test surfaces under it. A grid larger than the analysis can handle is refused here, with the smallest voxel size that fits.
 - Under **More detail settings**, **Rays per batch**, which changes the speed and the memory a run uses, not its results.
 
-The sample spacing on the test surfaces, the grid margin and the ray length have no field: the engine's values apply (see [Entering values](#entering-values)). Each change is saved as it is made, as in the steps; there is no Apply. A change puts every criterion out of date. While a run is in progress the fields wait and say why. The window ends with links to Envelope and massing and Export, which hold the other shared settings next to their builds. **Done**, × and Escape close it, and the focus goes back to the button.
+The sample spacing on the test surfaces, the grid margin and the ray length have no field: the engine's values apply (see [Entering values](#entering-values)). Each change is saved as it is made, as in the steps; there is no Apply. A change puts every criterion out of date. While a run is in progress the fields wait and say why. The settings of the envelope, the building massing and the export are in their steps, next to their builds. **Done**, × and Escape close it, and the focus goes back to the button.
 
 Run analysis is in the Criteria step. When a setting of this window blocks it, the reason names the window, "Fix the voxel size in Settings to run the analysis", and **Open settings** under it opens the window on that field. The **Go to** link of a run that failed on one of these settings does the same.
 

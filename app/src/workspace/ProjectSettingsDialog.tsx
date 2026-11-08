@@ -4,22 +4,22 @@
 // size, and it carries the "!" of a step row while a shared setting is to fix (settingsToFixByPlace). The window is the frame of the
 // project dialogs, with × and Done; each change is saved as the form saves (no Apply), and while a run is in progress the fields
 // wait and say why. A setting whose inputs the project has no files for (Account for context blocking without surroundings or
-// terrain) is greyed out with the reason. The window ends with links to the steps that hold the other shared settings. Run analysis
-// is in the Criteria step; its reason names Settings when a setting here is to fix, with Open settings beside it.
+// terrain) is greyed out with the reason. Run analysis is in the Criteria step; its reason names Settings when a setting here is to
+// fix, with Open settings beside it. The button's symbol is a gear: the sun already marks the theme button and the sun tool.
 import { createPortal } from "react-dom";
 import type { Ref } from "react";
 import { messages } from "../messages";
 import type { FormState } from "../settings_form/form_state";
 import { SettingsStep } from "../settings_form/SettingsStep";
-import type { StepName } from "../stages";
 import { DialogFrame } from "../common/dialogs";
 import "../theme/panels.css";
 
+/** A gear of eight teeth, with its hole. */
 function GearIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="8" cy="8" r="2.2" />
-      <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" />
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6.17 2.92 L6.54 0.95 L9.46 0.95 L9.83 2.92 L10.30 3.11 L11.95 1.98 L14.02 4.05 L12.89 5.70 L13.08 6.17 L15.05 6.54 L15.05 9.46 L13.08 9.83 L12.89 10.30 L14.02 11.95 L11.95 14.02 L10.30 12.89 L9.83 13.08 L9.46 15.05 L6.54 15.05 L6.17 13.08 L5.70 12.89 L4.05 14.02 L1.98 11.95 L3.11 10.30 L2.92 9.83 L0.95 9.46 L0.95 6.54 L2.92 6.17 L3.11 5.70 L1.98 4.05 L4.05 1.98 L5.70 3.11 Z" />
+      <circle cx="8" cy="8" r="2.3" />
     </svg>
   );
 }
@@ -56,16 +56,11 @@ interface ProjectSettingsDialogProps {
   /** The input roles the project has files for: Account for context blocking needs surroundings or terrain. */
   inputRoles: readonly string[];
   onClose: () => void;
-  /** Closes the window and opens a step that holds other shared settings (Envelope and massing, Export). */
-  onOpenStep: (step: StepName) => void;
   /** The element of the window's content, where a setting to focus is looked for. */
   contentRef?: Ref<HTMLDivElement>;
 }
 
-const STEPS_WITH_OTHER_SHARED_SETTINGS: readonly StepName[] = ["envelope_and_massing", "export"];
-
-export function ProjectSettingsDialog({ form, stepErrors, criterionKeys, onChange, disabledReason, inputRoles, onClose, onOpenStep,
-                                        contentRef }: ProjectSettingsDialogProps) {
+export function ProjectSettingsDialog({ form, stepErrors, criterionKeys, onChange, disabledReason, inputRoles, onClose, contentRef }: ProjectSettingsDialogProps) {
   // Drawn into the page's body, as the typical building's window: inside the panel its backdrop could not cover the view's overlays.
   return createPortal(
     <DialogFrame title={messages.projectSettingsTitle} busy={false} onClose={onClose} closeLabel={messages.closeProjectSettings} titleTakesFocus>
@@ -73,15 +68,6 @@ export function ProjectSettingsDialog({ form, stepErrors, criterionKeys, onChang
         <p className="project-settings-intro">{messages.projectSettingsIntro}</p>
         <SettingsStep form={form} stepErrors={stepErrors} onChange={onChange} disabledReason={disabledReason} inputRoles={inputRoles}
                       withoutInputs="disabled" settingShown={(name) => !criterionKeys.has(name)} />
-        <p className="project-settings-elsewhere">
-          {messages.projectSettingsElsewhere}{" "}
-          {STEPS_WITH_OTHER_SHARED_SETTINGS.map((step, index) => (
-            <span key={step}>
-              {index > 0 && ", "}
-              <button type="button" className="link-button" onClick={() => onOpenStep(step)}>{messages.stepTitles[step]}</button>
-            </span>
-          ))}
-        </p>
       </div>
       <div className="project-dialog-buttons">
         <button type="button" className="primary-button" onClick={onClose}>{messages.done}</button>

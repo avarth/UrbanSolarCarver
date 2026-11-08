@@ -380,9 +380,9 @@
 .run-button-reason { margin: var(--space-unit) 0 0; color: var(--colour-muted); font-size: var(--text-secondary); }
 .run-button-reason-action { align-self: flex-start; font-size: var(--text-secondary); }
 
-/* The project settings window (ProjectSettingsDialog): its line on what the settings apply to, the settings, the links to the steps. */
+/* The project settings window (ProjectSettingsDialog): its line on what the settings apply to, then the settings. */
 .project-settings { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); }
-.project-settings-intro, .project-settings-elsewhere { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
+.project-settings-intro { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
 
 /* Inputs ---------------------------------------------------------------------------------------------------------------- */
 

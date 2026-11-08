@@ -19,7 +19,7 @@ const field = (setting: string) => dialog()!.querySelector<HTMLElement>(`[data-s
 
 function renderDialog(overrides: Partial<Parameters<typeof ProjectSettingsDialog>[0]> = {}) {
   const props = { form, stepErrors: [], criterionKeys: CRITERION_KEYS, onChange: () => {}, disabledReason: null, inputRoles: [],
-                  onClose: () => {}, onOpenStep: () => {}, ...overrides };
+                  onClose: () => {}, ...overrides };
   rendered = renderForTest(<ProjectSettingsDialog {...props} />);
   return props;
 }
@@ -56,15 +56,13 @@ test("while a run is in progress the fields wait and say why", () => {
   expect(field("north_deg")!.querySelector<HTMLInputElement>("input[type='number']")!.disabled).toBe(true);
 });
 
-test("Done and × close the window; the links open the steps that hold the other shared settings", () => {
-  const onClose = vi.fn(), onOpenStep = vi.fn();
-  renderDialog({ onClose, onOpenStep });
+test("Done and × close the window, which ends with the settings", () => {
+  const onClose = vi.fn();
+  renderDialog({ onClose });
+  expect([...dialog()!.querySelectorAll("button")].map((button) => button.textContent)).not.toContain("Envelope and massing");
   click([...dialog()!.querySelectorAll("button")].find((button) => button.textContent === "Done")!);
   click(dialog()!.querySelector("button[aria-label='Close']")!);
   expect(onClose).toHaveBeenCalledTimes(2);
-  click([...dialog()!.querySelectorAll("button")].find((button) => button.textContent === "Envelope and massing")!);
-  click([...dialog()!.querySelectorAll("button")].find((button) => button.textContent === "Export")!);
-  expect(onOpenStep.mock.calls).toEqual([["envelope_and_massing"], ["export"]]);
 });
 
 test("the Settings button gives the summary in its tooltip and the ! of a step row while a shared setting is to fix", () => {

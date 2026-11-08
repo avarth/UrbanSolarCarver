@@ -557,12 +557,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
   );
   const settingsDialog = settingsOpen && (
     <ProjectSettingsDialog form={form} stepErrors={sharedForm.form.stepErrors} criterionKeys={criterionKeys} onChange={changeSettings}
-                           disabledReason={inputsDisabledReason} inputRoles={inputRolesWithFiles} onClose={closeSettings} contentRef={settingsContent}
-                           onOpenStep={(step) => {
-                             setSettingsOpen(false);
-                             if (props.mode !== "design") props.onGoToCarve?.();
-                             openTheStep(step);
-                           }} />
+                           disabledReason={inputsDisabledReason} inputRoles={inputRolesWithFiles} onClose={closeSettings} contentRef={settingsContent} />
   );
 
   return (
