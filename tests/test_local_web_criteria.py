@@ -436,3 +436,72 @@ def test_a_shared_setting_over_the_grid_budget_is_refused_with_the_plan(tmp_path
         store.write_shared_settings("p", {"voxel_size": 0.0125})
     assert refused.value.grid_plan.total_voxels > refused.value.grid_plan.budget_voxels
     assert _config_path(store, "p").read_bytes() == config_before
+
+
+# ---- Rays per sky patch: a criterion setting until 2026-11-09, now shared by the chain ------------------------------------------
+
+def _store_rays_in_criteria_as_before(store, name, values_by_id):
+    """A project as an earlier version left it: each criterion's rays per patch in project.json and in its config.yaml entry."""
+
+    with store.project_lock(name):
+        project_json = store.read_project_json(name)
+        for entry in project_json.criteria:
+            if entry.id in values_by_id:
+                entry.settings["rays_per_patch"] = values_by_id[entry.id]
+        store.write_project_json(name, project_json)
+        config_path = store.open(name) / "config.yaml"
+        document = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        document.pop("rays_per_patch", None)
+        for item in document["criteria"]:
+            if item["id"] in values_by_id:
+                item["rays_per_patch"] = values_by_id[item["id"]]
+        config_path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+
+
+def test_rays_per_patch_is_a_shared_setting_written_once_at_the_top_of_the_chain(project_with_inputs):
+
+    store, name = project_with_inputs
+    store.add_criterion(name, "daylight")
+    store.write_shared_settings(name, {**split_settings(store.read_settings(name, "1"))[0], "rays_per_patch": 9})
+    document = yaml.safe_load((store.open(name) / "config.yaml").read_text(encoding="utf-8"))
+    assert document["rays_per_patch"] == 9
+    assert all("rays_per_patch" not in item for item in document["criteria"])
+    assert store.read_settings(name, "2")["rays_per_patch"] == 9
+    load_chain(store.open(name) / "config.yaml")           # the engine takes it
+
+
+def test_an_earlier_projects_rays_per_patch_comes_from_its_first_criterion_that_is_on_and_survives_a_criterion_save(project_with_inputs):
+
+    store, name = project_with_inputs
+    second = store.add_criterion(name, "daylight")
+    _store_rays_in_criteria_as_before(store, name, {"1": 1, second.id: 9})
+    assert store.read_settings(name, second.id)["rays_per_patch"] == 1            # the first criterion's, for every criterion
+    store.update_criterion(name, "1", values={**store.read_settings(name, "1"), "carve_fraction": 0.5})
+    document = yaml.safe_load((store.open(name) / "config.yaml").read_text(encoding="utf-8"))
+    assert document["rays_per_patch"] == 1
+    assert all("rays_per_patch" not in item for item in document["criteria"])
+    assert "rays_per_patch" not in store.read_project_json(name).criteria[0].settings     # the copy is dropped
+    load_chain(store.open(name) / "config.yaml")
+
+
+def test_a_criterion_whose_mode_does_not_trace_the_sky_is_given_no_rays_per_patch(project_with_inputs):
+    store, name = project_with_inputs
+    entry = store.add_criterion(name, "time-based")
+    store.write_shared_settings(name, {**split_settings(store.read_settings(name, "1"))[0], "rays_per_patch": 9})
+    assert "rays_per_patch" not in store.read_stored_config(name, entry.id)
+    assert "rays_per_patch" not in store.load_project_config(name, entry.id).model_fields_set
+    assert store.read_stored_config(name, "1")["rays_per_patch"] == 9          # daylight reads it
+
+
+def test_rays_per_patch_is_kept_and_checked_when_the_first_criterion_does_not_trace_the_sky(project_with_inputs):
+    store, name = project_with_inputs
+    store.update_criterion(name, "1", values={"mode": "time-based"})
+    store.add_criterion(name, "daylight")
+    shared = split_settings(store.read_settings(name, "1"))[0]
+    store.write_shared_settings(name, {**shared, "rays_per_patch": 16})
+    assert yaml.safe_load((store.open(name) / "config.yaml").read_text(encoding="utf-8"))["rays_per_patch"] == 16
+    store.update_criterion(name, "2", bypassed=True)                     # only the Sun hours criterion is checked now
+    store.write_shared_settings(name, {**shared, "rays_per_patch": 9})
+    assert yaml.safe_load((store.open(name) / "config.yaml").read_text(encoding="utf-8"))["rays_per_patch"] == 9
+    with pytest.raises(ConfigError, match="rays_per_patch"):
+        store.write_shared_settings(name, {**shared, "rays_per_patch": 5})

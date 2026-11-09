@@ -10,7 +10,7 @@ import {
 } from "./chain_service_for_test";
 import {
   buttonIn, container, endWorkspaceTest, openPanelSection, openPanelSections, openStep, pinnedBar, reasonOf, settle, showCriterionCards, startWorkspaceTest, stepRow, thresholdField,
-  togglePanelSection, type, unmountWorkspace, waitForTheSave,
+  togglePanelSection, type, typeAndLeave, unmountWorkspace, waitForTheSave,
 } from "./project_workspace_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
@@ -231,9 +231,7 @@ test("while a card's settings are on their way its panel waits, and a reply for 
   expect(selectedCardName()).toBe("Daylight on roofs");
   openPanelSection("Test surfaces");
   expect(protectedFiles()).toEqual(["roofs.obj"]);
-  openPanelSection("Settings");
-  act(() => panel().querySelector<HTMLElement>(".settings-step .setting-fold")!.click());
-  type(panel().querySelector<HTMLSelectElement>('[data-setting="rays_per_patch"] select')!, "9");
+  typeAndLeave(thresholdField(), "2");          // Daylight has no settings of its own: its carving rule is changed
   await waitForTheSave();
   await settle();
   expect(service.patches.map((patch) => patch.id)).toEqual(["3"]);

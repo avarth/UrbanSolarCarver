@@ -23,6 +23,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - Simulate: a study can account for the **Base volume** while the project has a base height (`CheckSettings.geometry`
   `base_volume`, the request's `base_volume_path`).
 - 3D view: panning moves the picture and no longer the orbit point, which stays at the compass ring's centre.
+- **Rays per sky patch is a project setting**, in Settings under More detail settings, shared by every criterion and the
+  studies (engine: `chain_config.SHARED_MODE_SETTINGS`; a chain file sets it at the top level). A project that kept it per
+  criterion takes the value of its first criterion that is on.
 - Simulate: a study on the base volume of a project whose base height was set back to 0 says it waits ("Set a base height in
   Settings") at once, also when the change was made in Settings while Simulate was open, and its Account for choice says so.
 - **Inputs is now the Site step**, and holds the site's geometry only: the weather file moved to Settings, in a **Location**

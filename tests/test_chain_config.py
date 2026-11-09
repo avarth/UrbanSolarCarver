@@ -63,6 +63,22 @@ def test_a_shared_setting_inside_a_criterion_is_refused(tmp_path):
     assert "criterion 2" in str(caught.value)
 
 
+def test_rays_per_patch_is_shared_by_the_criteria_that_trace_the_sky(tmp_path):
+    path = write_yaml(tmp_path, chain_data(DAYLIGHT, TILTED, rays_per_patch=9))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UrbanSolarCarverWarning)       # the plane criterion is not told it ignores a shared setting
+        chain = load_chain(str(path))
+    assert chain.criteria[0].config.rays_per_patch == 9
+    assert "rays_per_patch" not in chain.criteria[1].config.model_fields_set
+    assert "rays_per_patch" not in CRITERION_KEYS
+
+
+def test_rays_per_patch_inside_a_criterion_is_refused(tmp_path):
+    path = write_yaml(tmp_path, chain_data({**DAYLIGHT, "rays_per_patch": 9}))
+    with pytest.raises(ConfigError, match="rays_per_patch.*shared"):
+        load_chain(str(path))
+
+
 def test_a_criterion_setting_at_the_top_level_is_refused(tmp_path):
     path = write_yaml(tmp_path, chain_data(DAYLIGHT, carve_fraction=0.5))
     with pytest.raises(ConfigError, match="carve_fraction.*criteria"):

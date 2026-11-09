@@ -314,7 +314,7 @@ def change_shared_setting(store, name, **changes):
 
 def test_changing_a_criterions_settings_dates_it_and_the_ones_after(chain_of_three):
     store, name = chain_of_three
-    store.update_criterion(name, "2", values={"rays_per_patch": 9})     # a setting of its analysis
+    store.update_criterion(name, "2", values={"edge_taper": 1.0})     # a setting of its analysis
     assert criterion_status(store, name) == {"1": CURRENT, "2": ANALYSIS_OUT_OF_DATE, "3": THRESHOLDING_OUT_OF_DATE}
     assert stage_status(store, name) == {stage: "out_of_date" for stage in PIPELINE_STAGES}
 
@@ -408,7 +408,7 @@ def test_with_no_criterion_on_there_is_no_criterion_status_and_the_analysis_is_m
 
 def test_choose_stages_traces_only_the_changed_criteria(chain_of_three):
     store, name = chain_of_three
-    store.update_criterion(name, "2", values={"rays_per_patch": 9})
+    store.update_criterion(name, "2", values={"edge_taper": 1.0})
     choice = choose_stages(store, name, ["exporting", "massing"])
     assert (choice.stages, choice.start_from, choice.trace_criteria) == (list(PIPELINE_STAGES), "preprocessing", ["2"])
     assert choice.criterion_stages == {"1": [], "2": ["preprocessing", "thresholding"], "3": ["thresholding"]}
@@ -456,7 +456,7 @@ def test_choose_stages_rethresholds_from_the_changed_criterion(chain_of_three):
 
 def test_a_run_of_the_chosen_stages_brings_every_criterion_back(chain_of_three):
     store, name = chain_of_three
-    store.update_criterion(name, "2", values={"rays_per_patch": 9})
+    store.update_criterion(name, "2", values={"edge_taper": 1.0})
     engine = FakeEngine()
     run_and_wait(make_worker(store, handle_request=engine), name, ["exporting", "massing"])
     assert (engine.requests[0].start_from, engine.requests[0].trace_criteria) == ("preprocessing", ["2"])

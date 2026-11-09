@@ -57,15 +57,17 @@ NO_STUDY = "Add a study to run."
 
 
 def _rays_criterion(store: ProjectStore, name: str) -> str | None:
-    """The criterion whose rays_per_patch the studies trace with: the first that is on, the first when none is, None without one."""
+    """The criterion whose settings a study reads the shared ones with: the first that is on, the first when none is, None without one.
+    The rays per sky patch are shared (chain_config.SHARED_MODE_SETTINGS); a project that stored them in a criterion gives that of this
+    one (criteria.with_lifted_settings)."""
     criteria = store.criteria(name)
     chosen = (active_criteria(criteria) or criteria or [None])[0]
     return chosen.id if chosen is not None else None
 
 
 def study_settings(store: ProjectStore, name: str, study: StudyEntry) -> CheckSettings:
-    """The check settings of a study: north and ray length from the shared settings, the test point spacing of the carving,
-    rays_per_patch of the first criterion that is on (the first criterion when none is, 4 without one), the study's metric and
+    """The check settings of a study: north, ray length and the rays per sky patch from the shared settings (4 without one), the
+    test point spacing of the carving, the study's metric and
     settings (the period, its time basis, the mode settings), and the weather file when the metric reads one and the project has
     it. The lowest sun altitude is CheckSettings' default.
 
@@ -75,7 +77,7 @@ def study_settings(store: ProjectStore, name: str, study: StudyEntry) -> CheckSe
     project_settings = store.read_settings(name, criterion_id)
     voxel_size = float(project_settings.get("voxel_size") or UserConfig.model_fields["voxel_size"].default)
     values = {key: project_settings[key] for key in SHARED_SETTING_KEYS if project_settings.get(key) is not None}
-    values["rays_per_patch"] = (project_settings.get("rays_per_patch") if criterion_id is not None else None) or DEFAULT_RAYS_PER_PATCH
+    values["rays_per_patch"] = project_settings.get("rays_per_patch") or DEFAULT_RAYS_PER_PATCH
     values["sample_spacing"] = resolve_grid_step(project_settings.get("grid_step"), voxel_size)     # unless the study has its own
     spec = CHECK_METRICS.get(study.metric)
     weather_path = store.weather_file_path(name)

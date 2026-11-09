@@ -101,8 +101,8 @@
     },
     "rays_per_patch": {
       "label": "Rays per sky patch", "unit": "choice",
-      "help": "Rays traced from each test point toward each of the 145 sky patches. With 1, one ray goes to the centre of the patch; the centres are 12° apart, so far from the test surfaces whole layers of voxels fall between the rays and the scores show bands. 4 spreads the rays over each patch and closes the gaps; 9 and 16 are finer and slower.",
-      "step": "settings", "group": "Detail", "essential": false, "modes": ["irradiance", "benefit", "daylight", "radiative_cooling"]
+      "help": "Rays traced from each test point toward each of the 145 sky patches. With 1, one ray goes to the centre of the patch; the centres are 12° apart, so far from the test surfaces whole layers of voxels fall between the rays and the scores show bands. 4 spreads the rays over each patch and closes the gaps; 9 and 16 are finer and slower. The same for every criterion; Sun hours and Angle rule do not use it.",
+      "step": "settings", "group": "Detail", "essential": false
     },
     "ray_batch_size": {
       "label": "Rays per batch", "unit": "rays",

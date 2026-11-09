@@ -49,10 +49,12 @@ test("the criterion's settings leave out the shared ones, which the project sett
   for (const shared of ["voxel_size", "north_deg", "ray_batch_size", "context_blocks_rays"]) expect(find(`[data-setting="${shared}"]`), shared).toBeNull();
 });
 
-test("a group with only folded settings in the panel is a fold that says it holds settings, not a bare heading", () => {
+test("a mode with no settings of its own shows its mode line and no group: the rays per sky patch are the project's", () => {
   rendered = renderForTest(<CriterionPanel {...panelProps({ form: formFor("daylight") })} />);
   expect([...rendered.container.querySelectorAll(".setting-group-title")].map((title) => title.textContent)).toEqual([]);
-  expect([...rendered.container.querySelectorAll(".settings-step .setting-fold")].map((fold) => fold.textContent)).toEqual(["Detail settings"]);
+  expect([...rendered.container.querySelectorAll(".settings-step .setting-fold")]).toEqual([]);
+  expect(find('[data-setting="rays_per_patch"]')).toBeNull();
+  expect(rendered.container.querySelector(".mode-step-note")).not.toBeNull();
 });
 
 type PanelWithoutSections = Omit<CriterionPanelProps, "openSections" | "onToggleSection" | "onOpenSections">;

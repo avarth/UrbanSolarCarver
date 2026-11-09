@@ -20,6 +20,7 @@ from local_web_test_support import (
 from urbansolarcarver import solar_check
 from urbansolarcarver.engine_requests import handle_engine_request
 from urbansolarcarver.local_web_service import simulation
+from urbansolarcarver.local_web_service.criteria import split_settings
 from urbansolarcarver.local_web_service.projects import ProjectStore
 from urbansolarcarver.local_web_service.run_worker import RunConflict
 from urbansolarcarver.local_web_service.stage_records import stage_status_reply
@@ -318,25 +319,19 @@ def test_a_moved_project_keeps_its_weather_study_current(service):
     assert state_of(store, "moved", study) == ("current", None)
 
 
-def test_the_rays_per_patch_are_those_of_the_first_criterion_that_is_on(service):
+def test_the_rays_per_patch_are_the_projects_shared_setting(service):
     _client, worker, _engine = service
     store = worker.store
     study = store.add_study("p", metric="sky_view")
-    first = store.criteria("p")[0]
-    store.update_criterion("p", first.id, values={**first.settings, "rays_per_patch": 1})
-    second = store.add_criterion("p", "daylight")
-    store.update_criterion("p", second.id, values={**second.settings, "rays_per_patch": 9})
-    assert simulation.study_settings(store, "p", study).rays_per_patch == 1        # the first is on
-    store.update_criterion("p", first.id, bypassed=True)
+    assert simulation.study_settings(store, "p", study).rays_per_patch == 4        # the default
+    store.write_shared_settings("p", {**split_settings(store.read_settings("p", "1"))[0], "rays_per_patch": 9})
     settings = simulation.study_settings(store, "p", study)
     assert settings.rays_per_patch == 9 and settings.min_altitude == 5.0
-    store.update_criterion("p", second.id, bypassed=True)
-    assert simulation.study_settings(store, "p", study).rays_per_patch == 1        # none is on: the first
     with store.project_lock("p"):
         project_json = store.read_project_json("p")
         project_json.criteria = []
         store.write_project_json("p", project_json)
-    assert simulation.study_settings(store, "p", study).rays_per_patch == 4        # no criterion
+    assert simulation.study_settings(store, "p", study).rays_per_patch == 9        # no criterion: still the project's
 
 
 def test_a_study_takes_its_time_basis_from_its_own_settings(service):

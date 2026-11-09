@@ -20,12 +20,16 @@ from .mode_registry import MODES, canonical_mode_name
 from .pydantic_schemas import _MODE_SPECIFIC_FIELDS, UserConfig, expand_analysis_period
 from .stage_settings import ThresholdingSettings
 
-# The settings one criterion decides. Everything else in the config is shared by the whole chain and is set at the
-# top level. The weather file is mode specific but shared: one file serves every criterion that reads it.
+# Mode-specific settings that the whole chain shares: one weather file serves every criterion that reads it, and the rays per sky
+# patch are a detail of the ray tracing, the same for every criterion that traces the sky (user, 2026-11-09). A criterion whose mode
+# does not read one is given none, so it is not warned about a setting it ignores.
+SHARED_MODE_SETTINGS = frozenset({"epw_path", "rays_per_patch"})
+
+# The settings one criterion decides. Everything else in the config is shared by the whole chain and is set at the top level.
 CRITERION_KEYS = frozenset(
     {"name", "id", "mode", "test_surface_path"}
     | (set(ThresholdingSettings.model_fields) - {"kept_volume_path"})
-    | (_MODE_SPECIFIC_FIELDS - {"epw_path"})
+    | (_MODE_SPECIFIC_FIELDS - SHARED_MODE_SETTINGS)
     | {"edge_taper"}
 )
 
@@ -164,8 +168,9 @@ def load_chain(
                         shared_inside[0])
         settings = {**top, **{key: value for key, value in item.items() if key not in ("name", "id")}}
         spec = MODES.get(canonical_mode_name(settings.get("mode") or "time-based"))
-        if spec is not None and not spec.needs_epw:
-            settings.pop("epw_path", None)
+        if spec is not None:
+            for key in SHARED_MODE_SETTINGS - spec.extra_params:
+                settings.pop(key, None)
         try:
             config = build_config(settings)
         except ConfigError as exc:

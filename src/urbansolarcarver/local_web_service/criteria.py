@@ -92,12 +92,46 @@ def uses_typical_building(entry: CriterionEntry) -> bool:
     return entry.energy_weighted and canonical_mode_name(entry.settings.get("mode")) == "benefit"
 
 
+# Settings a criterion stored before they became shared by the chain (rays_per_patch, 2026-11-09). A project that has one in a
+# criterion gives the chain the value of its first criterion that is on (the first when none is), the one Simulate read; the criteria's
+# copies are left out of what is read and written, and the next save of a criterion drops them.
+LIFTED_TO_SHARED = ("rays_per_patch",)
+
+
+def criterion_own(settings: Mapping[str, Any]) -> dict:
+    """A criterion's stored settings without those now shared by the chain (LIFTED_TO_SHARED)."""
+    return {key: value for key, value in settings.items() if key not in LIFTED_TO_SHARED}
+
+
+def with_lifted_settings(shared: Mapping[str, Any], criteria: list[CriterionEntry]) -> dict:
+    """*shared* with each LIFTED_TO_SHARED setting it lacks taken from the first criterion that is on (the first when none is), when
+    that criterion stored one."""
+    lifted = dict(shared)
+    source = (active_criteria(criteria) or criteria)[:1]
+    for key in LIFTED_TO_SHARED:
+        if key not in lifted and source and key in source[0].settings:
+            lifted[key] = source[0].settings[key]
+    return lifted
+
+
+def lifted_from_config(stored_config: Mapping[str, Any]) -> dict:
+    """The top of a config.yaml with each LIFTED_TO_SHARED setting it lacks taken from its first criterion entry (the first that is on,
+    as an earlier version wrote them), so the value a project ran with is kept whatever happens to the criteria before the next write."""
+    top = {key: value for key, value in stored_config.items() if key != "criteria"}
+    entries = stored_config.get("criteria")
+    first = entries[0] if isinstance(entries, list) and entries and isinstance(entries[0], Mapping) else {}
+    for key in LIFTED_TO_SHARED:
+        if key not in top and key in first:
+            top[key] = first[key]
+    return top
+
+
 def engine_settings(entry: CriterionEntry) -> dict:
     """A criterion's settings as config.yaml gives them to the engine: for one that uses the typical building, the weights file as
     simulated_weights_path and no balance temperature or offset (its stored settings keep them, so switching back restores them)."""
     if not uses_typical_building(entry):
-        return dict(entry.settings)
-    settings = {key: value for key, value in entry.settings.items() if key not in BALANCE_POINT_KEYS}
+        return criterion_own(entry.settings)
+    settings = {key: value for key, value in criterion_own(entry.settings).items() if key not in BALANCE_POINT_KEYS}
     settings["simulated_weights_path"] = WEIGHTS_PATH
     return settings
 
@@ -171,12 +205,18 @@ def flat_settings(shared_and_paths: dict, entry: CriterionEntry | None, for_engi
     """
     flat = dict(shared_and_paths)
     if entry is not None:
-        flat.update(engine_settings(entry) if for_engine else entry.settings)
+        flat.update(engine_settings(entry) if for_engine else criterion_own(entry.settings))
         flat["test_surface_path"] = joined_test_surfaces_path(entry.id)
         if reads_weather_file(entry.settings.get("mode")):
             flat.setdefault("epw_path", SERVICE_PATHS["epw_path"])
         else:
             flat.pop("epw_path", None)
+        # A shared mode setting the criterion's mode does not read is left out, as the engine's chain loader does (no warning about it)
+        spec = MODES.get(canonical_mode_name(entry.settings.get("mode")))
+        if spec is not None:
+            for key in LIFTED_TO_SHARED:
+                if key not in spec.extra_params:
+                    flat.pop(key, None)
     return flat
 
 
@@ -205,6 +245,7 @@ def chain_config_document(shared: dict, criteria: list[CriterionEntry], project_
     surfaces.
     """
     active = active_criteria(criteria)
+    shared = with_lifted_settings(shared, criteria)
     paths = {key: path for key, path in SERVICE_PATHS.items()
              if key != "epw_path" or any(reads_weather_file(criterion.settings.get("mode")) for criterion in active)}
     paths.update({key: path for key, path in OPTIONAL_SERVICE_PATHS.values() if (project_folder / path).is_file()})

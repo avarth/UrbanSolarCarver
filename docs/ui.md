@@ -51,7 +51,7 @@ The window holds these settings, with plain labels, units and a help text for ea
 - **Location**: the **weather file** (`.epw`), a box like those of the Site step, with **Add files** (then **Replace**) at the right of its title, the location the file gives (city and country) and × to remove it, and a line naming the modes that need it; and **North direction** (°).
 - **Account for context blocking**: with existing surroundings or terrain in the Site step, on by default; off, they still take their voxels but block no sun or sky, to compare the two carvings. Without either it is greyed out and says what to add. The Angle rule traces no rays to the sky and does not read it.
 - **Voxel size** (m), with the size of the voxel grid and the sample spacing on the test surfaces under it. A grid larger than the analysis can handle is refused here, with the smallest voxel size that fits.
-- Under **More detail settings**, **Rays per batch**, which changes the speed and the memory a run uses, not its results.
+- Under **More detail settings**, **Rays per sky patch** (1, 4, 9 or 16; the same for every criterion, and for Simulate's studies; Sun hours and Angle rule do not use it) and **Rays per batch**, which changes the speed and the memory a run uses, not its results. A project that kept rays per sky patch in its criteria, from before 2026-11-09, takes the value of its first criterion that is on.
 - **Heights**: the **Base height**, below which nothing is carved, and, for a project made from sites, the **Max height**. See [Base height and max height](#base-height-and-max-height).
 
 The sample spacing on the test surfaces, the grid margin and the ray length have no field: the engine's values apply (see [Entering values](#entering-values)). Each change is saved as it is made, as in the steps; there is no Apply. A change puts every criterion out of date. While a run is in progress the fields wait and say why. The settings of the envelope, the building massing and the export are in their steps, next to their builds. **Done**, × and Escape close it, and the focus goes back to the button.
@@ -214,7 +214,7 @@ The bar pinned under the steps while the Criteria step is open, in the list and 
 
 ### What the criteria share
 
-The maximum volume, the surroundings and the terrain are set once in the Site step, and the [project settings](#project-settings) (the weather file, north, the surroundings switch, voxel size and, folded, the rays per batch) apply to every criterion, as do the settings of Envelope and massing and Export. A change to any of them puts every criterion out of date. A setting belongs to a criterion when the service lists it in `GET /api/criterion-keys` (the mode's settings and the carving rule); the app takes the split from there. The weather file reaches only the criteria whose mode reads one.
+The maximum volume, the surroundings and the terrain are set once in the Site step, and the [project settings](#project-settings) (the weather file, north, the surroundings switch, voxel size and, folded, the rays per sky patch and the rays per batch) apply to every criterion, as do the settings of Envelope and massing and Export. A change to any of them puts every criterion out of date. A setting belongs to a criterion when the service lists it in `GET /api/criterion-keys` (the mode's settings and the carving rule); the app takes the split from there. The weather file reaches only the criteria whose mode reads one.
 
 ### Runs
 

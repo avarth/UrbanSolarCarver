@@ -21,8 +21,9 @@ test("the Settings step groups, their folds and their fold labels", () => {
   expect(names(when.folded)).toEqual(["time_basis", "sun_steps_per_hour", "min_altitude"]);
   expect(when.foldLabel).toBe("More sun settings");
   // R2 4.5: the computer's settings come last in the detail fold. The sample spacing is the engine's (half the voxel size),
-  // the grid margin is hidden for now, and the edge strip is shown in Night cooling only.
-  expect(names(detail.folded)).toEqual(["ray_batch_size"]);
+  // the grid margin is hidden for now, and the edge strip is shown in Night cooling only. The rays per sky patch are shared by the
+  // criteria (2026-11-09), so they are in every mode's Detail fold, which the project settings show.
+  expect(names(detail.folded)).toEqual(["rays_per_patch", "ray_batch_size"]);
   expect(detail.foldLabel).toBe("More detail settings");
   const benefitModeGroup = settingsForStep("settings", "benefit")[2];
   expect(benefitModeGroup.title).toBe("Mode specific");

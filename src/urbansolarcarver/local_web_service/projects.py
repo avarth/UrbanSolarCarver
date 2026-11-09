@@ -27,6 +27,7 @@ from ..errors import ConfigError, ConfigFieldError, InputError
 from ..grid_planning import MAX_GRID_VOXELS, VoxelGridPlan, check_voxel_grid_budget, plan_voxel_grid
 from ..io import load_mesh, save_mesh
 from ..load_config import build_config, build_config_from_mode_starting_values
+from ..mode_registry import MODES, canonical_mode_name
 from ..pydantic_schemas import UserConfig
 from . import site_input, stored_files, test_surfaces, uploads
 from .api_models import (
@@ -37,7 +38,7 @@ from .criteria import (
     kept_volume_service_path,
     CRITERIA_FOLDER, OPTIONAL_SERVICE_PATHS, SERVICE_PATHS, active_criteria, append_criterion, chain_config_document, chain_config_text, checked_colour,
     checked_criterion_name, criterion_run_folder, find_criterion, flat_settings, joined_test_surfaces_path, reads_weather_file,
-    set_criterion_settings, split_settings,
+    LIFTED_TO_SHARED, lifted_from_config, set_criterion_settings, split_settings, with_lifted_settings,
 )
 from .example_catalog import read_examples
 from .project_names import PROJECT_JSON_FILE_NAME, ProjectError, check_not_a_windows_device_name, validate_project_name
@@ -117,6 +118,16 @@ def is_from_example(project_json: ProjectJson, example: str, example_title: str)
 def example_of_project(project_json: ProjectJson) -> ExampleProject | None:
     """The packaged example a project was made from (see is_from_example), None for any other project."""
     return next((example for example in read_examples() if is_from_example(project_json, example.name, example.title)), None)
+
+
+def _validated_field(key: str, value):
+    """*value* checked as the engine's config field *key* takes it; ConfigError naming the field when it does not."""
+    from pydantic import TypeAdapter
+    try:
+        return TypeAdapter(UserConfig.model_fields[key].annotation).validate_python(value)
+    except ValidationError as error:
+        message = error.errors()[0].get("msg", str(error))
+        raise ConfigError(f"{key}: {message}", [ConfigFieldError(key, message)]) from error
 
 
 def sanitize_file_name(name: str) -> str:
@@ -457,7 +468,15 @@ class ProjectStore:
                     configs.append(self._config_from_browser_values(project_folder, {**shared, **criterion.settings}, criterion.id)[0])
             grid_plan = self._plan_and_check_grid(name, configs[0])
             # Stored as the engine's config reads them ("2" is 2.0, "yes" is True), as write_config_from_values stores them.
+            shared_values = shared
             shared = split_settings(self._without_service_owned(configs[0].model_dump(mode="json", exclude_unset=True)))[0]
+            # A shared mode setting is kept as a criterion that reads it validated it, or checked alone when none of them reads it
+            for key in LIFTED_TO_SHARED:
+                readers = [config for config in configs if key in config.model_fields_set]
+                if readers:
+                    shared[key] = getattr(readers[0], key)
+                elif key in shared_values:
+                    shared[key] = _validated_field(key, shared_values[key])
             self._write_chain(name, project_folder, project_json, shared)
             return ConfigReply(settings=shared, grid_plan=grid_plan)
 
@@ -850,7 +869,7 @@ class ProjectStore:
             project_json = self.read_project_json(name)
             stored_config = self._parse_config_file(self.open(name) / CONFIG_FILE_NAME, name)
             if "criteria" in stored_config:
-                shared_and_paths = {key: value for key, value in stored_config.items() if key != "criteria"}
+                shared_and_paths = with_lifted_settings(lifted_from_config(stored_config), project_json.criteria)
                 entry = None if not project_json.criteria else find_criterion(project_json, criterion_id)
                 stored_config = flat_settings(shared_and_paths, entry, for_engine)
             return {key: value for key, value in stored_config.items() if key not in SETTINGS_LEFT_TO_THE_ENGINE}
@@ -888,6 +907,11 @@ class ProjectStore:
         """
         browser_values = {key: value for key, value in values.items()
                           if key not in SERVICE_OWNED_SETTINGS and key not in SETTINGS_LEFT_TO_THE_ENGINE}
+        # A shared mode setting the criterion's mode does not read is left out, as the chain loader does (no warning about it)
+        spec = MODES.get(canonical_mode_name(values.get("mode"))) if values.get("mode") else None
+        if spec is not None:
+            browser_values = {key: value for key, value in browser_values.items()
+                              if key not in LIFTED_TO_SHARED or key in spec.extra_params}
         service_paths = {**self._service_paths_for_mode(values.get("mode")), **self._optional_service_paths(project_folder),
                          "test_surface_path": joined_test_surfaces_path(criterion_id)}
         config = build_config_from_mode_starting_values(
@@ -916,7 +940,7 @@ class ProjectStore:
     def _shared_settings_of(cls, stored_config: dict) -> dict:
         """The shared settings in the content of a config.yaml, without the service's paths and device."""
         return split_settings(cls._without_service_owned(
-            {key: value for key, value in stored_config.items() if key != "criteria" and key not in SETTINGS_LEFT_TO_THE_ENGINE}))[0]
+            {key: value for key, value in lifted_from_config(stored_config).items() if key not in SETTINGS_LEFT_TO_THE_ENGINE}))[0]
 
     def _chain_config_text(self, project_folder: Path, project_json: ProjectJson, shared: dict) -> str:
         document = chain_config_document({**shared, "device": self._device}, project_json.criteria, project_folder)

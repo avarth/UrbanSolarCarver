@@ -190,7 +190,7 @@ def test_a_second_run_traces_only_the_changed_criterion(chain_of_two):
     run_folder = store.open(name) / "run"
     first_preprocessing = run_id_in(run_folder / "criteria" / "1" / "preprocessing")
     first_thresholding = run_id_in(run_folder / "criteria" / "1" / "thresholding")
-    store.update_criterion(name, "2", values={"rays_per_patch": 9})
+    store.update_criterion(name, "2", values={"edge_taper": 1.0})
     reply = run_and_wait(worker, name, ["exporting", "massing"])
     assert engine.requests[1].trace_criteria == ["2"] and engine.requests[1].start_from == "preprocessing"
     assert reply.criterion_stages == {"1": [], "2": ["preprocessing", "thresholding"]}
@@ -439,8 +439,8 @@ def test_a_run_that_stops_keeps_the_records_of_the_criteria_it_finished(chain_of
 def test_a_stopped_run_does_not_record_the_output_of_an_earlier_run(chain_of_two):
     store, name = chain_of_two
     run_and_wait(make_worker(store), name, ["exporting", "massing"])
-    store.update_criterion(name, "1", values={"rays_per_patch": 9})
-    store.update_criterion(name, "2", values={"rays_per_patch": 9})
+    store.update_criterion(name, "1", values={"edge_taper": 1.0})
+    store.update_criterion(name, "2", values={"edge_taper": 1.0})
     run_and_wait(make_worker(store, handle_request=StopsAfter("criterion 1")), name, ["exporting", "massing"])
     assert criterion_status(store, name) == {"1": CURRENT, "2": MISSING}
 

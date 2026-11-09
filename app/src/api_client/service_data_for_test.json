@@ -649,7 +649,6 @@
     "min_sky_elevation_deg",
     "mode",
     "name",
-    "rays_per_patch",
     "score_smoothing",
     "simulated_weights_path",
     "start_day",
