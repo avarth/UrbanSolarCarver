@@ -12,6 +12,16 @@ export interface Site {
   height: number;
   /** The site's own base height (Per site); null or absent: no lower limit. */
   base_height?: number | null;
+  /** An imported site's outline as imported, and its file (design/site-import.md); absent for a drawn site. */
+  original?: { file: string; points: SitePoint[] } | null;
+}
+
+/** Whether the site's outline differs from the one it was imported with (Restore original is then offered). */
+export function differsFromOriginal(site: Site): boolean {
+  const original = site.original;
+  if (!original) return false;
+  return original.points.length !== site.points.length
+    || original.points.some((point, index) => point.some((value, axis) => Math.abs(value - site.points[index][axis]) > 1e-9));
 }
 
 /** One of the two heights (design/base-height.md): the same for all sites (value, m), or each site's own. */

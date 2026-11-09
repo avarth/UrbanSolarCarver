@@ -42,7 +42,8 @@ test("a new project offers the two inputs; Sites makes the maximum volume from t
   expect(service.siteSource).toBe("sites");
   const sitesCard = panel().querySelector<HTMLElement>(".input-box")!;
   expect(sitesCard.querySelector(".input-box-title-row h3")!.textContent).toBe("Sites");
-  expect(sitesCard.querySelector(".input-box-title-row button")!.textContent).toBe("Draw site");
+  expect(sitesCard.querySelector(".input-box-title-row button")!.textContent).toBe("Draw");
+  expect([...sitesCard.querySelectorAll(".input-box-title-row button")].map((button) => button.textContent)).toEqual(["Draw", "Import"]);
   expect(sitesCard.querySelector(".input-box-required")).toBeNull();
   expect(panel().textContent).toContain("Draw the site boundary in the 3D view");
   expect(panel().textContent).toContain("Use a maximum volume instead");
@@ -61,7 +62,7 @@ test("a site is drawn with clicks, closed on its first point, saved with the def
   const service = new FakeService(NOTHING_RUN, null);
   service.siteSource = "sites";
   await openWorkspace(service, newProject());
-  act(() => { buttonIn(panel(), "Draw site").click(); });
+  act(() => { buttonIn(panel(), "Draw").click(); });
   await settle();
   expect(editor()!.textContent).toContain("Drawing Site 1");
   expect(FakeViewerScene.latest!.viewsFromTheTop).toBeGreaterThan(0);

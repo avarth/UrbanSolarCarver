@@ -2,14 +2,14 @@
 // tiles before either has content, the Site card (a row per site with its name, height, area and elevations, Draw site), and the
 // link that switches the input, which asks first when the input has content. The sites themselves are drawn and edited in the view
 // (SiteEditor.tsx).
-import { useId, useState, type CSSProperties, type FormEvent } from "react";
+import { useId, useRef, useState, type CSSProperties, type DragEvent, type FormEvent } from "react";
 import { ActionMenu } from "../common/ActionMenu";
 import { DialogButtons, DialogFrame } from "../common/dialogs";
 import { messages } from "../messages";
 import { Subheading } from "../settings_form/Subheading";
 import { WarningIcon } from "../settings_form/SettingField";
 import { formattedNumber } from "../format_numbers";
-import { outlinePoints, planArea, siteProblems, siteRise, type Heights, type Site } from "./site_geometry";
+import { differsFromOriginal, outlinePoints, planArea, siteProblems, siteRise, type Heights, type Site } from "./site_geometry";
 import type { SiteTool } from "./SiteEditor";
 import "./sites.css";
 
@@ -86,23 +86,49 @@ interface SiteBoxProps {
   onChangeSite: (index: number, site: Site) => Promise<string | null>;
   onDeleteSite: (index: number) => void;
   onSwitch: () => void;
+  /** A DXF or OBJ file chosen with Import or dropped on the box (design/site-import.md). */
+  onImport: (file: File) => void;
+  /** Place on terrain and Restore original, from a site's menu. */
+  onPlaceOnTerrain: (index: number) => void;
+  onRestoreOriginal: (index: number) => void;
+  /** Whether the project has terrain: Place on terrain needs it. */
+  hasTerrain: boolean;
   /** The service's reason the last change was refused. */
   refusal: string | null;
+  /** What the last import or Place on terrain said ("2 vertices have no terrain under them ..."), or why an import failed. */
+  note?: { text: string; warning: boolean } | null;
   disabledReason: string | null;
 }
 
 /** The Sites card: Draw site at the right of its title, a line for the heights set for all sites, a table of the sites (a line each:
  * name, the heights set per site, the menu), and at its foot the link back to a maximum volume. */
-export function SiteBox({ sites, heights, onOpenSettings, tool, onDraw, onEdit, onChangeSite, onDeleteSite, onSwitch, refusal, disabledReason }: SiteBoxProps) {
+export function SiteBox({ sites, heights, onOpenSettings, tool, onDraw, onEdit, onChangeSite, onDeleteSite, onSwitch, onImport, onPlaceOnTerrain,
+                          onRestoreOriginal, hasTerrain, refusal, note = null, disabledReason }: SiteBoxProps) {
   const titleId = useId();
+  const picker = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const outlineFileOf = (files: FileList | null) => Array.from(files ?? []).find((file) => /\.(dxf|obj)$/i.test(file.name));
+  const drop = (event: DragEvent) => {
+    event.preventDefault();
+    setDragging(false);
+    const file = outlineFileOf(event.dataTransfer.files);
+    if (file && disabledReason === null) onImport(file);
+  };
   const [renaming, setRenaming] = useState<number | null>(null);
   const perSite = { base: !heights.base.for_all_sites, max: !heights.max.for_all_sites };
   const columns = Number(perSite.base) + Number(perSite.max);
   return (
-    <section className="input-box input-box-filled" aria-labelledby={titleId}>
+    <section className={`input-box input-box-filled${dragging && disabledReason === null ? " input-box-drop-target" : ""}`} aria-labelledby={titleId}
+             onDragOver={(event) => { event.preventDefault(); if (disabledReason === null) setDragging(true); }}
+             onDragLeave={() => setDragging(false)} onDrop={drop}>
+      <input ref={picker} type="file" hidden accept=".dxf,.obj"
+             onChange={(event) => { const file = outlineFileOf(event.target.files); event.target.value = ""; if (file) onImport(file); }} />
       <div className="input-box-title-row">
         <Subheading id={titleId} className="input-box-title">{messages.siteTitle}</Subheading>
-        <button type="button" className="input-add" disabled={disabledReason !== null || tool?.kind === "draw"} onClick={onDraw}>{messages.drawSite}</button>
+        <span className="site-box-actions">
+          <button type="button" className="input-add" disabled={disabledReason !== null || tool?.kind === "draw"} onClick={onDraw}>{messages.drawSite}</button>
+          <button type="button" className="input-add" disabled={disabledReason !== null} onClick={() => picker.current?.click()}>{messages.importSites}</button>
+        </span>
       </div>
       {(heights.base.for_all_sites || heights.max.for_all_sites) && (
         <p className="site-shared-heights">
@@ -113,7 +139,7 @@ export function SiteBox({ sites, heights, onOpenSettings, tool, onDraw, onEdit, 
           </button>
         </p>
       )}
-      {sites.length === 0 ? <p className="input-box-hint">{messages.siteEmptyHint}</p> : (
+      {sites.length === 0 ? <><p className="input-box-hint">{messages.siteEmptyHint}</p><p className="input-box-drop-hint">{messages.siteDropHint}</p></> : (
         <div className="site-table" style={{ "--site-table-columns": tableColumns(columns) } as CSSProperties}>
           {columns > 0 && (
             <div className="site-table-head" aria-hidden="true">
@@ -133,9 +159,12 @@ export function SiteBox({ sites, heights, onOpenSettings, tool, onDraw, onEdit, 
                        }}
                        onHeight={(height) => onChangeSite(index, { ...site, height })}
                        onBase={(base) => onChangeSite(index, { ...site, base_height: base })}
+                       hasTerrain={hasTerrain}
                        onChoose={(key) => {
                          if (key === "rename") setRenaming(index);
                          else if (key === "edit") onEdit(index);
+                         else if (key === "place_on_terrain") onPlaceOnTerrain(index);
+                         else if (key === "restore_original") onRestoreOriginal(index);
                          else if (key === "delete") onDeleteSite(index);
                        }} />
             ))}
@@ -143,6 +172,8 @@ export function SiteBox({ sites, heights, onOpenSettings, tool, onDraw, onEdit, 
         </div>
       )}
       {refusal !== null && <p className="input-box-problem" role="alert"><WarningIcon />{refusal}</p>}
+      {note !== null && (note.warning ? <p className="input-box-problem" role="alert"><WarningIcon />{note.text}</p>
+        : <p className="input-box-hint" role="status">{note.text}</p>)}
       {disabledReason !== null && <p className="input-box-reason">{disabledReason}</p>}
       <SwitchInputLink toSite={false} asks={sites.length > 0} onSwitch={onSwitch} disabledReason={disabledReason} />
     </section>
@@ -166,10 +197,11 @@ interface SiteRowProps {
   onHeight: (height: number) => Promise<string | null>;
   onBase: (base: number | null) => Promise<string | null>;
   onChoose: (key: string) => void;
+  hasTerrain: boolean;
 }
 
 /** One line per site; its area and elevations are in the name's tooltip, and under the name while the site is edited. */
-function SiteRow({ site, heights, perSite, editing, renaming, disabledReason, onRenamed, onHeight, onBase, onChoose }: SiteRowProps) {
+function SiteRow({ site, heights, perSite, editing, renaming, disabledReason, onRenamed, onHeight, onBase, onChoose, hasTerrain }: SiteRowProps) {
   const points = outlinePoints(site.points);
   const [typedProblems, setTypedProblems] = useState<string[]>([]);
   // A typed height is checked as the site would be with it; a problem keeps it unsaved and is shown in the row
@@ -214,6 +246,8 @@ function SiteRow({ site, heights, perSite, editing, renaming, disabledReason, on
                   items={[
                     { key: "rename", label: messages.renameSite, disabledReason },
                     { key: "edit", label: messages.editSite, disabledReason },
+                    { key: "place_on_terrain", label: messages.placeOnTerrain, disabledReason: hasTerrain ? disabledReason : messages.placeOnTerrainNeedsTerrain },
+                    ...(differsFromOriginal(site) ? [{ key: "restore_original", label: messages.restoreOriginal, disabledReason }] : []),
                     { key: "delete", label: messages.deleteSite, disabledReason },
                   ]} />
       {editing && <span className="site-row-details">{details}</span>}

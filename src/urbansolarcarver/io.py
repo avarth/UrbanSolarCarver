@@ -63,6 +63,18 @@ def _read_triangles(path: str, fix_normals: bool = True):
         raise InputError(f"load_mesh: file not found: {path}")
     if os.path.getsize(path) == 0:
         return None
+    if path.lower().endswith(".dxf"):
+        # trimesh reads DXF as curves only; the faces are read with ezdxf (outlines.dxf_faces, design/site-import.md)
+        from .outlines import dxf_faces
+        try:
+            mesh = dxf_faces(path)
+        except InputError as exc:
+            raise InputError(f"load_mesh: {exc}") from exc
+        if mesh is None or len(mesh.faces) == 0:
+            return None
+        if fix_normals:
+            mesh.fix_normals(multibody=mesh.is_watertight)
+        return mesh
     try:
         mesh = trimesh.load(path, force="mesh")
     except Exception as exc:

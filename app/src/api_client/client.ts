@@ -13,6 +13,7 @@ export type InputFilesReply = Schemas["InputFilesReply"];
 export type InputFileInfo = Schemas["InputFileInfo"];
 export type SiteJson = Schemas["SiteJson"];
 export type SitesReply = Schemas["SitesReply"];
+export type OutlinesReply = Schemas["OutlinesReply"];
 export type MaxVolumeSource = SitesReply["source"];
 export type Heights = Schemas["HeightsJson"];
 export type ConfigReply = Schemas["ConfigReply"];
@@ -246,6 +247,18 @@ export function baseVolumeUrl(project: string): string {
 
 /** What the maximum volume is made from, the sites, and the joined maximum volume's bounds and grid. */
 export const getSites = (token: string, project: string) => requestJson<SitesReply>(token, `${projectPath(project)}/sites`);
+
+/** The closed polylines of a DXF or OBJ file as outlines placed in the model (design/site-import.md); the file is kept, no site added. */
+export async function readOutlines(token: string, project: string, file: File): Promise<OutlinesReply> {
+  const form = new FormData();
+  form.append("file", file);
+  const reply = await send(token, `${projectPath(project)}/outlines`, "POST", form);
+  return reply.json();
+}
+
+/** The height of the top of the terrain at each plan point [x, y]; null where there is none (Place on terrain). */
+export const terrainHeights = (token: string, project: string, points: number[][]) =>
+  requestJson<Schemas["TerrainHeightsReply"]>(token, `${projectPath(project)}/terrain-heights`, "POST", { points });
 
 /** Store the whole list of sites; a site that cannot make a volume is refused (422) with every such site named. */
 export const saveSites = (token: string, project: string, sites: SiteJson[]) =>

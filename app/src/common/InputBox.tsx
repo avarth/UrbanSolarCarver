@@ -13,7 +13,7 @@ export type InputRole = "max_volume" | "test_surfaces" | "context" | "terrain" |
 /** The mesh roles a run can do without: "Optional" under their titles. */
 const OPTIONAL_MESH_ROLES: readonly InputRole[] = ["context", "terrain"];
 
-const MESH_FILE_TYPES = ".ply,.obj,.stl,.glb";
+const MESH_FILE_TYPES = ".ply,.obj,.stl,.glb,.dxf";
 const WEATHER_FILE_TYPE = ".epw";
 
 /** Why a request about an input file failed, in words for its box. */

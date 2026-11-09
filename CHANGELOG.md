@@ -28,7 +28,15 @@ versioning follows [Semantic Versioning](https://semver.org/).
   The Settings button's tooltip names the weather file's location.
 - **Set up the project.** Create project opens a three-page setup window: Location (weather file and north), the site's way in
   (Sites or Maximum volume) and Heights. Start opens the Site step, drawing the first site after Sites; Skip setup closes it.
-- Input boxes: the action (Add files, Replace, Draw site) is at the right of the title in every box, empty or not; "Optional"
+- **Importing sites.** **Import** in the Sites box reads the closed polylines of a DXF or OBJ file (2D or 3D, in blocks,
+  in the drawing's units) as sites. Elevations are taken relative to the file's lowest vertex and placed at the level drawn
+  sites start at, so survey elevations do not move the model. A window shows what was found and left out before anything is
+  added. An imported site keeps its original outline (**Restore original**). **Place on terrain** sets a site's vertices to
+  the terrain's height below them. The draw button reads **Draw**. Engine: `outlines.py` (new dependency `ezdxf`). Service:
+  `POST /projects/{name}/outlines`, `POST /projects/{name}/terrain-heights`, `SiteJson.original`.
+- **DXF mesh inputs.** Every mesh input (maximum volume, surroundings, terrain, test and study surfaces) takes DXF files:
+  `3DFACE`, polyface and polygon-mesh polylines and `MESH` entities, in the drawing's units (`io.load_mesh`).
+- Input boxes: the action (Add files, Replace, Draw) is at the right of the title in every box, empty or not; "Optional"
   is a muted line under the title in place of "(optional)" and "Required". The box of drawn sites is titled **Sites**.
 - Engine: `kept_volume_path`, a shared setting read by thresholding: the voxels inside the mesh are kept, and the threshold
   and `carve_fraction` act on the other voxels. Service: `PUT /projects/{name}/heights`.

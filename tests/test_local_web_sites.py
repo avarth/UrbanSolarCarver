@@ -61,7 +61,7 @@ def test_a_change_of_the_sites_builds_the_maximum_volume_again_and_switching_bac
     assert client.put("/api/projects/p/sites", json={"sites": [taller]}).status_code == 200
     assert joined_max_volume(projects_folder).bounds[1][2] == 130
     reply = client.put("/api/projects/p/max-volume-source", json={"source": "mesh"})
-    assert reply.json()["sites"] == [{**taller, "base_height": None}] and reply.json()["source"] == "mesh"
+    assert reply.json()["sites"] == [{**taller, "base_height": None, "original": None}] and reply.json()["source"] == "mesh"
     assert joined_max_volume(projects_folder).bounds.tolist() == mesh_bounds
 
 

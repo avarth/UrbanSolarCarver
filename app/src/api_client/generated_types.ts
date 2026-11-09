@@ -475,6 +475,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/outlines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read Outlines
+         * @description Read the closed polylines of a DXF or OBJ file as outlines placed in the model (design/site-import.md) and keep the file in
+         *     inputs/sites/; no site is added (the page adds them with PUT sites). 422 for a file with none, or that cannot be read.
+         */
+        post: operations["read_outlines"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/terrain-heights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Terrain Heights
+         * @description The height of the top of the project's terrain at each plan point (Place on terrain); null where there is none. 404 without
+         *     terrain. Reads only.
+         */
+        post: operations["terrain_heights"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}/heights": {
         parameters: {
             query?: never;
@@ -1350,6 +1392,11 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_read_outlines */
+        Body_read_outlines: {
+            /** File */
+            file: string;
+        };
         /**
          * CancelRunReply
          * @description Whether the run was stopped by this request; False when it had already ended.
@@ -1666,6 +1713,21 @@ export interface components {
             base?: components["schemas"]["HeightSetting"];
         };
         /**
+         * ImportedOutline
+         * @description A closed outline of an imported file, placed in the model (design/site-import.md, section 4): its name ("" for none), its
+         *     points [[x, y, z], ...] in the input files' coordinates, its plan area (m²) and its rise (m, its highest vertex above its lowest).
+         */
+        ImportedOutline: {
+            /** Name */
+            name: string;
+            /** Points */
+            points: number[][];
+            /** Area */
+            area: number;
+            /** Rise */
+            rise: number;
+        };
+        /**
          * InputFileChange
          * @description A stored input file changed in the project folder (a notice not dismissed yet) or missing from it.
          */
@@ -1863,6 +1925,24 @@ export interface components {
             };
         };
         /**
+         * OutlinesReply
+         * @description What an outline file holds: the file as kept (inputs/sites/), the unit it was read in, its outlines that can be sites, what was
+         *     left out (one text each: "2 open polylines", "Plot 7: the outline crosses itself"), and, when the outlines lie more than 1 km
+         *     from the other inputs in plan, how far (m); None otherwise.
+         */
+        OutlinesReply: {
+            /** File */
+            file: string;
+            /** Unit */
+            unit: string;
+            /** Outlines */
+            outlines: components["schemas"]["ImportedOutline"][];
+            /** Left Out */
+            left_out: string[];
+            /** Distance From Inputs */
+            distance_from_inputs: number | null;
+        };
+        /**
          * ProjectDetail
          * @description Everything the browser needs when it opens a project.
          */
@@ -2005,6 +2085,18 @@ export interface components {
             height: number;
             /** Base Height */
             base_height?: number | null;
+            original?: components["schemas"]["SiteOriginal"] | null;
+        };
+        /**
+         * SiteOriginal
+         * @description The outline an imported site had when it was imported (design/site-import.md), kept so the user can go back to it: the file
+         *     it came from (kept in inputs/sites/) and its points as placed then.
+         */
+        SiteOriginal: {
+            /** File */
+            file: string;
+            /** Points */
+            points: number[][];
         };
         /**
          * SitesReply
@@ -2272,6 +2364,22 @@ export interface components {
             day_step: number;
             /** Step Minutes */
             step_minutes: number;
+        };
+        /**
+         * TerrainHeightsReply
+         * @description The height of the top of the terrain at each point asked for; None where no terrain lies under it.
+         */
+        TerrainHeightsReply: {
+            /** Heights */
+            heights: (number | null)[];
+        };
+        /**
+         * TerrainHeightsRequest
+         * @description Plan points [[x, y], ...] whose terrain heights are asked for.
+         */
+        TerrainHeightsRequest: {
+            /** Points */
+            points: number[][];
         };
         /**
          * TurnSurfacesRequest
@@ -3527,6 +3635,94 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    read_outlines: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_read_outlines"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutlinesReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    terrain_heights: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TerrainHeightsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerrainHeightsReply"];
                 };
             };
             /** @description A run of this project is active. */

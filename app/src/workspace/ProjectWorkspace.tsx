@@ -14,7 +14,7 @@
 import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
-  failureTextOf, markModeChosen, reportServiceProblem, type HealthReply, type ModeInfo, type ProjectDetail,
+  failureTextOf, markModeChosen, readOutlines, reportServiceProblem, terrainHeights, type HealthReply, type OutlinesReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
 import { ProjectSessionContext } from "../api_client/project_session";
 import { activeCriteria, filesOfOtherCriteria } from "../criteria/criteria_state";
@@ -61,6 +61,7 @@ import { analysisPeriodOf, useSunPathOfStoredPeriod } from "../steps/sun_path_re
 import { useInputFiles } from "./use_input_files";
 import { InputChoice, SiteBox, SwitchInputLink } from "../sites/SiteInput";
 import { ProjectSetupDialog } from "./ProjectSetupDialog";
+import { ImportSitesDialog } from "../sites/ImportSitesDialog";
 import { HeightsSettings } from "../sites/HeightsSettings";
 import { SiteEditor, SitePicker, type SiteTool } from "../sites/SiteEditor";
 import { drawingLevel } from "../sites/site_drawing";
@@ -212,6 +213,9 @@ function OpenProject(props: ProjectWorkspaceProps) {
   });
   // A site as the input (design/site-input.md): the tool drawing or editing a site in the view, and the tile chosen before any content
   const [siteTool, setSiteTool] = useState<SiteTool | null>(null);
+  // An outline file read and shown in the import window (design/site-import.md), and what the last import or placing said
+  const [importing, setImporting] = useState<{ found: OutlinesReply; busy: boolean } | null>(null);
+  const [siteNote, setSiteNote] = useState<{ text: string; warning: boolean } | null>(null);
   const [maxVolumeChosen, setMaxVolumeChosen] = useState(false);
   const inputChangesNotice = <InputChangesNotice changes={inputChanges} onDismiss={dismissChanges} />;
   const tellSettingsSaver = useEffectEvent((open: boolean) => {
@@ -439,6 +443,84 @@ function OpenProject(props: ProjectWorkspaceProps) {
     const added = [...siteInput.sites, { name: nextSiteName(siteInput.sites), points, height }];
     void siteInput.save(added).then((refused) => { if (refused === null) setSiteTool({ kind: "edit", index: added.length - 1 }); });
   };
+  // Sites from DXF and OBJ files and Place on terrain (design/site-import.md): the service reads and places the outlines; they are
+  // added here as one undoable change, as a drawing adds a site
+  const hasTerrain = files.terrain.length > 0;
+  const onTerrain = async (points: SitePoint[]): Promise<{ points: SitePoint[]; off: number }> => {
+    const reply = await terrainHeights(token, project.name, points.map((point) => [point[0], point[1]]));
+    let off = 0;
+    const placed = points.map((point, index): SitePoint => {
+      const height = reply.heights[index];
+      if (height === null || height === undefined) {
+        off += 1;
+        return point;
+      }
+      return [point[0], point[1], height];
+    });
+    return { points: placed, off };
+  };
+  const reportSiteProblem = (error: unknown) => {
+    if (reportServiceProblem(error, onServiceProblem)) return;
+    setSiteNote({ text: failureTextOf(error), warning: true });
+  };
+  // The names the outlines are added with: their own, or the next "Site n" after the sites there and those before them
+  const importedNames = (found: OutlinesReply): string[] => {
+    const named: Site[] = [...siteInput.sites];
+    return found.outlines.map((outline) => {
+      const siteName = (outline.name || nextSiteName(named)).slice(0, 80);
+      named.push({ name: siteName, points: [], height: 1 });
+      return siteName;
+    });
+  };
+  const importOutlines = (file: File) => {
+    setSiteNote(null);
+    readOutlines(token, project.name, file).then((found) => setImporting({ found, busy: false }), reportSiteProblem);
+  };
+  const finishImport = async (placeOnTerrain: boolean) => {
+    if (importing === null) return;
+    setImporting({ ...importing, busy: true });
+    try {
+      const sites = [...siteInput.sites];
+      const names = importedNames(importing.found);
+      let off = 0;
+      for (const [index, outline] of importing.found.outlines.entries()) {
+        const original = outline.points.map((point) => [point[0], point[1], point[2]] as SitePoint);
+        let points = original;
+        if (placeOnTerrain) {
+          const placed = await onTerrain(original);
+          points = placed.points;
+          off += placed.off;
+        }
+        const rise = Math.max(...points.map((point) => point[2])) - Math.min(...points.map((point) => point[2]));
+        sites.push({ name: names[index], points, height: Math.max(lastHeight, Math.ceil(rise + 1)),
+                     original: { file: importing.found.file, points: original } });
+      }
+      setImporting(null);
+      const refused = await siteInput.save(sites);
+      if (refused === null) {
+        if (off > 0) setSiteNote({ text: messages.placedOffTerrain(off), warning: false });
+        frameAllInputs();
+      }
+    } catch (error) {
+      setImporting(null);
+      reportSiteProblem(error);
+    }
+  };
+  const placeSiteOnTerrain = async (index: number) => {
+    setSiteNote(null);
+    try {
+      const site = siteInput.sites[index];
+      const placed = await onTerrain(site.points);
+      const refused = await changeSite(index, { ...site, points: placed.points });
+      if (refused === null && placed.off > 0) setSiteNote({ text: messages.placedOffTerrain(placed.off), warning: false });
+    } catch (error) {
+      reportSiteProblem(error);
+    }
+  };
+  const restoreOriginal = (index: number) => {
+    const site = siteInput.sites[index];
+    if (site.original) void changeSite(index, { ...site, points: site.original.points });
+  };
   const maxVolumeBox = siteInput.source === null ? undefined : choosingInput ? (
     <InputChoice disabledReason={inputsDisabledReason} onChooseMaxVolume={() => setMaxVolumeChosen(true)}
                  onChooseSite={() => { void siteInput.setSource("sites"); }} />
@@ -446,7 +528,8 @@ function OpenProject(props: ProjectWorkspaceProps) {
     <SiteBox sites={siteInput.sites} heights={siteInput.heights} tool={siteTool} refusal={siteInput.refusal} disabledReason={inputsDisabledReason}
              onOpenSettings={(name) => { setSettingsOpen(true); setSettingToFocus({ name }); }}
              onDraw={() => setSiteTool({ kind: "draw" })} onEdit={(index) => setSiteTool({ kind: "edit", index })}
-             onChangeSite={changeSite} onDeleteSite={deleteSite}
+             onChangeSite={changeSite} onDeleteSite={deleteSite} onImport={importOutlines} onPlaceOnTerrain={(index) => { void placeSiteOnTerrain(index); }}
+             onRestoreOriginal={restoreOriginal} hasTerrain={hasTerrain} note={siteNote}
              onSwitch={() => { setSiteTool(null); setMaxVolumeChosen(true); void siteInput.setSource("mesh"); }} />
   ) : undefined;
   const maxVolumeFooter = siteInput.source === "mesh" && !choosingInput ? (
@@ -624,6 +707,10 @@ function OpenProject(props: ProjectWorkspaceProps) {
       {settingsButtonElement}
       {settingsDialog}
       {setupDialog}
+      {importing !== null && (
+        <ImportSitesDialog found={importing.found} names={importedNames(importing.found)} hasTerrain={hasTerrain} busy={importing.busy} onImport={(placeOnTerrain) => { void finishImport(placeOnTerrain); }}
+                           onCancel={() => setImporting(null)} />
+      )}
       <aside ref={panel} className="workspace-panel" hidden={props.mode !== "design"} onScrollCapture={keepScroll}>
         {inputChangesNotice}
         <StepAccordion steps={steps} openStep={openStep} onOpenStep={openTheStep}

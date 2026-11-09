@@ -34,7 +34,8 @@ from ..errors import ConfigError
 from ..mode_registry import MODES
 from ..pydantic_schemas import UserConfig
 from ..stage_settings import PIPELINE_STAGES
-from . import folder_picker, inspection, simulation, site_input, sun_study, typical_building, user_preferences
+from . import folder_picker, inspection, simulation, site_import, site_input, sun_study, typical_building, user_preferences
+from .api_models import OutlinesReply, TerrainHeightsReply, TerrainHeightsRequest
 from .api_models import (
     NEW_PROJECT_MODE,
     CancelRunReply, ColdPeriodReply, ConfigErrorReply, ConfigReply, ConfigValuesRequest, CreateCriterionRequest, CreateProjectRequest,
@@ -570,6 +571,20 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         422 names every site that cannot make a volume, and nothing is stored."""
         with writable_project(name) as store:
             return site_input.save_sites(store, name, request.sites)
+
+    @router.post("/projects/{name}/outlines", responses=_ERROR_RESPONSES)
+    def read_outlines(name: str, file: UploadFile = File(...)) -> OutlinesReply:
+        """Read the closed polylines of a DXF or OBJ file as outlines placed in the model (design/site-import.md) and keep the file in
+        inputs/sites/; no site is added (the page adds them with PUT sites). 422 for a file with none, or that cannot be read."""
+        data = file.file.read()
+        with writable_project(name) as store:
+            return site_import.read_outline_file(store, name, file.filename or "", data)
+
+    @router.post("/projects/{name}/terrain-heights", responses=_ERROR_RESPONSES)
+    def terrain_heights(name: str, request: TerrainHeightsRequest) -> TerrainHeightsReply:
+        """The height of the top of the project's terrain at each plan point (Place on terrain); null where there is none. 404 without
+        terrain. Reads only."""
+        return site_import.terrain_heights(folder_in_use.store, name, request.points)
 
     @router.put("/projects/{name}/heights", responses=_ERROR_RESPONSES)
     def set_heights(name: str, request: HeightsJson) -> SitesReply:

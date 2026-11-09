@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { constrainedToAngle, drawingLevel, placePoint, type ToScreen } from "./site_drawing";
 import {
-  baseHeightOf, containsPoint, crossesItself, maxHeightOf, nextSiteName, outlinePoints, planArea, pointAlong, siteProblems, siteRise, type SitePoint,
+  baseHeightOf, containsPoint, crossesItself, differsFromOriginal, maxHeightOf, nextSiteName, outlinePoints, planArea, pointAlong, siteProblems, siteRise, type SitePoint,
 } from "./site_geometry";
 
 const SQUARE: SitePoint[] = [[0, 0, 100], [40, 0, 102], [40, 30, 106], [0, 30, 101]];
@@ -78,4 +78,17 @@ test("with heights a site's max and base are the project's or its own, and a bas
   expect(siteProblems(site, { max: { for_all_sites: false }, base: { for_all_sites: true, value: null } })).toEqual([]);
   expect(baseHeightOf(site, { max: { for_all_sites: false }, base: { for_all_sites: true, value: 8 } })).toBe(8);
   expect(maxHeightOf(site, perSite)).toBe(20);
+});
+
+test("a site differs from its original when a vertex moved, was added or was removed; a drawn site never does", () => {
+  const original = { file: "plots.dxf", points: SQUARE };
+  const site = { name: "A", points: SQUARE.map((point) => [...point] as SitePoint), height: 20, original };
+  expect(differsFromOriginal(site)).toBe(false);
+  expect(differsFromOriginal({ ...site, points: [[0, 0, 100 + 1e-12], ...SQUARE.slice(1)] })).toBe(false);     // within rounding
+  expect(differsFromOriginal({ ...site, points: [[0, 0, 100.5], ...SQUARE.slice(1)] })).toBe(true);
+  expect(differsFromOriginal({ ...site, points: [[0.1, 0, 100], ...SQUARE.slice(1)] })).toBe(true);
+  expect(differsFromOriginal({ ...site, points: SQUARE.slice(0, 3) })).toBe(true);
+  expect(differsFromOriginal({ ...site, points: [...SQUARE, [0, 15, 100]] })).toBe(true);
+  expect(differsFromOriginal({ name: "B", points: SQUARE, height: 20 })).toBe(false);
+  expect(differsFromOriginal({ name: "B", points: SQUARE, height: 20, original: null })).toBe(false);
 });

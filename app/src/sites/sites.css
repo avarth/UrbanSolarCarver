@@ -29,6 +29,15 @@
 .site-row-details { grid-column: 1 / -1; color: var(--colour-muted); font-size: var(--text-secondary); }
 .site-row-problem { grid-column: 1 / -1; color: var(--colour-error); font-size: var(--text-secondary); }
 .site-row-editing { background: var(--colour-accent-soft); }
+.site-box-actions { display: flex; flex: none; gap: var(--space-unit); margin-left: auto; }
+.site-box-actions .input-add { white-space: nowrap; }
+.import-sites-list { margin: 0; padding: 0; list-style: none; display: grid; gap: calc(var(--space-unit) / 2); max-height: 14em; overflow-y: auto; }
+.import-sites-list li { display: flex; justify-content: space-between; gap: calc(var(--space-unit) * 2); }
+.import-sites-detail { color: var(--colour-muted); font-size: var(--text-secondary); white-space: nowrap; }
+.import-sites-left-out { color: var(--colour-muted); font-size: var(--text-secondary); }
+.import-sites-left-out ul { margin: var(--space-unit) 0 0; padding-left: 1.2em; }
+.import-sites-terrain { display: flex; gap: calc(var(--space-unit) * 2); align-items: flex-start; }
+.import-sites-terrain small { display: block; color: var(--colour-muted); font-size: var(--text-secondary); }
 .input-switch-link { align-self: flex-start; margin-top: var(--space-unit); }
 
 .site-editor { position: absolute; inset: 0; pointer-events: none; z-index: 2; }

@@ -90,6 +90,13 @@ class ChangedFileNotice(BaseModel):
 MaxVolumeSource = Literal["mesh", "sites"]
 
 
+class SiteOriginal(BaseModel):
+    """The outline an imported site had when it was imported (design/site-import.md), kept so the user can go back to it: the file
+    it came from (kept in inputs/sites/) and its points as placed then."""
+    file: str = Field(min_length=1, max_length=255)
+    points: list[list[float]] = Field(min_length=3, max_length=2000)
+
+
 class SiteJson(BaseModel):
     """A site (sites.py): a closed outline whose vertices carry the ground's elevation, in the input files' coordinates, and its
     height above its lowest vertex."""
@@ -97,6 +104,7 @@ class SiteJson(BaseModel):
     points: list[list[float]] = Field(min_length=3, max_length=2000)    # [[x, y, z], ...], not repeated at the end
     height: float = Field(gt=0, allow_inf_nan=False)     # the site's own max height, used while the max height is Per site
     base_height: float | None = Field(None, ge=0, allow_inf_nan=False)    # its own base height (Per site); None or 0: no lower limit
+    original: SiteOriginal | None = None    # an imported site's outline as imported; None for a drawn site
 
     @model_validator(mode="after")
     def _points_are_xyz(self):
@@ -240,6 +248,42 @@ class InputFilesReply(BaseModel):
 class SitesRequest(BaseModel):
     """The whole list of a project's sites, as it is to be stored."""
     sites: list[SiteJson] = Field(max_length=200)
+
+
+class ImportedOutline(BaseModel):
+    """A closed outline of an imported file, placed in the model (design/site-import.md, section 4): its name ("" for none), its
+    points [[x, y, z], ...] in the input files' coordinates, its plan area (m²) and its rise (m, its highest vertex above its lowest)."""
+    name: str
+    points: list[list[float]]
+    area: float
+    rise: float
+
+
+class OutlinesReply(BaseModel):
+    """What an outline file holds: the file as kept (inputs/sites/), the unit it was read in, its outlines that can be sites, what was
+    left out (one text each: "2 open polylines", "Plot 7: the outline crosses itself"), and, when the outlines lie more than 1 km
+    from the other inputs in plan, how far (m); None otherwise."""
+    file: str
+    unit: str
+    outlines: list[ImportedOutline]
+    left_out: list[str]
+    distance_from_inputs: float | None
+
+
+class TerrainHeightsRequest(BaseModel):
+    """Plan points [[x, y], ...] whose terrain heights are asked for."""
+    points: list[list[float]] = Field(min_length=1, max_length=20000)
+
+    @model_validator(mode="after")
+    def _points_are_xy(self):
+        if any(len(point) != 2 for point in self.points):
+            raise ValueError("every point is [x, y]")
+        return self
+
+
+class TerrainHeightsReply(BaseModel):
+    """The height of the top of the terrain at each point asked for; None where no terrain lies under it."""
+    heights: list[float | None]
 
 
 class MaxVolumeSourceRequest(BaseModel):

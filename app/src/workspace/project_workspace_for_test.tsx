@@ -9,7 +9,7 @@ import { flushSync } from "react-dom";
 import { vi } from "vitest";
 import type {
   ColdPeriodReply, ConfigErrorReply, ConfigReply, CriterionEntry, InputFileChange, InputFileInfo, InputFilesReply, InspectedFile, InspectReply, ModeInfo,
-  Heights, SiteJson, SitesReply,
+  Heights, OutlinesReply, SiteJson, SitesReply,
   ProjectDetail, RunSummary, StageStatusReply, StartRunReply, SunChart, SunPath, SunPositions,
 } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
@@ -125,6 +125,14 @@ export class FakeService {
   savedHeights: Heights[] = [];
   /** The bodies of every PUT sites. */
   readonly savedSites: SiteJson[][] = [];
+  /** What POST outlines answers (design/site-import.md): the outlines read, or a refusal with its status and reason. */
+  outlinesReply: OutlinesReply | { status: number; detail: string } = { file: "plots.dxf", unit: "metres", outlines: [], left_out: [], distance_from_inputs: null };
+  /** The name of the file of every POST outlines. */
+  readonly outlineFilesRead: string[] = [];
+  /** The terrain's height at each plan point of a POST terrain-heights; null: the project has no terrain (404). */
+  terrainHeightsOf: ((points: number[][]) => (number | null)[]) | null = (points) => points.map(() => 0);
+  /** The points of every POST terrain-heights. */
+  readonly terrainRequests: number[][][] = [];
 
   constructor(stages: Record<PipelineStage, StageState>, carving: typeof CARVING | null) {
     this.stages = stages;
@@ -187,6 +195,17 @@ export class FakeService {
       if (method === "PUT" && path === "/max-volume-source") this.siteSource = (JSON.parse(String(init!.body)) as { source: "mesh" | "sites" }).source;
       const bounds = this.siteSource === "sites" && this.sites.length ? [[0, 0, 0], [10, 10, 30]] : null;
       return json<SitesReply>({ source: this.siteSource, sites: this.sites, joined_bounds: bounds, grid_plan: null, heights: this.heights });
+    }
+    if (method === "POST" && path === "/outlines") {
+      this.outlineFilesRead.push(((init!.body as FormData).get("file") as File).name);
+      const reply = this.outlinesReply;
+      return "status" in reply ? json<ErrorDetailReply>({ detail: reply.detail }, reply.status) : json<OutlinesReply>(reply);
+    }
+    if (method === "POST" && path === "/terrain-heights") {
+      const { points } = JSON.parse(String(init!.body)) as { points: number[][] };
+      this.terrainRequests.push(points);
+      if (this.terrainHeightsOf === null) return json<ErrorDetailReply>({ detail: "The project has no terrain." }, 404);
+      return json<{ heights: (number | null)[] }>({ heights: this.terrainHeightsOf(points) });
     }
     if (path === "/max-volume") return new Response(TRIANGLE_PLY);
     if (path === "/base-volume") return new Response(TRIANGLE_PLY);

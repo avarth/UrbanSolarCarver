@@ -41,7 +41,7 @@ layer above. The layers, top first:
 | 3. Requests | `engine_requests`: one entry point that runs a stage chain or a simulation for the service and the daemon |
 | 4. API | `api`: the public Python API (`run_pipeline`, `run_chain` and the stage functions) |
 | 5. Stages and checks | `api_core/` (preprocessing, thresholding, exporting, massing, chains), `solar_check` (Simulate), `access_evaluation`, `sites` (the volume of a site, built by the service) |
-| 6. Engine | voxels, test points, rays and kernels, sky and sun weights, scoring, meshing, floor plates, file reading |
+| 6. Engine | voxels, test points, rays and kernels, sky and sun weights, scoring, meshing, floor plates, file reading; under it `outlines` (the closed polylines of DXF and OBJ files and the faces of DXF files, read with ezdxf) |
 | 7. Settings and basics | config models and loading, the mode registry, errors, run context, the compute device, the weather file reader |
 
 The exact list of modules in each layer is the `[tool.importlinter]` section of `pyproject.toml`. A second rule there

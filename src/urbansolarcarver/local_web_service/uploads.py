@@ -35,8 +35,11 @@ def checked_upload(folder: Path, clean_name: str, data: bytes, fix_normals: bool
         except InputError as error:
             # the engine message names the temporary file; the person knows the file by its own name
             message = str(error).removeprefix("load_mesh: ")
-            raise ProjectError(message.replace(repr(str(upload_path)), repr(clean_name)).replace(str(upload_path), clean_name),
-                               status_code=422) from error
+            message = message.replace(repr(str(upload_path)), repr(clean_name)).replace(str(upload_path), clean_name)
+            message = message.replace(upload_path.name, clean_name)
+            if "has polylines but no faces" in message:      # a DXF of outlines (design/site-import.md)
+                message += " To use its closed polylines as sites, use Import in the Sites box."
+            raise ProjectError(message, status_code=422) from error
     except BaseException:
         upload_path.unlink(missing_ok=True)
         raise
