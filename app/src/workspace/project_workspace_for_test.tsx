@@ -133,6 +133,10 @@ export class FakeService {
   terrainHeightsOf: ((points: number[][]) => (number | null)[]) | null = (points) => points.map(() => 0);
   /** The points of every POST terrain-heights. */
   readonly terrainRequests: number[][][] = [];
+  /** Whether the carving reruns as its settings change (project.json carving_updates_itself), as PUT carving-updates stores it. */
+  carvingUpdatesItself = true;
+  /** The body of every PUT carving-updates. */
+  readonly carvingUpdateChoices: { on: boolean }[] = [];
 
   constructor(stages: Record<PipelineStage, StageState>, carving: typeof CARVING | null) {
     this.stages = stages;
@@ -218,6 +222,12 @@ export class FakeService {
       return new Response(null, { status: 204 });
     }
     if (method === "POST" && path === "/mode-chosen") return new Response(null, { status: 204 });
+    if (method === "PUT" && path === "/carving-updates") {
+      const choice = JSON.parse(String(init!.body)) as { on: boolean };
+      this.carvingUpdateChoices.push(choice);
+      this.carvingUpdatesItself = choice.on;
+      return new Response(null, { status: 204 });
+    }
     if (method === "POST" && path === "/runs") {
       await holdReply(this.runStartsWaitFor);
       const { produce } = JSON.parse(String(init!.body)) as { produce: string[] };
@@ -325,7 +335,7 @@ export function project(stages: Record<PipelineStage, StageState>, settings: Rec
     inputs: { max_volume: [{ name: "volume.obj", triangle_count: 1 }], test_surfaces: [{ name: "surfaces.obj", triangle_count: 1 }],
               weather: [{ name: "weather.epw", triangle_count: 0 }] },
     joined_bounds: [[0, 0, 0], [1, 1, 0]], weather_location: "Golden, CO, USA", weather_latitude: 39.74, stage_status: { stages }, grid_plan: null,
-    criteria: [criterionEntry(criterionSettings)], criterion_status: { 1: stages }, mode_to_choose: false,
+    criteria: [criterionEntry(criterionSettings)], criterion_status: { 1: stages }, mode_to_choose: false, carving_updates_itself: true,
   };
 }
 

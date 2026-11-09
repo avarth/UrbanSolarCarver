@@ -238,6 +238,20 @@
   pointer-events: none;
 }
 
+/* The run that brings the results up to date (Carve only), on the stamp; the stamp lets the pointer through, its button does not. */
+.viewer-out-of-date .viewer-stamp-action {
+  pointer-events: auto;
+  margin-top: 4px;
+  padding: 2px 10px;
+  border: 1px solid var(--colour-out-of-date);
+  border-radius: var(--radius-small);
+  color: var(--colour-out-of-date);
+  font-weight: 600;
+}
+.viewer-out-of-date .viewer-stamp-action:hover:not(:disabled) { background: var(--colour-out-of-date); color: var(--colour-panel); }
+.viewer-out-of-date .viewer-stamp-action:disabled { opacity: 0.5; cursor: default; }
+.viewer-out-of-date[data-viewport-theme="dark"] .viewer-stamp-action { border-color: var(--colour-out-of-date-on-dark); color: var(--colour-out-of-date-on-dark); }
+
 .viewer-out-of-date strong {
   color: var(--colour-out-of-date);
   font-size: var(--text-body);

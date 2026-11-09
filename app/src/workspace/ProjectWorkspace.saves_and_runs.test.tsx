@@ -53,7 +53,7 @@ test("a settings change saves; Run analysis starts a run; its events finish it; 
   expect(service.count("GET /run/summary")).toBe(1);
   expect(service.count("GET /stage-status")).toBe(2);
   expect(stepIsOpen("Criteria")).toBe(true);                                 // a finished analysis opens Criteria
-  expect(stepRow("Criteria").textContent).toContain("Update the carving as I change these settings");     // the carving rule, no longer waiting
+  expect(stepRow("Criteria").textContent).toContain("Shade allowed per voxel");     // the carving rule, no longer waiting
   expect(stepRow("Criteria").textContent).not.toContain("Run the analysis to see the carving");
   expect(dimmedCarvingLayers()).toEqual([]);
   openStep("Site");
@@ -597,4 +597,76 @@ test("the saver of the open project waits for criterion requests in flight: a by
   await act(async () => answerSettings());
   await settle();
   expect(ended).toBe(true);
+});
+
+// The carving's reruns follow the project's switch in Settings > Carving (the stamp's run is in ProjectWorkspace.chain_runs).
+
+/** The switch "Update the carving as I change its settings", in the project settings window (opened first when it is closed). */
+const carvingUpdatesSwitch = () => (openProjectSettings(),
+  projectSettings()!.querySelector<HTMLInputElement>('[data-setting="carving_updates_itself"] input[role="switch"]')!);
+
+test("Settings has a Carving group whose switch is on by default; switched off, a threshold change starts no carving run; on again, it does", async () => {
+  service = new FakeService(CARVED, CARVING);
+  await openWorkspace(service, project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
+  const group = () => projectSettings()!.querySelector<HTMLElement>('[data-setting="carving_updates_itself"]')!;
+  expect(carvingUpdatesSwitch().checked).toBe(true);
+  expect(group().querySelector(".setting-group-title")!.textContent).toBe("Carving");
+  expect(group().querySelector(".switch-row")!.textContent).toBe("Update the carving as I change its settings");
+  expect(group().querySelector(".setting-note")!.textContent).toContain("Update carving does");
+
+  await act(async () => carvingUpdatesSwitch().click());
+  await settle();
+  expect(service.carvingUpdateChoices).toEqual([{ on: false }]);
+  expect(carvingUpdatesSwitch().checked).toBe(false);
+  closeProjectSettings();
+  if (!stepIsOpen("Criteria")) openStep("Criteria");
+  service.stages = { ...CARVED, thresholding: "out_of_date" };       // as the service holds it after the save
+  typeAndLeave(thresholdField(), "2");
+  await waitForTheSave();
+  await settle();
+  expect(service.savedValues.map(thresholdOf)).toEqual([2]);         // stored, not run
+  expect(service.runsStarted).toEqual([]);
+  expect(buttonIn(pinnedBar(), "Update carving")).toBeDefined();    // the pinned bar offers the run
+  service.stages = CARVED;
+
+  const switchAgain = carvingUpdatesSwitch();           // the window opened outside the act of the press
+  await act(async () => switchAgain.click());
+  await settle();
+  expect(service.carvingUpdateChoices).toEqual([{ on: false }, { on: true }]);
+  closeProjectSettings();
+  typeAndLeave(thresholdField(), "3");
+  await settle();
+  expect(service.runsStarted).toEqual([["thresholding"]]);
+});
+
+test("a project stored with the switch off opens with it off and sends nothing", async () => {
+  service = new FakeService(CARVED, CARVING);
+  await openWorkspace(service, { ...project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }), carving_updates_itself: false });
+  expect(carvingUpdatesSwitch().checked).toBe(false);
+  expect(service.count("PUT /carving-updates")).toBe(0);
+});
+
+test("the choice an earlier version kept in this browser is used, moved into the project once and forgotten here", async () => {
+  window.localStorage.setItem("usc.autoUpdate.p", "off");
+  service = new FakeService(CARVED, CARVING);
+  await openWorkspace(service, project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
+  expect(service.carvingUpdateChoices).toEqual([{ on: false }]);
+  expect(window.localStorage.getItem("usc.autoUpdate.p")).toBeNull();
+  expect(carvingUpdatesSwitch().checked).toBe(false);
+  closeProjectSettings();
+  if (!stepIsOpen("Criteria")) openStep("Criteria");
+  typeAndLeave(thresholdField(), "2");
+  await waitForTheSave();
+  await settle();
+  expect(service.runsStarted).toEqual([]);
+  expect(service.count("PUT /carving-updates")).toBe(1);
+});
+
+test("a choice kept in this browser that the project already holds is forgotten here and not sent", async () => {
+  window.localStorage.setItem("usc.autoUpdate.p", "on");
+  service = new FakeService(CARVED, CARVING);
+  await openWorkspace(service, project(CARVED));
+  expect(service.count("PUT /carving-updates")).toBe(0);
+  expect(window.localStorage.getItem("usc.autoUpdate.p")).toBeNull();
+  expect(carvingUpdatesSwitch().checked).toBe(true);
 });

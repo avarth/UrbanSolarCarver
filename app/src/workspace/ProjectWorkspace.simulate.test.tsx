@@ -478,7 +478,7 @@ test("selecting another study draws its values; only one study is drawn", async 
   expect(container().querySelector(".target-legend")).toBeNull();
 });
 
-test("an out of date study's values stay drawn, dimmed, with the stamp", async () => {
+test("an out of date study's values stay drawn, dimmed, with the stamp, which offers no run (studies are not run from it)", async () => {
   await openSimulate(undefined, (service) => {
     service.studies = [study("1", "sun_hours", ["facades.obj"], "out_of_date"), study("2", "sky_view", ["facades.obj"], "current")];
     service.valuesOf = { 1: studyValuesOf({ open: [4, 4], max_volume: [1, 2] }), 2: studyValuesOf({ open: [90], max_volume: [40] }, "%") };
@@ -487,6 +487,7 @@ test("an out of date study's values stay drawn, dimmed, with the stamp", async (
   expect(studyLayerSummary()).toBe("2 points");
   expect(scene().dimmed.has("study_values")).toBe(true);
   expect(stamp()!.textContent).toContain("Out of date");
+  expect(stamp()!.querySelector("button")).toBeNull();
   await selectStudy("Sky view factor");
   expect(scene().dimmed.has("study_values")).toBe(false);
   expect(stamp()).toBeNull();

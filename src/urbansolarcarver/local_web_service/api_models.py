@@ -161,6 +161,8 @@ class ProjectJson(BaseModel):
     next_study_id: int = 1      # the id the next study gets
     typical_building: TypicalBuildingEntry | None = None    # None: none chosen yet (typical_building.building_of)
     mode_to_choose: bool = False    # a new project: its one criterion stands in NEW_PROJECT_MODE until the user chooses a mode
+    # The app reruns the carving as its settings change (Settings > Carving, user 2026-11-09); off: the user starts it (Update carving)
+    carving_updates_itself: bool = True
     # What the maximum volume is made from: the mesh files of the max_volume role, or the sites (site_input.py); one or the other
     max_volume_source: MaxVolumeSource = "mesh"
     sites: list[SiteJson] = Field(default_factory=list)     # kept while the source is "mesh", so switching back restores them
@@ -284,6 +286,11 @@ class TerrainHeightsRequest(BaseModel):
 class TerrainHeightsReply(BaseModel):
     """The height of the top of the terrain at each point asked for; None where no terrain lies under it."""
     heights: list[float | None]
+
+
+class CarvingUpdatesRequest(BaseModel):
+    """Whether the app reruns the carving as its settings change."""
+    on: bool
 
 
 class MaxVolumeSourceRequest(BaseModel):
@@ -683,6 +690,7 @@ class ProjectDetail(BaseModel):
     criteria: list[CriterionEntry] = Field(default_factory=list)          # the chain in carving order, bypassed criteria included
     criterion_status: dict[str, dict[str, StageState]] = Field(default_factory=dict)    # as stage_status.criteria
     mode_to_choose: bool = False    # as in ProjectJson
+    carving_updates_itself: bool = True     # as in ProjectJson
 
 
 class CancelRunReply(BaseModel):

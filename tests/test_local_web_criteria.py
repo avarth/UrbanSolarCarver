@@ -505,3 +505,10 @@ def test_rays_per_patch_is_kept_and_checked_when_the_first_criterion_does_not_tr
     assert yaml.safe_load((store.open(name) / "config.yaml").read_text(encoding="utf-8"))["rays_per_patch"] == 9
     with pytest.raises(ConfigError, match="rays_per_patch"):
         store.write_shared_settings(name, {**shared, "rays_per_patch": 5})
+
+
+def test_the_carving_switch_is_kept_in_project_json_and_set_during_a_run_too(client_with_inputs):
+    client = client_with_inputs
+    assert client.get("/api/projects/p").json()["carving_updates_itself"] is True          # on until the user turns it off
+    assert client.put("/api/projects/p/carving-updates", json={"on": False}).status_code == 204
+    assert client.get("/api/projects/p").json()["carving_updates_itself"] is False

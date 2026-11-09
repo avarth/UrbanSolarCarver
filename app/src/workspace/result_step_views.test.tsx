@@ -5,7 +5,7 @@ import { SERVICE_CRITERION_KEYS, SERVICE_SCHEMA, serviceModes } from "../api_cli
 import { formReducer, initialFormState, type FormState } from "../settings_form/form_state";
 import { addStyleSheetForTest, click, press, renderForTest, type, typeAndLeave, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import type { ScorePoints } from "../viewer/score_points_decoder";
-import { CarvingStep, readAutoUpdate, type CarvingStepProps } from "../criteria/CarvingStep";
+import { CarvingStep, browserAutoUpdateChoice, forgetBrowserAutoUpdateChoice, type CarvingStepProps } from "../criteria/CarvingStep";
 import { EnvelopeAndMassingStep, storeyRows, type EnvelopeAndMassingStepProps, type PlatesFile } from "../steps/EnvelopeAndMassingStep";
 import { exportDownloads } from "../steps/ExportStep";
 import { RunProgress } from "../common/RunProgress";
@@ -47,9 +47,8 @@ afterEach(() => {
 function carvingProps(overrides: Partial<CarvingStepProps> = {}): CarvingStepProps {
   return {
     form: formFor("time-based", { threshold: { method: "cutoff", value: 1.5 } }), isWeightedMode: false, summary: CARVING, scorePoints: SCORE_POINTS,
-    analysisOutOfDate: false, carvingDimmed: false, autoUpdate: true, onAutoUpdateChange: vi.fn(), thresholdDisabledReason: null,
-    settingsDisabledReason: null, runBlocker: null, onChange: vi.fn(), onThresholdCommit: vi.fn(), onCarvingSettingCommit: vi.fn(),
-    onUpdateCarving: vi.fn(), ...overrides,
+    analysisOutOfDate: false, carvingDimmed: false, autoUpdate: true, thresholdDisabledReason: null,
+    settingsDisabledReason: null, onChange: vi.fn(), onThresholdCommit: vi.fn(), onCarvingSettingCommit: vi.fn(), ...overrides,
   };
 }
 
@@ -59,7 +58,9 @@ test("Sun hours: Shade allowed per voxel with its slider ends and the histogram,
   expect(rendered.container.querySelector(".threshold-control label")!.textContent).toBe("Shade allowed per voxel");
   expect(rendered.container.querySelector(".threshold-slider-ends")!.textContent).toBe("09.6\u00a0m²·h, the highest of any voxel");
   expect(text).toContain("More carving settings");
-  expect(text).toContain("Update the carving as I change these settings");
+  // The switch is in Settings > Carving, and Update carving in the pinned bar and on the view's stamp: neither is in the section.
+  expect(text).not.toContain("Update the carving as I change");
+  expect(rendered.container.querySelector('[role="switch"]')).toBeNull();
   expect(text).not.toContain("Update carving");
   expect(text).toContain("Scores of the voxels");
   expect(rendered.container.querySelector(".number-tile")).toBeNull();     // the card says what it removed, the top bar the last run's time
@@ -67,8 +68,8 @@ test("Sun hours: Shade allowed per voxel with its slider ends and the histogram,
   expect(text).not.toContain("Last");
 });
 
-test("with auto-update on the threshold runs when the user leaves the field; off, it changes the form and Update carving runs", () => {
-  const onThresholdCommit = vi.fn(), onChange = vi.fn(), onUpdateCarving = vi.fn();
+test("with auto-update on the threshold runs when the user leaves the field; off, it only changes the form and the section has no Update carving", () => {
+  const onThresholdCommit = vi.fn(), onChange = vi.fn();
   rendered = renderForTest(<CarvingStep {...carvingProps({ onThresholdCommit, onChange })} />);
   const field = rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!;
   type(field, "2.5");
@@ -78,11 +79,11 @@ test("with auto-update on the threshold runs when the user leaves the field; off
   expect(onChange).not.toHaveBeenCalled();
   rendered.unmount();
 
-  rendered = renderForTest(<CarvingStep {...carvingProps({ autoUpdate: false, onChange, onUpdateCarving })} />);
-  type(rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!, "3");
+  rendered = renderForTest(<CarvingStep {...carvingProps({ autoUpdate: false, onChange, onThresholdCommit })} />);
+  typeAndLeave(rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!, "3");
   expect(onChange).toHaveBeenCalledWith({ threshold: { method: "cutoff", value: 3 } });
-  click([...rendered.container.querySelectorAll("button")].find((button) => button.textContent === "Update carving")!);
-  expect(onUpdateCarving).toHaveBeenCalledOnce();
+  expect(onThresholdCommit).toHaveBeenCalledOnce();       // only the first render's
+  expect([...rendered.container.querySelectorAll("button")].some((button) => button.textContent === "Update carving")).toBe(false);
 });
 
 test("a threshold typed back to the stored value while another value waits behind a run replaces that value", async () => {
@@ -131,7 +132,6 @@ test("a weighted mode shows Carve amount in % and no number tiles; the angle rul
   rendered = renderForTest(<CarvingStep {...carvingProps({ form: formFor("tilted_plane") })} />);
   expect(rendered.container.textContent).toContain("The angle rule has no threshold: everything above the planes is removed. Change the angle above.");
   expect(rendered.container.querySelector(".score-histogram")).toBeNull();
-  expect(rendered.container.textContent).toContain("Update carving");
 });
 
 test("an analysis out of date dims the carving, disables its controls and says so", () => {
@@ -139,15 +139,20 @@ test("an analysis out of date dims the carving, disables its controls and says s
   expect(rendered.container.textContent).toContain("The settings changed since the analysis. Run it again to update the carving.");
   expect(rendered.container.querySelector(".carving-content-dimmed")).not.toBeNull();
   expect(rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!.disabled).toBe(true);
-  expect(rendered.container.querySelector<HTMLInputElement>(".switch-row input")!.disabled).toBe(true);
   expect([...rendered.container.querySelectorAll("button")].some((button) => button.textContent === "Run analysis")).toBe(false);
 });
 
-test("auto-update is on unless switched off for the project on this computer", () => {
-  expect(readAutoUpdate("p")).toBe(true);
+test("the auto-update choice an earlier version kept in this browser is read per project until it is forgotten", () => {
+  expect(browserAutoUpdateChoice("p")).toBeNull();
   window.localStorage.setItem("usc.autoUpdate.p", "off");
-  expect(readAutoUpdate("p")).toBe(false);
-  expect(readAutoUpdate("other")).toBe(true);
+  window.localStorage.setItem("usc.autoUpdate.q", "on");
+  expect(browserAutoUpdateChoice("p")).toBe(false);
+  expect(browserAutoUpdateChoice("q")).toBe(true);
+  expect(browserAutoUpdateChoice("other")).toBeNull();
+  forgetBrowserAutoUpdateChoice("p");
+  expect(window.localStorage.getItem("usc.autoUpdate.p")).toBeNull();
+  expect(browserAutoUpdateChoice("p")).toBeNull();
+  expect(browserAutoUpdateChoice("q")).toBe(true);
 });
 
 test("the histogram: title, Log and Linear, the cutoff label, the key, the axis title, the slope-limit note and the readout", () => {
@@ -485,22 +490,16 @@ test("with auto-update off, carving settings only change the form", () => {
   expect(onCarvingSettingCommit).not.toHaveBeenCalled();
 });
 
-test("disabled carving controls say why, outside the dimmed carving: the run in progress over the controls, the run blocker under Update carving", () => {
+test("disabled carving controls say why, outside the dimmed carving: the run in progress over the controls", () => {
   // The carving is dimmed while its run is under way, which is when these reasons show: dimmed, their text would fall below AA (UX 12).
   rendered = renderForTest(<CarvingStep {...carvingProps({ autoUpdate: false, carvingDimmed: true, thresholdDisabledReason: "A run is in progress",
-                                                           settingsDisabledReason: "A run is in progress", runBlocker: "A run is in progress" })} />);
+                                                           settingsDisabledReason: "A run is in progress" })} />);
   expect(rendered.container.querySelector(".carving-content-dimmed")).not.toBeNull();
   expect([...rendered.container.querySelectorAll(".carving-step > .step-reason")].map((reason) => reason.textContent)).toEqual(["A run is in progress"]);
-  const update = [...rendered.container.querySelectorAll("button")].find((button) => button.textContent === "Update carving")!;
-  expect(update.hasAttribute("disabled")).toBe(true);
-  const updateReason = document.getElementById(update.getAttribute("aria-describedby")!)!;
-  expect(updateReason.textContent).toBe("A run is in progress");
-  expect(updateReason.closest(".carving-content-dimmed")).toBeNull();
   expect(rendered.container.querySelectorAll(".carving-content-dimmed .step-reason, .carving-content-dimmed .run-button-reason")).toHaveLength(0);
   rendered.unmount();
-  rendered = renderForTest(<CarvingStep {...carvingProps({ autoUpdate: false, runBlocker: "Waiting for the GPU to be ready" })} />);
+  rendered = renderForTest(<CarvingStep {...carvingProps({ autoUpdate: false })} />);
   expect(rendered.container.querySelector(".carving-step > .step-reason")).toBeNull();
-  expect(rendered.container.querySelector(".update-carving .run-button-reason")!.textContent).toBe("Waiting for the GPU to be ready");
   rendered.unmount();
 
   // The angle rule's message, in place of the threshold control, is not dimmed either.
@@ -656,7 +655,7 @@ test("the line follows the pointer while it is dragged and is set when the point
   expect(onThresholdCommit).toHaveBeenCalledExactlyOnceWith({ threshold: { method: "cutoff", value: 4.8 }, carve_fraction: null });
 });
 
-test("with auto-update off, a cutoff let go changes the form and stays on the histogram as a preview until Update carving runs it", () => {
+test("with auto-update off, a cutoff let go changes the form and stays on the histogram as a preview until a carving update runs it", () => {
   const onChange = vi.fn(), onThresholdCommit = vi.fn();
   const props = weightedCarvingProps({}, { autoUpdate: false, onChange, onThresholdCommit });
   rendered = renderForTest(<CarvingStep {...props} />);

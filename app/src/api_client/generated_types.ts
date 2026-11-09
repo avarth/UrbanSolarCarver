@@ -600,6 +600,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/carving-updates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Carving Updates
+         * @description Whether the app reruns the carving as its settings change (Settings > Carving). A choice of the page's, not of a result: it is
+         *     stored during a run too.
+         */
+        put: operations["set_carving_updates"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}/mode-chosen": {
         parameters: {
             query?: never;
@@ -1454,6 +1475,14 @@ export interface components {
             kept_volume?: components["schemas"]["KeptVolumeSummary"] | null;
         };
         /**
+         * CarvingUpdatesRequest
+         * @description Whether the app reruns the carving as its settings change.
+         */
+        CarvingUpdatesRequest: {
+            /** On */
+            on: boolean;
+        };
+        /**
          * ChainSummary
          * @description What the chain of criteria that are on kept, from the volumes of the criteria.
          */
@@ -1986,6 +2015,11 @@ export interface components {
              * @default false
              */
             mode_to_choose: boolean;
+            /**
+             * Carving Updates Itself
+             * @default true
+             */
+            carving_updates_itself: boolean;
         };
         /**
          * ProjectSummary
@@ -3893,6 +3927,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": string[];
+                };
+            };
+        };
+    };
+    set_carving_updates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CarvingUpdatesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
                 };
             };
         };

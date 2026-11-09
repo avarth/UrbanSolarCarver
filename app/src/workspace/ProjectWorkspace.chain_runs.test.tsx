@@ -4,6 +4,7 @@ import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { ProjectDetail } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
+import { packScorePoints } from "../viewer/packed_results_for_test";
 import {
   CURRENT, FACADES, OUT_OF_DATE, ROOFS, WINDOWS, card, cardLine, carvingSummaryOf, openChain, panel, panelFrame, select, selectedCardName,
   service as chainService,
@@ -11,7 +12,7 @@ import {
 } from "./chain_service_for_test";
 import {
   buildPart, buttonIn, container, endWorkspaceTest, openStep, closeProjectSettings, projectSettings, settingsButton, panelSectionOpen, pinnedBar, pressRunAnalysis, reasonOf, settle, showCriterionCards,
-  showCriterionEditor, startWorkspaceTest, thresholdField, thresholdOf, togglePanelSection, typeAndLeave, voxelSizeField, waitForTheSave,
+  showCriterionEditor, startWorkspaceTest, switchMode, thresholdField, thresholdOf, togglePanelSection, typeAndLeave, voxelSizeField, waitForTheSave,
 } from "./project_workspace_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
@@ -395,4 +396,56 @@ test("with one criterion the line after a carving update names none", async () =
   FakeWebSocket.opened[0].send({ type: "run_finished", stages: ["thresholding"], files: [] });
   await settle();
   expect(updatedLine()).toBe("Carving updated.");
+});
+
+// The view's Out of date stamp in Carve offers the run the pinned bar offers; it starts the same run.
+
+const viewStamp = () => container().querySelector<HTMLElement>(".viewer-out-of-date");
+const stampButton = () => viewStamp()?.querySelector<HTMLButtonElement>("button.viewer-stamp-action") ?? null;
+/** The kept voxels of criterion 1 are drawn, so a carving out of date is shown dimmed, with the stamp. */
+const withScorePoints = (chain: { scorePointsOf: Record<string, ArrayBuffer> }) => { chain.scorePointsOf = { 1: packScorePoints([0, 1, 2, 3], [1, 0, 1, 1]) }; };
+
+test("in Carve the Out of date stamp offers Update carving when only the carving is out of date, and starts that run", async () => {
+  await openChain([FACADES], { 1: THRESHOLD_OUT_OF_DATE }, withScorePoints);
+  expect(viewStamp()!.textContent).toContain("Out of date");
+  expect(stampButton()!.textContent).toBe("Update carving");
+  expect(stampButton()!.disabled).toBe(false);
+  chainService.runCriterionStages = { 1: ["thresholding"] };
+  await act(async () => stampButton()!.click());
+  await settle();
+  expect(chainService.runsStarted).toEqual([["thresholding"]]);
+  expect(stampButton()).toBeNull();                                  // nothing offered while the run goes
+});
+
+test("in Carve the Out of date stamp offers Run analysis when the analysis is out of date, and starts it", async () => {
+  await openChain([FACADES], { 1: OUT_OF_DATE }, withScorePoints);
+  expect(stampButton()!.textContent).toBe("Run analysis");
+  chainService.runCriterionStages = { 1: ["preprocessing", "thresholding"] };
+  await act(async () => stampButton()!.click());
+  await settle();
+  expect(chainService.runsStarted).toEqual([["thresholding"]]);
+  expect(FakeWebSocket.opened).toHaveLength(1);
+});
+
+test("the stamp's run is disabled while a run cannot start, with the pinned bar's reason as its title", async () => {
+  const withoutWeatherFile = (opened: ProjectDetail): ProjectDetail => ({ ...opened, inputs: { ...opened.inputs, weather: [] } });
+  await openChain([FACADES], { 1: THRESHOLD_OUT_OF_DATE }, withScorePoints, [], withoutWeatherFile);
+  const barButton = buttonIn(pinnedBar(), "Update carving");
+  expect(barButton.disabled).toBe(true);
+  expect(stampButton()!.disabled).toBe(true);
+  expect(stampButton()!.title).toBe(reasonOf(barButton));
+  expect(stampButton()!.title).toBe("Add a weather file in Settings to run this mode");
+  await act(async () => stampButton()!.click());
+  expect(chainService.runsStarted).toEqual([]);
+});
+
+test("in Simulate the stamp offers no run, though the carving is out of date", async () => {
+  await openChain([FACADES], { 1: THRESHOLD_OUT_OF_DATE }, withScorePoints);
+  expect(stampButton()).not.toBeNull();
+  await switchMode("simulate");
+  await settle();
+  expect(stampButton()).toBeNull();
+  await switchMode("design");
+  await settle();
+  expect(stampButton()!.textContent).toBe("Update carving");
 });

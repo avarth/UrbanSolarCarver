@@ -23,6 +23,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - Simulate: a study can account for the **Base volume** while the project has a base height (`CheckSettings.geometry`
   `base_volume`, the request's `base_volume_path`).
 - 3D view: panning moves the picture and no longer the orbit point, which stays at the compass ring's centre.
+- **Update the carving as I change its settings** moved from each criterion's Carving rule to Settings > Carving, kept in
+  the project (`project.json` `carving_updates_itself`, `PUT /projects/{name}/carving-updates`) instead of the browser. The
+  view's Out of date stamp in Carve has the run that brings the results up to date (Update carving or Run analysis); it never
+  runs studies.
 - **Rays per sky patch is a project setting**, in Settings under More detail settings, shared by every criterion and the
   studies (engine: `chain_config.SHARED_MODE_SETTINGS`; a chain file sets it at the top level). A project that kept it per
   criterion takes the value of its first criterion that is on.

@@ -35,7 +35,7 @@ from ..mode_registry import MODES
 from ..pydantic_schemas import UserConfig
 from ..stage_settings import PIPELINE_STAGES
 from . import folder_picker, inspection, simulation, site_import, site_input, sun_study, typical_building, user_preferences
-from .api_models import OutlinesReply, TerrainHeightsReply, TerrainHeightsRequest
+from .api_models import CarvingUpdatesRequest, OutlinesReply, TerrainHeightsReply, TerrainHeightsRequest
 from .api_models import (
     NEW_PROJECT_MODE,
     CancelRunReply, ColdPeriodReply, ConfigErrorReply, ConfigReply, ConfigValuesRequest, CreateCriterionRequest, CreateProjectRequest,
@@ -326,6 +326,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         with store.project_lock(name):
             summary = store.summary(name)
             status = stage_status_reply(store, name)
+            project_json = store.read_project_json(name)
             return ProjectDetail(
                 name=summary.name, created=summary.created, modified=summary.modified, example=summary.example,
                 settings=store.read_settings(name),
@@ -333,8 +334,9 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
                 joined_bounds=store.joined_bounds(name), weather_location=store.weather_location(name),
                 weather_latitude=store.weather_latitude(name),
                 stage_status=status, grid_plan=store.stored_grid_plan(name),
-                carving_chain=store.read_project_json(name).carving_chain, criteria=store.criteria(name),
-                criterion_status=status.criteria, mode_to_choose=store.read_project_json(name).mode_to_choose)
+                carving_chain=project_json.carving_chain, criteria=project_json.criteria,
+                criterion_status=status.criteria, mode_to_choose=project_json.mode_to_choose,
+                carving_updates_itself=project_json.carving_updates_itself)
 
     def run_folder_of(name: str) -> Path:
         return folder_in_use.store.open(name) / RUN_FOLDER
@@ -611,6 +613,17 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
     def criterion_keys() -> list[str]:
         """The names of the settings that belong to a criterion; every other setting is shared by the criteria."""
         return sorted(CRITERION_KEYS)
+
+    @router.put("/projects/{name}/carving-updates", status_code=204, response_class=Response, responses=_ERROR_RESPONSES)
+    def set_carving_updates(name: str, request: CarvingUpdatesRequest) -> Response:
+        """Whether the app reruns the carving as its settings change (Settings > Carving). A choice of the page's, not of a result: it is
+        stored during a run too."""
+        store = folder_in_use.store
+        with store.project_lock(name):
+            project_json = store.read_project_json(name)
+            project_json.carving_updates_itself = request.on
+            store.write_project_json(name, project_json)
+        return Response(status_code=204)
 
     @router.post("/projects/{name}/mode-chosen", status_code=204, response_class=Response, responses=_ERROR_RESPONSES)
     def mode_chosen(name: str) -> Response:

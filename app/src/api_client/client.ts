@@ -220,6 +220,11 @@ export async function deleteProject(token: string, name: string, confirmName: st
 export const resetProjectToExample = (token: string, name: string) =>
   requestJson<ProjectDetail>(token, `${projectPath(name)}/reset-to-example`, "POST");
 
+/** Whether the app reruns the carving as its settings change (Settings > Carving); stored in the project, during a run too. */
+export async function setCarvingUpdates(token: string, project: string, on: boolean): Promise<void> {
+  await send(token, `${projectPath(project)}/carving-updates`, "PUT", JSON.stringify({ on }), "application/json");
+}
+
 /** Opens the project folder in the file manager of this computer. */
 export async function openProjectFolder(token: string, name: string): Promise<void> {
   await send(token, `${projectPath(name)}/open-folder`, "POST");

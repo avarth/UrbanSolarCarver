@@ -14,7 +14,7 @@ import type { StepFormAction } from "../settings_form/two_forms";
 import type { Point3 } from "../viewer/local_origin";
 import type { LayerName } from "../viewer/scene";
 import type { ViewerPaneProps } from "../viewer_overlays/ViewerPane";
-import { CarvingStep, thresholdControlOf, useAutoUpdate } from "../criteria/CarvingStep";
+import { CarvingStep, thresholdControlOf } from "../criteria/CarvingStep";
 import { CriteriaRunBar } from "../criteria/CriteriaRunBar";
 import { carvingUpdatedText, runActionOf } from "../criteria/criteria_state";
 import type { CriteriaOfResults } from "../criteria/use_workspace_criteria";
@@ -168,6 +168,8 @@ export interface ResultStepsContext extends CriteriaOfResults {
   runBlockerAction?: ReactNode;
   /** Every criterion that is on has a current carving: Build envelope and massing, pinned in Criteria, waits until then. */
   everyCriterionCarved: boolean;
+  /** The project's choice: the carving reruns as its settings change (Settings > Carving, project.json). */
+  carvingUpdatesItself: boolean;
   /** A run of this project is starting or in progress: the service refuses to save its settings. */
   projectRunActive: boolean;
   origin: Point3;
@@ -188,6 +190,9 @@ export interface ResultSteps {
   /** The bar pinned under a step: in Criteria, Run analysis and Build envelope and massing with the progress of their runs. */
   pinnedAction: Partial<Record<StepName, ReactNode>>;
   viewer: Pick<ViewerPaneProps, "results" | "dimmedLayers" | "missingLayers" | "missingLayerNotes" | "runProgress" | "overlayContent">;
+  /** On the view's Out of date stamp in Carve: the run the pinned bar offers (Update carving or Run analysis), never a study; null
+   *  when none is needed or one is running. */
+  stampAction: ReactNode;
   results: RunResults;
   /** The criteria whose thresholding the last run did and whose new numbers are not in yet: their cards say Running. */
   criteriaAwaitingNumbers: ReadonlySet<string>;
@@ -210,7 +215,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     carvedByCriterionIds: context.carvedByCriterionIds, activeCriterionIds: context.activeCriterionIds,
     stagesWithResults: (Object.keys(stages) as PipelineStage[]).filter((stage) => stages[stage] !== "missing"),
   });
-  const [autoUpdate, setAutoUpdate] = useAutoUpdate(project);
+  const autoUpdate = context.carvingUpdatesItself;
   const [runReportOpen, setRunReportOpen] = useState(false);
   const [downloadProblem, setDownloadProblem] = useState<string | null>(null);
   const [fetchesUnderWay, setFetchesUnderWay] = useState<Partial<Record<PipelineStage, number>>>({});
@@ -285,13 +290,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     const shownForm = latest.current.context.currentForm();
     return shownForm.storedAnalysisRevision !== revisionBefore || analysisDiffersFromStored(shownForm);
   };
-  // Update carving: saved first, and run only when the save left the analysis as it was.
-  const updateCarvingAfterSaving = async () => {
-    if (!carvingRunsNow()) return;
-    const revisionBefore = context.currentForm().storedAnalysisRevision;
-    const outcome = await flushSave();
-    if ((outcome === "saved" || outcome === "none") && !analysisChangedBy(revisionBefore) && carvingRunsNow()) void startRun(CARVING_STAGES, "carving_update");
-  };
+
 
   // Threshold changes with auto-update on go through the queue: one carving run at a time, the last value of each criterion next.
   // A run whose value the user left while it ran is marked so (RunRecord.isSuperseded): its results are not fetched and the
@@ -391,12 +390,11 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
       <CarvingStep form={form} isWeightedMode={context.isWeightedMode} summary={criterionCarving} scorePoints={results.scorePoints}
                    analysisOutOfDate={analysisOutOfDate}
                    carvingDimmed={isStageDimmed("thresholding", record, ownStages, stagesBeingFetched, context.criterionId)}
-                   autoUpdate={autoUpdate} onAutoUpdateChange={setAutoUpdate}
+                   autoUpdate={autoUpdate}
                    thresholdDisabledReason={otherRunActive ? activeRunReason(runs.activeRun) : null} settingsDisabledReason={settingsDisabledReason}
-                   runBlocker={runBlocker ?? carvingWaitReason} onChange={changeSettings}
+                   onChange={changeSettings}
                    onThresholdCommit={submitThreshold}
                    onCarvingSettingCommit={() => { if (thresholdView !== null) submitThreshold({}); }}
-                   onUpdateCarving={() => void updateCarvingAfterSaving()}
                    showsDisabledReason={false} />
     </>
   );
@@ -409,9 +407,16 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const runAction = carvingUpdateRunning ? null : neededRun;
   const carvingUpdatedNote = neededRun === null && record !== null && !(record.isSuperseded?.() ?? false)
     ? carvingUpdatedText(criteriaCarvedBy(record.state), context.criterionNames) : null;
+  const runTheNeededStages = () => void (runAction === "carving" ? startAfterSaving(CARVING_STAGES, "carving_update") : startAfterSaving(ANALYSIS_STAGES, "carving_run_analysis"));
+  const stampAction = runAction === null || running ? null : (
+    <button type="button" className="secondary-button viewer-stamp-action" disabled={runBlocker !== null} title={runBlocker ?? undefined}
+            onClick={runTheNeededStages}>
+      {runAction === "carving" ? messages.updateCarving : messages.runAnalysis}
+    </button>
+  );
   const criteriaRunBar = (
     <CriteriaRunBar runAction={runAction} runBlocker={runBlocker} buildBlocker={pinnedBuildBlocker}
-                    onRun={() => void (runAction === "carving" ? startAfterSaving(CARVING_STAGES, "carving_update") : startAfterSaving(ANALYSIS_STAGES, "carving_run_analysis"))}
+                    onRun={runTheNeededStages}
                     onBuild={() => {
                       context.openStep("envelope_and_massing");
                       void startAfterSaving(BUILD_STAGES, "build");
@@ -451,6 +456,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     content,
     carvingRule,
     pinnedAction: { criteria: criteriaRunBar },
+    stampAction,
     viewer: {
       results: { scorePoints: viewerResults.scorePoints, carving: criterionCarving, skyDome: viewerResults.skyDome, skippedSurfaces: viewerResults.skippedSurfaces,
                  envelope: viewerResults.envelope, massing: viewerResults.massing, carvedByCriterion: viewerResults.carvedByCriterion },

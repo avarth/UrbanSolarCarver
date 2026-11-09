@@ -219,6 +219,8 @@ export interface ViewerPaneProps {
   study?: StudyView | null;
   /** The study selected in Simulate is out of date: the stamp shows, whether or not its values are drawn. */
   studyOutOfDate?: boolean;
+  /** On the Out of date stamp, under its line: the run that brings the results up to date (Carve only); null for none. */
+  stampAction?: ReactNode;
   /** The envelope is drawn see-through even without the building massing (Simulate's envelope). */
   envelopeSeeThrough?: boolean;
   /** Inspect: while set, the test surfaces are hidden and the surface orientation layer is shown in their place. */
@@ -265,7 +267,7 @@ export function ViewerPane({ maxVolume, baseVolume = null, testSurfaces, onTestS
                              northDegrees, framingRequest, centreContent, results = NO_VIEWER_RESULTS, localOrigin = NO_SHIFT, dimmedLayers = NO_LAYERS,
                              missingLayers = NO_LAYERS, missingLayerNotes, runProgress = null, overlayContent, mode = null,
                              analysisCurrent = false, skyDomeTitle, skyDomeChoiceRemembered = true, study = null, studyOutOfDate = false, envelopeSeeThrough = false, inspect = null, sunStudy = null, sunTool = null,
-                             sceneTool = null }: ViewerPaneProps) {
+                             sceneTool = null, stampAction = null }: ViewerPaneProps) {
   const container = useRef<HTMLDivElement>(null);
   const [scene, setScene] = useState<ViewerScene | null>(null);
   const [sceneUnavailable] = useState(() => !browserHasWebGl());
@@ -534,6 +536,7 @@ export function ViewerPane({ maxVolume, baseVolume = null, testSurfaces, onTestS
         <div className="viewer-overlay viewer-out-of-date" data-viewport-theme={theme} role="status">
           <strong>{runProgress === null ? messages.viewerStampOutOfDate : messages.viewerStampUpdating}</strong>
           <span>{runProgress === null ? messages.viewerStampOutOfDateNote : messages.viewerStampUpdatingNote}</span>
+          {runProgress === null && stampAction}
         </div>
       )}
       {centreContent && <div className="viewer-centre" data-viewport-theme={theme}>{centreContent}</div>}

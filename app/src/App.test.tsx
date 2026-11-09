@@ -184,6 +184,7 @@ function projectDetail(name: string, modified = "2026-10-17T09:00:00", example: 
     name, created: "2026-10-17T09:00:00", modified, example, settings: { mode: "time-based" }, mode_to_choose: false,
     inputs: { max_volume: [], test_surfaces: [], weather: [] }, joined_bounds: null, weather_location: null, weather_latitude: null,
     stage_status: { stages: { preprocessing: "missing", thresholding: "missing", exporting: "missing", massing: "missing" } }, grid_plan: null,
+    carving_updates_itself: true,
   };
 }
 
@@ -427,7 +428,7 @@ test("with a failed save outstanding, a delete of the open project sends no sett
   expect(service.requests.slice(deleteAt).filter((request) => request.startsWith("PUT"))).toEqual([]);
 });
 
-test("the carving's auto-update choice follows a rename and goes with a delete", async () => {
+test("an auto-update choice an earlier version kept in this browser follows a rename and goes with a delete", async () => {
   const service = new FakeService();
   window.localStorage.setItem("usc.autoUpdate.Plot 7", "off");
   await renderApp(service);

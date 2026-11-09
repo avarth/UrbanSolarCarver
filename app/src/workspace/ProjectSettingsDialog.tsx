@@ -62,9 +62,11 @@ interface ProjectSettingsDialogProps {
   heights?: ReactNode;
   /** The weather file's box, first in the Location group (design/new-project-setup.md). */
   weather?: ReactNode;
+  /** The Carving group: whether the carving reruns as its settings change. */
+  carving?: ReactNode;
 }
 
-export function ProjectSettingsDialog({ form, stepErrors, criterionKeys, onChange, disabledReason, inputRoles, onClose, contentRef, heights, weather }: ProjectSettingsDialogProps) {
+export function ProjectSettingsDialog({ form, stepErrors, criterionKeys, onChange, disabledReason, inputRoles, onClose, contentRef, heights, weather, carving }: ProjectSettingsDialogProps) {
   // Drawn into the page's body, as the typical building's window: inside the panel its backdrop could not cover the view's overlays.
   return createPortal(
     <DialogFrame title={messages.projectSettingsTitle} busy={false} onClose={onClose} closeLabel={messages.closeProjectSettings} titleTakesFocus>
@@ -72,6 +74,7 @@ export function ProjectSettingsDialog({ form, stepErrors, criterionKeys, onChang
         <p className="project-settings-intro">{messages.projectSettingsIntro}</p>
         <SettingsStep form={form} stepErrors={stepErrors} onChange={onChange} disabledReason={disabledReason} inputRoles={inputRoles}
                       withoutInputs="disabled" settingShown={(name) => !criterionKeys.has(name)} groupLeads={weather === undefined ? undefined : { Location: weather }} />
+        {carving}
         {heights}
       </div>
       <div className="project-dialog-buttons">

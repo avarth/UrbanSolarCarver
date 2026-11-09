@@ -14,7 +14,7 @@
 import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
-  failureTextOf, markModeChosen, readOutlines, reportServiceProblem, terrainHeights, type HealthReply, type OutlinesReply, type ModeInfo, type ProjectDetail,
+  failureTextOf, markModeChosen, readOutlines, reportServiceProblem, setCarvingUpdates, terrainHeights, type HealthReply, type OutlinesReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
 import { ProjectSessionContext } from "../api_client/project_session";
 import { activeCriteria, filesOfOtherCriteria } from "../criteria/criteria_state";
@@ -62,6 +62,8 @@ import { useInputFiles } from "./use_input_files";
 import { InputChoice, SiteBox, SwitchInputLink } from "../sites/SiteInput";
 import { ProjectSetupDialog } from "./ProjectSetupDialog";
 import { ImportSitesDialog } from "../sites/ImportSitesDialog";
+import { browserAutoUpdateChoice, forgetBrowserAutoUpdateChoice } from "../criteria/CarvingStep";
+import { Subheading } from "../settings_form/Subheading";
 import { HeightsSettings } from "../sites/HeightsSettings";
 import { SiteEditor, SitePicker, type SiteTool } from "../sites/SiteEditor";
 import { drawingLevel } from "../sites/site_drawing";
@@ -161,6 +163,8 @@ export interface OpenProjectSettingsSaver {
   waitForInputChanges: () => Promise<void>;
 }
 
+/** The Carving group of Settings (data-setting), whose switch the carving's reruns follow. */
+const CARVING_UPDATES_SETTING = "carving_updates_itself";
 /** What a reason that leads to the weather file focuses in Settings: its box (data-setting). */
 const WEATHER_SETTING = "weather_file";
 const NO_STEP_ERRORS: readonly string[] = [];
@@ -253,6 +257,25 @@ function OpenProject(props: ProjectWorkspaceProps) {
   // The project settings window, opened from the Settings button or from a reason or link that names one of its settings.
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [setupOpen, setSetupOpen] = useState(props.startsWithSetup === true);
+  // The carving reruns as its settings change: the project's choice (project.json), in Settings > Carving. A choice an earlier
+  // version kept in this browser is moved into the project once.
+  const [carvingUpdatesItself, setCarvingUpdatesItselfShown] = useState(
+    () => browserAutoUpdateChoice(props.project.name) ?? props.project.carving_updates_itself ?? true);
+  const changeCarvingUpdates = (on: boolean) => {
+    setCarvingUpdatesItselfShown(on);
+    setCarvingUpdates(props.token, props.project.name, on).catch((error: unknown) => {
+      if (!reportServiceProblem(error, props.onServiceProblem)) setCarvingUpdatesItselfShown(!on);
+    });
+  };
+  const moveBrowserChoice = useEffectEvent(() => {
+    const kept = browserAutoUpdateChoice(props.project.name);
+    if (kept === null) return;
+    forgetBrowserAutoUpdateChoice(props.project.name);
+    if (kept !== (props.project.carving_updates_itself ?? true)) {
+      setCarvingUpdates(props.token, props.project.name, kept).catch((error: unknown) => reportServiceProblem(error, props.onServiceProblem));
+    }
+  });
+  useEffect(() => moveBrowserChoice(), []);
   const settingsButton = useRef<HTMLButtonElement>(null);
   const settingsContent = useRef<HTMLDivElement>(null);
   const closeSettings = () => {
@@ -381,6 +404,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
     criterionId: resultsCriterionId, criterionKeys,
     form, currentForm, dispatch, flushSave, changeAndSave, isWeightedMode: modeInfo?.score_kind === "weighted_sum", stages: shownStages,
     refreshStageStatus, runs, runBlocker: workspaceCriteria.runBlocker, everyCriterionCarved, projectRunActive: runActive, origin, openStep: openTheStep,
+    carvingUpdatesItself,
     // A reason that names a setting of the project settings leads there: the window opens on that field.
     runBlockerAction: workspaceCriteria.runBlockerPlace === "project_settings" && (
       <button type="button" className="link-button run-button-reason-action" onClick={() => {
@@ -674,6 +698,17 @@ function OpenProject(props: ProjectWorkspaceProps) {
     <ProjectSettingsDialog form={form} stepErrors={sharedForm.form.stepErrors} criterionKeys={criterionKeys} onChange={changeSettings}
                            disabledReason={inputsDisabledReason} inputRoles={inputRolesWithFiles} onClose={closeSettings} contentRef={settingsContent}
                            weather={<div data-setting={WEATHER_SETTING}>{settingsWeatherBox}</div>}
+                           carving={(
+                             <div className="setting-group" data-setting={CARVING_UPDATES_SETTING}>
+                               <Subheading className="setting-group-title">{messages.carvingGroup}</Subheading>
+                               <label className="switch-row">
+                                 <input type="checkbox" role="switch" className="setting-switch" checked={carvingUpdatesItself}
+                                        onChange={(event) => changeCarvingUpdates(event.target.checked)} />
+                                 {messages.updateWhenThresholdChanges}
+                               </label>
+                               <p className="setting-note">{messages.updateWhenThresholdChangesHelp}</p>
+                             </div>
+                           )}
                            heights={siteInput.source === null ? undefined : (
                              <HeightsSettings fromSites={siteInput.source === "sites"} heights={siteInput.heights} onChange={siteInput.setHeights}
                                               startingMax={siteInput.sites[0]?.height ?? DEFAULT_SITE_HEIGHT} disabledReason={inputsDisabledReason} />
@@ -734,6 +769,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
                     shownByDefault={shownByDefault} northDegrees={northDegrees} framingRequest={framingRequest}
                     centreContent={props.mode === "design" && emptyViewContent} localOrigin={origin} mode={form.mode}
                     analysisCurrent={(ownStages ?? shownStages).preprocessing === "current"} {...resultSteps.viewer} inspect={inspectView}
+                    stampAction={props.mode === "design" ? resultSteps.stampAction : null}
                     {...(simulating ? simulateViewer : {})} {...(inspecting ? inspectViewer : {})} sceneTool={sceneTool} />
       </section>
     </div>

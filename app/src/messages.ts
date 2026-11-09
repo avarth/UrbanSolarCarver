@@ -638,7 +638,9 @@ export const messages = {
   analysisOutOfDate: "The settings changed since the analysis. Run it again to update the carving.",
   sliderLowestEnd: "0",
   sliderHighestScore: (highestText: string) => `${highestText}, the highest of any voxel`,
-  updateWhenThresholdChanges: "Update the carving as I change these settings",
+  updateWhenThresholdChanges: "Update the carving as I change its settings",
+  carvingGroup: "Carving",
+  updateWhenThresholdChangesHelp: "On: a change of a criterion's carving rule carves again at once. Off: Update carving does, in the bar under the steps or on the view.",
   updateCarving: "Update carving",
   // Under the pinned buttons once a carving update has finished, while its results are current.
   carvingUpdated: "Carving updated.",

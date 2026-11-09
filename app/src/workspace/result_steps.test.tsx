@@ -156,7 +156,7 @@ test("a threshold run whose follow-up brings no run (a failed save, results up t
     const runs = useRunLoop("token", vi.fn());
     latest = useResultSteps({
       form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false, stages,
-      refreshStageStatus, runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
+      refreshStageStatus, runs, runBlocker: null, everyCriterionCarved: true, carvingUpdatesItself: true, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
       goToSetting: vi.fn(),
     });
     return <>{latest.carvingRule}{latest.pinnedAction.criteria}</>;
@@ -215,7 +215,7 @@ test("after a follow-up with nothing to run, the carving stays dimmed until the 
     const runs = useRunLoop("token", vi.fn());
     latest = useResultSteps({
       form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: false,
-      stages, refreshStageStatus: vi.fn(), runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0],
+      stages, refreshStageStatus: vi.fn(), runs, runBlocker: null, everyCriterionCarved: true, carvingUpdatesItself: true, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0],
       openStep: vi.fn(), goToSetting: vi.fn(),
     });
     return <>{latest.carvingRule}{latest.pinnedAction.criteria}</>;
@@ -267,7 +267,7 @@ test("a threshold change whose save stores a mode or an analysis setting a refus
     const runs = useRunLoop("token", vi.fn());
     const steps = useResultSteps({
       form, currentForm: () => formNow, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false,
-      stages, refreshStageStatus: vi.fn(), runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: false, origin: [0, 0, 0], openStep: vi.fn(),
+      stages, refreshStageStatus: vi.fn(), runs, runBlocker: null, everyCriterionCarved: true, carvingUpdatesItself: true, projectRunActive: false, origin: [0, 0, 0], openStep: vi.fn(),
       goToSetting: vi.fn(),
     });
     return <>{steps.carvingRule}</>;

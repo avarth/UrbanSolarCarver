@@ -1,11 +1,12 @@
 // A criterion's carving rule (UX 5.5, 11; once the Carving step, now in the criterion's panel, CriterionPanel): in the weighted
 // modes the carving rule at the top (Manual or Automatic), then the control of the
 // rule (Shade allowed per voxel in m²·h for Sun hours, Carve amount in % under Manual, a line for Automatic; the angle rule's
-// message), the "Update the carving as I change these settings" switch, remembered per project, the histogram with its cutoff line, and the
-// other carving settings folded last. What the carving removed is on the criterion's card (cardResultLine).
-// With the switch on, letting go of the slider, of the line on the histogram or leaving the number field reruns the carving, as
-// does a change of another carving setting (a switch or a choice at once, a number field when the user leaves it, a slider when it
-// is let go); off, Update carving does.
+// message), the histogram with its cutoff line, and the other carving settings folded last. What the carving removed is on the
+// criterion's card (cardResultLine).
+// With the project's "Update the carving as I change its settings" on (Settings > Carving, kept in project.json), letting go of the
+// slider, of the line on the histogram or leaving the number field reruns the carving, as does a change of another carving setting (a
+// switch or a choice at once, a number field when the user leaves it, a slider when it is let go); off, Update carving in the pinned
+// bar or on the view's Out of date stamp does.
 // The line on the histogram can be dragged in every rule: it previews the share of the volume a cutoff keeps, worked out from the
 // score points, and sets the carve amount that cutoff stands for (Manual; Automatic turns into Manual, which the step says), or
 // the cutoff itself (Shade allowed per voxel). A cutoff a weighted mode's config holds (from the command line or an earlier version) is
@@ -47,12 +48,22 @@ export function autoUpdateStorageKey(project: string): string {
   return `${AUTO_UPDATE_STORAGE_PREFIX}${project}`;
 }
 
-/** Whether the project's carving reruns on a threshold change: on unless the user switched it off on this computer. */
-export function readAutoUpdate(project: string): boolean {
+/** The choice an earlier version kept in this browser for the project (true or false); null when none was kept. It is moved into the
+ *  project once (project.json carving_updates_itself), then forgotten here. */
+export function browserAutoUpdateChoice(project: string): boolean | null {
   try {
-    return window.localStorage.getItem(autoUpdateStorageKey(project)) !== "off";
+    const choice = window.localStorage.getItem(autoUpdateStorageKey(project));
+    return choice === null ? null : choice !== "off";
   } catch {
-    return true;
+    return null;
+  }
+}
+
+export function forgetBrowserAutoUpdateChoice(project: string): void {
+  try {
+    window.localStorage.removeItem(autoUpdateStorageKey(project));
+  } catch {
+    // storage is blocked: nothing was kept
   }
 }
 
@@ -68,19 +79,6 @@ export function moveAutoUpdateChoice(from: string, to: string | null): void {
   } catch {
     // storage is blocked: no choice was kept
   }
-}
-
-export function useAutoUpdate(project: string): [boolean, (on: boolean) => void] {
-  const [autoUpdate, setAutoUpdate] = useState(() => readAutoUpdate(project));
-  const remember = (on: boolean) => {
-    setAutoUpdate(on);
-    try {
-      window.localStorage.setItem(autoUpdateStorageKey(project), on ? "on" : "off");
-    } catch {
-      // storage is blocked: the choice holds for this page load
-    }
-  };
-  return [autoUpdate, remember];
 }
 
 /** The setting the threshold control sets in *mode*: Shade allowed per voxel (threshold), Carve amount (carve_fraction), or none. */
@@ -304,20 +302,17 @@ export interface CarvingStepProps {
   analysisOutOfDate: boolean;
   /** The carving shown is out of date or being replaced: drawn dimmed. */
   carvingDimmed: boolean;
+  /** The project's choice (Settings > Carving): a change of the carving rule reruns the carving. */
   autoUpdate: boolean;
-  onAutoUpdateChange: (on: boolean) => void;
   /** Why the threshold cannot be changed now (a run other than a carving update, or the analysis out of date); null when it can. */
   thresholdDisabledReason: string | null;
   /** Why the other carving settings cannot be changed now (a run of the project); null when they can. */
   settingsDisabledReason: string | null;
-  /** Why a run cannot start (another run, inputs, settings, the warm-up); null when it can. */
-  runBlocker: string | null;
   onChange: (values: Record<string, unknown>) => void;
   /** The threshold settings to apply and run, with auto-update on: the rule, its cutoff, or the carve amount. */
   onThresholdCommit: (values: Record<string, unknown>) => void;
   /** A carving setting was changed with auto-update on and the user is done with it: the carving reruns with it. */
   onCarvingSettingCommit: () => void;
-  onUpdateCarving: () => void;
   /** Whether the reason the controls are disabled is written over them; false where Run analysis says it (the Criteria step's pinned bar). */
   showsDisabledReason?: boolean;
 }
@@ -329,8 +324,7 @@ interface ReleasedCutoff {
 }
 
 export function CarvingStep(props: CarvingStepProps) {
-  const { form, summary, scorePoints, analysisOutOfDate, autoUpdate, runBlocker, isWeightedMode } = props;
-  const updateReasonId = useId();
+  const { form, summary, scorePoints, analysisOutOfDate, autoUpdate, isWeightedMode } = props;
   const settingChangedSinceCommit = useRef(false);
   const [draggedCutoff, setDraggedCutoff] = useState<number | null>(null);
   const [heldControlNumber, setHeldControlNumber] = useState<number | null>(null);
@@ -384,7 +378,6 @@ export function CarvingStep(props: CarvingStepProps) {
   const commitSliderOnRelease = (event: PointerEvent) => { if (isSlider(event.target)) commitCarvingSetting(); };
   const commitSliderAfterKey = (event: KeyboardEvent) => { if (SLIDER_KEYS.has(event.key) && isSlider(event.target)) commitCarvingSetting(); };
   const disabledReason = analysisOutOfDate ? null : (props.thresholdDisabledReason ?? props.settingsDisabledReason);
-  const updateBlocker = analysisOutOfDate ? null : runBlocker;
   const resultsClassName = props.carvingDimmed || analysisOutOfDate ? "carving-content carving-content-dimmed" : "carving-content";
   const thresholdLocked = thresholdDisabled || analysisOutOfDate;
 
@@ -456,23 +449,9 @@ export function CarvingStep(props: CarvingStepProps) {
                                 onChangeValue={(shownNumber) => props.onChange(thresholdControlValues(ruleControl, shownNumber))}
                                 onCommit={(shownNumber) => props.onThresholdCommit(thresholdControlValues(ruleControl, shownNumber))} />
             )}
-            <label className="switch-row">
-              <input type="checkbox" role="switch" className="setting-switch" checked={autoUpdate} disabled={analysisOutOfDate}
-                     onChange={(event) => props.onAutoUpdateChange(event.target.checked)} />
-              {messages.updateWhenThresholdChanges}
-            </label>
           </>
         )}
       </div>
-      {!autoUpdating && (
-        <div className="update-carving">
-          <button type="button" className="secondary-button" disabled={runBlocker !== null || analysisOutOfDate}
-                  aria-describedby={updateBlocker !== null ? updateReasonId : undefined} onClick={props.onUpdateCarving}>
-            {messages.updateCarving}
-          </button>
-          {updateBlocker !== null && <p id={updateReasonId} className="run-button-reason">{updateBlocker}</p>}
-        </div>
-      )}
       {summary !== null && (
         <div className={resultsClassName}>
           {thresholdView !== null && comparedScores !== null && kept !== null && shownCutoff !== null && (
