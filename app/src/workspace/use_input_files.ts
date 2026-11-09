@@ -149,7 +149,7 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
   const maxVolume = useInputGeometry("max_volume", fromSites ? (joinedBounds === null ? [] : MAX_VOLUME_FILE) : files.max_volume, origin,
                                      inputRevisions.max_volume, onInputsLoaded, fromSites ? () => joinedMaxVolumeUrl(project.name) : undefined);
   const hasBase = source === "sites" ? sites.some((site) => baseHeightOf(site, heights) !== null)
-    : source === "mesh" && typeof heights.base.value === "number" && files.max_volume.length > 0;
+    : source === "mesh" && (heights.base.value ?? 0) > 0 && files.max_volume.length > 0;     // 0 is no lower limit, as none is
   const baseVolume = useInputGeometry("max_volume", hasBase ? BASE_VOLUME_FILE : [], origin, inputRevisions.max_volume, () => {},
                                       () => baseVolumeUrl(project.name));
   const testSurfaces = useInputGeometry("test_surfaces", files.test_surfaces, origin, inputRevisions.test_surfaces, onInputsLoaded);

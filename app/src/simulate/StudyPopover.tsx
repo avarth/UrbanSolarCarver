@@ -223,7 +223,8 @@ function AccountAndSimulate({ settings, hasSurroundings, hasTerrain, envelopeBui
                 onChange={(event) => onChange({ [GEOMETRY]: event.target.value })}>
           {stands.map((each) => (
             <option key={each} value={each} disabled={!built[each] && each !== stand}>
-              {built[each] || each === stand ? messages.studyStands[each] : messages.studyStandWaiting(messages.studyStands[each], messages.buildGeometryFirst[each])}
+              {/* The study's own choice says it waits too (a base height set back to none), so a run that leaves it out is no surprise */}
+              {built[each] ? messages.studyStands[each] : messages.studyStandWaiting(messages.studyStands[each], messages.buildGeometryFirst[each])}
             </option>
           ))}
         </select>

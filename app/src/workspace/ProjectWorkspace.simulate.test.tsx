@@ -13,7 +13,7 @@ import { studyPaletteColour } from "../viewer/study_palettes";
 import { press } from "../viewer_overlays/render_for_test";
 import {
   CARVING, ENVELOPE, NOTHING_RUN, FakeService, buttonIn, container, endWorkspaceTest, openStep, openWorkspace, pinnedBar, pressRunAnalysis, project, reasonOf,
-  settle, startWorkspaceTest, stepRow, switchMode, reportedServiceProblems,
+  settle, startWorkspaceTest, stepRow, switchMode, reportedServiceProblems, openProjectSettings, closeProjectSettings, projectSettings,
 } from "./project_workspace_for_test";
 import {
   addStudyButton, addStudyMenuItems, chooseAddStudy, openSimulate, openStudySettings, runButton, selectedStudyName, simulateService, study,
@@ -282,6 +282,42 @@ test("without a base height the base volume is not offered", async () => {
   await openSimulate(undefined, (service) => { service.studies = [study("1", "sky_view", ["facades.obj"], "current")]; });
   await openStudySettings("Sky view factor");
   expect([...accountForSelect().options].map((option) => option.textContent)).not.toContain("Base volume");
+});
+
+/** Types *text* into a field and presses Enter, as a height is typed. */
+const typeIn = async (field: HTMLInputElement, text: string) => {
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, text);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => { field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
+  await settle();
+};
+
+test("a study on the base volume of a project without a base height shows its choice waiting, with the reason", async () => {
+  await openSimulate(undefined, (service) => {
+    service.studies = [study("1", "sky_view", ["facades.obj"], "refused", "Set a base height in Settings", { geometry: "base_volume" })];
+  });
+  await openStudySettings("Sky view factor");
+  const select = accountForSelect();
+  expect(select.value).toBe("base_volume");
+  expect(select.options[select.selectedIndex].textContent).toBe("Base volume (set a base height in Settings)");
+});
+
+test("a change of the heights in Settings reads the studies again, so a study on the base volume says it waits", async () => {
+  await openSimulate(undefined, (service) => {
+    service.heights = { max: { for_all_sites: false, value: null }, base: { for_all_sites: true, value: 8 } };
+    service.studies = [study("1", "sky_view", ["facades.obj"], "current", null, { geometry: "base_volume" })];
+  });
+  const readsBefore = simulateService.count("GET /studies");
+  simulateService.studies = [study("1", "sky_view", ["facades.obj"], "refused", "Set a base height in Settings", { geometry: "base_volume" })];
+  openProjectSettings();
+  await settle();
+  await typeIn(projectSettings()!.querySelector<HTMLInputElement>('[data-setting="base_height"] input')!, "0");
+  closeProjectSettings();
+  await settle();
+  expect(simulateService.count("GET /studies")).toBeGreaterThan(readsBefore);
+  expect(studyRow("Sky view factor").textContent).toContain("Set a base height in Settings");
 });
 
 test("a study's spacing follows Carve until typed, and Follow Carve takes it back", async () => {

@@ -211,6 +211,15 @@ function OpenProject(props: ProjectWorkspaceProps) {
           sites: siteInput } = useInputFiles({
     project, modes, currentForm, sharedForm, refreshStageStatus, onInputsLoaded: frameAllInputs,
   });
+  // The studies are read again when the sites, their heights or the source of the maximum volume change: a study on the base volume
+  // waits once there is no base height, and the others go out of date (also when the change is made in Settings while in Simulate)
+  const refreshStudiesAfterSites = useEffectEvent(() => void studies.refresh());
+  const sitesKey = JSON.stringify([siteInput.heights, siteInput.sites, siteInput.source]);     // the values, not the objects read again
+  const sitesSeen = useRef<string | null>(null);
+  useEffect(() => {
+    if (sitesSeen.current !== null && sitesSeen.current !== sitesKey) refreshStudiesAfterSites();
+    sitesSeen.current = sitesKey;
+  }, [sitesKey]);
   // A site as the input (design/site-input.md): the tool drawing or editing a site in the view, and the tile chosen before any content
   const [siteTool, setSiteTool] = useState<SiteTool | null>(null);
   // An outline file read and shown in the import window (design/site-import.md), and what the last import or placing said

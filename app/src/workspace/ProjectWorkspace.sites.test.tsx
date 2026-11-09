@@ -142,6 +142,14 @@ const typeIn = async (field: HTMLInputElement, text: string) => {
 };
 const FLAT_SITE = { name: "Site 1", points: [[0, 0, 0], [20, 0, 0], [20, 10, 0]], height: 30 };
 
+test("a mesh maximum volume with a base height of 0 has no base volume to read", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.heights = { max: { for_all_sites: true, value: 50 }, base: { for_all_sites: true, value: 0 } };
+  await openWorkspace(service, project(NOTHING_RUN));
+  await settle();
+  expect(service.requests.filter((request) => request.startsWith("GET /base-volume"))).toEqual([]);
+});
+
 test("a base height for all sites is typed in Settings, said once above the sites, and its link opens Settings on it", async () => {
   const service = new FakeService(NOTHING_RUN, null);
   service.siteSource = "sites";
