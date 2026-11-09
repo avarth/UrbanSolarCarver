@@ -504,7 +504,7 @@ export const messages = {
   relativeElevation: (value: number) => `${value >= 0 ? "+" : ""}${formattedNumber(value)}\u00a0m above the lowest point`,
   vertexHandle: (index: number) => `Vertex ${index}`,
   siteCannotBeDrawnWhileRunning: "Sites cannot change while the analysis runs.",
-  inputsSizeTitle: "Size of all inputs together",
+  inputsSizeTitle: "Overall size",
   inputsSize: (sideX: string, sideY: string, sideZ: string) => `${sideX} × ${sideY} × ${sideZ}\u00a0m`,
 
   // Mode (5.3). The names, lines and tooltips of the six modes are in mode_tiles.json.

@@ -404,8 +404,10 @@
 .input-box-empty { border-style: dashed; }
 .input-box-drop-target { border-color: var(--colour-accent); background: var(--colour-accent-soft); }
 
+/* When the title and the actions do not fit on one line, the actions go under the title, still on the right. */
 .input-box-title-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: calc(var(--space-unit) * 2);

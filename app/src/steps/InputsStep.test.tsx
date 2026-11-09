@@ -49,7 +49,7 @@ test("empty boxes: dashed, Add files in the title row and no badge, the hint, th
   expect(maxVolume.textContent).toContain("The largest building you would allow, as one or more closed meshes.");
   expect(maxVolume.querySelector(".input-box-actions")).toBeNull();
   expect(maxVolume.querySelector("p.input-box-drop-hint")!.textContent).toBe("Or drop the files here.");
-  expect(rendered.container.textContent).not.toContain("Size of all inputs together");
+  expect(rendered.container.textContent).not.toContain("Overall size");
   rendered.unmount();
   rendered = renderForTest(weatherBox([]));
   const weather = boxTitled("Weather file");
@@ -68,7 +68,7 @@ test("filled boxes: a row per file with its triangle count or location, a named 
   expect([...context.querySelectorAll(".input-file-name")].map((name) => name.textContent)).toEqual(["neighbour_blocks.ply", "neighbour_trees.ply"]);
   expect(context.querySelector(".input-file-detail")!.textContent).toBe("2 040 triangles");
   expect(context.querySelector('[aria-label="Remove neighbour_trees.ply"]')).not.toBeNull();
-  expect(rendered.container.querySelector(".inputs-size")!.textContent).toBe("Size of all inputs together52 × 44 × 30 m");
+  expect(rendered.container.querySelector(".inputs-size")!.textContent).toBe("Overall size52 × 44 × 30 m");
   rendered.unmount();
   rendered = renderForTest(weatherBox(WEATHER_FILES));
   const weather = boxTitled("Weather file");
