@@ -390,6 +390,11 @@ export const messages = {
   orDropWeatherFileHere: "Or drop the .epw file here.",
   replaceFile: "Replace",
   removeFile: (fileName: string) => `Remove ${fileName}`,
+  fileRemoved: (fileName: string) => `${fileName} was removed.`,
+  undoRemoval: "Undo",
+  removedFilesKept: (count: number) => (count === 1 ? "1 removed file is kept in the project folder." : `${count} removed files are kept in the project folder.`),
+  showRemovedFiles: "Show",
+  removeFileTitle: (fileName: string) => `Remove ${fileName} from the project. The file is kept in the project folder, under inputs/removed`,
   triangleCount: (count: number) => `${groupedDigits(count)} ${count === 1 ? "triangle" : "triangles"}`,
   fileProblem: (fileName: string, reason: string) => `${fileName}: ${reason}`,
   // A file the service accepted (the engine reads it) that the 3D view cannot draw, said in its box as fileProblem(name, reason)

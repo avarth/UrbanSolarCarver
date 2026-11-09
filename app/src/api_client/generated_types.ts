@@ -410,6 +410,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/inputs/{role}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Removed Input
+         * @description Add a removed input back from inputs/removed/<role>/ (the undo of a removal); 404 when the kept file is not there.
+         */
+        post: operations["restore_removed_input"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/removed-inputs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Removed Inputs
+         * @description How many removed inputs the project folder keeps under inputs/removed/.
+         */
+        get: operations["removed_inputs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/removed-inputs/open-folder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open Removed Inputs Folder
+         * @description Open inputs/removed/ of the project in the file manager of this computer (made when missing).
+         */
+        post: operations["open_removed_inputs_folder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}/sites": {
         parameters: {
             query?: never;
@@ -1867,6 +1927,8 @@ export interface components {
             weather_location: string | null;
             /** Weather Latitude */
             weather_latitude: number | null;
+            /** Kept As */
+            kept_as?: string | null;
         };
         /**
          * InspectReply
@@ -2150,6 +2212,14 @@ export interface components {
             can_change: boolean;
         };
         /**
+         * RemovedInputsReply
+         * @description How many removed inputs the project folder keeps under inputs/removed/.
+         */
+        RemovedInputsReply: {
+            /** Count */
+            count: number;
+        };
+        /**
          * RenameProjectRequest
          * @description The body of a request to rename a project.
          */
@@ -2172,6 +2242,16 @@ export interface components {
         RestoreOriginalRequest: {
             /** Version */
             version: string;
+        };
+        /**
+         * RestoreRemovedInputRequest
+         * @description A removed input to add back: its name under inputs/removed/<role>/ and the name it is listed by again.
+         */
+        RestoreRemovedInputRequest: {
+            /** Kept As */
+            kept_as: string;
+            /** File Name */
+            file_name: string;
         };
         /**
          * RunSummary
@@ -3612,6 +3692,129 @@ export interface operations {
             };
             /** @description A run of this project is active. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    restore_removed_input: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                role: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreRemovedInputRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InputFilesReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    removed_inputs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemovedInputsReply"];
+                };
+            };
+            /** @description There is no such criterion. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    open_removed_inputs_folder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description There is no such project. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -43,7 +43,7 @@ from .criteria import (
 )
 from .example_catalog import read_examples
 from .project_names import PROJECT_JSON_FILE_NAME, ProjectError, check_not_a_windows_device_name, validate_project_name
-from .project_removal import ProjectRemovalRefused, check_project_folder_can_be_removed, discard_file, discard_folder, move_to_recycle_bin
+from .project_removal import ProjectRemovalRefused, check_project_folder_can_be_removed, discard_folder, move_to_recycle_bin
 from ..check_settings import CHECK_METRICS
 from .studies import (
     NOT_SENT, append_study, change_study, checked_metric, default_study_name, default_study_settings, find_study, joined_study_surfaces_path,
@@ -61,6 +61,11 @@ MESH_EXTENSIONS = (".ply", ".obj", ".stl", ".glb", ".dxf")
 WEATHER_EXTENSION = ".epw"
 WEATHER_FILE_NAME = "weather.epw"
 INPUTS_FOLDER = "inputs"
+# Where a removed input's stored file goes, one folder per role (inputs/removed/<role>/): removing a file takes it out of the
+# project and its calculations but keeps it, so an accidental removal is undone by adding it again (user, 2026-11-09).
+REMOVED_INPUTS_FOLDER = "removed"
+# Beside a removed surface set's file, its name and picks (SurfaceSetJson), so that an undo brings the set back as it was.
+SET_RECORD_SUFFIX = ".set.json"
 JOINED_FOLDER = "inputs/joined"
 # Settings the service decides, whatever the browser sends: every file location (the service takes no path from the browser;
 # simulated_weights_path is set for an energy-weighted criterion, see criteria.engine_settings) and the compute device.
@@ -147,6 +152,22 @@ def sanitize_file_name(name: str) -> str:
 
 def _utc_iso(timestamp_seconds: float) -> str:
     return datetime.fromtimestamp(timestamp_seconds, timezone.utc).isoformat(timespec="seconds")
+
+
+def keep_removed_file(project_folder: Path, role: str, stored_path: Path, file_name: str) -> Path | None:
+    """Move the stored file of a removed input to inputs/removed/<role>/<file_name>, where it can be found and added again; the
+    path it got, or None when there was no file. A name already there gets " (2)", " (3)" and so on. OSError when it cannot move
+    (a program has it open), and the file stays."""
+    if not stored_path.is_file():
+        return None
+    folder = project_folder / INPUTS_FOLDER / REMOVED_INPUTS_FOLDER / role
+    folder.mkdir(parents=True, exist_ok=True)
+    stem, suffix = Path(file_name).stem, Path(file_name).suffix
+    target, number = folder / file_name, 2
+    while target.exists():
+        target, number = folder / f"{stem} ({number}){suffix}", number + 1
+    os.replace(stored_path, target)
+    return target
 
 
 def _name_list(names: list[str]) -> str:
@@ -839,8 +860,10 @@ class ProjectStore:
                                                  lambda _project_folder, project_json, _entry: self.write_project_json(name, project_json))
         return self._file_info(self.read_project_json(name), test_surfaces.ROLE, stored)
 
-    def delete_surface_set(self, name: str, file_name: str) -> None:
-        """Remove a surface set from the project: its stored file to the recycle bin (discard_file), with its name and picks.
+    def delete_surface_set(self, name: str, file_name: str) -> Path | None:
+        """Remove a surface set from the project, with its name and picks: its stored file moves to inputs/removed/test_surfaces/
+        (keep_removed_file), with its name and picks beside it in <file>.set.json (SET_RECORD_SUFFIX) for restore_removed_input; the path it
+        was kept at, or None.
 
         ProjectError 404 for an unknown set, 422 while a criterion or study uses it (the reason names them): it is switched off
         there first (user, 2026-11-09)."""
@@ -855,9 +878,13 @@ class ProjectStore:
                 raise ProjectError(f"{shown} is used by {_name_list(users)}. Switch it off there first.", status_code=422)
             project_json.input_files[test_surfaces.ROLE].pop(file_name, None)
             project_json.stored_files.get(test_surfaces.ROLE, {}).pop(file_name, None)
-            project_json.surface_sets.pop(file_name, None)
+            set_entry = project_json.surface_sets.pop(file_name, None)
             self.write_project_json(name, project_json)
-            self._discard_test_surface_files(project_folder, [file_name])
+            kept = self._keep_removed_test_surface(project_folder, file_name)
+            if kept is not None and set_entry is not None:
+                with contextlib.suppress(OSError):
+                    kept.with_name(kept.name + SET_RECORD_SUFFIX).write_text(set_entry.model_dump_json(), encoding="utf-8")
+            return kept
 
     @staticmethod
     def _surface_set_users(project_json: ProjectJson, file_name: str) -> list[str]:
@@ -866,14 +893,15 @@ class ProjectStore:
                 *(study.name for study in project_json.studies if file_name in study.test_surface_files)]
 
     @staticmethod
-    def _discard_test_surface_files(project_folder: Path, file_names: list[str]) -> None:
-        """Send stored test surface files that no criterion and no study uses to the recycle bin (discard_file), once project.json no longer lists them.
-        The original kept from a saved flip of a file goes with it."""
-        for file_name in file_names:
-            with contextlib.suppress(OSError):      # a program has the file open: it stays, project.json no longer lists it
-                discard_file(test_surfaces.stored_path(project_folder, file_name))
-            with contextlib.suppress(OSError):
-                test_surfaces.original_path(project_folder, file_name).unlink(missing_ok=True)
+    def _keep_removed_test_surface(project_folder: Path, file_name: str) -> Path | None:
+        """Move the stored file of a surface set project.json no longer lists to inputs/removed/test_surfaces/ (keep_removed_file).
+        The original kept from a saved flip of the file is dropped: the file kept is the one the project used."""
+        kept = None
+        with contextlib.suppress(OSError):      # a program has the file open: it stays, project.json no longer lists it
+            kept = keep_removed_file(project_folder, test_surfaces.ROLE, test_surfaces.stored_path(project_folder, file_name), file_name)
+        with contextlib.suppress(OSError):
+            test_surfaces.original_path(project_folder, file_name).unlink(missing_ok=True)
+        return kept
 
     def _write_after_test_surface_change(self, name: str, project_folder: Path, project_json: ProjectJson, entry: CriterionEntry) -> None:
         """Write project.json after the test surfaces of *entry* changed, and config.yaml too when its default name followed them."""
@@ -1126,13 +1154,14 @@ class ProjectStore:
     def remove_input(self, name: str, role: str, file_name: str) -> InputFilesReply:
         """Delete an uploaded file and rebuild the joined file of a mesh role; 404 when the file is not there.
 
-        Nothing is deleted unless the joined file of the remaining files could be built. A test surface file is a surface set
-        (delete_surface_set): refused while a criterion or study uses it.
+        Nothing is removed unless the joined file of the remaining files could be built. The stored file is not deleted: it moves to
+        inputs/removed/<role>/ (keep_removed_file). A test surface file is a surface set (delete_surface_set): refused while a
+        criterion or study uses it.
         """
         self._check_role(role)
         if role == test_surfaces.ROLE:
-            self.delete_surface_set(name, file_name)
-            return self._reply(name, role, self.read_project_json(name))
+            kept = self.delete_surface_set(name, file_name)
+            return self._reply(name, role, self.read_project_json(name)).model_copy(update={"kept_as": None if kept is None else kept.name})
         with self.project_lock(name):
             project_json = self.read_project_json(name)
             project_folder = self.open(name)
@@ -1145,7 +1174,7 @@ class ProjectStore:
                 if role != WEATHER_ROLE:
                     joined_temporary_path = self._write_joined_temporary_file(
                         project_folder, role, list(self._load_stored_meshes(project_folder, role, remaining_names).values()))
-                self._stored_file_path(project_folder, role, file_name).unlink(missing_ok=True)
+                kept = keep_removed_file(project_folder, role, self._stored_file_path(project_folder, role, file_name), file_name)
                 if role != WEATHER_ROLE:
                     self._replace_joined_file(project_folder, role, joined_temporary_path)
             finally:
@@ -1161,7 +1190,41 @@ class ProjectStore:
                 self._update_optional_paths(project_folder, name)
             project_json.inputs_revision += 1
             self.write_project_json(name, project_json)
-            return self._reply(name, role, project_json)
+            return self._reply(name, role, project_json).model_copy(update={"kept_as": None if kept is None else kept.name})
+
+    def restore_removed_input(self, name: str, role: str, kept_as: str, file_name: str) -> InputFilesReply:
+        """Add a removed input back from inputs/removed/<role>/<kept_as> as *file_name* (add_input), then drop the kept copy; a
+        surface set gets back the name and picks its removal kept beside it. 404 when there is no such kept file."""
+        self._check_role(role)
+        with self.project_lock(name):
+            project_folder = self.open(name)
+            kept = project_folder / INPUTS_FOLDER / REMOVED_INPUTS_FOLDER / role / kept_as
+            if Path(kept_as).name != kept_as or not kept.is_file():
+                raise ProjectError(f"There is no removed {role} file named '{kept_as}'.", status_code=404)
+            set_record = kept.with_name(kept.name + SET_RECORD_SUFFIX)
+            reply = self.add_input(name, role, file_name, kept.read_bytes())
+            if role == test_surfaces.ROLE and set_record.is_file():
+                stored = next((file.name for file in reply.files if file.name == file_name), None)
+                if stored is not None:
+                    project_json = self.read_project_json(name)
+                    project_json.surface_sets[stored] = SurfaceSetJson.model_validate_json(set_record.read_text(encoding="utf-8"))
+                    self.write_project_json(name, project_json)
+                    reply = self._reply(name, role, project_json)
+            for path in (kept, set_record):
+                with contextlib.suppress(OSError):
+                    path.unlink(missing_ok=True)
+            return reply
+
+    def removed_inputs_folder(self, name: str) -> Path:
+        """inputs/removed/ of the project, where removed inputs are kept (it may not exist)."""
+        return self.open(name) / INPUTS_FOLDER / REMOVED_INPUTS_FOLDER
+
+    def removed_inputs_count(self, name: str) -> int:
+        """How many removed inputs the project keeps, the records of surface sets not counted."""
+        folder = self.removed_inputs_folder(name)
+        if not folder.is_dir():
+            return 0
+        return sum(1 for path in folder.rglob("*") if path.is_file() and not path.name.endswith(SET_RECORD_SUFFIX))
 
     def refresh_changed_inputs(self, name: str) -> bool:
         """Build the stored files changed in the project folder from outside the app into the joined files, with a notice for each

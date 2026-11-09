@@ -9,6 +9,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Inputs
 
+- **A removed file is kept.** Removing a file in the Site step (maximum volume, surroundings, terrain, weather, test
+  surfaces) takes it out of the project and its calculations; the stored copy moves to `inputs/removed/<role>/` in the
+  project folder instead of being deleted, so a removal by mistake is undone by adding the file again. Right after a removal the box offers **Undo**; under the
+  boxes, a line says how many removed files are kept, with **Show** to open the folder.
 - **A site as the input.** A project makes its maximum volume from mesh files or from **sites**, chosen with two tiles in
   Inputs: closed outlines drawn in the 3D view, each with its own height. The vertices carry the ground's elevation (typed
   after drawing); the ground inside is a smooth membrane on the boundary, and the top is flat at the lowest vertex plus the

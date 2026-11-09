@@ -42,7 +42,7 @@ from .api_models import (
 from .api_models import (
     NEW_PROJECT_MODE,
     CancelRunReply, ColdPeriodReply, ConfigErrorReply, ConfigReply, ConfigValuesRequest, CreateCriterionRequest, CreateProjectRequest,
-    CriterionEntry, CriterionOrderRequest, CriterionSettingsReply, ErrorDetailReply, ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, InspectedFile, InspectReply, MissingInputsReply, ModeInfo, ProjectDetail, RestoreOriginalRequest,
+    CriterionEntry, CriterionOrderRequest, CriterionSettingsReply, ErrorDetailReply, ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, InspectedFile, InspectReply, MissingInputsReply, ModeInfo, ProjectDetail, RemovedInputsReply, RestoreOriginalRequest, RestoreRemovedInputRequest,
     ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkippedSurfaces, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, StoredFileChangedReply, SunChart, SunPath, SunPositions, TurnSurfacesRequest,
     UpdateCriterionRequest, AddStudyRequest, ReorderStudiesRequest, StudiesReply, StudyEntry, StudyWithState, UpdateStudyRequest,
     NewLibraryEntryRequest, TypicalBuildingLibraryEntry, TypicalBuildingReply, TypicalBuildingRequest, TypicalBuildingWeightsReply,
@@ -552,6 +552,31 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         with store.project_lock(name):
             refuse_while_running(name)
             return store.remove_input(name, role, file_name)
+
+    @router.post("/projects/{name}/inputs/{role}/restore", responses=_ERROR_RESPONSES)
+    def restore_removed_input(name: str, role: str, request: RestoreRemovedInputRequest) -> InputFilesReply:
+        """Add a removed input back from inputs/removed/<role>/ (the undo of a removal); 404 when the kept file is not there."""
+        store = folder_in_use.store
+        with store.project_lock(name):
+            refuse_while_running(name)
+            return store.restore_removed_input(name, role, request.kept_as, request.file_name)
+
+    @router.get("/projects/{name}/removed-inputs", responses={404: _CRITERION_RESPONSES[404]})
+    def removed_inputs(name: str) -> RemovedInputsReply:
+        """How many removed inputs the project folder keeps under inputs/removed/."""
+        return RemovedInputsReply(count=folder_in_use.store.removed_inputs_count(name))
+
+    @router.post("/projects/{name}/removed-inputs/open-folder", status_code=204, response_class=Response,
+                 responses={404: {"model": ErrorDetailReply, "description": "There is no such project."}, 422: _ERROR_RESPONSES[422]})
+    def open_removed_inputs_folder(name: str) -> Response:
+        """Open inputs/removed/ of the project in the file manager of this computer (made when missing)."""
+        folder = folder_in_use.store.removed_inputs_folder(name)
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            open_folder_function(folder)
+        except OSError as error:
+            raise ProjectError(f"The folder {folder} could not be opened: {error}", status_code=422) from error
+        return Response(status_code=204)
 
     @router.get("/projects/{name}/sites", responses=_ERROR_RESPONSES)
     def sites(name: str) -> SitesReply:

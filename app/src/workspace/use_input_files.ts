@@ -1,10 +1,12 @@
 // The input files of an open project (ProjectWorkspace): the lists the service keeps for each role, the weather file's location and
 // latitude and the notice about a new weather file, the local origin the meshes are drawn around, the meshes themselves
 // (input_meshes.ts), and the requests that add or remove a file. The uploads and removals under way are followed, so the app can
-// wait for them before a rename, reset or delete of the project.
+// wait for them before a rename, reset or delete of the project. A removed file is kept under inputs/removed/ of the project
+// folder: the last removal can be undone until the next upload or removal, and the Site step says how many are kept.
 import { useEffect, useRef, useState } from "react";
 import {
-  addInput, failureTextOf, getInputFiles, getProject, baseVolumeUrl, getSites, joinedMaxVolumeUrl, removeInput, reportServiceProblem, saveSites, setHeights as storeHeights, setMaxVolumeSource,
+  addInput, failureTextOf, getInputFiles, getProject, getRemovedInputs, baseVolumeUrl, getSites, joinedMaxVolumeUrl, openRemovedInputsFolder, removeInput,
+  reportServiceProblem, restoreRemovedInput, saveSites, setHeights as storeHeights, setMaxVolumeSource,
   type InputFileInfo, type InputFilesReply, type MaxVolumeSource, type ModeInfo, type ProjectDetail, type SitesReply,
 } from "../api_client/client";
 import { NO_HEIGHTS, baseHeightOf, heightsOf, type Heights, type Site } from "../sites/site_geometry";
@@ -15,6 +17,7 @@ import { localOrigin, type Bounds3, type Point3 } from "../viewer/local_origin";
 import { useInputGeometry, type InputGeometry, type MeshRole } from "../steps/input_meshes";
 import { inputProblemText, type AddInputFiles, type InputRole, type RemoveInputFile } from "../common/InputBox";
 import { analysisPeriodOf } from "../steps/sun_path_request";
+import type { LastRemoval } from "../common/last_removal";
 import type { WeatherFileChange } from "../settings_form/weather_change_notice";
 
 const NO_SHIFT: Point3 = [0, 0, 0];
@@ -52,6 +55,10 @@ export interface InputFiles {
   inputRevisions: Record<MeshRole, number>;
   addFiles: AddInputFiles;
   removeFile: RemoveInputFile;
+  /** The last removal, with its undo, until the next upload or removal; null when there is none. */
+  lastRemoval: LastRemoval | null;
+  /** The removed files the project folder keeps under inputs/removed/, and opening that folder (resolves with the reason it could not). */
+  removedFiles: { count: number; show: () => Promise<string | null> };
   /** The stored test surface files, as the service lists them after a change by a criterion: the 3D view loads them again. */
   storeTestSurfaceFiles: (stored: InputFileInfo[]) => void;
   /**
@@ -156,6 +163,21 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
   const contextMesh = useInputGeometry("context", files.context, origin, inputRevisions.context, onInputsLoaded);
   const terrain = useInputGeometry("terrain", files.terrain, origin, inputRevisions.terrain, onInputsLoaded);
 
+  const [removal, setRemoval] = useState<{ role: InputRole; fileName: string; name: string; keptAs: string } | null>(null);
+  const [removedCount, setRemovedCount] = useState(0);
+  const readRemovedCount = () => {
+    getRemovedInputs(token, project.name).then((reply) => setRemovedCount(reply.count)).catch(() => {});    // the line just stays as it was
+  };
+  useEffect(() => {
+    let stale = false;
+    getRemovedInputs(token, project.name).then((reply) => {
+      if (!stale) setRemovedCount(reply.count);
+    }).catch(() => {});
+    return () => {
+      stale = true;
+    };
+  }, [token, project.name]);
+
   const applyFilesReply = (reply: InputFilesReply) => {
     setFiles((current) => ({ ...current, [reply.role]: reply.files }));
     setJoinedBounds(reply.joined_bounds as Bounds3 | null);
@@ -187,6 +209,7 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
   };
 
   const addFilesOneByOne: AddInputFiles = async (role, chosenFiles) => {
+    setRemoval(null);
     const problems: string[] = [];
     for (const file of chosenFiles) {
       try {
@@ -205,14 +228,43 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
   };
 
   const removeFileAndApply: RemoveInputFile = async (role, fileName) => {
+    const name = files[role].find((file) => file.name === fileName)?.shown_name ?? fileName;
     try {
-      applyFilesReply(await removeInput(token, project.name, role, fileName));
+      const reply = await removeInput(token, project.name, role, fileName);
+      applyFilesReply(reply);
+      setRemoval(reply.kept_as ? { role, fileName, name, keptAs: reply.kept_as } : null);
+      readRemovedCount();
       if (role === "weather") setWeatherFileChange(null);         // the notice was about the file removed
       afterInputsChanged(role);
       return null;
     } catch (error) {
       reportServiceProblem(error, onServiceProblem);
       return inputProblemText(error, fileName);
+    }
+  };
+  const undoRemoval = async (undone: NonNullable<typeof removal>): Promise<string | null> => {
+    try {
+      const reply = await restoreRemovedInput(token, project.name, undone.role, undone.keptAs, undone.fileName);
+      applyFilesReply(reply);
+      setRemoval(null);
+      readRemovedCount();
+      if (undone.role === "weather") noteNewWeatherFile(reply);
+      afterInputsChanged(undone.role);
+      return null;
+    } catch (error) {
+      reportServiceProblem(error, onServiceProblem);
+      return inputProblemText(error, undone.name);
+    }
+  };
+  const lastRemoval: LastRemoval | null = removal === null ? null
+    : { role: removal.role, name: removal.name, undo: () => followedInputChange(undoRemoval(removal)) };
+  const showRemovedFiles = async (): Promise<string | null> => {
+    try {
+      await openRemovedInputsFolder(token, project.name);
+      return null;
+    } catch (error) {
+      reportServiceProblem(error, onServiceProblem);
+      return failureTextOf(error);
     }
   };
   // The app waits for these before a rename, reset or delete of the project (waitForInputChanges).
@@ -321,7 +373,7 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
     files, joinedBounds, origin,
     weather: { location: weatherLocation, latitude: weatherLatitude, fileRevision: weatherFileRevision, fileChange: weatherFileChange,
                setFileChange: setWeatherFileChange },
-    inputRevisions, addFiles, removeFile, storeTestSurfaceFiles, reloadRoles, followedInputChange, inputChangesUnderWay, waitForInputChanges,
+    inputRevisions, addFiles, removeFile, lastRemoval, removedFiles: { count: removedCount, show: showRemovedFiles }, storeTestSurfaceFiles, reloadRoles, followedInputChange, inputChangesUnderWay, waitForInputChanges,
     meshes: { max_volume: maxVolume, test_surfaces: testSurfaces, context: contextMesh, terrain }, baseVolume,
   };
 }

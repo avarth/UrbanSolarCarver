@@ -1,13 +1,14 @@
 // One box of input files (UX 5.2): dashed with its hint while empty, one row per file with a remove button once it has files,
 // "Add files" by the picker or by dropping files onto the box. The Site step draws one per role of the site and one for the
 // project's test surfaces (SurfaceSetsBox). While a run is active the service refuses uploads and removals, so both are disabled
-// with the reason.
-import { useId, useRef, useState, type DragEvent, type ReactNode } from "react";
+// with the reason. A removed file is kept in the project folder: the box says so with an Undo (last_removal.ts).
+import { useContext, useId, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { ApiError, failureTextOf, type InputFileInfo } from "../api_client/client";
 import { listedWithAnd, messages } from "../messages";
 import { WarningIcon } from "../settings_form/SettingField";
 import { Subheading } from "../settings_form/Subheading";
 import "../theme/panels.css";
+import { LastRemovalContext, type LastRemoval } from "./last_removal";
 
 export type InputRole = "max_volume" | "test_surfaces" | "context" | "terrain" | "weather";
 /** The mesh roles a run can do without: "Optional" under their titles. */
@@ -96,6 +97,8 @@ export function InputBox({ role, files, weatherLocation = null, weatherHint = ""
                            showsDisabledReason = true, footer = null, extraAction = null, fileMenu, removeRefusal }: InputBoxProps) {
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const lastRemoval = useContext(LastRemovalContext);
+  const removal = lastRemoval?.role === role ? lastRemoval : null;
   const [dragging, setDragging] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
   const titleId = useId();
@@ -124,6 +127,17 @@ export function InputBox({ role, files, weatherLocation = null, weatherHint = ""
     setProblems([]);
     try {
       const problem = await onRemoveFile(role, fileName);
+      if (problem !== null) setProblems([problem]);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const undoRemoval = async (undone: LastRemoval) => {
+    if (disabled) return;
+    setBusy(true);
+    setProblems([]);
+    try {
+      const problem = await undone.undo();
       if (problem !== null) setProblems([problem]);
     } finally {
       setBusy(false);
@@ -181,7 +195,7 @@ export function InputBox({ role, files, weatherLocation = null, weatherHint = ""
               </div>
               {fileMenu?.(file)}
               <button type="button" className="input-remove" aria-label={messages.removeFile(file.shown_name ?? file.name)}
-                      title={refusal ?? messages.removeFile(file.shown_name ?? file.name)}
+                      title={refusal ?? messages.removeFileTitle(file.shown_name ?? file.name)}
                       disabled={disabled || refusal !== null} onClick={() => void remove(file.name)}>
                 <RemoveIcon />
               </button>
@@ -191,6 +205,12 @@ export function InputBox({ role, files, weatherLocation = null, weatherHint = ""
         </ul>
       )}
       {filled && note !== null && <p className="input-box-hint">{note}</p>}
+      {removal !== null && (
+        <p className="input-box-removed" role="status">
+          {messages.fileRemoved(removal.name)}{" "}
+          <button type="button" className="link-button" disabled={disabled} onClick={() => void undoRemoval(removal)}>{messages.undoRemoval}</button>
+        </p>
+      )}
       {disabledReason !== null && showsDisabledReason && <p className="input-box-reason">{disabledReason}</p>}
       {[...problems, ...drawingProblems].map((problem) => <p key={problem} className="input-box-problem"><WarningIcon />{problem}</p>)}
       {footer}

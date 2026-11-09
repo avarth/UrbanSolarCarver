@@ -70,7 +70,7 @@ test("dropped files are added as test surfaces; a set no one uses is removed by 
   expect(onAddFiles).toHaveBeenCalledExactlyOnceWith("test_surfaces", [file]);
   const remove = byRole<HTMLButtonElement>(box(), "button", "Remove roofs.ply");
   expect(remove.disabled).toBe(false);
-  expect(remove.title).toBe("Remove roofs.ply");
+  expect(remove.title).toBe("Remove roofs.ply from the project. The file is kept in the project folder, under inputs/removed");
   await act(async () => click(remove));
   expect(onRemoveFile).toHaveBeenCalledExactlyOnceWith("test_surfaces", "roofs.ply");
 });

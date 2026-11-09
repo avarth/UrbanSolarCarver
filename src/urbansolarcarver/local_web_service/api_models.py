@@ -268,6 +268,7 @@ class InputFilesReply(BaseModel):
     joined_bounds: list[list[float]] | None   # [[xmin, ymin, zmin], [xmax, ymax, zmax]] of the joined max volume, whatever the role
     weather_location: str | None              # "<city>, <country>" from the weather file, None without one
     weather_latitude: float | None            # degrees north, negative in the southern hemisphere; None without a usable weather file
+    kept_as: str | None = None                # after a removal: the file's name under inputs/removed/<role>/, for an undo
 
 
 class SitesRequest(BaseModel):
@@ -317,6 +318,17 @@ class PickedSurfacesRequest(BaseModel):
     picks: list[SurfacePick] = Field(min_length=1, max_length=500)
     name: str | None = Field(None, max_length=200)
     replace: str | None = None
+
+
+class RestoreRemovedInputRequest(BaseModel):
+    """A removed input to add back: its name under inputs/removed/<role>/ and the name it is listed by again."""
+    kept_as: str = Field(min_length=1, max_length=255)
+    file_name: str = Field(min_length=1, max_length=255)
+
+
+class RemovedInputsReply(BaseModel):
+    """How many removed inputs the project folder keeps under inputs/removed/."""
+    count: int
 
 
 class SurfaceSetNameRequest(BaseModel):

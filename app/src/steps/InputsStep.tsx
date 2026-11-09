@@ -3,8 +3,9 @@
 // files onto the box) and a remove button per file; under the boxes the size of all inputs together and the warning when it does not
 // look like metres. The boxes are common/InputBox.tsx; then the project's test surfaces as surface sets (SurfaceSetsBox), which the
 // criteria and studies choose among; the weather file is in the project settings (ProjectSettingsDialog).
-// While a run of the project is active the service refuses uploads and removals, so both are disabled with the reason.
-import type { ReactNode } from "react";
+// While a run of the project is active the service refuses uploads and removals, so both are disabled with the reason. Under the boxes,
+// how many removed files the project folder keeps (inputs/removed/), with Show to open that folder.
+import { useState, type ReactNode } from "react";
 import type { InputFileInfo } from "../api_client/client";
 import { InputBox, type AddInputFiles, type InputRole, type RemoveInputFile } from "../common/InputBox";
 import { messages } from "../messages";
@@ -52,11 +53,14 @@ interface InputsStepProps {
   maxVolumeFooter?: ReactNode;
   /** After the terrain: the project's test surfaces as surface sets (SurfaceSetsBox). */
   testSurfacesBox?: ReactNode;
+  /** The removed files kept under inputs/removed/ of the project folder, and opening that folder; absent: no line about them. */
+  removedFiles?: { count: number; show: () => Promise<string | null> };
 }
 
 export function InputsStep({ files, inputsBounds, onAddFiles, onRemoveFile, disabledReason, drawingProblems = {},
-                             maxVolumeNote = null, maxVolumeBox, maxVolumeFooter = null, testSurfacesBox = null }: InputsStepProps) {
+                             maxVolumeNote = null, maxVolumeBox, maxVolumeFooter = null, testSurfacesBox = null, removedFiles }: InputsStepProps) {
   const warning = inputsBounds === null ? null : sizeWarning(inputsBounds);
+  const [showProblem, setShowProblem] = useState<string | null>(null);
   return (
     <div className="inputs-step">
       {INPUT_ROLES.map((role) => (role === "max_volume" && maxVolumeBox !== undefined ? <div key={role}>{maxVolumeBox}</div> : (
@@ -65,6 +69,13 @@ export function InputsStep({ files, inputsBounds, onAddFiles, onRemoveFile, disa
                   note={role === "max_volume" ? maxVolumeNote : null} footer={role === "max_volume" ? maxVolumeFooter : null} />
       )))}
       {testSurfacesBox}
+      {removedFiles !== undefined && removedFiles.count > 0 && (
+        <p className="inputs-removed">
+          {messages.removedFilesKept(removedFiles.count)}{" "}
+          <button type="button" className="link-button" onClick={() => { void removedFiles.show().then(setShowProblem); }}>{messages.showRemovedFiles}</button>
+          {showProblem !== null && <span className="input-box-problem"><WarningIcon />{showProblem}</span>}
+        </p>
+      )}
       {inputsBounds !== null && (
         <div className="inputs-size">
           <div className="inputs-size-title">{messages.inputsSizeTitle}</div>

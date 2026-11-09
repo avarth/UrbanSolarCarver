@@ -19,6 +19,7 @@ import {
 import { ProjectSessionContext } from "../api_client/project_session";
 import { activeCriteria } from "../criteria/criteria_state";
 import { SurfaceSetsBox } from "../common/SurfaceSetsBox";
+import { LastRemovalContext } from "../common/last_removal";
 import { CriteriaStep, type CriteriaShows } from "../criteria/CriteriaStep";
 import { firstCriteriaShows } from "../criteria/criteria_shows";
 import { CriterionPanel } from "../criteria/CriterionPanel";
@@ -221,7 +222,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
   });
   const [framingRequest, setFramingRequest] = useState(0);
   const frameAllInputs = () => setFramingRequest((count) => count + 1);
-  const { files, origin, weather, meshes, baseVolume, addFiles, removeFile, storeTestSurfaceFiles, reloadRoles, followedInputChange, waitForInputChanges,
+  const { files, origin, weather, meshes, baseVolume, addFiles, removeFile, lastRemoval, removedFiles, storeTestSurfaceFiles, reloadRoles, followedInputChange, waitForInputChanges,
           sites: siteInput } = useInputFiles({
     project, modes, currentForm, sharedForm, refreshStageStatus, onInputsLoaded: frameAllInputs,
   });
@@ -662,7 +663,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
     inputs: (
       <InputsStep files={files} inputsBounds={inputsBounds} onAddFiles={addFiles} testSurfacesBox={testSurfacesBox}
                   onRemoveFile={removeFile} disabledReason={inputsDisabledReason} maxVolumeNote={carvedByNote(project.carving_chain ?? [])}
-                  maxVolumeBox={maxVolumeBox} maxVolumeFooter={maxVolumeFooter}
+                  maxVolumeBox={maxVolumeBox} maxVolumeFooter={maxVolumeFooter} removedFiles={removedFiles}
                   drawingProblems={{ max_volume: maxVolumeMesh.drawingProblems, context: contextMesh.drawingProblems, terrain: terrainMesh.drawingProblems }} />
     ),
     criteria: (
@@ -827,6 +828,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
   );
 
   return (
+    <LastRemovalContext.Provider value={lastRemoval}>
     <div className="workspace">
       {settingsButtonElement}
       {settingsDialog}
@@ -853,5 +855,6 @@ function OpenProject(props: ProjectWorkspaceProps) {
                     {...(simulating ? simulateViewer : {})} {...(inspecting ? inspectViewer : {})} sceneTool={pickerTool ?? sceneTool} />
       </section>
     </div>
+    </LastRemovalContext.Provider>
   );
 }

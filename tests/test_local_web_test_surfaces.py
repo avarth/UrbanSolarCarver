@@ -1,5 +1,6 @@
 """Test surface files stored once per project, protected per criterion, one joined file per criterion (local web service)."""
 import hashlib
+import os
 
 import pytest
 import send2trash
@@ -82,7 +83,7 @@ def test_removing_a_file_from_one_criterion_keeps_it_for_the_other(tmp_path):
     assert _fingerprints(store, "2") == second_before
 
 
-def test_a_set_no_criterion_uses_stays_until_it_is_deleted_and_then_goes_to_the_recycle_bin(tmp_path, monkeypatch):
+def test_a_set_no_criterion_uses_stays_until_it_is_removed_and_then_is_kept_under_removed(tmp_path, monkeypatch):
     recycle_bin = FakeRecycleBin()
     monkeypatch.setattr(send2trash, "send2trash", recycle_bin)
     store = _store_with_criteria(tmp_path)
@@ -90,17 +91,26 @@ def test_a_set_no_criterion_uses_stays_until_it_is_deleted_and_then_goes_to_the_
     store.add_criterion_test_surface("p", "2", "roof.ply", _panel(50))
     store.remove_criterion_test_surface("p", "1", "facade.ply")
     store.delete_criterion("p", "2")
-    assert _stored_file_names(store) == ["facade.ply", "roof.ply"] and recycle_bin.files == []
+    assert _stored_file_names(store) == ["facade.ply", "roof.ply"]
     store.remove_input("p", "test_surfaces", "facade.ply")
     assert _stored_file_names(store) == ["roof.ply"]
     assert [file.name for file in store.input_files("p", "test_surfaces")] == ["roof.ply"]
-    assert recycle_bin.files == [store.open("p") / "inputs" / "test_surfaces" / "facade.ply"]
+    assert (store.open("p") / "inputs" / "removed" / "test_surfaces" / "facade.ply").read_bytes() == _panel(0)
+    assert recycle_bin.files == []
 
 
-def test_a_set_the_recycle_bin_refuses_stays_on_disk_and_leaves_the_project(tmp_path, monkeypatch):
+def test_a_set_whose_file_cannot_move_stays_on_disk_and_leaves_the_project(tmp_path, monkeypatch):
     store = _store_with_criteria(tmp_path, count=1)
     store.add_input("p", "test_surfaces", "facade.ply", _panel(0))
-    monkeypatch.setattr(send2trash, "send2trash", FakeRecycleBin(error=OSError("the file is open in another program")))
+
+    replace = os.replace
+
+    def open_in_another_program(source, target):
+        if "removed" in str(target):
+            raise OSError("the file is open in another program")
+        replace(source, target)
+
+    monkeypatch.setattr(os, "replace", open_in_another_program)
     store.delete_surface_set("p", "facade.ply")
     assert store.input_files("p", "test_surfaces") == [] and _stored_file_names(store) == ["facade.ply"]
 

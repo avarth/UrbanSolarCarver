@@ -10,6 +10,7 @@ export type ExampleInfo = Schemas["ExampleInfo"];
 export type ProjectSummary = Schemas["ProjectSummary"];
 export type ProjectDetail = Schemas["ProjectDetail"];
 export type InputFilesReply = Schemas["InputFilesReply"];
+export type RemovedInputsReply = Schemas["RemovedInputsReply"];
 export type InputFileInfo = Schemas["InputFileInfo"];
 export type SiteJson = Schemas["SiteJson"];
 export type SitesReply = Schemas["SitesReply"];
@@ -251,6 +252,18 @@ export async function addInput(token: string, project: string, role: string, fil
 
 export const removeInput = (token: string, project: string, role: string, fileName: string) =>
   requestJson<InputFilesReply>(token, inputFileUrl(project, role, fileName), "DELETE");
+
+/** Adds a removed input back from inputs/removed/<role>/<keptAs> as *fileName* (the undo of a removal). */
+export const restoreRemovedInput = (token: string, project: string, role: string, keptAs: string, fileName: string) =>
+  requestJson<InputFilesReply>(token, `${projectPath(project)}/inputs/${encodeURIComponent(role)}/restore`, "POST", { kept_as: keptAs, file_name: fileName });
+
+/** How many removed inputs the project folder keeps under inputs/removed/. */
+export const getRemovedInputs = (token: string, project: string) =>
+  requestJson<RemovedInputsReply>(token, `${projectPath(project)}/removed-inputs`);
+
+export async function openRemovedInputsFolder(token: string, project: string): Promise<void> {
+  await send(token, `${projectPath(project)}/removed-inputs/open-folder`, "POST");
+}
 
 /** The address of the joined maximum volume the engine carves (from the mesh files or the sites). Needs the token header. */
 export function joinedMaxVolumeUrl(project: string): string {

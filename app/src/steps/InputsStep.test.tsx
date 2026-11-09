@@ -3,6 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { carvedByNote, InputsStep, inputsSizeText } from "./InputsStep";
 import { InputBox, type AddInputFiles } from "../common/InputBox";
+import { LastRemovalContext } from "../common/last_removal";
 
 let rendered: RenderedOverlay | null = null;
 
@@ -157,4 +158,39 @@ test("a project carved further with an earlier version keeps its note on the max
                 onRemoveFile={async () => null} disabledReason={null} maxVolumeNote={carvedByNote(chain)} />);
   expect(boxTitled("Maximum volume").querySelector(".input-box-hint")!.textContent).toBe(note);
   expect(boxTitled(CONTEXT_TITLE).textContent).not.toContain("Carved by");
+});
+
+test("the box a file was removed from says so with Undo, and a failed undo shows its reason there", async () => {
+  const undo = vi.fn(async () => "The file could not be added back");
+  rendered = renderForTest(
+    <LastRemovalContext.Provider value={{ role: "context", name: "neighbour_trees.ply", undo }}>{inputsStep(SOME_FILES)}</LastRemovalContext.Provider>,
+  );
+  expect(boxTitled("Maximum volume").querySelector(".input-box-removed")).toBeNull();
+  const line = boxTitled(CONTEXT_TITLE).querySelector(".input-box-removed")!;
+  expect(line.textContent).toBe("neighbour_trees.ply was removed. Undo");
+  await act(async () => {
+    click(line.querySelector("button")!);
+  });
+  expect(undo).toHaveBeenCalledOnce();
+  expect(boxTitled(CONTEXT_TITLE).querySelector(".input-box-problem")!.textContent).toBe("The file could not be added back");
+});
+
+test("under the boxes, how many removed files the folder keeps, and Show opens it", async () => {
+  const show = vi.fn(async () => null);
+  rendered = renderForTest(
+    <InputsStep files={SOME_FILES} inputsBounds={null} onAddFiles={async () => []} onRemoveFile={async () => null} disabledReason={null}
+                removedFiles={{ count: 3, show }} />,
+  );
+  const line = rendered.container.querySelector(".inputs-removed")!;
+  expect(line.textContent).toBe("3 removed files are kept in the project folder. Show");
+  await act(async () => {
+    click(line.querySelector("button")!);
+  });
+  expect(show).toHaveBeenCalledOnce();
+  rendered.unmount();
+  rendered = renderForTest(
+    <InputsStep files={SOME_FILES} inputsBounds={null} onAddFiles={async () => []} onRemoveFile={async () => null} disabledReason={null}
+                removedFiles={{ count: 0, show }} />,
+  );
+  expect(rendered.container.querySelector(".inputs-removed")).toBeNull();
 });

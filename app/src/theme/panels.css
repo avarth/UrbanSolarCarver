@@ -419,6 +419,8 @@
 .input-box-subtitle { margin: calc(var(--space-unit) * -1.5) 0 0; color: var(--colour-muted); font-size: var(--text-secondary); }
 .input-box-hint { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
 
+.input-box-removed { margin: 0; font-size: var(--text-secondary); }
+.inputs-removed { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
 .input-box-drop-hint { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
 
 .input-add {

@@ -1176,6 +1176,20 @@ def test_removing_the_context_drops_the_path(project_with_inputs):
     assert store.load_project_config(name).context_path is None
 
 
+def test_a_removed_file_is_kept_under_removed_and_a_second_one_of_that_name_is_numbered(project_with_inputs):
+    store, name = project_with_inputs
+    removed = store.open(name) / "inputs" / "removed" / "context"
+    store.add_input(name, "context", "ctx.ply", box_bytes([30, 0, 5]))
+    store.remove_input(name, "context", "ctx.ply")
+    assert not (store.open(name) / "inputs" / "context" / "ctx.ply").exists()
+    assert (removed / "ctx.ply").read_bytes() == box_bytes([30, 0, 5])
+    store.add_input(name, "context", "ctx.ply", box_bytes([60, 0, 5]))
+    store.remove_input(name, "context", "ctx.ply")
+    assert sorted(path.name for path in removed.iterdir()) == ["ctx (2).ply", "ctx.ply"]
+    assert (removed / "ctx (2).ply").read_bytes() == box_bytes([60, 0, 5])
+    assert store.input_files(name, "context") == []
+
+
 def test_existing_project_without_role_folders_accepts_context(project_with_inputs):
     store, name = project_with_inputs
     for role in ("context", "terrain"):
