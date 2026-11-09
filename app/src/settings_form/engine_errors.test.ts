@@ -19,7 +19,7 @@ test("each of those messages, as the engine renders it, gets the interface's sen
     .toEqual({ settings: ["end_day"], message: "April has 30 days, so the end day cannot be 31." });
   expect(shown("mode 'benefit' requires analysis period fields: start_day", "benefit"))
     .toEqual({ settings: ["start_month"], message: "Solar heating needs the whole analysis period: every day, month and hour." });
-  expect(shown("mode 'irradiance' requires epw_path", "irradiance")).toEqual({ settings: [], message: "Add a weather file to run this mode" });
+  expect(shown("mode 'irradiance' requires epw_path", "irradiance")).toEqual({ settings: [], message: "Add a weather file in Settings to run this mode" });
 });
 
 test("a field the form does not show is named in plain words, and a hidden setting's label is not said twice", () => {

@@ -383,6 +383,10 @@
 /* The project settings window (ProjectSettingsDialog): its line on what the settings apply to, then the settings. */
 .project-settings { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); }
 .project-settings-intro { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
+/* The setup of a new project: the page count above, Skip setup at the left of Back and Next */
+.project-setup-count { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
+.project-setup-buttons { align-items: center; }
+.project-setup-skip { margin-right: auto; }
 
 /* Inputs ---------------------------------------------------------------------------------------------------------------- */
 
@@ -408,12 +412,12 @@
 }
 
 .input-box-title { margin: 0; font-size: var(--text-body); font-weight: 600; }
-.input-box-required { color: var(--colour-muted); font-size: var(--text-secondary); }
+/* The box's one action, at the right of its title whether the box has files or not, on one line (design/new-project-setup.md) */
+.input-box-title-row > .input-add { flex: none; margin-left: auto; white-space: nowrap; }
+.input-box-subtitle { margin: calc(var(--space-unit) * -1.5) 0 0; color: var(--colour-muted); font-size: var(--text-secondary); }
 .input-box-hint { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
 
-/* Room for a "Draw" button beside "Add files" in milestone 2 (UX 5.2). */
-.input-box-actions { display: flex; align-items: center; gap: calc(var(--space-unit) * 2); }
-.input-box-drop-hint { color: var(--colour-muted); font-size: var(--text-secondary); }
+.input-box-drop-hint { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
 
 .input-add {
   padding: var(--space-unit) calc(var(--space-unit) * 3);

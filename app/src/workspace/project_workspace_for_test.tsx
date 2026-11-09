@@ -346,7 +346,7 @@ export const reportedServiceProblems: unknown[] = [];
 
 export async function openWorkspace(
   service: FakeService, opened: ProjectDetail,
-  steps: Pick<ComponentProps<typeof ProjectWorkspace>, "startSteps" | "onStepsChange" | "onSettingsSaverReady"> = {},
+  steps: Pick<ComponentProps<typeof ProjectWorkspace>, "startSteps" | "onStepsChange" | "onSettingsSaverReady" | "startsWithSetup" | "onSetupClosed"> = {},
   { schema = SCHEMA, modes = MODES }: { schema?: typeof SCHEMA; modes?: ModeInfo[] } = {},
 ) {
   vi.stubGlobal("fetch", vi.fn(service.answer));
@@ -411,6 +411,19 @@ export function openProjectSettings() {
 export function closeProjectSettings() {
   const dialog = projectSettings();
   if (dialog !== null) act(() => [...dialog.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Done")!.click());
+}
+
+/** The weather file's box in the project settings window, first in Location; null while the window is closed. */
+export const settingsWeatherBox = () => projectSettings()?.querySelector<HTMLElement>('[data-setting="weather_file"] .input-box') ?? null;
+
+/** Adds a weather file with the box in the project settings window, as a user does, and closes the window again. */
+export async function addWeatherFileInSettings() {
+  openProjectSettings();
+  const weatherPicker = settingsWeatherBox()!.querySelector<HTMLInputElement>('input[type="file"][accept=".epw"]')!;
+  Object.defineProperty(weatherPicker, "files", { value: [new File(["LOCATION"], "weather.epw")], configurable: true });
+  act(() => weatherPicker.dispatchEvent(new Event("change", { bubbles: true })));
+  await settle();
+  closeProjectSettings();
 }
 
 /**

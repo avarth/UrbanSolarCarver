@@ -16,7 +16,7 @@ test("essential settings of the Settings step per mode", () => {
 
 test("the Settings step groups, their folds and their fold labels", () => {
   const groups = settingsForStep("settings", "time-based");
-  expect(groups.map((group) => group.title)).toEqual(["Site", "When", "Detail"]);     // no mode specific settings: left out
+  expect(groups.map((group) => group.title)).toEqual(["Location", "When", "Detail"]);     // no mode specific settings: left out
   const [, when, detail] = groups;
   expect(names(when.folded)).toEqual(["time_basis", "sun_steps_per_hour", "min_altitude"]);
   expect(when.foldLabel).toBe("More sun settings");

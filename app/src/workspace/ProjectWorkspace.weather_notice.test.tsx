@@ -3,7 +3,7 @@
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
-  FakeService, NOTHING_RUN, buttonIn, container, endWorkspaceTest, openPanelSection, openStep, openWorkspace, pressRunAnalysis, project,
+  FakeService, NOTHING_RUN, addWeatherFileInSettings, buttonIn, container, endWorkspaceTest, openPanelSection, openStep, openWorkspace, pressRunAnalysis, project,
   settle, startWorkspaceTest, stepIsOpen, waitForTheSave,
 } from "./project_workspace_for_test";
 
@@ -19,12 +19,8 @@ const BRISBANE = { location: "Brisbane, AUS", latitude: -27.38 };
 const GOLDEN = { location: "Golden, CO, USA", latitude: 39.74 };
 
 async function addWeatherFile() {
-  if (!stepIsOpen("Inputs")) openStep("Inputs");
-  const weatherPicker = container().querySelector<HTMLInputElement>('input[type="file"][accept=".epw"]')!;
-  Object.defineProperty(weatherPicker, "files", { value: [new File(["LOCATION"], "weather.epw")], configurable: true });
-  act(() => weatherPicker.dispatchEvent(new Event("change", { bubbles: true })));
-  await settle();
-  openStep("Criteria");
+  await addWeatherFileInSettings();
+  if (!stepIsOpen("Criteria")) openStep("Criteria");
   openPanelSection("Settings");
 }
 
@@ -141,7 +137,7 @@ test("the notice is a live region kept on the page, empty until a notice fills i
   openStep("Criteria");
   expect(noticeRegion()!.getAttribute("role")).toBe("status");
   expect(noticeRegion()!.textContent).toBe("");
-  await addWeatherFile();                                           // through the Inputs step, back to Criteria
+  await addWeatherFile();                                           // through the Settings window, back to Criteria
   const region = noticeRegion()!;
   expect(region.textContent).toContain(BRISBANE_SHIFT);
   act(() => buttonIn(weatherNotice()!, "Keep").click());

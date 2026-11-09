@@ -31,13 +31,13 @@ test("two criteria show cards in order, each with its result, and the first is s
   showCriterionCards();
   expect(buttonIn(stepRow("Criteria"), "Add criterion")).toBeDefined();
   expect(container().textContent).not.toContain("Add another criterion");
-  openStep("Inputs");
+  openStep("Site");
   expect(criteriaSummary()).toBe("Winter sun on facades 61 %, then Spring sun on windows 80 %");
 });
 
 test("the step summary names a criterion the user did not name by its mode, without its test surface file", async () => {
   await openChain([{ ...FACADES, name: "Sun hours on facades", named_by_user: false }, WINDOWS]);
-  openStep("Inputs");
+  openStep("Site");
   expect(criteriaSummary()).toBe("Sun hours 61 %, then Spring sun on windows 80 %");
 });
 
@@ -77,7 +77,7 @@ test("the open sections stay as the user left them when another criterion is sel
   await select("Winter sun on facades");
   expect(openPanelSections()).toEqual(["Test surfaces", "Settings"]);
   // The open sections are the workspace's: closing the step and opening it again keeps them.
-  openStep("Inputs");
+  openStep("Site");
   openStep("Criteria");
   expect(openPanelSections()).toEqual(["Test surfaces", "Settings"]);
 });
@@ -104,7 +104,7 @@ test("switching a card off greys it and reads Off", async () => {
   expect(cardLine("Spring sun on windows")).toBe("Off");
   expect(selectedCardName()).toBe("Winter sun on facades");
   expect(service.count("GET /stage-status")).toBeGreaterThan(0);
-  openStep("Inputs");
+  openStep("Site");
   expect(criteriaSummary()).toBe("Winter sun on facades 61 %");       // the criterion that is off is left out
 });
 
@@ -169,7 +169,7 @@ test("turning the only criterion off and on again: Run analysis waits while it i
   expect(card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(false);
   expect(panel().textContent).toContain("Off: the chain skips this criterion");
   expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toContain("Turn on a criterion to run");
-  openStep("Inputs");
+  openStep("Site");
   expect(criteriaSummary()).toBe("Sun hours, Off");
   openStep("Criteria");
   await act(async () => card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.click());

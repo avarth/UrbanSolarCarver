@@ -372,7 +372,7 @@ test("an error of the whole config is put, in the interface's words, under each 
   expect(state.fieldErrors).toEqual({ start_month: "Sun hours needs the whole analysis period: every day, month and hour." });
   state = reject(state, [{ field: null, message: "Value error, mode 'time-based' requires epw_path" }]);
   expect(state.fieldErrors).toEqual({});
-  expect(state.stepErrors).toEqual(["Add a weather file to run this mode"]);
+  expect(state.stepErrors).toEqual(["Add a weather file in Settings to run this mode"]);
 });
 
 test("any other engine message loses the 'Value error' prefix and has the labels in place of the config names", () => {

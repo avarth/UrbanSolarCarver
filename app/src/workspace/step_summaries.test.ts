@@ -37,12 +37,12 @@ function stateWith(overrides: StateOverrides): ProjectViewState {
   };
 }
 
-test("the steps are Inputs, Criteria, Envelope and massing and Export", () => {
+test("the steps are inputs (titled Site), Criteria, Envelope and massing and Export", () => {
   expect(STEP_NAMES).toEqual(["inputs", "criteria", "envelope_and_massing", "export"]);
 });
 
 test("closed steps summarise their state in the UX spec's words", () => {
-  expect(stepSummary("inputs", stateWith({ maxVolume: 1, weather: true }))).toBe("1 volume, weather");
+  expect(stepSummary("inputs", stateWith({ maxVolume: 1, weather: true }))).toBe("1 volume");     // the weather file is in Settings
   expect(stepSummary("envelope_and_massing", stateWith({ totalFloorArea: 4820, storeys: 7, stages: { exporting: "current", massing: "current" } })))
     .toBe(`4${THIN}820${NBSP}m², 7 storeys`);
   expect(stepSummary("envelope_and_massing", stateWith({ stages: { exporting: "out_of_date", massing: "out_of_date" } }))).toBe("Out of date");
@@ -54,10 +54,11 @@ test("the inputs summary counts the site's files per role and names a missing ma
   expect(stepSummary("inputs", stateWith({ maxVolume: 0, weather: true }))).toBe("Maximum volume missing");
 });
 
-test("the project settings in a line give the north and the voxel size; their settings to fix are counted apart from the steps", () => {
-  expect(projectSettingsSummary(stateWith({ north: 10, voxelSize: 0.5 }))).toBe(`North 10°, 0.5${NBSP}m voxels`);
-  expect(projectSettingsSummary(stateWith({}))).toBe(`North 0°, 1${NBSP}m voxels`);
-  expect(projectSettingsSummary(stateWith({ north: 12.5, voxelSize: 2 }))).toBe(`North 12.5°, 2${NBSP}m voxels`);
+test("the project settings in a line give the weather file's place, the north and the voxel size; their settings to fix are counted apart from the steps", () => {
+  expect(projectSettingsSummary(stateWith({ north: 10, voxelSize: 0.5 }))).toBe(`No weather file. North 10°, 0.5${NBSP}m voxels`);
+  expect(projectSettingsSummary(stateWith({ north: 10, voxelSize: 0.5 }), "Golden, CO, USA")).toBe(`Golden, CO, USA. North 10°, 0.5${NBSP}m voxels`);
+  expect(projectSettingsSummary(stateWith({}))).toBe(`No weather file. North 0°, 1${NBSP}m voxels`);
+  expect(projectSettingsSummary(stateWith({ north: 12.5, voxelSize: 2 }))).toBe(`No weather file. North 12.5°, 2${NBSP}m voxels`);
   const state = stateWith({ settingsToFix: { project_settings: 1 } });
   expect(settingsToFixIn("project_settings", state)).toBe(1);
   for (const step of STEP_NAMES) expect(stepMark(step, state), step).not.toBe("error");
@@ -150,6 +151,6 @@ test("a setting to fix is counted and marked on the step that holds it", () => {
 
 test("the inputs summary counts the surroundings files and names the terrain when there are some", () => {
   expect(stepSummary("inputs", stateWith({ maxVolume: 1, context: 3 }))).toBe("1 volume, 3 surroundings files");
-  expect(stepSummary("inputs", stateWith({ maxVolume: 1, context: 1, terrain: 1, weather: true }))).toBe("1 volume, 1 surroundings file, terrain, weather");
+  expect(stepSummary("inputs", stateWith({ maxVolume: 1, context: 1, terrain: 1, weather: true }))).toBe("1 volume, 1 surroundings file, terrain");
   expect(stepSummary("inputs", stateWith({ maxVolume: 1, terrain: 2 }))).toBe("1 volume, terrain");
 });

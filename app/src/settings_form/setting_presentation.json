@@ -1,6 +1,6 @@
 {
   "steps": {
-    "settings": ["Site", "When", "Mode specific", "Surroundings", "Detail"],
+    "settings": ["Location", "When", "Mode specific", "Surroundings", "Detail"],
     "carving": ["How much to carve"],
     "envelope_and_massing": ["Envelope", "Building massing"],
     "export": ["Export"]
@@ -39,7 +39,7 @@
     "north_deg": {
       "label": "North direction", "unit": "°",
       "help": "Angle of north, clockwise from the model's +Y axis. 0 means +Y points north.",
-      "step": "settings", "group": "Site", "essential": "all", "slider": { "low": 0, "high": 359, "step": 1 }
+      "step": "settings", "group": "Location", "essential": "all", "slider": { "low": 0, "high": 359, "step": 1 }
     },
     "time_basis": {
       "label": "Time", "unit": "choice",

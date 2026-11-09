@@ -1,7 +1,8 @@
-// The Inputs step (UX 5.2, spec 7.1): the site only, one box per input role with its files (the maximum volume, the existing
-// surroundings and the terrain, which are optional, and the weather file), "Add files" (picker, or drop the files onto the box) and
-// a remove button per file; under the boxes the size of all inputs together and the warning when it does not look like metres.
-// The boxes are common/InputBox.tsx; the test surfaces belong to the criteria (ProtectsBox).
+// The Site step (UX 5.2, spec 7.1; named Inputs until design/new-project-setup.md): the site's geometry, one box per input role with
+// its files (the maximum volume, the existing surroundings and the terrain, which are optional), "Add files" (picker, or drop the
+// files onto the box) and a remove button per file; under the boxes the size of all inputs together and the warning when it does not
+// look like metres. The boxes are common/InputBox.tsx; the test surfaces belong to the criteria (ProtectsBox), the weather file to the
+// project settings (ProjectSettingsDialog).
 // While a run of the project is active the service refuses uploads and removals, so both are disabled with the reason.
 import type { ReactNode } from "react";
 import type { InputFileInfo } from "../api_client/client";
@@ -14,8 +15,8 @@ import { formatNumber, formattedNumber } from "../format_numbers";
 import { plainModeName } from "../modes";
 import "../theme/panels.css";
 
-/** The roles of the Inputs step: the site's (the test surfaces are each criterion's). */
-export const INPUT_ROLES: readonly InputRole[] = ["max_volume", "context", "terrain", "weather"];
+/** The roles of the Site step: the site's geometry (the test surfaces are each criterion's, the weather file is in Settings). */
+export const INPUT_ROLES: readonly InputRole[] = ["max_volume", "context", "terrain"];
 /**
  * "Carved by Daylight, then Sun hours. ..." for a project that was carved further with an earlier version of the app (its
  * record stays, spec 9); null for one that was not.
@@ -36,8 +37,6 @@ export function inputsSizeText(bounds: Bounds3): string {
 interface InputsStepProps {
   /** The files of each role; a role left out has none. */
   files: Partial<Record<InputRole, InputFileInfo[]>>;
-  weatherLocation: string | null;
-  weatherHint: string;
   /** The bounds of all input meshes together, null before any is shown. */
   inputsBounds: Bounds3 | null;
   onAddFiles: AddInputFiles;
@@ -53,13 +52,13 @@ interface InputsStepProps {
   maxVolumeFooter?: ReactNode;
 }
 
-export function InputsStep({ files, weatherLocation, weatherHint, inputsBounds, onAddFiles, onRemoveFile, disabledReason, drawingProblems = {},
+export function InputsStep({ files, inputsBounds, onAddFiles, onRemoveFile, disabledReason, drawingProblems = {},
                              maxVolumeNote = null, maxVolumeBox, maxVolumeFooter = null }: InputsStepProps) {
   const warning = inputsBounds === null ? null : sizeWarning(inputsBounds);
   return (
     <div className="inputs-step">
       {INPUT_ROLES.map((role) => (role === "max_volume" && maxVolumeBox !== undefined ? <div key={role}>{maxVolumeBox}</div> : (
-        <InputBox key={role} role={role} files={files[role] ?? NO_FILES} weatherLocation={weatherLocation} weatherHint={weatherHint}
+        <InputBox key={role} role={role} files={files[role] ?? NO_FILES}
                   onAddFiles={onAddFiles} onRemoveFile={onRemoveFile} disabledReason={disabledReason} drawingProblems={drawingProblems[role]}
                   note={role === "max_volume" ? maxVolumeNote : null} footer={role === "max_volume" ? maxVolumeFooter : null} />
       )))}

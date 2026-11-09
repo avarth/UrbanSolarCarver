@@ -51,7 +51,7 @@ import { carvedByNote, InputsStep } from "../steps/InputsStep";
 import { InputBox, type InputRole } from "../common/InputBox";
 import { useResultSteps } from "./result_steps";
 import type { RunLoop } from "../common/run_state";
-import { placeOfSetting, SaveFailureNotice, saveFailureTextOf, SettingsToFix } from "../settings_form/SettingsStep";
+import { placeOfSetting, SaveFailureNotice, saveFailureTextOf, SettingsStep, SettingsToFix } from "../settings_form/SettingsStep";
 import { ProjectSettingsButton, ProjectSettingsDialog } from "./ProjectSettingsDialog";
 import { StepAccordion, type AccordionStep } from "./StepAccordion";
 import { projectSettingsSummary, settingsToFixIn, stepMark, stepNotUsableYet, stepSummary } from "./step_summaries";
@@ -60,6 +60,7 @@ import { STEP_NAMES, type SettingPlace, type StepName } from "../stages";
 import { analysisPeriodOf, useSunPathOfStoredPeriod } from "../steps/sun_path_request";
 import { useInputFiles } from "./use_input_files";
 import { InputChoice, SiteBox, SwitchInputLink } from "../sites/SiteInput";
+import { ProjectSetupDialog } from "./ProjectSetupDialog";
 import { HeightsSettings } from "../sites/HeightsSettings";
 import { SiteEditor, SitePicker, type SiteTool } from "../sites/SiteEditor";
 import { drawingLevel } from "../sites/site_drawing";
@@ -118,8 +119,12 @@ interface ProjectWorkspaceProps {
    * waits for the input files under way, then saves or drops.
    */
   onSettingsSaverReady?: (saver: OpenProjectSettingsSaver | null) => void;
-  /** The steps to open with (the workspace made again for a renamed project); absent: Inputs. */
+  /** The steps to open with (the workspace made again for a renamed project); absent: Site. */
   startSteps?: WorkspaceSteps;
+  /** A project Create project has just made: the setup window opens over it (design/new-project-setup.md). */
+  startsWithSetup?: boolean;
+  /** The setup window closed (Start, Skip setup): it is not shown again for this project. */
+  onSetupClosed?: () => void;
   /** Told the open step and the step the view shows whenever either changes. */
   onStepsChange?: (steps: WorkspaceSteps) => void;
   /**
@@ -154,6 +159,10 @@ export interface OpenProjectSettingsSaver {
   /** Resolves once the uploads and removals of input files under way have ended, so none reaches a renamed, reset or deleted project. */
   waitForInputChanges: () => Promise<void>;
 }
+
+/** What a reason that leads to the weather file focuses in Settings: its box (data-setting). */
+const WEATHER_SETTING = "weather_file";
+const NO_STEP_ERRORS: readonly string[] = [];
 
 export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   // The token, the project's name and the app's handler of failed requests, for the hooks and panels of the open project.
@@ -230,6 +239,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
   const [settingToFocus, setSettingToFocus] = useState<{ name: string } | null>(null);
   // The project settings window, opened from the Settings button or from a reason or link that names one of its settings.
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(props.startsWithSetup === true);
   const settingsButton = useRef<HTMLButtonElement>(null);
   const settingsContent = useRef<HTMLDivElement>(null);
   const closeSettings = () => {
@@ -319,7 +329,8 @@ function OpenProject(props: ProjectWorkspaceProps) {
     const selector = `[data-setting="${settingToFocus.name}"]`;
     const field = settingsContent.current?.querySelector<HTMLElement>(selector) ?? panel.current?.querySelector<HTMLElement>(selector);
     const labelled = field?.dataset.inputId === undefined ? null : document.getElementById(field.dataset.inputId);
-    (labelled ?? field?.querySelector<HTMLElement>(":is(input, select)"))?.focus();
+    // A field's input, or a box's button (the weather file's Add files)
+    (labelled ?? field?.querySelector<HTMLElement>(":is(input:not([type=file]), select)") ?? field?.querySelector<HTMLElement>("button"))?.focus();
   }, [settingToFocus]);
   // The criterion panel's open sections, kept here so they outlast the Criteria step while it is closed (not stored). A setting of
   // the panel to focus opens the section that holds it first, in the same render.
@@ -361,8 +372,11 @@ function OpenProject(props: ProjectWorkspaceProps) {
     runBlockerAction: workspaceCriteria.runBlockerPlace === "project_settings" && (
       <button type="button" className="link-button run-button-reason-action" onClick={() => {
         const firstShared = Object.keys(sharedForm.form.fieldErrors)[0];
-        if (firstShared === undefined) setSettingsOpen(true);
-        else focusSettingInPanel(fieldSettingOf(firstShared));
+        if (firstShared !== undefined) focusSettingInPanel(fieldSettingOf(firstShared));
+        else {
+          setSettingsOpen(true);
+          if (!hasWeatherFile) setSettingToFocus({ name: WEATHER_SETTING });
+        }
       }}>{messages.openProjectSettings}</button>
     ),
     goToSetting: workspaceCriteria.goToSetting,
@@ -378,6 +392,11 @@ function OpenProject(props: ProjectWorkspaceProps) {
   const weatherBox = (
     <InputBox role="weather" files={files.weather} weatherLocation={weather.location} weatherHint={weatherHint} onAddFiles={addFiles}
               onRemoveFile={removeFile} disabledReason={inputsDisabledReason} weatherNeeded showsDisabledReason={false} />
+  );
+  // The weather file in the Location group of Settings (design/new-project-setup.md)
+  const settingsWeatherBox = (
+    <InputBox role="weather" files={files.weather} weatherLocation={weather.location} weatherHint={weatherHint} onAddFiles={addFiles}
+              onRemoveFile={removeFile} disabledReason={inputsDisabledReason} showsDisabledReason={false} />
   );
   const changeSettings = (values: Record<string, unknown>) => dispatch({ type: "values_changed", values });
   // A new project asks for the mode of its first criterion once: the mode goes with the criterion's settings, its editor opens.
@@ -446,7 +465,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
     );
   const stepContent: Record<StepName, ReactNode> = {
     inputs: (
-      <InputsStep files={files} weatherLocation={weather.location} weatherHint={weatherHint} inputsBounds={inputsBounds} onAddFiles={addFiles}
+      <InputsStep files={files} inputsBounds={inputsBounds} onAddFiles={addFiles}
                   onRemoveFile={removeFile} disabledReason={inputsDisabledReason} maxVolumeNote={carvedByNote(project.carving_chain ?? [])}
                   maxVolumeBox={maxVolumeBox} maxVolumeFooter={maxVolumeFooter}
                   drawingProblems={{ max_volume: maxVolumeMesh.drawingProblems, context: contextMesh.drawingProblems, terrain: terrainMesh.drawingProblems }} />
@@ -555,23 +574,56 @@ function OpenProject(props: ProjectWorkspaceProps) {
 
   // The Settings button, drawn in the top bar, and its window.
   const settingsButtonElement = props.settingsButtonSlot != null && createPortal(
-    <ProjectSettingsButton summary={projectSettingsSummary(viewState)} settingsToFix={settingsToFixIn("project_settings", viewState)} open={settingsOpen}
+    <ProjectSettingsButton summary={projectSettingsSummary(viewState, hasWeatherFile ? weather.location : null)} settingsToFix={settingsToFixIn("project_settings", viewState)} open={settingsOpen}
                            onOpen={() => setSettingsOpen(true)} buttonRef={settingsButton} />,
     props.settingsButtonSlot,
   );
   const settingsDialog = settingsOpen && (
     <ProjectSettingsDialog form={form} stepErrors={sharedForm.form.stepErrors} criterionKeys={criterionKeys} onChange={changeSettings}
                            disabledReason={inputsDisabledReason} inputRoles={inputRolesWithFiles} onClose={closeSettings} contentRef={settingsContent}
+                           weather={<div data-setting={WEATHER_SETTING}>{settingsWeatherBox}</div>}
                            heights={siteInput.source === null ? undefined : (
                              <HeightsSettings fromSites={siteInput.source === "sites"} heights={siteInput.heights} onChange={siteInput.setHeights}
                                               startingMax={siteInput.sites[0]?.height ?? DEFAULT_SITE_HEIGHT} disabledReason={inputsDisabledReason} />
                            )} />
   );
 
+  // The setup of a new project: the Location group as in Settings, the way in, the heights; Start opens the Site step on the way chosen
+  const setupWay = usesSites ? "sites" : maxVolumeChosen ? "mesh" : null;
+  const closeSetup = () => {
+    setSetupOpen(false);
+    props.onSetupClosed?.();
+  };
+  const setupDialog = setupOpen && !settingsOpen && (
+    <ProjectSetupDialog way={setupWay} disabledReason={inputsDisabledReason}
+                        location={(
+                          <SettingsStep form={form} stepErrors={NO_STEP_ERRORS} onChange={changeSettings} disabledReason={inputsDisabledReason}
+                                        settingShown={(name) => name === "north_deg"} groupLeads={{ Location: settingsWeatherBox }} />
+                        )}
+                        onChooseWay={(way) => {
+                          if (way === "sites") void siteInput.setSource("sites");
+                          else {
+                            setMaxVolumeChosen(true);
+                            if (usesSites) void siteInput.setSource("mesh");
+                          }
+                        }}
+                        heights={(way) => siteInput.source === null ? null : (
+                          <HeightsSettings fromSites={way === "sites"} heights={siteInput.heights} onChange={siteInput.setHeights}
+                                           startingMax={siteInput.sites[0]?.height ?? DEFAULT_SITE_HEIGHT} disabledReason={inputsDisabledReason} />
+                        )}
+                        onSkip={closeSetup}
+                        onStart={(way) => {
+                          closeSetup();
+                          openTheStep("inputs");
+                          if (way === "sites" && inputsDisabledReason === null) setSiteTool({ kind: "draw" });
+                        }} />
+  );
+
   return (
     <div className="workspace">
       {settingsButtonElement}
       {settingsDialog}
+      {setupDialog}
       <aside ref={panel} className="workspace-panel" hidden={props.mode !== "design"} onScrollCapture={keepScroll}>
         {inputChangesNotice}
         <StepAccordion steps={steps} openStep={openStep} onOpenStep={openTheStep}

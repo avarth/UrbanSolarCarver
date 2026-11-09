@@ -79,7 +79,7 @@ test("Simulate puts its own content over the 3D view, and Design takes it away",
   expect(container().querySelector(".simulate-view")).toBeNull();
 });
 
-test("in Simulate the empty view does not offer to add files, which Inputs in the hidden steps would take", async () => {
+test("in Simulate the empty view does not offer to add files, which the Site step in the hidden steps would take", async () => {
   const opened = project(NOTHING_RUN);
   await openWorkspace(new FakeService(NOTHING_RUN, null), { ...opened, inputs: { max_volume: [], test_surfaces: [], weather: [] } });
   expect(container().querySelector(".viewer-empty-state")).not.toBeNull();
@@ -112,7 +112,7 @@ test("Add study lists the criteria first as Like <name>, then the metrics, Sun h
     { label: "Sky view factor", disabled: false },
   ]);
   const sunHours = [...container().querySelectorAll<HTMLButtonElement>('.add-study-menu [role="menuitem"]')][1];
-  expect(document.getElementById(sunHours.getAttribute("aria-describedby")!)!.textContent).toBe("Needs a weather file");
+  expect(document.getElementById(sunHours.getAttribute("aria-describedby")!)!.textContent).toBe("Add a weather file in Settings");
   await act(async () => sunHours.click());       // a disabled item adds nothing
   expect(simulateService.requests).not.toContain("POST /studies");
 });
@@ -735,7 +735,7 @@ test("the clock of the Sun panel is local standard, local solar or local dayligh
 
 test("without a weather file the Sun panel says one is needed and reads nothing", async () => {
   await openSunPanel((service) => { service.hasWeatherFile = false; });
-  expect(sunPanel().textContent).toContain("Add a weather file in Carve (Inputs) to see the sun");
+  expect(sunPanel().textContent).toContain("Add a weather file in Settings to see the sun");
   expect(simulateService.requests.some((request) => request.includes("/sun-"))).toBe(false);
 });
 

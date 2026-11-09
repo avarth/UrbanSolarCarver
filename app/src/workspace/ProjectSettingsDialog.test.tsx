@@ -39,7 +39,7 @@ test("the window shows only the shared settings, with the grid line under Voxel 
 test("the surroundings switch is greyed out with the reason until the project has surroundings or terrain", () => {
   renderDialog();
   expect(field("context_blocks_rays")!.querySelector<HTMLInputElement>("input")!.disabled).toBe(true);
-  expect(field("context_blocks_rays")!.textContent).toContain("Add existing surroundings or terrain in Inputs to use this.");
+  expect(field("context_blocks_rays")!.textContent).toContain("Add existing surroundings or terrain in Site to use this.");
   rendered!.unmount();
   renderDialog({ inputRoles: ["terrain"] });
   expect(field("context_blocks_rays")!.querySelector<HTMLInputElement>("input")!.disabled).toBe(false);

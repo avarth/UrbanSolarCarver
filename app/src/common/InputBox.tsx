@@ -10,7 +10,7 @@ import { Subheading } from "../settings_form/Subheading";
 import "../theme/panels.css";
 
 export type InputRole = "max_volume" | "test_surfaces" | "context" | "terrain" | "weather";
-/** The mesh roles a run can do without: no "Required" beside their titles. */
+/** The mesh roles a run can do without: "Optional" under their titles. */
 const OPTIONAL_MESH_ROLES: readonly InputRole[] = ["context", "terrain"];
 
 const MESH_FILE_TYPES = ".ply,.obj,.stl,.glb";
@@ -31,15 +31,17 @@ export type RemoveInputFile = (role: InputRole, fileName: string) => Promise<str
 interface InputBoxProps {
   role: InputRole;
   files: InputFileInfo[];
-  weatherLocation: string | null;
+  /** The weather file's place ("THESSALONIKI, GRC"), for the weather box. */
+  weatherLocation?: string | null;
   /** The weather box's line: which modes need the file. */
-  weatherHint: string;
+  weatherHint?: string;
   /** Absent: the box offers no adding (no button, no drop), only its files and their removal (a study's stored files). */
   onAddFiles?: AddInputFiles;
   onRemoveFile: RemoveInputFile;
   /** Why files cannot be added or removed now (a run is in progress); null when they can. */
   disabledReason: string | null;
-  /** The weather box under the mode tiles, where the chosen mode needs the file: not titled optional there. */
+  /** The weather box in a criterion's editor, where its mode needs the file: "Also in Settings" under its title, the window that
+   * holds it (design/new-project-setup.md). */
   weatherNeeded?: boolean;
   /** The files of the box that the 3D view cannot draw, one text each naming the file. */
   drawingProblems?: string[];
@@ -83,7 +85,7 @@ function RemoveIcon() {
 /** One input box: dashed and with its hint while empty, solid with one row per file once it has files. */
 const NO_PROBLEMS: string[] = [];
 
-export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles, onRemoveFile, disabledReason, weatherNeeded = false,
+export function InputBox({ role, files, weatherLocation = null, weatherHint = "", onAddFiles, onRemoveFile, disabledReason, weatherNeeded = false,
                            drawingProblems = NO_PROBLEMS, note = null, title, titleHidden = false, hint: hintGiven, addLabel,
                            showsDisabledReason = true, footer = null }: InputBoxProps) {
   const [problems, setProblems] = useState<string[]>([]);
@@ -95,7 +97,8 @@ export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles
   const filled = files.length > 0;
   const disabled = disabledReason !== null || busy;
   const hint = hintGiven ?? (role === "weather" ? weatherHint : MESH_HINTS[role]);
-  const badge = isWeather ? messages.weatherFileExtension : OPTIONAL_MESH_ROLES.includes(role) ? null : messages.requiredInput;
+  // One muted line under the title: what kind of box it is, where that is not plain (design/new-project-setup.md, section 5)
+  const subtitle = isWeather && weatherNeeded ? messages.weatherAlsoInSettings : OPTIONAL_MESH_ROLES.includes(role) ? messages.optionalInput : null;
 
   const adds = onAddFiles !== undefined;
   const add = async (chosen: File[]) => {
@@ -131,7 +134,7 @@ export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles
       {isWeather && filled ? messages.replaceFile : addLabel ?? messages.addFiles}
     </button>
   );
-  const shownTitle = title ?? (isWeather && weatherNeeded ? messages.weatherFileNeededTitle : TITLES[role]);
+  const shownTitle = title ?? TITLES[role];
   const boxClass = ["input-box", filled ? "input-box-filled" : "input-box-empty", dragging && !disabled ? "input-box-drop-target" : ""].join(" ");
   const dropHandlers = adds ? {
     onDragOver: (event: DragEvent) => { event.preventDefault(); if (!disabled) setDragging(true); },
@@ -146,12 +149,13 @@ export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles
       )}
       <div className="input-box-title-row">
         {!titleHidden && <Subheading id={titleId} className="input-box-title">{shownTitle}</Subheading>}
-        {filled ? addButton : badge !== null && <span className="input-box-required">{badge}</span>}
+        {addButton}
       </div>
+      {subtitle !== null && <p className="input-box-subtitle">{subtitle}</p>}
       {!filled && (
         <>
           <p className="input-box-hint">{hint}</p>
-          {adds && <div className="input-box-actions">{addButton}<span className="input-box-drop-hint">{messages.orDropThemHere}</span></div>}
+          {adds && <p className="input-box-drop-hint">{isWeather ? messages.orDropWeatherFileHere : messages.orDropFilesHere}</p>}
         </>
       )}
       {filled && (

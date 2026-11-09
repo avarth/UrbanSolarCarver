@@ -17,8 +17,9 @@ test("a criterion without test surfaces says what to add", () => {
   expect(box().getAttribute("aria-label")).toBe("Test surfaces");
   expect(box().classList.contains("input-box-empty")).toBe(true);
   expect(box().querySelector(".input-box-hint")!.textContent).toBe("Windows or facades that need daylight. Flat panels; a curved or folded one is skipped.");
-  expect(box().querySelector(".input-box-actions")!.textContent).toBe("Add test surfacesor drop them here");
-  expect(box().querySelector(".input-box-required")!.textContent).toBe("Required");
+  expect(box().querySelector(".input-box-title-row button")!.textContent).toBe("Add test surfaces");
+  expect(box().querySelector(".input-box-drop-hint")!.textContent).toBe("Or drop the files here.");
+  expect(box().querySelector(".input-box-subtitle")).toBeNull();     // not optional: no muted line
 });
 
 test("the hint follows the criterion's mode", () => {

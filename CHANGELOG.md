@@ -23,6 +23,13 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - Simulate: a study can account for the **Base volume** while the project has a base height (`CheckSettings.geometry`
   `base_volume`, the request's `base_volume_path`).
 - 3D view: panning moves the picture and no longer the orbit point, which stays at the compass ring's centre.
+- **Inputs is now the Site step**, and holds the site's geometry only: the weather file moved to Settings, in a **Location**
+  group with North direction. A missing weather file says "Add a weather file in Settings to run ..." with **Open settings**.
+  The Settings button's tooltip names the weather file's location.
+- **Set up the project.** Create project opens a three-page setup window: Location (weather file and north), the site's way in
+  (Sites or Maximum volume) and Heights. Start opens the Site step, drawing the first site after Sites; Skip setup closes it.
+- Input boxes: the action (Add files, Replace, Draw site) is at the right of the title in every box, empty or not; "Optional"
+  is a muted line under the title in place of "(optional)" and "Required". The box of drawn sites is titled **Sites**.
 - Engine: `kept_volume_path`, a shared setting read by thresholding: the voxels inside the mesh are kept, and the threshold
   and `carve_fraction` act on the other voxels. Service: `PUT /projects/{name}/heights`.
 

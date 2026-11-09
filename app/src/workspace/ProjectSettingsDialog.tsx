@@ -60,16 +60,18 @@ interface ProjectSettingsDialogProps {
   contentRef?: Ref<HTMLDivElement>;
   /** The Heights group (HeightsSettings), drawn after the shared settings. */
   heights?: ReactNode;
+  /** The weather file's box, first in the Location group (design/new-project-setup.md). */
+  weather?: ReactNode;
 }
 
-export function ProjectSettingsDialog({ form, stepErrors, criterionKeys, onChange, disabledReason, inputRoles, onClose, contentRef, heights }: ProjectSettingsDialogProps) {
+export function ProjectSettingsDialog({ form, stepErrors, criterionKeys, onChange, disabledReason, inputRoles, onClose, contentRef, heights, weather }: ProjectSettingsDialogProps) {
   // Drawn into the page's body, as the typical building's window: inside the panel its backdrop could not cover the view's overlays.
   return createPortal(
     <DialogFrame title={messages.projectSettingsTitle} busy={false} onClose={onClose} closeLabel={messages.closeProjectSettings} titleTakesFocus>
       <div ref={contentRef} className="project-settings">
         <p className="project-settings-intro">{messages.projectSettingsIntro}</p>
         <SettingsStep form={form} stepErrors={stepErrors} onChange={onChange} disabledReason={disabledReason} inputRoles={inputRoles}
-                      withoutInputs="disabled" settingShown={(name) => !criterionKeys.has(name)} />
+                      withoutInputs="disabled" settingShown={(name) => !criterionKeys.has(name)} groupLeads={weather === undefined ? undefined : { Location: weather }} />
         {heights}
       </div>
       <div className="project-dialog-buttons">

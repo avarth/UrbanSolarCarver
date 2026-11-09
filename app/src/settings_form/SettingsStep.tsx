@@ -105,11 +105,13 @@ export function runAnalysisBlockOf(conditions: RunAnalysisConditions): RunAnalys
   if (!hasMaxVolume) return plain(conditions.maxVolumeFromSites === true ? messages.addSiteToRun : messages.addMaxVolumeToRun);
   if (!hasTestSurfaces) return plain(criterionName === null ? messages.addTestSurfacesToRun : messages.addTestSurfacesOfCriterionToRun(criterionName));
   if (conditions.otherCriterionWithoutTestSurfaces != null) return plain(messages.addTestSurfacesOfCriterionToRun(conditions.otherCriterionWithoutTestSurfaces));
+  // The weather file is in the project settings: the reason leads there (Open settings)
+  const inSettings = (reason: string): RunAnalysisBlock => ({ reason, settingsElsewhere: "project_settings" });
   if (conditions.modeNeedsWeatherFile && !conditions.hasWeatherFile) {
-    return plain(criterionName === null ? messages.weatherFileNeeded : messages.weatherFileNeededFor(criterionName));
+    return inSettings(criterionName === null ? messages.weatherFileNeeded : messages.weatherFileNeededFor(criterionName));
   }
   const otherNeedingWeatherFile = conditions.otherCriterionNeedingWeatherFile;
-  if (otherNeedingWeatherFile != null && !conditions.hasWeatherFile) return plain(messages.weatherFileNeededFor(otherNeedingWeatherFile));
+  if (otherNeedingWeatherFile != null && !conditions.hasWeatherFile) return inSettings(messages.weatherFileNeededFor(otherNeedingWeatherFile));
   const firstFieldWithError = Object.keys(form.fieldErrors)[0];
   if (firstFieldWithError !== undefined) {
     // A setting of another place is named with its place, so the user knows where to find it.
@@ -318,6 +320,8 @@ interface SettingsStepProps {
   stepErrors?: readonly string[];
   /** Whether the reason things are disabled is written here; false where another part says it (a criterion's Run analysis). */
   showsDisabledReason?: boolean;
+  /** What a group shows first, by group title: the weather file in Location, in the project settings. */
+  groupLeads?: Readonly<Record<string, ReactNode>>;
 }
 
 const NO_INPUT_ROLES: readonly string[] = [];
@@ -341,7 +345,7 @@ function edgeStripOutsideItsField(form: FormState): number | null {
 
 export function SettingsStep({ form, onChange, disabledReason, coldPeriod = null, hemisphere = "northern",
                                weatherChangeNotice, inputRoles = NO_INPUT_ROLES, withoutInputs = "hidden", settingShown, stepErrors = form.stepErrors,
-                               showsDisabledReason = true }: SettingsStepProps) {
+                               showsDisabledReason = true, groupLeads = {} }: SettingsStepProps) {
   const groups = settingsForStep("settings", form.mode, withoutInputs === "hidden" ? inputRoles : null, settingShown);
   const fieldExtras: Record<string, SettingFieldExtras> = { voxel_size: voxelSizeExtras(form), [ANALYSIS_PERIOD_FIELDS[0]]: { coldPeriod, hemisphere } };
   // Drawn without its inputs ("disabled"): greyed out, with the reason under it.
@@ -357,7 +361,8 @@ export function SettingsStep({ form, onChange, disabledReason, coldPeriod = null
       )}
       {stepErrors.map((error) => <p key={error} className="setting-error step-error"><WarningIcon /><span>{error}</span></p>)}
       {groups.map((group) => (
-        <SettingGroup key={group.title} group={group} form={form} onChange={onChange} disabled={disabledReason !== null} fieldExtras={fieldExtras} />
+        <SettingGroup key={group.title} group={group} form={form} onChange={onChange} disabled={disabledReason !== null} fieldExtras={fieldExtras}
+                      lead={groupLeads[group.title]} />
       ))}
       {edgeStripCarriedOver !== null && (settingShown?.("edge_taper") ?? true) && <p className="step-reason">{messages.edgeStripCarriedOver(edgeStripCarriedOver)}</p>}
     </div>

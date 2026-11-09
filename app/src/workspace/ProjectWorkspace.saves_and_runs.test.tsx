@@ -11,8 +11,8 @@ import type { OpenProjectSettingsSaver } from "./ProjectWorkspace";
 import type { PipelineStage, StageState } from "../stages";
 import { FACADES, ROOFS, WINDOWS, card, openChain, select } from "./chain_service_for_test";
 import {
-  CARVED, CARVING, ENVELOPE, FakeService, MASSING, NOTHING_RUN, TRIANGLE_OBJ, buildPart, buttonIn, container,
-  dimmedCarvingLayers, endWorkspaceTest, openPanelSection, openStep, closeProjectSettings, openProjectSettings, projectSettings, settingsButton, openWorkspace, panelSectionOpen, pinnedBar, pressRunAnalysis, project, reasonOf, reportedServiceProblems, settle,
+  CARVED, CARVING, ENVELOPE, FakeService, MASSING, NOTHING_RUN, TRIANGLE_OBJ, addWeatherFileInSettings, buildPart, buttonIn, container,
+  dimmedCarvingLayers, endWorkspaceTest, openPanelSection, openStep, closeProjectSettings, openProjectSettings, projectSettings, settingsButton, settingsWeatherBox, openWorkspace, panelSectionOpen, pinnedBar, pressRunAnalysis, project, reasonOf, reportedServiceProblems, settle,
   startWorkspaceTest, stepIsOpen, stepRow, thresholdField, thresholdOf, togglePanelSection, type, typeAndLeave, voxelSizeField, waitForTheSave,
 } from "./project_workspace_for_test";
 
@@ -56,7 +56,7 @@ test("a settings change saves; Run analysis starts a run; its events finish it; 
   expect(stepRow("Criteria").textContent).toContain("Update the carving as I change these settings");     // the carving rule, no longer waiting
   expect(stepRow("Criteria").textContent).not.toContain("Run the analysis to see the carving");
   expect(dimmedCarvingLayers()).toEqual([]);
-  openStep("Inputs");
+  openStep("Site");
   expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Sun hours, 61\u00a0% kept");
 });
 
@@ -164,7 +164,7 @@ test("a shared change refused for the criterion's mode is saved again once the f
   await waitForTheSave();
   await settle();
   expect(settingsSaves()).toEqual(["PUT /shared-settings"]);
-  expect(projectSettings()!.querySelector(".step-error")!.textContent).toBe("Add a weather file to run this mode");
+  expect(projectSettings()!.querySelector(".step-error")!.textContent).toBe("Add a weather file in Settings to run this mode");
 
   closeProjectSettings();
   openStep("Criteria");
@@ -220,7 +220,7 @@ test("a page opened during a run it does not follow: Run analysis answered with 
   service.everythingUpToDate = true;
   // Opened while the run had removed the records of the stages it rewrote: the envelope and the massing were still current.
   await openWorkspace(service, project({ ...built, preprocessing: "missing", thresholding: "missing" }));
-  openStep("Inputs");
+  openStep("Site");
   expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Sun hours, Not run yet");
 
   const requestsBefore = service.requests.length;
@@ -231,7 +231,7 @@ test("a page opened during a run it does not follow: Run analysis answered with 
   expect(service.requests.slice(requestsBefore).filter((request) => request.startsWith("GET /run/"))
     .map((request) => request.split("?")[0]).sort())
     .toEqual(["GET /run/score-points", "GET /run/skipped-surfaces", "GET /run/sky-patches", "GET /run/summary"]);
-  openStep("Inputs");
+  openStep("Site");
   expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Sun hours, 61\u00a0% kept");
   openStep("Criteria");
   expect(stepRow("Criteria").textContent).not.toContain("Run the analysis to see the carving");
@@ -300,7 +300,7 @@ test("a stored grid over the budget marks the Settings button, and Run analysis 
   await openWorkspace(service, { ...project(NOTHING_RUN, { voxel_size: 0.05 }), grid_plan: overBudget });
   expect(settingsButton().getAttribute("aria-label")).toBe("Settings, 1 setting to fix");
   expect(settingsButton().querySelector(".step-mark-error")).not.toBeNull();
-  for (const title of ["Inputs", "Criteria", "Envelope and massing", "Export"]) expect(stepRow(title).querySelector(".step-mark-error"), title).toBeNull();
+  for (const title of ["Site", "Criteria", "Envelope and massing", "Export"]) expect(stepRow(title).querySelector(".step-mark-error"), title).toBeNull();
   openStep("Criteria");
   const run = buttonIn(pinnedBar(), "Run analysis");
   expect(run.disabled).toBe(true);
@@ -309,6 +309,26 @@ test("a stored grid over the budget marks the Settings button, and Run analysis 
   expect(projectSettings()).not.toBeNull();
   expect(document.activeElement).toBe(voxelSizeField());
   expect(projectSettings()!.querySelector('[data-setting="voxel_size"] .setting-error')).not.toBeNull();
+});
+
+test("without a weather file Run analysis names Settings, with a button that opens it on the weather file's Add files", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  const opened = project(NOTHING_RUN);
+  await openWorkspace(service, { ...opened, inputs: { ...opened.inputs, weather: [] }, weather_location: null, weather_latitude: null });
+  expect(settingsButton().title.startsWith("No weather file. North 0")).toBe(true);
+  openStep("Criteria");
+  const run = buttonIn(pinnedBar(), "Run analysis");
+  expect(run.disabled).toBe(true);
+  expect(reasonOf(run)).toBe("Add a weather file in Settings to run this mode");
+  act(() => buttonIn(pinnedBar(), "Open settings").click());
+  expect(projectSettings()).not.toBeNull();
+  const addFiles = settingsWeatherBox()!.querySelector<HTMLButtonElement>(".input-box-title-row button")!;
+  expect(addFiles.textContent).toBe("Add files");
+  expect(document.activeElement).toBe(addFiles);
+  closeProjectSettings();
+  await addWeatherFileInSettings();
+  expect(buttonIn(pinnedBar(), "Run analysis").disabled).toBe(false);
+  expect(pinnedBar().textContent).not.toContain("Add a weather file");
 });
 
 test("the pinned bar folds the warnings of the last run behind one line", async () => {
@@ -515,7 +535,7 @@ test("a workspace made again for a renamed project opens with the steps it had o
   const stepsReported = vi.fn();
   await openWorkspace(service, project(CARVED), { startSteps: { open: "criteria", view: "criteria" }, onStepsChange: stepsReported });
   expect(stepIsOpen("Criteria")).toBe(true);
-  expect(stepIsOpen("Inputs")).toBe(false);
+  expect(stepIsOpen("Site")).toBe(false);
   expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
   expect(FakeViewerScene.latest!.visibleLayers.has("max_volume")).toBe(true);         // the layers of Criteria, the maximum volume as a ghost
   openStep("Export");

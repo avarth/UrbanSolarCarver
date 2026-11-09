@@ -300,7 +300,7 @@ test("hiding the layer is the step's choice, not the criteria's: another step br
   clickTestSurfaceEntry("Spring sun on windows");
   clickTestSurfaceEntry("Test surfaces");
   expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(false);
-  openStep("Inputs");
+  openStep("Site");
   await settle();
   expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
   expect([verticesOf("1"), verticesOf("2")]).toEqual([3, null]);
@@ -323,7 +323,7 @@ test("checking a criterion's entry while the layer is hidden shows it alone when
 test("the choice of criteria shown is kept when another step opens", async () => {
   await openChain([FACADES, WINDOWS], undefined, twoFiles);
   clickTestSurfaceEntry("Spring sun on windows");
-  openStep("Inputs");
+  openStep("Site");
   await settle();
   expect([verticesOf("1"), verticesOf("2")]).toEqual([3, null]);
   expect(testSurfaceEntries().parts.map((part) => part.checked)).toEqual([true, false]);

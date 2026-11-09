@@ -150,6 +150,8 @@ export function App() {
   const [projectsFolder, setProjectsFolder] = useState<ProjectsFolderReply | null>(null);
   // Counts the resets of the open project: the workspace is made again for the fresh copy, which keeps the project's name.
   const [openProjectResets, setOpenProjectResets] = useState(0);
+  // A project Create project has just made opens with its setup window, until that closes (design/new-project-setup.md)
+  const [newProjectSetup, setNewProjectSetup] = useState(false);
   // The workspace is made again for a renamed project too, and then opens with the steps it had open; otherwise with Inputs.
   const openWorkspaceSteps = useRef<WorkspaceSteps | undefined>(undefined);
   const [workspaceStartSteps, setWorkspaceStartSteps] = useState<WorkspaceSteps | undefined>(undefined);
@@ -241,9 +243,10 @@ export function App() {
   };
 
   /** Opens the project the request gives; resolves with the reason it failed, or null. */
-  const openFrom = async (request: Promise<ProjectDetail>): Promise<string | null> => {
+  const openFrom = async (request: Promise<ProjectDetail>, withSetup = false): Promise<string | null> => {
     try {
       setOpenProject(await request);
+      setNewProjectSetup(withSetup);
       setWorkspaceStartSteps(undefined);
       setWorkspaceMode("design");
       setFocusStartScreenHeading(false);
@@ -381,7 +384,7 @@ export function App() {
         {openProject === null && (
           <StartScreen health={health} projects={projects} examples={examplesCurrent ? examples : null} projectsFolder={projectsFolder}
                        activeRunProject={runs.activeRun?.project ?? null} projectActions={projectActions} headingTakesFocus={focusStartScreenHeading}
-                       onCreateProject={(name) => openFrom(createProject(accessToken, name))}
+                       onCreateProject={(name) => openFrom(createProject(accessToken, name), true)}
                        onOpenProject={(name) => openFrom(getProject(accessToken, name))}
                        onTryExample={(example) => openFrom(example.project
                          ? getProject(accessToken, example.project)       // made from this example before (R2 7.4)
@@ -394,7 +397,8 @@ export function App() {
                             onShowProjects={() => setOpenProject(null)} onSettingsSaverReady={(saver) => { openProjectSettings.current = saver; }}
                             startSteps={workspaceStartSteps} onStepsChange={(steps) => { openWorkspaceSteps.current = steps; }}
                             onInspectUnsavedChange={leavingInspect.onUnsavedChange} onInspectTurnsReady={leavingInspect.onTurnsReady}
-                            onGoToCarve={() => leavingInspect.leave(() => setWorkspaceMode("design"))} settingsButtonSlot={settingsButtonSlot} />
+                            onGoToCarve={() => leavingInspect.leave(() => setWorkspaceMode("design"))} settingsButtonSlot={settingsButtonSlot}
+                            startsWithSetup={newProjectSetup} onSetupClosed={() => setNewProjectSetup(false)} />
         )}
         {leavingInspect.dialog}
       </div>

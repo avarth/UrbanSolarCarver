@@ -91,8 +91,8 @@ interface SiteBoxProps {
   disabledReason: string | null;
 }
 
-/** The Site card: a line for the heights set for all sites, a table of the sites (a line each: name, the heights set per site, the
- * menu), Draw site, and the link back to a maximum volume. */
+/** The Sites card: Draw site at the right of its title, a line for the heights set for all sites, a table of the sites (a line each:
+ * name, the heights set per site, the menu), and at its foot the link back to a maximum volume. */
 export function SiteBox({ sites, heights, onOpenSettings, tool, onDraw, onEdit, onChangeSite, onDeleteSite, onSwitch, refusal, disabledReason }: SiteBoxProps) {
   const titleId = useId();
   const [renaming, setRenaming] = useState<number | null>(null);
@@ -102,7 +102,7 @@ export function SiteBox({ sites, heights, onOpenSettings, tool, onDraw, onEdit, 
     <section className="input-box input-box-filled" aria-labelledby={titleId}>
       <div className="input-box-title-row">
         <Subheading id={titleId} className="input-box-title">{messages.siteTitle}</Subheading>
-        <span className="input-box-required">{messages.requiredInput}</span>
+        <button type="button" className="input-add" disabled={disabledReason !== null || tool?.kind === "draw"} onClick={onDraw}>{messages.drawSite}</button>
       </div>
       {(heights.base.for_all_sites || heights.max.for_all_sites) && (
         <p className="site-shared-heights">
@@ -142,9 +142,6 @@ export function SiteBox({ sites, heights, onOpenSettings, tool, onDraw, onEdit, 
           </ul>
         </div>
       )}
-      <div className="site-card-actions">
-        <button type="button" className="input-add" disabled={disabledReason !== null || tool?.kind === "draw"} onClick={onDraw}>{messages.drawSite}</button>
-      </div>
       {refusal !== null && <p className="input-box-problem" role="alert"><WarningIcon />{refusal}</p>}
       {disabledReason !== null && <p className="input-box-reason">{disabledReason}</p>}
       <SwitchInputLink toSite={false} asks={sites.length > 0} onSwitch={onSwitch} disabledReason={disabledReason} />

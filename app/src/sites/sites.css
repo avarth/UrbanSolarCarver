@@ -7,7 +7,8 @@
   border: 1px solid var(--colour-line); border-radius: var(--radius-large); background: var(--colour-panel); color: var(--colour-ink);
   font: inherit; cursor: pointer;
 }
-.input-choice-tile:hover { border-color: var(--colour-accent); }
+.input-choice-tile:hover, .input-choice-tile[aria-pressed="true"] { border-color: var(--colour-accent); }
+.input-choice-tile[aria-pressed="true"] { background: var(--colour-accent-soft); }
 .input-choice-tile:disabled { cursor: not-allowed; opacity: 0.6; }
 .input-choice-tile strong { font-size: var(--text-body); }
 .input-choice-tile span { color: var(--colour-muted); font-size: var(--text-secondary); }
@@ -28,8 +29,7 @@
 .site-row-details { grid-column: 1 / -1; color: var(--colour-muted); font-size: var(--text-secondary); }
 .site-row-problem { grid-column: 1 / -1; color: var(--colour-error); font-size: var(--text-secondary); }
 .site-row-editing { background: var(--colour-accent-soft); }
-.site-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--space-unit) * 2); margin-top: calc(var(--space-unit) * 2); }
-.input-switch-link { margin-top: calc(var(--space-unit) * 2); }
+.input-switch-link { align-self: flex-start; margin-top: var(--space-unit); }
 
 .site-editor { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
 .site-editor-bar {

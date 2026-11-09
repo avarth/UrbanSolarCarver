@@ -39,18 +39,19 @@ export interface ProjectViewState {
 function inputsSummary(state: ProjectViewState): string {
   if (state.sites) {
     if (state.sites.count === 0) return messages.siteMissing;
-    return messages.sitesInputsSummary(state.sites.count, state.sites.area, state.hasWeatherFile, state.contextFiles ?? 0, (state.terrainFiles ?? 0) > 0);
+    return messages.sitesInputsSummary(state.sites.count, state.sites.area, state.contextFiles ?? 0, (state.terrainFiles ?? 0) > 0);
   }
   if (state.maxVolumeFiles === 0) return messages.maxVolumeMissing;
-  return messages.inputsSummary(state.maxVolumeFiles, state.hasWeatherFile, state.contextFiles ?? 0, (state.terrainFiles ?? 0) > 0);
+  return messages.inputsSummary(state.maxVolumeFiles, state.contextFiles ?? 0, (state.terrainFiles ?? 0) > 0);
 }
 
 /** The settings to fix in a step, or in the project settings window. */
 export const settingsToFixIn = (place: SettingPlace, state: Pick<ProjectViewState, "settingsToFix">) => state.settingsToFix[place] ?? 0;
 
-/** The project settings in a line, for the Settings button's tooltip: "North 10°, 0.5 m voxels". */
-export function projectSettingsSummary(state: Pick<ProjectViewState, "northDegrees" | "voxelSize">): string {
-  return messages.projectSettingsSummary(formattedNumber(state.northDegrees), messages.voxelsOfSize(withUnit(formattedNumber(state.voxelSize), "m")));
+/** The project settings in a line, for the Settings button's tooltip: "THESSALONIKI, GRC. North 10°, 0.5 m voxels" (*location*: the
+ * weather file's, null without one). */
+export function projectSettingsSummary(state: Pick<ProjectViewState, "northDegrees" | "voxelSize">, location: string | null = null): string {
+  return messages.projectSettingsSummary(location, formattedNumber(state.northDegrees), messages.voxelsOfSize(withUnit(formattedNumber(state.voxelSize), "m")));
 }
 
 function carvingSummary(state: ProjectViewState): string {

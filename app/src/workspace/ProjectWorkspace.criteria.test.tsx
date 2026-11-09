@@ -1,4 +1,4 @@
-// The open project's steps for one criterion, against a fake service: Inputs hold the site, the project settings the shared settings,
+// The open project's steps for one criterion, against a fake service: Site holds the site, the project settings the shared settings,
 // and Criteria opens straight on the criterion, whose test surfaces go through its own routes. The last tests are of what the
 // Criteria step shows, the list or the editor of one criterion: how it opens, what it keeps, and what leads to a criterion's settings.
 import { act } from "react";
@@ -9,7 +9,7 @@ import { FakeViewerScene } from "../viewer/fake_scene_for_test";
 import type { PipelineStage, StageState } from "../stages";
 import { FACADES, ROOFS, WINDOWS, deleteCriterion, openChain, select, service as chainService } from "./chain_service_for_test";
 import {
-  CARVED, CARVING, ENVELOPE, FakeService, MASSING, NOTHING_RUN, TRIANGLE_OBJ, buttonIn, container, criterionEntry, endWorkspaceTest, openStep, closeProjectSettings, openProjectSettings, projectSettings, settingsButton,
+  CARVED, CARVING, ENVELOPE, FakeService, MASSING, NOTHING_RUN, TRIANGLE_OBJ, addWeatherFileInSettings, buttonIn, container, criterionEntry, endWorkspaceTest, openStep, closeProjectSettings, openProjectSettings, projectSettings, settingsButton,
   openPanelSection, openWorkspace, pinnedBar, pressRunAnalysis, project, reasonOf, settle, showCriterionCards, showCriterionEditor, startWorkspaceTest, stepIsOpen, stepRow, type,
   unmountWorkspace, voxelSizeField,
 } from "./project_workspace_for_test";
@@ -29,10 +29,10 @@ const protectedFiles = () => [...protectsBox().querySelectorAll(".input-file-nam
 const field = (setting: string) => container().querySelector(`[data-setting="${setting}"]`);
 const stepTitles = () => [...container().querySelectorAll(".step-title")].map((title) => title.textContent);
 
-test("the steps are Inputs, Criteria, Envelope and massing and Export; the shared settings are behind the Settings button", async () => {
+test("the steps are Site, Criteria, Envelope and massing and Export; the shared settings are behind the Settings button", async () => {
   service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, project(NOTHING_RUN));
-  expect(stepTitles()).toEqual(["Inputs", "Criteria", "Envelope and massing", "Export"]);
+  expect(stepTitles()).toEqual(["Site", "Criteria", "Envelope and massing", "Export"]);
   expect(settingsButton().textContent).toBe("Settings");
 });
 
@@ -69,11 +69,11 @@ test("one criterion shows its row in the list, with the switch on and no drag ha
   expect(protectedFiles()).toEqual(["surfaces.obj"]);
   expect(buttonIn(pinnedBar(), "Build envelope and massing")).toBeDefined();
   expect(stepRow("Criteria").querySelector(".step-summary")).toBeNull();               // open, no setting to fix
-  openStep("Inputs");
+  openStep("Site");
   expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Sun hours, 61 % kept");
 });
 
-test("the criteria step pins the build, and Run analysis while the analysis is out of date; Inputs has neither", async () => {
+test("the criteria step pins the build, and Run analysis while the analysis is out of date; Site has neither", async () => {
   service = new FakeService(CARVED, CARVING);
   await openWorkspace(service, project(CARVED));
   openStep("Criteria");
@@ -83,7 +83,7 @@ test("the criteria step pins the build, and Run analysis while the analysis is o
   await act(async () => window.dispatchEvent(new Event("focus")));         // the stage status is read again
   await settle();
   expect(buttonIn(pinnedBar(), "Run analysis").disabled).toBe(false);
-  openStep("Inputs");
+  openStep("Site");
   expect(buttonIn(container(), "Run analysis")).toBeUndefined();                                                   // only for Criteria
   expect(buttonIn(container(), "Build envelope and massing")).toBeUndefined();
 });
@@ -147,24 +147,30 @@ test("an earlier project shows its test surfaces in the criterion", async () => 
   openPanelSection("Test surfaces");
   expect(protectedFiles()).toEqual(["roofs.ply", "windows.ply"]);
   expect(protectsBox().querySelector(".input-file-detail")!.textContent).toBe("20 triangles");
-  for (const title of ["Inputs", "Criteria", "Envelope and massing", "Export"]) {
+  for (const title of ["Site", "Criteria", "Envelope and massing", "Export"]) {
     expect(stepRow(title).querySelector(".step-mark-done"), title).not.toBeNull();
   }
   expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);      // the 3D view still draws them
 });
 
-test("inputs hold only the site", async () => {
+test("the Site step holds only the site's geometry; the weather file is first in Location in the project settings", async () => {
   service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, project(NOTHING_RUN));
-  const titles = [...stepRow("Inputs").querySelectorAll(".input-box h3")].map((title) => title.textContent);
-  expect(titles).toEqual(["Maximum volume", "Existing surroundings (optional)", "Terrain (optional)", "Weather file (optional)"]);
-  expect(stepRow("Inputs").querySelector(".step-mark-done")).not.toBeNull();         // the maximum volume is there
+  const titles = [...stepRow("Site").querySelectorAll(".input-box h3")].map((title) => title.textContent);
+  expect(titles).toEqual(["Maximum volume", "Existing surroundings", "Terrain"]);
+  openProjectSettings();
+  const location = projectSettings()!.querySelector(".setting-group-essential")!;
+  expect(location.parentElement!.querySelector(".setting-group-title")!.textContent).toBe("Location");
+  expect([...location.children].map((child) => child.getAttribute("data-setting"))).toEqual(["weather_file", "north_deg"]);
+  expect(location.querySelector('[data-setting="weather_file"] h3')!.textContent).toBe("Weather file");
+  closeProjectSettings();
+  expect(stepRow("Site").querySelector(".step-mark-done")).not.toBeNull();         // the maximum volume is there
 });
 
 test("the project settings show only shared settings, and no run button", async () => {
   service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, project(NOTHING_RUN, { north_deg: 10, voxel_size: 0.5 }));
-  expect(settingsButton().title).toBe("North 10°, 0.5\u00a0m voxels. Opens the settings every criterion shares.");
+  expect(settingsButton().title).toBe("Golden, CO, USA. North 10°, 0.5\u00a0m voxels. Opens the settings every criterion shares.");
   openProjectSettings();
   const inWindow = (setting: string) => projectSettings()!.querySelector(`[data-setting="${setting}"]`);
   expect(inWindow("voxel_size")).not.toBeNull();
@@ -242,13 +248,13 @@ test("after All criteria, closing and opening the Criteria step shows the list a
   openStep("Criteria");
   expect(listShown()).toBe(false);
   showCriterionCards();
-  openStep("Inputs");
+  openStep("Site");
   openStep("Criteria");
   expect(listShown()).toBe(true);                        // remembered, not decided again from the one criterion
   unmountWorkspace();
   await openChain([FACADES, WINDOWS]);
   showCriterionEditor();
-  openStep("Inputs");
+  openStep("Site");
   openStep("Criteria");
   expect(editorName()).toBe("Winter sun on facades");     // and the editor too, of two criteria
 });
@@ -256,7 +262,7 @@ test("after All criteria, closing and opening the Criteria step shows the list a
 test("a run that ends and opens the Criteria step keeps the list or the editor as it was", async () => {
   // Run analysis is pinned under Criteria: the step is closed first, so the end of the run opens it again.
   async function runFromCriteria() {
-    openStep("Inputs");
+    openStep("Site");
     await pressRunAnalysis();
     service.stages = CARVED;
     FakeWebSocket.opened.at(-1)!.send({ type: "run_finished", stages: ["preprocessing", "thresholding"], files: [] });
@@ -303,11 +309,8 @@ test("a new weather file's notice opens the Criteria step on the criterion it co
   await openWorkspace(service, project(NOTHING_RUN));
   openStep("Criteria");
   showCriterionCards();
-  openStep("Inputs");
-  const weatherPicker = container().querySelector<HTMLInputElement>('input[type="file"][accept=".epw"]')!;
-  Object.defineProperty(weatherPicker, "files", { value: [new File(["LOCATION"], "weather.epw")], configurable: true });
-  act(() => weatherPicker.dispatchEvent(new Event("change", { bubbles: true })));
-  await settle();
+  openStep("Site");
+  await addWeatherFileInSettings();
   openStep("Criteria");
   expect(listShown()).toBe(false);
   expect(editorName()).not.toBeNull();

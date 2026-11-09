@@ -96,9 +96,9 @@ export const messages = {
   addStudy: "Add study",
   addStudyMenuTitle: "New study",
   likeCriterion: (criterionName: string) => `Like ${criterionName}`,
-  metricNeedsWeatherFile: "Needs a weather file",
+  metricNeedsWeatherFile: "Add a weather file in Settings",
   metricOption: (label: string, unit: string) => `${label} (${unit})`,
-  metricUnavailableOption: (label: string) => `${label}, needs a weather file`,
+  metricUnavailableOption: (label: string) => `${label}, needs a weather file (Settings)`,
   runStudies: "Run",
   studySettingsOf: (studyName: string) => `Settings of ${studyName}`,
   studyName: "Name",
@@ -114,7 +114,7 @@ export const messages = {
                            ground: "A flat disc on the compass circle, at the foot of the max volume" } as Record<string, string>,
   // The same in the line of a study's row: "the massing, facades.obj, the context".
   studySurfacesFromInLine: { context: "the context", terrain: "the terrain", ground: "the ground" } as Record<string, string>,
-  studyNeedsSurroundingsFiles: "The project has no surroundings files: add them in Inputs",
+  studyNeedsSurroundingsFiles: "The project has no surroundings files: add them in Site",
   useFileOfProject: "Use a file of the project",
   deleteStudy: "Delete study",
   closeStudySettings: "Close",
@@ -245,20 +245,20 @@ export const messages = {
 
   // The steps and their summary lines (4.1)
   stepTitles: {
-    inputs: "Inputs",
+    inputs: "Site",
     criteria: "Criteria",
     envelope_and_massing: "Envelope and massing",
     export: "Export",
   },
-  // The site's files (the test surfaces belong to the criteria): "1 volume, 2 surroundings files, terrain, weather".
-  inputsSummary: (volumeCount: number, hasWeatherFile: boolean, contextCount = 0, hasTerrain = false) =>
+  // The site's files (the test surfaces belong to the criteria, the weather file to Settings): "1 volume, 2 surroundings files, terrain".
+  inputsSummary: (volumeCount: number, contextCount = 0, hasTerrain = false) =>
     `${volumeCount} ${volumeCount === 1 ? "volume" : "volumes"}` +
     (contextCount > 0 ? `, ${contextCount} ${contextCount === 1 ? "surroundings file" : "surroundings files"}` : "") +
-    (hasTerrain ? ", terrain" : "") +
-    (hasWeatherFile === true ? ", weather" : ""),
+    (hasTerrain ? ", terrain" : ""),
   maxVolumeMissing: "Maximum volume missing",
-  // The project settings, in the Settings button's tooltip: "North 10°, 0.5 m voxels"
-  projectSettingsSummary: (northText: string, voxelsText: string) => `North ${northText}°, ${voxelsText}`,
+  // The project settings, in the Settings button's tooltip: "THESSALONIKI, GRC. North 10°, 0.5 m voxels"
+  projectSettingsSummary: (location: string | null, northText: string, voxelsText: string) =>
+    `${location ?? "No weather file"}. North ${northText}°, ${voxelsText}`,
   // The project settings window (the settings every criterion shares), opened from the Settings button in the top bar
   projectSettingsButton: "Settings",
   // Where a setting to fix is, in "Fix the voxel size in Settings to run the analysis"
@@ -268,16 +268,27 @@ export const messages = {
   projectSettingsButtonWithFixes: (count: number) => `Settings, ${count} ${count === 1 ? "setting" : "settings"} to fix`,
   projectSettingsIntro: "These settings apply to every criterion. A change puts every criterion out of date.",
   closeProjectSettings: "Close",
+  // The setup of a new project (design/new-project-setup.md): the project settings a page at a time
+  setupTitle: "Set up the project",
+  setupPageOf: (page: number, pages: number) => `${page} of ${pages}`,
+  setupLocationLine: "The weather file gives the site's sun and sky; the modes that count sun or sky need it. North turns the site to the compass. "
+    + "You can set both later in Settings.",
+  setupSiteTitle: "The site",
+  setupSiteLine: "How you give the largest volume that may be built. You can switch later in the Site step.",
+  setupHeightsLine: "You can change them later in Settings.",
+  setupBack: "Back",
+  setupNext: "Next",
+  setupStart: "Start",
+  skipSetup: "Skip setup",
   openProjectSettings: "Open settings",
   // A setting that needs the surroundings or the terrain, shown greyed out in the window without them
-  needsSurroundingsOrTerrain: "Add existing surroundings or terrain in Inputs to use this.",
+  needsSurroundingsOrTerrain: "Add existing surroundings or terrain in Site to use this.",
   siteMissing: "Site missing",
-  // A project that uses its sites: "2 sites, 3,450 m², weather"
-  sitesInputsSummary: (siteCount: number, area: number, hasWeatherFile: boolean, contextCount = 0, hasTerrain = false) =>
+  // A project that uses its sites: "2 sites, 3,450 m², terrain"
+  sitesInputsSummary: (siteCount: number, area: number, contextCount = 0, hasTerrain = false) =>
     `${siteCount} ${siteCount === 1 ? "site" : "sites"}, ${groupedDigits(Math.round(area))}\u00a0m²` +
     (contextCount > 0 ? `, ${contextCount} ${contextCount === 1 ? "surroundings file" : "surroundings files"}` : "") +
-    (hasTerrain ? ", terrain" : "") +
-    (hasWeatherFile === true ? ", weather" : ""),
+    (hasTerrain ? ", terrain" : ""),
   addSiteToRun: "Draw a site to run the analysis",
   // Criteria with one criterion: its mode and its carving, "Solar heating, 56 % kept"
   criterionSummary: (modeName: string, carvingText: string) => `${modeName}, ${carvingText}`,
@@ -364,18 +375,19 @@ export const messages = {
   // Inputs (5.2)
   maxVolumeTitle: "Maximum volume",
   testSurfacesTitle: "Test surfaces",
-  contextTitle: "Existing surroundings (optional)",
-  terrainTitle: "Terrain (optional)",
-  weatherFileTitle: "Weather file (optional)",
-  weatherFileNeededTitle: "Weather file",
-  requiredInput: "Required",
-  weatherFileExtension: ".epw",
+  contextTitle: "Existing surroundings",
+  terrainTitle: "Terrain",
+  weatherFileTitle: "Weather file",
+  // The muted line under the title of a box (design/new-project-setup.md, section 5)
+  optionalInput: "Optional",
+  weatherAlsoInSettings: "Also in Settings",
   maxVolumeHint: "The largest building you would allow, as one or more closed meshes.",
   testSurfacesHint: "The surfaces whose sun or sky the carving protects, such as neighbouring facades.",
   contextHint: "Buildings and large trees that stay. They block sun and sky, and nothing is built in their place.",
   terrainHint: "The ground. It blocks sun and sky; the site stays buildable above it.",
   weatherNeededFor: (modeNames: string) => `Needed for ${modeNames}.`,
-  orDropThemHere: "or drop them here",
+  orDropFilesHere: "Or drop the files here.",
+  orDropWeatherFileHere: "Or drop the .epw file here.",
   replaceFile: "Replace",
   removeFile: (fileName: string) => `Remove ${fileName}`,
   triangleCount: (count: number) => `${groupedDigits(count)} ${count === 1 ? "triangle" : "triangles"}`,
@@ -394,15 +406,15 @@ export const messages = {
   inputChoiceTitle: "Start from",
   inputChoiceMaxVolume: "Maximum volume",
   inputChoiceMaxVolumeLine: "Add mesh files of the largest volume a building may take",
-  inputChoiceSite: "Site",
+  inputChoiceSite: "Sites",
   inputChoiceSiteLine: "Draw the site boundaries in the view and give each a height",
-  useSiteInstead: "Use a site instead",
+  useSiteInstead: "Draw sites instead",
   useMaxVolumeInstead: "Use a maximum volume instead",
-  switchInputTitle: (toSite: boolean) => (toSite ? "Use a site instead?" : "Use a maximum volume instead?"),
+  switchInputTitle: (toSite: boolean) => (toSite ? "Draw sites instead?" : "Use a maximum volume instead?"),
   switchInputText: (toSite: boolean) => `The results will go out of date. Your ${toSite ? "maximum volume files are" : "sites are"} kept, so `
     + "you can switch back.",
   switchInput: "Switch",
-  siteTitle: "Site",
+  siteTitle: "Sites",
   drawSite: "Draw site",
   siteEmptyHint: "Draw the site boundary in the 3D view, then click its vertices to set their elevations.",
   siteName: (number: number) => `Site ${number}`,
@@ -513,9 +525,9 @@ export const messages = {
   noInputsYet: "Add a maximum volume to start",
   addFiles: "Add files",
   orTryAnExample: "or try an example",
-  weatherFileNeeded: "Add a weather file to run this mode",
+  weatherFileNeeded: "Add a weather file in Settings to run this mode",
   // A criterion that is on has a mode that needs a weather file (with several criteria the shown one is named too)
-  weatherFileNeededFor: (criterionName: string) => `Add a weather file to run ${criterionName}`,
+  weatherFileNeededFor: (criterionName: string) => `Add a weather file in Settings to run ${criterionName}`,
   fixSettingToRun: (settingLabel: string) => `Fix the ${String(settingLabel).toLowerCase()} to run the analysis`,
   fixSettingInStepToRun: (settingLabel: string, stepTitle: string) => `Fix the ${String(settingLabel).toLowerCase()} in ${stepTitle} to run the analysis`,
   // A setting of the shown criterion, with several criteria
@@ -904,7 +916,7 @@ export const messages = {
   legend: "Legend",
   // Simulate's sun tool (the Sun panel) and the hours in shade on the view.
   sunToolTitle: "Sun",
-  sunToolNoWeatherFile: "Add a weather file in Carve (Inputs) to see the sun: its location gives the sun's path.",
+  sunToolNoWeatherFile: "Add a weather file in Settings to see the sun: its location gives the sun's path.",
   sunToolDay: "Day",
   sunToolClock: "Clock",
   sunToolTimeBases: { standard: "Local standard time", solar: "Local solar time", daylight_saving: "Local daylight saving time" } as Record<string, string>,
@@ -1034,7 +1046,7 @@ export const messages = {
   calculating: "Calculating, about 10 s",
   calculationProgress: "Calculation progress",
   // Why Calculate waits: one sentence without a final period, as the run buttons' reasons.
-  calculateNeedsWeatherFile: "Add a weather file in Carve (Inputs) to calculate the typical building",
+  calculateNeedsWeatherFile: "Add a weather file in Settings to calculate the typical building",
   calculateWaitsForValues: "Fix the values marked above to calculate",
   typicalBuildingOutOfDate: "The building or the weather file changed since this was calculated.",
   // The chart of each hour: benefit minus harm (benefit alone when the criterion does not count harm), sun-down hours grey.

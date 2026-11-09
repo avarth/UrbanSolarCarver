@@ -3,7 +3,7 @@
 // threshold) is one fold titled with the group name. A fold holding a setting with an error stays open, so the message is never
 // hidden. Every field takes a row of its own, so a slider has the panel's width to be dragged along (the three massing sliders side
 // by side were too narrow to set a value with).
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { shownValue, type FormState } from "./form_state";
 import type { SettingGroupView, SettingView } from "./presentation";
 import { fieldErrorOf, SettingField, type SettingFieldExtras } from "./SettingField";
@@ -19,9 +19,11 @@ interface SettingGroupProps {
   fieldExtras?: Record<string, SettingFieldExtras>;
   /** While *disabled*, a field holding an error stays editable, so it can be fixed (Carving while the analysis is out of date). */
   fieldsWithErrorEditable?: boolean;
+  /** Drawn first under the group's title: the weather file in Location (design/new-project-setup.md). */
+  lead?: ReactNode;
 }
 
-export function SettingGroup({ group, form, onChange, disabled = false, fieldExtras = {}, fieldsWithErrorEditable = false }: SettingGroupProps) {
+export function SettingGroup({ group, form, onChange, disabled = false, fieldExtras = {}, fieldsWithErrorEditable = false, lead = null }: SettingGroupProps) {
   const disabledField = (view: SettingGroupView["essential"][number]) => disabled && !(fieldsWithErrorEditable && fieldErrorOf(form, view) !== undefined);
   const [unfoldedByUser, setUnfoldedByUser] = useState(false);
   const foldId = useId();
@@ -35,6 +37,7 @@ export function SettingGroup({ group, form, onChange, disabled = false, fieldExt
         <>
           <Subheading className="setting-group-title">{group.title}</Subheading>
           <div className="setting-group-essential">
+            {lead}
             {group.essential.filter(isShown).map((view) => <SettingField key={view.name} view={view} form={form} onChange={onChange} disabled={disabledField(view)} extras={fieldExtras[view.name]} />)}
           </div>
         </>

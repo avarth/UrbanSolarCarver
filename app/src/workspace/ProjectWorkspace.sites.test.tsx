@@ -1,4 +1,4 @@
-// A site as the input (design/site-input.md): the tiles of a new project, the Site card, drawing a site in the view and editing it.
+// A site as the input (design/site-input.md): the tiles of a new project, the Sites card, drawing a site in the view and editing it.
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
@@ -32,24 +32,28 @@ const clickAt = async (x: number, y: number) => {
   await settle();
 };
 
-test("a new project offers the two inputs; Site makes the maximum volume from the sites and shows the Site card", async () => {
+test("a new project offers the two inputs; Sites makes the maximum volume from the sites and shows the Sites card", async () => {
   const service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, newProject());
   expect(panel().textContent).toContain("Start from");
-  act(() => { buttonIn(panel(), "SiteDraw the site boundaries in the view and give each a height").click(); });
+  act(() => { buttonIn(panel(), "SitesDraw the site boundaries in the view and give each a height").click(); });
   await settle();
   expect(service.count("PUT /max-volume-source")).toBe(1);
   expect(service.siteSource).toBe("sites");
+  const sitesCard = panel().querySelector<HTMLElement>(".input-box")!;
+  expect(sitesCard.querySelector(".input-box-title-row h3")!.textContent).toBe("Sites");
+  expect(sitesCard.querySelector(".input-box-title-row button")!.textContent).toBe("Draw site");
+  expect(sitesCard.querySelector(".input-box-required")).toBeNull();
   expect(panel().textContent).toContain("Draw the site boundary in the 3D view");
   expect(panel().textContent).toContain("Use a maximum volume instead");
 });
 
-test("Maximum volume keeps the files' box, with the link to a site instead", async () => {
+test("Maximum volume keeps the files' box, with the link to draw sites instead", async () => {
   const service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, newProject());
   act(() => { buttonIn(panel(), "Maximum volumeAdd mesh files of the largest volume a building may take").click(); });
   await settle();
-  expect(panel().textContent).toContain("Use a site instead");
+  expect(panel().textContent).toContain("Draw sites instead");
   expect(service.count("PUT /max-volume-source")).toBe(0);
 });
 

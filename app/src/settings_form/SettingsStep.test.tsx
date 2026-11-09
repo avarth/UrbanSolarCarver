@@ -44,7 +44,7 @@ test("Run analysis says what blocks it, in order: a run, the inputs, the weather
   expect(runAnalysisBlocker(conditions({ runActive: true, testSurfaceFiles: 0 }))).toBe("A run is in progress");
   expect(runAnalysisBlocker(conditions({ testSurfaceFiles: 0, hasWeatherFile: false }))).toBe("Add test surfaces to run the analysis");
   expect(runAnalysisBlocker(conditions({ maxVolumeFiles: 0 }))).toBe("Add a maximum volume to run the analysis");
-  expect(runAnalysisBlocker(conditions({ hasWeatherFile: false, warmUpState: "running" }))).toBe("Add a weather file to run this mode");
+  expect(runAnalysisBlocker(conditions({ hasWeatherFile: false, warmUpState: "running" }))).toBe("Add a weather file in Settings to run this mode");
   expect(runAnalysisBlocker(conditions({ hasWeatherFile: false, modeNeedsWeatherFile: false }))).toBeNull();
   expect(runAnalysisBlocker(conditions({ form: rejected([{ field: "voxel_size", message: "too many voxels" }], PLAN_OVER_BUDGET) })))
     .toBe("Fix the voxel size in Settings to run the analysis");
@@ -168,12 +168,17 @@ test("a setting to fix in another place is named with that place under the run b
   expect(runAnalysisBlockOf(conditions({ form: marginRefused })))
     .toEqual({ reason: "Fix the grid module in Envelope and massing to run the analysis", settingsElsewhere: "envelope_and_massing" });
   expect(runAnalysisBlockOf(conditions({ runActive: true }))).toEqual({ reason: "A run is in progress", settingsElsewhere: null });
+  // The weather file is in the project settings: its reasons lead there
+  expect(runAnalysisBlockOf(conditions({ hasWeatherFile: false })))
+    .toEqual({ reason: "Add a weather file in Settings to run this mode", settingsElsewhere: "project_settings" });
+  expect(runAnalysisBlockOf(conditions({ hasWeatherFile: false, modeNeedsWeatherFile: false, otherCriterionNeedingWeatherFile: "Sun on roofs" })))
+    .toEqual({ reason: "Add a weather file in Settings to run Sun on roofs", settingsElsewhere: "project_settings" });
 });
 
 test("with several criteria the reasons Criteria gives about the shown criterion name it", () => {
   const named = { shownIn: "criteria" as const, shownCriterionName: "Daylight on roofs" };
   expect(runAnalysisBlocker(conditions({ ...named, testSurfaceFiles: 0 }))).toBe("Add test surfaces to Daylight on roofs to run the analysis");
-  expect(runAnalysisBlocker(conditions({ ...named, hasWeatherFile: false }))).toBe("Add a weather file to run Daylight on roofs");
+  expect(runAnalysisBlocker(conditions({ ...named, hasWeatherFile: false }))).toBe("Add a weather file in Settings to run Daylight on roofs");
   const slopeRefused = rejected([{ field: "max_slope_deg", message: "Input should be greater than 0" }]);
   expect(runAnalysisBlocker(conditions({ ...named, form: slopeRefused }))).toBe("Fix the steepest slope of the envelope of Daylight on roofs to run the analysis");
   const criterionMessage = { stepErrorsByPlace: { project_settings: [], criteria: ["Value error, the settings do not fit together"] } };
@@ -198,7 +203,7 @@ test("a setting whose inputs are missing is left out, or greyed out with the rea
   rendered.rerender(<SettingsStep form={form()} onChange={() => {}} disabledReason={null} settingShown={shared} withoutInputs="disabled" />);
   const contextSwitch = rendered.container.querySelector<HTMLElement>('[data-setting="context_blocks_rays"]')!;
   expect(contextSwitch.querySelector<HTMLInputElement>("input")!.disabled).toBe(true);
-  expect(contextSwitch.querySelector(".setting-note")!.textContent).toBe("Add existing surroundings or terrain in Inputs to use this.");
+  expect(contextSwitch.querySelector(".setting-note")!.textContent).toBe("Add existing surroundings or terrain in Site to use this.");
   rendered.rerender(<SettingsStep form={form()} onChange={() => {}} disabledReason={null} settingShown={shared} withoutInputs="disabled" inputRoles={["context"]} />);
   expect(rendered.container.querySelector<HTMLInputElement>('[data-setting="context_blocks_rays"] input')!.disabled).toBe(false);
   expect(rendered.container.querySelector('[data-setting="context_blocks_rays"] .setting-note')).toBeNull();

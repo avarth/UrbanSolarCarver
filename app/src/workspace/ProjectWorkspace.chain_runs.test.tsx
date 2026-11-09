@@ -293,9 +293,9 @@ test("with several criteria the build buttons name the criterion whose analysis 
 test("Run analysis asks for the weather file a criterion that is on needs, naming it, also when the shown one needs none", async () => {
   const withoutWeatherFile = (opened: ProjectDetail): ProjectDetail => ({ ...opened, inputs: { ...opened.inputs, weather: [] } });
   await openChain([{ ...ROOFS, id: "1" }, { ...FACADES, id: "2" }], { 1: CURRENT, 2: OUT_OF_DATE }, undefined, [], withoutWeatherFile);
-  expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Add a weather file to run Winter sun on facades");
+  expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Add a weather file in Settings to run Winter sun on facades");
   await select("Winter sun on facades");
-  expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Add a weather file to run Winter sun on facades");
+  expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Add a weather file in Settings to run Winter sun on facades");
 });
 
 test("a criterion that is off is not flagged for a missing weather file", async () => {
