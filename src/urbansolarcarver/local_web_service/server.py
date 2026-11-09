@@ -35,7 +35,10 @@ from ..mode_registry import MODES
 from ..pydantic_schemas import UserConfig
 from ..stage_settings import PIPELINE_STAGES
 from . import folder_picker, inspection, simulation, site_import, site_input, sun_study, typical_building, user_preferences
-from .api_models import CarvingUpdatesRequest, OutlinesReply, TerrainHeightsReply, TerrainHeightsRequest
+from .api_models import (
+    CarvingUpdatesRequest, OutlinesReply, PickedSurfacesRequest, SurfacePicksReply, SurfaceSetNameRequest, TerrainHeightsReply,
+    TerrainHeightsRequest,
+)
 from .api_models import (
     NEW_PROJECT_MODE,
     CancelRunReply, ColdPeriodReply, ConfigErrorReply, ConfigReply, ConfigValuesRequest, CreateCriterionRequest, CreateProjectRequest,
@@ -613,6 +616,24 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
     def criterion_keys() -> list[str]:
         """The names of the settings that belong to a criterion; every other setting is shared by the criteria."""
         return sorted(CRITERION_KEYS)
+
+    @router.post("/projects/{name}/surface-sets/picked", responses=_ERROR_RESPONSES)
+    def pick_surface_set(name: str, request: PickedSurfacesRequest) -> InputFileInfo:
+        """Make a surface set from picks on the surroundings (design/test-surfaces-on-context.md): a new stored test surface file, or
+        the picked set *replace*. The reply is the set; a criterion or study then uses it with its own PUT."""
+        with writable_project(name) as store:
+            return store.pick_surface_set(name, request.picks, request.name, request.replace)
+
+    @router.put("/projects/{name}/surface-sets/{file_name}/name", responses=_ERROR_RESPONSES)
+    def rename_surface_set(name: str, file_name: str, request: SurfaceSetNameRequest) -> InputFileInfo:
+        """Show a stored test surface file by another name; the file keeps its stored name."""
+        with writable_project(name) as store:
+            return store.rename_surface_set(name, file_name, request.name)
+
+    @router.get("/projects/{name}/surface-sets/{file_name}/picks", responses=_ERROR_RESPONSES)
+    def surface_set_picks(name: str, file_name: str) -> SurfacePicksReply:
+        """The picks of a set picked on the surroundings (Edit picks)."""
+        return SurfacePicksReply(picks=folder_in_use.store.surface_set_picks(name, file_name))
 
     @router.put("/projects/{name}/carving-updates", status_code=204, response_class=Response, responses=_ERROR_RESPONSES)
     def set_carving_updates(name: str, request: CarvingUpdatesRequest) -> Response:

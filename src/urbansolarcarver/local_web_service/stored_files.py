@@ -90,7 +90,7 @@ def refresh_changed_inputs(store, name: str) -> bool:
                     if changed_names:
                         project_json.inputs_revision += 1
                 elif role == test_surfaces.ROLE:
-                    changed_names = _join_test_surfaces_again(project_folder, project_json, sorted(files))
+                    changed_names = join_test_surfaces_again(project_folder, project_json, sorted(files))
                     for file_name in files:     # the kept original of a saved flip is older than the file now in the folder
                         with contextlib.suppress(OSError):
                             test_surfaces.original_path(project_folder, file_name).unlink(missing_ok=True)
@@ -98,6 +98,8 @@ def refresh_changed_inputs(store, name: str) -> bool:
                     changed_names = []          # the maximum volume is made from the sites: its files are kept, not joined
                 else:
                     changed_names = _join_mesh_role_again(store, name, project_folder, project_json, role, sorted(files))
+                    if role == "context" and changed_names:      # picked sets follow the surroundings
+                        store.rebuild_picked_sets(project_folder, project_json)
             except (ProjectError, OSError) as error:
                 first_error = first_error or (error if isinstance(error, ProjectError) else _not_read(role, ", ".join(sorted(files)), error))
                 continue
@@ -150,7 +152,7 @@ def _users_of_files(project_json: ProjectJson, file_names: list[str]) -> dict[st
     return {key: names for key, names in users.items() if set(names) & set(file_names)}
 
 
-def _join_test_surfaces_again(project_folder: Path, project_json: ProjectJson, file_names: list[str]) -> list[str]:
+def join_test_surfaces_again(project_folder: Path, project_json: ProjectJson, file_names: list[str]) -> list[str]:
     """Build again the joined files of the criteria and studies that list any of *file_names*; the names of those files listed by a
     joined file that came out different (only those joined files are replaced)."""
     meshes = test_surfaces.load_stored_meshes(project_folder, file_names)

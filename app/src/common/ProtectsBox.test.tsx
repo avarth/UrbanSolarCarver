@@ -1,6 +1,6 @@
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
-import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { byRole, click, renderForTest, type, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { ProtectsBox } from "./ProtectsBox";
 
 let rendered: RenderedOverlay | null = null;
@@ -79,4 +79,112 @@ test("a file the criterion could not use is said under the list", async () => {
                                         otherFiles={["windows.ply"]} onUseFile={async () => "A run is in progress"} />);
   await act(async () => click(rendered!.container.querySelector('[aria-label="Use windows.ply"]')!));
   expect(rendered.container.querySelector('.protects-reuse [role="alert"]')!.textContent).toBe("A run is in progress");
+});
+
+// Surface sets (design/test-surfaces-on-context.md): picking on the surroundings, a set's shown name, Rename and Edit picks.
+const menuItems = () => [...rendered!.container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+const renameDialog = () => rendered!.container.querySelector<HTMLElement>('[role="dialog"]');
+
+test("From surroundings sits beside the add button when the criterion can pick on the surroundings, and opens picking", () => {
+  const onPick = vi.fn();
+  rendered = renderForTest(<ProtectsBox files={[]} mode="daylight" onAddFiles={async () => []} onRemoveFile={async () => null} disabledReason={null}
+                                        onPickFromSurroundings={onPick} />);
+  const actions = box().querySelector(".input-box-title-row .site-box-actions")!;
+  expect([...actions.querySelectorAll("button")].map((button) => button.textContent)).toEqual(["Add test surfaces", "From surroundings"]);
+  click(byRole(actions, "button", "From surroundings"));
+  expect(onPick).toHaveBeenCalledOnce();
+});
+
+test("without surroundings there is no From surroundings; during a run it is off", () => {
+  rendered = renderForTest(<ProtectsBox files={[]} mode="daylight" onAddFiles={async () => []} onRemoveFile={async () => null} disabledReason={null} />);
+  expect(box().querySelector(".site-box-actions")).toBeNull();
+  expect(box().textContent).not.toContain("From surroundings");
+  rendered.unmount();
+  rendered = renderForTest(<ProtectsBox files={[]} mode="daylight" onAddFiles={async () => []} onRemoveFile={async () => null}
+                                        disabledReason="A run is in progress" onPickFromSurroundings={() => {}} />);
+  expect(byRole<HTMLButtonElement>(box(), "button", "From surroundings").disabled).toBe(true);
+});
+
+test("a set is listed by its shown name, with its stored name as the title; a picked set says so, and how many picks are gone", () => {
+  rendered = renderForTest(<ProtectsBox files={[
+    { name: "picked_1.ply", triangle_count: 6, shown_name: "South facades", picked: true, picks_lost: 2 },
+    { name: "roofs.ply", triangle_count: 4, shown_name: "roofs.ply" },
+    { name: "windows.ply", triangle_count: 1, shown_name: "Windows", picked: true, picks_lost: 1 },
+  ]} mode="daylight" onAddFiles={async () => []} onRemoveFile={async () => null} disabledReason={null} />);
+  const names = [...box().querySelectorAll<HTMLElement>(".input-file-name")];
+  expect(names.map((name) => name.textContent)).toEqual(["South facades", "roofs.ply", "Windows"]);
+  expect(names.map((name) => name.getAttribute("title"))).toEqual(["picked_1.ply", null, "windows.ply"]);
+  expect([...box().querySelectorAll(".input-file-detail")].map((detail) => detail.textContent)).toEqual([
+    "6 triangles, picked on the surroundings", "4 triangles", "1 triangle, picked on the surroundings",
+  ]);
+  expect([...box().querySelectorAll(".input-file-row .input-box-problem")].map((line) => line.textContent)).toEqual([
+    "2 picked faces are gone from the surroundings", "1 picked face is gone from the surroundings",
+  ]);
+  // The remove button still names the stored file
+  expect(box().querySelector('[aria-label="Remove picked_1.ply"]')).not.toBeNull();
+});
+
+test("a set's menu offers Rename, and Edit picks only for a picked set", () => {
+  const onEditPicks = vi.fn();
+  rendered = renderForTest(<ProtectsBox files={[
+    { name: "picked_1.ply", triangle_count: 6, shown_name: "South facades", picked: true },
+    { name: "roofs.ply", triangle_count: 4 },
+  ]} mode="daylight" onAddFiles={async () => []} onRemoveFile={async () => null} disabledReason={null} onRenameSet={async () => null}
+                                        onEditPicks={onEditPicks} />);
+  const roofsMenu = byRole<HTMLButtonElement>(box(), "button", "Actions for roofs.ply");
+  expect(roofsMenu.textContent).toBe("⋯");
+  click(roofsMenu);
+  expect(menuItems().map((item) => item.textContent)).toEqual(["Rename"]);
+  click(roofsMenu);
+  click(byRole(box(), "button", "Actions for South facades"));
+  expect(menuItems().map((item) => item.textContent)).toEqual(["Rename", "Edit picks"]);
+  click(menuItems()[1]);
+  expect(onEditPicks).toHaveBeenCalledExactlyOnceWith("picked_1.ply");
+});
+
+test("without renaming there is no menu", () => {
+  rendered = renderForTest(<ProtectsBox files={[{ name: "picked_1.ply", triangle_count: 6, picked: true }]} mode="daylight"
+                                        onAddFiles={async () => []} onRemoveFile={async () => null} disabledReason={null} onEditPicks={() => {}} />);
+  expect(box().querySelector(".action-menu-button")).toBeNull();
+});
+
+test("Rename asks for the set's new name and renames the stored file; the same name or none cannot be confirmed", async () => {
+  const onRenameSet = vi.fn(async (_fileName: string, _name: string) => null as string | null);
+  rendered = renderForTest(<ProtectsBox files={[{ name: "picked_1.ply", triangle_count: 6, shown_name: "Picked 1", picked: true }]} mode="daylight"
+                                        onAddFiles={async () => []} onRemoveFile={async () => null} disabledReason={null} onRenameSet={onRenameSet} />);
+  click(byRole(box(), "button", "Actions for Picked 1"));
+  click(menuItems().find((item) => item.textContent === "Rename")!);
+  const dialog = renameDialog()!;
+  expect(dialog.querySelector("h2")!.textContent).toBe("Rename Picked 1");
+  const field = dialog.querySelector<HTMLInputElement>('input[aria-label="Name of the new set"]')!;
+  expect(field.value).toBe("Picked 1");
+  const confirm = byRole<HTMLButtonElement>(dialog, "button", "Rename");
+  expect(confirm.disabled).toBe(true);
+  type(field, "  ");
+  expect(confirm.disabled).toBe(true);
+  type(field, "South facades");
+  expect(confirm.disabled).toBe(false);
+  await act(async () => click(confirm));
+  expect(onRenameSet).toHaveBeenCalledExactlyOnceWith("picked_1.ply", "South facades");
+  expect(renameDialog()).toBeNull();
+});
+
+test("a refused rename is said in the dialog, which stays open", async () => {
+  rendered = renderForTest(<ProtectsBox files={[{ name: "roofs.ply", triangle_count: 4 }]} mode="daylight" onAddFiles={async () => []}
+                                        onRemoveFile={async () => null} disabledReason={null} onRenameSet={async () => "Another set is named Roofs."} />);
+  click(byRole(box(), "button", "Actions for roofs.ply"));
+  click(menuItems()[0]);
+  type(renameDialog()!.querySelector<HTMLInputElement>("input")!, "Roofs");
+  await act(async () => click(byRole(renameDialog()!, "button", "Rename")));
+  expect(renameDialog()!.querySelector('[role="alert"]')!.textContent).toBe("Another set is named Roofs.");
+});
+
+test("the files of other criteria are listed by their sets' names; Use still names the stored file", async () => {
+  const onUseFile = vi.fn(async (_fileName: string) => null as string | null);
+  rendered = renderForTest(<ProtectsBox files={[]} mode="daylight" onAddFiles={async () => []} onRemoveFile={async () => null} disabledReason={null}
+                                        otherFiles={["picked_1.ply", "windows.ply"]} onUseFile={onUseFile} setNames={{ "picked_1.ply": "South facades" }} />);
+  const reuse = rendered.container.querySelector<HTMLElement>(".protects-reuse")!;
+  expect([...reuse.querySelectorAll(".protects-reuse-name")].map((name) => name.textContent)).toEqual(["South facades", "windows.ply"]);
+  await act(async () => click(reuse.querySelector('[aria-label="Use picked_1.ply"]')!));
+  expect(onUseFile).toHaveBeenCalledExactlyOnceWith("picked_1.ply");
 });

@@ -1,5 +1,5 @@
 // A fake service of a project whose criteria are a chain, and the project opened against it at the Criteria step, with the
-// queries of its cards and panel: shared by ProjectWorkspace.criterion_cards, .criteria, .chain_runs, .saves_and_runs, .three_d and
+// queries of its cards and panel: shared by ProjectWorkspace.criterion_cards, .criteria, .chain_runs, .saves_and_runs, .three_d, .picked_surfaces and
 // .simulate (.test.tsx), and by simulate_service_for_test.tsx, which builds on it. Each test file mocks ../viewer/scene with
 // FakeViewerScene itself and calls startWorkspaceTest and endWorkspaceTest. Its replies are typed with the service's types
 // (json<Reply>), so a reply that drifts from generated_types.ts fails npm run typecheck.

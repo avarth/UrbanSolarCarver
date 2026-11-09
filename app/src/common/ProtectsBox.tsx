@@ -6,7 +6,9 @@
 import type { InputFileInfo } from "../api_client/client";
 import { messages } from "../messages";
 import { InputBox } from "./InputBox";
-import { useDialogRequest } from "./dialogs";
+import { useState, type FormEvent } from "react";
+import { ActionMenu } from "./ActionMenu";
+import { DialogButtons, DialogFrame, useDialogRequest } from "./dialogs";
 import { MODE_TILES } from "../modes";
 
 interface ProtectsBoxProps {
@@ -35,6 +37,14 @@ interface ProtectsBoxProps {
   otherFiles?: string[];
   /** Lets the criterion use a stored file too; resolves with the reason it could not, or null. */
   onUseFile?: (fileName: string) => Promise<string | null>;
+  /** Opens picking on the surroundings for this criterion (design/test-surfaces-on-context.md); absent without surroundings. */
+  onPickFromSurroundings?: () => void;
+  /** Shows a surface set by another name; resolves with the reason it could not, or null. */
+  onRenameSet?: (fileName: string, name: string) => Promise<string | null>;
+  /** Opens picking on the set's picks (Edit picks). */
+  onEditPicks?: (fileName: string) => void;
+  /** The name each stored file is shown by (its surface set's), for the files of other criteria. */
+  setNames?: Readonly<Record<string, string>>;
 }
 
 export function protectsHintOf(mode: string): string {
@@ -48,7 +58,7 @@ interface FilesOfOtherCriteriaProps {
   title: string;
 }
 
-function FilesOfOtherCriteria({ files, onUseFile, disabledReason, title }: FilesOfOtherCriteriaProps) {
+function FilesOfOtherCriteria({ files, onUseFile, disabledReason, title, setNames = {} }: FilesOfOtherCriteriaProps & { setNames?: Readonly<Record<string, string>> }) {
   const { problem, busy, send } = useDialogRequest(() => {});
   const use = (fileName: string) => send(() => onUseFile(fileName));
   return (
@@ -57,7 +67,7 @@ function FilesOfOtherCriteria({ files, onUseFile, disabledReason, title }: Files
       <ul className="protects-reuse-files">
         {files.map((name) => (
           <li key={name}>
-            <span className="protects-reuse-name">{name}</span>
+            <span className="protects-reuse-name">{setNames[name] ?? name}</span>
             <button type="button" className="secondary-button" aria-label={messages.useFileNamed(name)} disabled={busy || disabledReason !== null}
                     onClick={() => void use(name)}>
               {messages.useFile}
@@ -71,16 +81,56 @@ function FilesOfOtherCriteria({ files, onUseFile, disabledReason, title }: Files
 }
 
 export function ProtectsBox({ files, mode, onAddFiles, onRemoveFile, disabledReason, drawingProblems, otherFiles = [], onUseFile, hint,
-                              addLabel = messages.addTestSurfaces, otherFilesTitle = messages.useFileOfOtherCriterion }: ProtectsBoxProps) {
+                              addLabel = messages.addTestSurfaces, otherFilesTitle = messages.useFileOfOtherCriterion, onPickFromSurroundings,
+                              onRenameSet, onEditPicks, setNames }: ProtectsBoxProps) {
+  const [renaming, setRenaming] = useState<InputFileInfo | null>(null);
+  const pickButton = onPickFromSurroundings === undefined ? null : (
+    <button type="button" className="input-add" disabled={disabledReason !== null} onClick={onPickFromSurroundings}>{messages.pickFromSurroundings}</button>
+  );
+  const fileMenu = onRenameSet === undefined ? undefined : (file: InputFileInfo) => (
+    <ActionMenu label={messages.surfaceSetActions(file.shown_name ?? file.name)} symbol={<span aria-hidden="true">⋯</span>}
+                onChoose={(key) => {
+                  if (key === "rename") setRenaming(file);
+                  else if (key === "edit_picks") onEditPicks?.(file.name);
+                }}
+                items={[
+                  { key: "rename", label: messages.renameSurfaceSet, disabledReason },
+                  ...(file.picked === true && onEditPicks !== undefined ? [{ key: "edit_picks", label: messages.editPicks, disabledReason }] : []),
+                ]} />
+  );
   return (
     <div className="protects">
       <InputBox role="test_surfaces" files={files} hint={hint ?? protectsHintOf(mode)} addLabel={addLabel} titleHidden
                 weatherLocation={null} weatherHint="" onAddFiles={onAddFiles === undefined ? undefined : (_role, chosen) => onAddFiles(chosen)}
                 onRemoveFile={(_role, fileName) => onRemoveFile(fileName)} disabledReason={disabledReason} drawingProblems={drawingProblems}
-                showsDisabledReason={false} />
+                showsDisabledReason={false} extraAction={pickButton} fileMenu={fileMenu} />
       {otherFiles.length > 0 && onUseFile !== undefined && (
-        <FilesOfOtherCriteria files={otherFiles} onUseFile={onUseFile} disabledReason={disabledReason} title={otherFilesTitle} />
+        <FilesOfOtherCriteria files={otherFiles} onUseFile={onUseFile} disabledReason={disabledReason} title={otherFilesTitle} setNames={setNames} />
+      )}
+      {renaming !== null && onRenameSet !== undefined && (
+        <RenameSetDialog file={renaming} onRename={(name) => onRenameSet(renaming.name, name)} onClose={() => setRenaming(null)} />
       )}
     </div>
+  );
+}
+
+/** Asks for a surface set's new name; the request's refusal is shown under the field. */
+function RenameSetDialog({ file, onRename, onClose }: { file: InputFileInfo; onRename: (name: string) => Promise<string | null>; onClose: () => void }) {
+  const shown = file.shown_name ?? file.name;
+  const [name, setName] = useState(shown);
+  const { problem, busy, send } = useDialogRequest(onClose);
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    void send(() => onRename(name));
+  };
+  return (
+    <DialogFrame title={messages.renameSurfaceSetTitle(shown)} busy={busy} onClose={onClose}>
+      <form className="project-dialog-form" onSubmit={submit}>
+        <input type="text" className="setting-number project-dialog-field" aria-label={messages.surfaceSetName} value={name} maxLength={80}
+               data-autofocus onChange={(event) => setName(event.target.value)} />
+        {problem !== null && <p className="input-box-problem" role="alert">{problem}</p>}
+        <DialogButtons confirmLabel={messages.renameSurfaceSet} confirmDisabled={!name.trim() || name.trim() === shown} busy={busy} onCancel={onClose} />
+      </form>
+    </DialogFrame>
   );
 }

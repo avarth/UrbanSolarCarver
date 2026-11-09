@@ -418,6 +418,23 @@ export const messages = {
   drawSite: "Draw",
   // Sites from DXF and OBJ files (design/site-import.md)
   importSites: "Import",
+  // Test surfaces picked on the surroundings, and surface sets (design/test-surfaces-on-context.md)
+  pickFromSurroundings: "From surroundings",
+  pickingSurfaces: "Picking test surfaces on the surroundings",
+  pickingSteps: "Click the facades and roofs of the surroundings to protect. Click a picked face again to drop it.",
+  pickedSetTarget: "Where the picked faces go",
+  newSurfaceSet: "New set",
+  addToSurfaceSet: (name: string) => `Add to ${name}`,
+  surfaceSetName: "Name of the new set",
+  editingSurfaceSet: (name: string) => `Editing ${name}`,
+  useFaces: (count: number) => `Use ${count} ${count === 1 ? "face" : "faces"}`,
+  savePicks: "Save picks",
+  renameSurfaceSet: "Rename",
+  renameSurfaceSetTitle: (name: string) => `Rename ${name}`,
+  editPicks: "Edit picks",
+  surfaceSetActions: (name: string) => `Actions for ${name}`,
+  pickedOnSurroundings: "picked on the surroundings",
+  picksLost: (count: number) => `${count} picked ${count === 1 ? "face is" : "faces are"} gone from the surroundings`,
   importSitesTitle: (fileName: string) => `Import sites from ${fileName}`,
   importSitesFound: (count: number, unit: string) =>
     `${count} closed ${count === 1 ? "polyline" : "polylines"}, read in ${unit}. Their elevations are kept relative to each other, from the level new sites start at.`,

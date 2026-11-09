@@ -37,6 +37,8 @@ interface SimulateViewProps {
   runs: RunLoop;
   /** A study let a file go, which the project may then no longer store: the stored files are asked for again. */
   onStoredFilesChange: () => void;
+  /** Opens picking on the surroundings for a study (design/test-surfaces-on-context.md); absent without surroundings. */
+  onPickSurfaces?: (studyId: string) => void;
   /** The selected study on the view: the target legend and the result card. */
   studyView: StudyViewHook;
   /** The viewport theme (the legend's palettes do not depend on it). */
@@ -46,7 +48,7 @@ interface SimulateViewProps {
 }
 
 export function SimulateView({ studies, criteria, storedTestSurfaces, hasSurroundings, hasTerrain, envelopeBuilt, massingBuilt, hasBaseVolume = false, carvingSpacing, runs,
-                               onStoredFilesChange, studyView, notice }: SimulateViewProps) {
+                               onStoredFilesChange, studyView, notice, onPickSurfaces }: SimulateViewProps) {
   const { project, onServiceProblem } = useProjectSession();
   const [popoverStudyId, setPopoverStudyId] = useState<string | null>(null);
   const view = useRef<HTMLDivElement>(null);
@@ -94,6 +96,10 @@ export function SimulateView({ studies, criteria, storedTestSurfaces, hasSurroun
                     onStoredFilesChange();
                   })}
                   onDuplicate={() => attempt(async () => setPopoverStudyId((await studies.duplicate(shown.entry.id)).id))}
+                  onPickFromSurroundings={onPickSurfaces === undefined ? undefined : () => {
+                    setPopoverStudyId(null);         // the view is clicked while picking: the popover goes out of its way
+                    onPickSurfaces(shown.entry.id);
+                  }}
                   onDelete={() => attempt(async () => {
                     await studies.remove(shown.entry.id);
                     setPopoverStudyId(null);

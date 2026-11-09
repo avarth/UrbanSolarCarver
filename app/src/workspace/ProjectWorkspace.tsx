@@ -14,7 +14,7 @@
 import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
-  failureTextOf, markModeChosen, readOutlines, reportServiceProblem, setCarvingUpdates, terrainHeights, type HealthReply, type OutlinesReply, type ModeInfo, type ProjectDetail,
+  failureTextOf, getSurfacePicks, markModeChosen, pickSurfaceSet, readOutlines, renameSurfaceSet, reportServiceProblem, setCarvingUpdates, terrainHeights, type HealthReply, type OutlinesReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
 import { ProjectSessionContext } from "../api_client/project_session";
 import { activeCriteria, filesOfOtherCriteria } from "../criteria/criteria_state";
@@ -62,6 +62,7 @@ import { useInputFiles } from "./use_input_files";
 import { InputChoice, SiteBox, SwitchInputLink } from "../sites/SiteInput";
 import { ProjectSetupDialog } from "./ProjectSetupDialog";
 import { ImportSitesDialog } from "../sites/ImportSitesDialog";
+import { ContextPicker, type PickTarget, type SurfacePick } from "../viewer_overlays/ContextPicker";
 import { browserAutoUpdateChoice, forgetBrowserAutoUpdateChoice } from "../criteria/CarvingStep";
 import { Subheading } from "../settings_form/Subheading";
 import { HeightsSettings } from "../sites/HeightsSettings";
@@ -163,6 +164,16 @@ export interface OpenProjectSettingsSaver {
   waitForInputChanges: () => Promise<void>;
 }
 
+/** Who picks surfaces on the surroundings: a criterion (Carve) or a study (Simulate). */
+type PickingFor = { kind: "criterion"; id: string } | { kind: "study"; id: string };
+interface PickingState {
+  for: PickingFor;
+  /** Edit picks: the set edited, with its name and picks. */
+  editing?: { file: string; name: string; picks: SurfacePick[] };
+  busy: boolean;
+  problem: string | null;
+}
+
 /** The Carving group of Settings (data-setting), whose switch the carving's reruns follow. */
 const CARVING_UPDATES_SETTING = "carving_updates_itself";
 /** What a reason that leads to the weather file focuses in Settings: its box (data-setting). */
@@ -226,6 +237,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
   }, [sitesKey]);
   // A site as the input (design/site-input.md): the tool drawing or editing a site in the view, and the tile chosen before any content
   const [siteTool, setSiteTool] = useState<SiteTool | null>(null);
+  const [picking, setPicking] = useState<PickingState | null>(null);
   // An outline file read and shown in the import window (design/site-import.md), and what the last import or placing said
   const [importing, setImporting] = useState<{ found: OutlinesReply; busy: boolean } | null>(null);
   const [siteNote, setSiteNote] = useState<{ text: string; warning: boolean } | null>(null);
@@ -579,6 +591,79 @@ function OpenProject(props: ProjectWorkspaceProps) {
     ) : (scene: ViewerScene) => (
       <SitePicker scene={scene} origin={origin} sites={siteInput.sites} onPick={(index) => setSiteTool({ kind: "edit", index })} />
     );
+  // Test surfaces picked on the surroundings (design/test-surfaces-on-context.md): picking is for the criterion shown in Carve, or a
+  // study in Simulate; it ends when that is not shown any more. Use makes a surface set (or adds to one, or saves an edit), which the
+  // criterion or study then uses; the stored files and the test surfaces drawn are read again.
+  const hasSurroundingsFiles = files.context.length > 0;
+  const setNames = Object.fromEntries(files.test_surfaces.map((file) => [file.name, file.shown_name ?? file.name]));
+  const pickedSets = files.test_surfaces.filter((file) => file.picked === true).map((file) => ({ file: file.name, name: file.shown_name ?? file.name }));
+  const nextPickedName = () => {
+    const shown = new Set(files.test_surfaces.map((file) => (file.shown_name ?? file.name).toLowerCase()));
+    let number = 1;
+    while (shown.has(`picked ${number}`)) number += 1;
+    return `Picked ${number}`;
+  };
+  const pickingApplies = picking !== null && (picking.for.kind === "criterion"
+    ? props.mode === "design" && picking.for.id === criterionId : props.mode === "simulate");
+  if (picking !== null && !pickingApplies) setPicking(null);
+  const startPicking = (target: PickingFor) => setPicking({ for: target, busy: false, problem: null });
+  const reportPickProblem = (error: unknown) => {
+    if (!reportServiceProblem(error, onServiceProblem)) setPicking((now) => now && { ...now, busy: false, problem: failureTextOf(error) });
+  };
+  const editPicks = async (fileName: string, target: PickingFor) => {
+    try {
+      const reply = await getSurfacePicks(token, project.name, fileName);
+      setPicking({ for: target, editing: { file: fileName, name: setNames[fileName] ?? fileName, picks: reply.picks }, busy: false, problem: null });
+    } catch (error) {
+      reportServiceProblem(error, onServiceProblem);
+    }
+  };
+  const renameSet = async (fileName: string, setName: string): Promise<string | null> => {
+    try {
+      await renameSurfaceSet(token, project.name, fileName, setName);
+      await testSurfaceCalls.reloadStoredFiles();
+      return null;
+    } catch (error) {
+      return reportServiceProblem(error, onServiceProblem) ? null : failureTextOf(error);
+    }
+  };
+  const savePicks = async (picks: SurfacePick[], target: PickTarget) => {
+    if (picking === null) return;
+    const now = picking;
+    setPicking({ ...now, busy: true, problem: null });
+    try {
+      let stored: string;
+      if (now.editing !== undefined) {
+        stored = (await pickSurfaceSet(token, project.name, { picks, replace: now.editing.file })).name;
+      } else if (target.kind === "add") {
+        const before = await getSurfacePicks(token, project.name, target.file);
+        stored = (await pickSurfaceSet(token, project.name, { picks: [...before.picks, ...picks], replace: target.file })).name;
+      } else {
+        stored = (await pickSurfaceSet(token, project.name, { picks, name: target.name.trim() })).name;
+      }
+      if (now.editing === undefined) {
+        const refused = now.for.kind === "criterion" ? await testSurfaceCalls.use(stored) : (await studies.useFile(now.for.id, stored), null);
+        if (refused !== null) {
+          setPicking({ ...now, busy: false, problem: refused });
+          return;
+        }
+      }
+      await testSurfaceCalls.reloadStoredFiles();
+      reloadRoles(["test_surfaces"]);
+      refreshStageStatus();
+      setPicking(null);
+    } catch (error) {
+      reportPickProblem(error);
+    }
+  };
+  const pickingColour = picking?.for.kind === "study"
+    ? studies.studies.find((study) => study.entry.id === picking.for.id)?.entry.colour ?? "#4477aa" : criterion?.colour ?? "#4477aa";
+  const pickerTool = picking === null || !pickingApplies || contextMesh.geometry === null ? null : (scene: ViewerScene) => (
+    <ContextPicker scene={scene} origin={origin} geometry={contextMesh.geometry!} colour={pickingColour}
+                   editing={picking.editing === undefined ? undefined : { name: picking.editing.name, picks: picking.editing.picks }}
+                   pickedSets={pickedSets} newSetName={nextPickedName()} busy={picking.busy} problem={picking.problem}
+                   onUse={(picks, target) => { void savePicks(picks, target); }} onCancel={() => setPicking(null)} />
+  );
   const stepContent: Record<StepName, ReactNode> = {
     inputs: (
       <InputsStep files={files} inputsBounds={inputsBounds} onAddFiles={addFiles}
@@ -592,7 +677,10 @@ function OpenProject(props: ProjectWorkspaceProps) {
                     panelProblem={workspaceCriteria.panelProblem} panel={
         <CriterionPanel key={criterionId} {...panelSections} testSurfaces={criterionTestSurfaces} criterionOn={criterionOn} testSurfaceDrawingProblems={testSurfacesMesh.drawingProblems} onAddTestSurfaces={testSurfaceCalls.add}
                         onRemoveTestSurface={testSurfaceCalls.remove} otherTestSurfaces={filesOfOtherCriteria(criteria.criteria, criterionId)}
-                        onUseTestSurface={testSurfaceCalls.use} form={form} stepErrors={criterionForm.form.stepErrors} criterionKeys={criterionKeys}
+                        onUseTestSurface={testSurfaceCalls.use} form={form}
+                        onPickFromSurroundings={hasSurroundingsFiles ? () => startPicking({ kind: "criterion", id: criterionId }) : undefined}
+                        onRenameSet={renameSet} onEditPicks={(fileName) => { void editPicks(fileName, { kind: "criterion", id: criterionId }); }}
+                        setNames={setNames} stepErrors={criterionForm.form.stepErrors} criterionKeys={criterionKeys}
                         onChange={changeSettings} disabledReason={inputsDisabledReason}
                         weatherDropZone={criterionOn && modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} inputRoles={inputRolesWithFiles}
                         coldPeriod={coldPeriod} hemisphere={hemisphereOfLatitude(weather.latitude)}
@@ -666,6 +754,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
                   hasSurroundings={files.context.length > 0} hasTerrain={files.terrain.length > 0}
                   envelopeBuilt={designResults?.envelope != null} massingBuilt={designResults?.massing != null} hasBaseVolume={baseVolume.geometry !== null} carvingSpacing={carvingSpacing}
                   onStoredFilesChange={() => { void testSurfaceCalls.reloadStoredFiles(); refreshStageStatus(); }} studyView={studyView}
+                  onPickSurfaces={hasSurroundingsFiles ? (studyId) => startPicking({ kind: "study", id: studyId }) : undefined}
                   theme={theme} notice={inputChangesNotice} />
   );
   const simulateViewer = { overlayContent: simulateView, study: studyView.view, studyOutOfDate: studyView.studyOutOfDate,
@@ -770,7 +859,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
                     centreContent={props.mode === "design" && emptyViewContent} localOrigin={origin} mode={form.mode}
                     analysisCurrent={(ownStages ?? shownStages).preprocessing === "current"} {...resultSteps.viewer} inspect={inspectView}
                     stampAction={props.mode === "design" ? resultSteps.stampAction : null}
-                    {...(simulating ? simulateViewer : {})} {...(inspecting ? inspectViewer : {})} sceneTool={sceneTool} />
+                    {...(simulating ? simulateViewer : {})} {...(inspecting ? inspectViewer : {})} sceneTool={pickerTool ?? sceneTool} />
       </section>
     </div>
   );

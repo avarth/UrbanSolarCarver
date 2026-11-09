@@ -141,6 +141,21 @@ class HeightsJson(BaseModel):
 NEW_PROJECT_HEIGHTS = {"max": {"for_all_sites": True, "value": 50.0}, "base": {"for_all_sites": True, "value": 0.0}}
 
 
+class SurfacePick(BaseModel):
+    """A pick of a flat piece of the surroundings (design/test-surfaces-on-context.md): the point clicked, in the input files'
+    coordinates, and the direction of the click's ray (the piece faces against it)."""
+    point: list[float] = Field(min_length=3, max_length=3)
+    ray: list[float] = Field(min_length=3, max_length=3)
+
+
+class SurfaceSetJson(BaseModel):
+    """A stored test surface file as a surface set: the name it is shown by (None: the file name without its extension) and, for a
+    set picked on the surroundings, its picks and how many found no face when it was last built."""
+    name: str | None = None
+    picks: list[SurfacePick] | None = None
+    picks_lost: int = 0
+
+
 class ProjectJson(BaseModel):
     """The content of a project's project.json."""
     name: str
@@ -163,6 +178,8 @@ class ProjectJson(BaseModel):
     mode_to_choose: bool = False    # a new project: its one criterion stands in NEW_PROJECT_MODE until the user chooses a mode
     # The app reruns the carving as its settings change (Settings > Carving, user 2026-11-09); off: the user starts it (Update carving)
     carving_updates_itself: bool = True
+    # The names and picks of the stored test surface files (picked_surfaces.py); a file not listed is an upload shown by its file name
+    surface_sets: dict[str, SurfaceSetJson] = Field(default_factory=dict)
     # What the maximum volume is made from: the mesh files of the max_volume role, or the sites (site_input.py); one or the other
     max_volume_source: MaxVolumeSource = "mesh"
     sites: list[SiteJson] = Field(default_factory=list)     # kept while the source is "mesh", so switching back restores them
@@ -236,6 +253,11 @@ class InputFileInfo(BaseModel):
     """One uploaded input file as listed in the file lists of the inputs screen."""
     name: str
     triangle_count: int         # 0 for the weather file
+    # A test surface file is a surface set: the name it is shown by, whether it was picked on the surroundings, and how many of its
+    # picks found no face when it was last built (picked_surfaces.py). None for the other roles, and for what does not apply.
+    shown_name: str | None = None
+    picked: bool | None = None
+    picks_lost: int | None = None
 
 
 class InputFilesReply(BaseModel):
@@ -286,6 +308,22 @@ class TerrainHeightsRequest(BaseModel):
 class TerrainHeightsReply(BaseModel):
     """The height of the top of the terrain at each point asked for; None where no terrain lies under it."""
     heights: list[float | None]
+
+
+class PickedSurfacesRequest(BaseModel):
+    """Picks on the surroundings to make a surface set from: a new set (*replace* None), named *name* or "Picked n", or the picked set
+    stored as *replace*, whose picks they become."""
+    picks: list[SurfacePick] = Field(min_length=1, max_length=500)
+    name: str | None = Field(None, max_length=200)
+    replace: str | None = None
+
+
+class SurfaceSetNameRequest(BaseModel):
+    name: str = Field(max_length=200)
+
+
+class SurfacePicksReply(BaseModel):
+    picks: list[SurfacePick]
 
 
 class CarvingUpdatesRequest(BaseModel):

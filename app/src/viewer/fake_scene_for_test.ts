@@ -162,6 +162,11 @@ export class FakeViewerScene implements Pick<ViewerScene, keyof ViewerScene> {
   toScreen(point: Point3): [number, number] | null {
     return [400 + point[0] * 10, 300 - point[1] * 10];
   }
+  /** The camera stands 100 m east of the origin, so a pick's ray runs west (toward -x). */
+  cameraPosition(): Point3 {
+    return [100, 0, 0];
+  }
+
   pointOnLevel(x: number, y: number, levelZ: number): Point3 | null {
     return [(x - 400) / 10, (300 - y) / 10, levelZ];
   }

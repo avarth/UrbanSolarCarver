@@ -422,6 +422,11 @@ export class ViewerScene {
     return [((projected.x + 1) / 2) * this.container.clientWidth, ((1 - projected.y) / 2) * this.container.clientHeight];
   }
 
+  /** Where the camera is, in local coordinates (a pick's ray runs from it to the point clicked). */
+  cameraPosition(): Point3 {
+    return [this.camera.position.x, this.camera.position.y, this.camera.position.z];
+  }
+
   /** The local point on the level plane z = *levelZ* under the pixel (x, y) of the view; null when the ray misses it (looking up). */
   pointOnLevel(x: number, y: number, levelZ: number): Point3 | null {
     const width = Math.max(1, this.container.clientWidth), height = Math.max(1, this.container.clientHeight);

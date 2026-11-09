@@ -1,5 +1,5 @@
 // A fake service of a project with studies (the Simulate workspace), and the project opened against it in Simulate, with the
-// queries of the studies panel: shared by ProjectWorkspace.simulate.test.tsx. Each test file mocks ../viewer/scene with
+// queries of the studies panel: shared by ProjectWorkspace.simulate.test.tsx and .picked_surfaces.test.tsx. Each test file mocks ../viewer/scene with
 // FakeViewerScene itself and calls startWorkspaceTest and endWorkspaceTest. Its replies are typed with the service's types (json<Reply>).
 import { act } from "react";
 import type { CriterionEntry, InputFileInfo, MetricInfo, SkyDome, StartRunReply, StudiesReply, StudyEntry, StudyWithState } from "../api_client/client";

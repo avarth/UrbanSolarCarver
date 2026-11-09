@@ -220,6 +220,18 @@ export async function deleteProject(token: string, name: string, confirmName: st
 export const resetProjectToExample = (token: string, name: string) =>
   requestJson<ProjectDetail>(token, `${projectPath(name)}/reset-to-example`, "POST");
 
+/** A surface set made from picks on the surroundings: a new one (named *name*, or "Picked n"), or the picked set *replace*. */
+export const pickSurfaceSet = (token: string, project: string, request: { picks: { point: number[]; ray: number[] }[]; name?: string; replace?: string }) =>
+  requestJson<InputFileInfo>(token, `${projectPath(project)}/surface-sets/picked`, "POST", request);
+
+/** Shows a stored test surface file by another name; the file keeps its stored name. */
+export const renameSurfaceSet = (token: string, project: string, fileName: string, name: string) =>
+  requestJson<InputFileInfo>(token, `${projectPath(project)}/surface-sets/${encodeURIComponent(fileName)}/name`, "PUT", { name });
+
+/** The picks of a set picked on the surroundings (Edit picks). */
+export const getSurfacePicks = (token: string, project: string, fileName: string) =>
+  requestJson<Schemas["SurfacePicksReply"]>(token, `${projectPath(project)}/surface-sets/${encodeURIComponent(fileName)}/picks`);
+
 /** Whether the app reruns the carving as its settings change (Settings > Carving); stored in the project, during a run too. */
 export async function setCarvingUpdates(token: string, project: string, on: boolean): Promise<void> {
   await send(token, `${projectPath(project)}/carving-updates`, "PUT", JSON.stringify({ on }), "application/json");

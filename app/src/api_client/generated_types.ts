@@ -600,6 +600,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/surface-sets/picked": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pick Surface Set
+         * @description Make a surface set from picks on the surroundings (design/test-surfaces-on-context.md): a new stored test surface file, or
+         *     the picked set *replace*. The reply is the set; a criterion or study then uses it with its own PUT.
+         */
+        post: operations["pick_surface_set"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/surface-sets/{file_name}/name": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Rename Surface Set
+         * @description Show a stored test surface file by another name; the file keeps its stored name.
+         */
+        put: operations["rename_surface_set"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/surface-sets/{file_name}/picks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Surface Set Picks
+         * @description The picks of a set picked on the surroundings (Edit picks).
+         */
+        get: operations["surface_set_picks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}/carving-updates": {
         parameters: {
             query?: never;
@@ -1782,6 +1843,12 @@ export interface components {
             name: string;
             /** Triangle Count */
             triangle_count: number;
+            /** Shown Name */
+            shown_name?: string | null;
+            /** Picked */
+            picked?: boolean | null;
+            /** Picks Lost */
+            picks_lost?: number | null;
         };
         /**
          * InputFilesReply
@@ -1970,6 +2037,19 @@ export interface components {
             left_out: string[];
             /** Distance From Inputs */
             distance_from_inputs: number | null;
+        };
+        /**
+         * PickedSurfacesRequest
+         * @description Picks on the surroundings to make a surface set from: a new set (*replace* None), named *name* or "Picked n", or the picked set
+         *     stored as *replace*, whose picks they become.
+         */
+        PickedSurfacesRequest: {
+            /** Picks */
+            picks: components["schemas"]["SurfacePick"][];
+            /** Name */
+            name?: string | null;
+            /** Replace */
+            replace?: string | null;
         };
         /**
          * ProjectDetail
@@ -2398,6 +2478,27 @@ export interface components {
             day_step: number;
             /** Step Minutes */
             step_minutes: number;
+        };
+        /**
+         * SurfacePick
+         * @description A pick of a flat piece of the surroundings (design/test-surfaces-on-context.md): the point clicked, in the input files'
+         *     coordinates, and the direction of the click's ray (the piece faces against it).
+         */
+        SurfacePick: {
+            /** Point */
+            point: number[];
+            /** Ray */
+            ray: number[];
+        };
+        /** SurfacePicksReply */
+        SurfacePicksReply: {
+            /** Picks */
+            picks: components["schemas"]["SurfacePick"][];
+        };
+        /** SurfaceSetNameRequest */
+        SurfaceSetNameRequest: {
+            /** Name */
+            name: string;
         };
         /**
          * TerrainHeightsReply
@@ -3927,6 +4028,136 @@ export interface operations {
                 };
                 content: {
                     "application/json": string[];
+                };
+            };
+        };
+    };
+    pick_surface_set: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PickedSurfacesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InputFileInfo"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    rename_surface_set: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                file_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SurfaceSetNameRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InputFileInfo"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    surface_set_picks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                file_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SurfacePicksReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
                 };
             };
         };

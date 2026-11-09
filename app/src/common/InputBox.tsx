@@ -57,6 +57,10 @@ interface InputBoxProps {
   showsDisabledReason?: boolean;
   /** At the end of the box: the maximum volume's link to a site instead (sites/SiteInput.tsx). */
   footer?: ReactNode;
+  /** A second action beside the add button (From surroundings, for test surfaces). */
+  extraAction?: ReactNode;
+  /** A menu at the end of a file's row, before its remove button (Rename, Edit picks of a surface set); null for none. */
+  fileMenu?: (file: InputFileInfo) => ReactNode;
 }
 
 const TITLES: Record<InputRole, string> = {
@@ -87,7 +91,7 @@ const NO_PROBLEMS: string[] = [];
 
 export function InputBox({ role, files, weatherLocation = null, weatherHint = "", onAddFiles, onRemoveFile, disabledReason, weatherNeeded = false,
                            drawingProblems = NO_PROBLEMS, note = null, title, titleHidden = false, hint: hintGiven, addLabel,
-                           showsDisabledReason = true, footer = null }: InputBoxProps) {
+                           showsDisabledReason = true, footer = null, extraAction = null, fileMenu }: InputBoxProps) {
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -149,7 +153,7 @@ export function InputBox({ role, files, weatherLocation = null, weatherHint = ""
       )}
       <div className="input-box-title-row">
         {!titleHidden && <Subheading id={titleId} className="input-box-title">{shownTitle}</Subheading>}
-        {addButton}
+        {extraAction === null ? addButton : <span className="site-box-actions">{addButton}{extraAction}</span>}
       </div>
       {subtitle !== null && <p className="input-box-subtitle">{subtitle}</p>}
       {!filled && (
@@ -163,9 +167,14 @@ export function InputBox({ role, files, weatherLocation = null, weatherHint = ""
           {files.map((file) => (
             <li key={file.name} className="input-file-row">
               <div>
-                <div className="input-file-name">{file.name}</div>
-                <div className="input-file-detail">{isWeather ? weatherLocation ?? "" : messages.triangleCount(file.triangle_count)}</div>
+                <div className="input-file-name" title={file.shown_name && file.shown_name !== file.name ? file.name : undefined}>{file.shown_name ?? file.name}</div>
+                <div className="input-file-detail">
+                  {isWeather ? weatherLocation ?? "" : messages.triangleCount(file.triangle_count)}
+                  {file.picked === true && `, ${messages.pickedOnSurroundings}`}
+                </div>
+                {(file.picks_lost ?? 0) > 0 && <div className="input-box-problem"><WarningIcon />{messages.picksLost(file.picks_lost ?? 0)}</div>}
               </div>
+              {fileMenu?.(file)}
               <button type="button" className="input-remove" aria-label={messages.removeFile(file.name)} title={messages.removeFile(file.name)}
                       disabled={disabled} onClick={() => void remove(file.name)}>
                 <RemoveIcon />

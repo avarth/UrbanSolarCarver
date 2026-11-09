@@ -29,6 +29,9 @@
 .site-row-details { grid-column: 1 / -1; color: var(--colour-muted); font-size: var(--text-secondary); }
 .site-row-problem { grid-column: 1 / -1; color: var(--colour-error); font-size: var(--text-secondary); }
 .site-row-editing { background: var(--colour-accent-soft); }
+.context-picker-pieces polygon { fill-opacity: 0.45; stroke-width: 1.5; stroke-linejoin: round; }
+.context-picker-target { display: flex; flex-wrap: wrap; gap: var(--space-unit); align-items: center; }
+.context-picker-target input { width: 12em; }
 .site-box-actions { display: flex; flex: none; gap: var(--space-unit); margin-left: auto; }
 .site-box-actions .input-add { white-space: nowrap; }
 .import-sites-list { margin: 0; padding: 0; list-style: none; display: grid; gap: calc(var(--space-unit) / 2); max-height: 14em; overflow-y: auto; }

@@ -1,5 +1,5 @@
 // The open project against a fake service, shared by every ProjectWorkspace.*.test.tsx file (saves_and_runs, weather_notice,
-// chain_runs, criteria, criterion_cards, input_changes, inspect, simulate, three_d, view_and_results) and by chain_service_for_test.tsx,
+// chain_runs, criteria, criterion_cards, input_changes, inspect, picked_surfaces, simulate, three_d, view_and_results) and by chain_service_for_test.tsx,
 // which builds on it; a few component tests take its SCHEMA or MODES. It holds the fake service, the project it serves, opening the
 // workspace and finding its parts. Each test file mocks ../viewer/scene with FakeViewerScene itself (vi.mock applies to the file it is
 // written in). settle, type and typeAndLeave come from render_for_test.tsx and are exported again here, so a workspace test imports
@@ -26,6 +26,9 @@ import type { WorkspaceMode } from "../common/WorkspaceModeSwitch";
 
 type ErrorDetailReply = components["schemas"]["ErrorDetailReply"];
 type StoredFileChangedReply = components["schemas"]["StoredFileChangedReply"];
+type SurfacePick = components["schemas"]["SurfacePick"];
+type PickedSurfacesRequest = components["schemas"]["PickedSurfacesRequest"];
+type SurfacePicksReply = components["schemas"]["SurfacePicksReply"];
 
 // The service's schema, modes and criterion settings as GET schema, modes and criterion-keys give them (service_data_for_test.json,
 // written from the service), so the form has the bounds, defaults and descriptions the user gets.
@@ -137,6 +140,15 @@ export class FakeService {
   carvingUpdatesItself = true;
   /** The body of every PUT carving-updates. */
   readonly carvingUpdateChoices: { on: boolean }[] = [];
+  // Surface sets (design/test-surfaces-on-context.md)
+  /** The picks of each picked set by its stored file, as GET surface-sets/{file}/picks gives them and POST surface-sets/picked stores them. */
+  surfacePicks: Record<string, SurfacePick[]> = {};
+  /** The body of every POST surface-sets/picked. */
+  readonly pickedSetRequests: PickedSurfacesRequest[] = [];
+  /** The reason POST surface-sets/picked is refused with (422); null: the set is stored. */
+  pickRefusal: string | null = null;
+  /** The file and the name of every PUT surface-sets/{file}/name. */
+  readonly setRenames: { fileName: string; name: string }[] = [];
 
   constructor(stages: Record<PipelineStage, StageState>, carving: typeof CARVING | null) {
     this.stages = stages;
@@ -187,6 +199,7 @@ export class FakeService {
       return json<CriterionEntry>(criterionEntry(this.criterionSettings, this.criterionTestSurfaceFiles));
     }
     if (method === "GET" && path === "/inputs/test_surfaces") return json<InputFileInfo[]>(this.storedTestSurfaces);
+    if (path.startsWith("/surface-sets/")) return this.answerSurfaceSets(method, path, init);
     if (path === "/sites" || path === "/max-volume-source" || path === "/heights") {
       if (method === "PUT" && path === "/heights") {
         this.heights = JSON.parse(String(init!.body)) as Heights;
@@ -293,6 +306,45 @@ export class FakeService {
     const changed = { ...fileNow()!, original_kept: route === "turn", version: `${fileNow()!.version}*` };
     this.inspection = this.inspection.map((candidate) => (candidate.role === "test_surfaces" && candidate.file_name === fileName ? changed : candidate));
     return json<InspectedFile>(changed);
+  }
+
+  /**
+   * The surface set routes: POST picked stores a new picked set ("picked_<n>.ply", named as asked or "Picked <n>") or replaces the
+   * picks of the set *replace*, two triangles a pick; GET {file}/picks gives a set's picks; PUT {file}/name shows a set by another name.
+   */
+  private answerSurfaceSets(method: string, path: string, init?: RequestInit): Response {
+    if (method === "POST" && path === "/surface-sets/picked") {
+      const body = JSON.parse(String(init!.body)) as PickedSurfacesRequest;
+      this.pickedSetRequests.push(body);
+      if (this.pickRefusal !== null) return json<ErrorDetailReply>({ detail: this.pickRefusal }, 422);
+      if (typeof body.replace === "string") {
+        const kept = this.storedTestSurfaces.find((file) => file.name === body.replace);
+        if (kept === undefined) return json<ErrorDetailReply>({ detail: "Not found" }, 404);
+        const changed = { ...kept, triangle_count: body.picks.length * 2, picks_lost: 0 };
+        this.storedTestSurfaces = this.storedTestSurfaces.map((file) => (file.name === kept.name ? changed : file));
+        this.surfacePicks[kept.name] = body.picks;
+        return json<InputFileInfo>(changed);
+      }
+      let number = 1;
+      while (this.storedTestSurfaces.some((file) => file.name === `picked_${number}.ply`)) number += 1;
+      const stored: InputFileInfo = { name: `picked_${number}.ply`, triangle_count: body.picks.length * 2, shown_name: body.name ?? `Picked ${number}`, picked: true };
+      this.storedTestSurfaces = [...this.storedTestSurfaces, stored];
+      this.surfacePicks[stored.name] = body.picks;
+      return json<InputFileInfo>(stored);
+    }
+    const [, , encoded, part] = path.split("/");
+    const fileName = decodeURIComponent(encoded);
+    const file = this.storedTestSurfaces.find((candidate) => candidate.name === fileName);
+    if (file === undefined) return json<ErrorDetailReply>({ detail: "Not found" }, 404);
+    if (method === "GET" && part === "picks") return json<SurfacePicksReply>({ picks: this.surfacePicks[fileName] ?? [] });
+    if (method === "PUT" && part === "name") {
+      const { name } = JSON.parse(String(init!.body)) as { name: string };
+      this.setRenames.push({ fileName, name });
+      const renamed = { ...file, shown_name: name };
+      this.storedTestSurfaces = this.storedTestSurfaces.map((candidate) => (candidate.name === fileName ? renamed : candidate));
+      return json<InputFileInfo>(renamed);
+    }
+    return json<ErrorDetailReply>({ detail: "Not found" }, 404);
   }
 
   count(request: string): number {

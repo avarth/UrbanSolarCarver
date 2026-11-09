@@ -48,6 +48,9 @@ def client_after_fake_run(client_with_inputs):
 
 # ---- Security ----
 
+# A file of a role other than test surfaces lists no surface set fields (picked_surfaces.py)
+NOT_A_SURFACE_SET = {"shown_name": None, "picked": None, "picks_lost": None}
+
 def test_token_and_host_are_checked(projects_folder):
     bare_client = build_client(projects_folder, authorized=False)[0]
     assert bare_client.get("/api/health").status_code == 401
@@ -181,7 +184,7 @@ def test_project_inputs_config_run_and_files(client):
         "max_volume": [], "test_surfaces": [], "context": [], "terrain": [], "weather": []}
     assert created["stage_status"]["stages"] == {stage: "missing" for stage in PIPELINE_STAGES}
     uploaded = upload(client, "p", "max_volume", VOLUME).json()
-    assert uploaded["files"] == [{"name": "volume.ply", "triangle_count": 12}] and uploaded["joined_bounds"] is not None
+    assert uploaded["files"] == [{"name": "volume.ply", "triangle_count": 12, **NOT_A_SURFACE_SET}] and uploaded["joined_bounds"] is not None
     assert upload_test_surfaces(client, "p", SURFACE).status_code == 200
     saved = client.put("/api/projects/p/shared-settings", json={"values": {"voxel_size": 2.0}})
     assert saved.status_code == 200 and saved.json()["grid_plan"]["voxel_size"] == 2.0
@@ -327,7 +330,7 @@ def test_an_example_cannot_replace_a_project_or_use_a_bad_name(client):
 
 def test_input_files_can_be_listed_fetched_and_removed(client_with_inputs):
     client = client_with_inputs
-    assert client.get("/api/projects/p/inputs/max_volume").json() == [{"name": "volume.ply", "triangle_count": 12}]
+    assert client.get("/api/projects/p/inputs/max_volume").json() == [{"name": "volume.ply", "triangle_count": 12, **NOT_A_SURFACE_SET}]
     assert client.get("/api/projects/p/inputs/max_volume/volume.ply").content.startswith(b"ply")
     assert client.get("/api/projects/p/inputs/max_volume/other.ply").status_code == 404
     assert client.get("/api/projects/p/inputs/nonsense").status_code == 422

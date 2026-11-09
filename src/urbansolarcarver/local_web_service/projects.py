@@ -29,7 +29,8 @@ from ..io import load_mesh, save_mesh
 from ..load_config import build_config, build_config_from_mode_starting_values
 from ..mode_registry import MODES, canonical_mode_name
 from ..pydantic_schemas import UserConfig
-from . import site_input, stored_files, test_surfaces, uploads
+from . import picked_surfaces, site_input, stored_files, test_surfaces, uploads
+from .api_models import SurfacePick, SurfaceSetJson
 from .api_models import (
     ColdPeriodDates, ColdPeriodReply, ConfigReply, CriterionEntry, ExampleProject, GridPlanReply, HeightsJson, InputFileInfo, InputFilesReply,
     NEW_PROJECT_HEIGHTS, ProjectJson, ProjectSummary, StudyEntry,
@@ -1085,6 +1086,8 @@ class ProjectStore:
                 self._add_mesh_file(project_folder, project_json, role, clean_name, data)
                 if role == site_input.MAX_VOLUME_ROLE:
                     site_input.update_kept_volume(project_folder, project_json)     # a base level above the new mesh's lowest point
+                if role == "context":
+                    self.rebuild_picked_sets(project_folder, project_json)         # picked sets follow the surroundings
                 if role in OPTIONAL_MESH_ROLES or role == site_input.MAX_VOLUME_ROLE:
                     self._update_optional_paths(project_folder, name)
             project_json.inputs_revision += 1
@@ -1121,6 +1124,8 @@ class ProjectStore:
             project_json.stored_files.get(role, {}).pop(file_name, None)
             if role == site_input.MAX_VOLUME_ROLE:
                 site_input.update_kept_volume(project_folder, project_json)
+            if role == "context":
+                self.rebuild_picked_sets(project_folder, project_json)
             if role in OPTIONAL_MESH_ROLES or role == site_input.MAX_VOLUME_ROLE:
                 self._update_optional_paths(project_folder, name)
             project_json.inputs_revision += 1
@@ -1220,7 +1225,106 @@ class ProjectStore:
     @staticmethod
     def _file_infos(project_json: ProjectJson, role: str) -> list[InputFileInfo]:
         triangle_counts = project_json.input_files.get(role, {})
-        return [InputFileInfo(name=file_name, triangle_count=triangle_counts[file_name]) for file_name in sorted(triangle_counts)]
+        return [ProjectStore._file_info(project_json, role, file_name) for file_name in sorted(triangle_counts)]
+
+    @staticmethod
+    def _file_info(project_json: ProjectJson, role: str, file_name: str) -> InputFileInfo:
+        """A stored file with its triangle count; a test surface file with its name as a surface set and its picks' state."""
+        count = project_json.input_files.get(role, {}).get(file_name, 0)
+        if role != test_surfaces.ROLE:
+            return InputFileInfo(name=file_name, triangle_count=count)
+        surface_set = project_json.surface_sets.get(file_name)
+        picked = surface_set is not None and surface_set.picks is not None
+        return InputFileInfo(name=file_name, triangle_count=count, shown_name=picked_surfaces.shown_name(file_name, surface_set),
+                             picked=True if picked else None, picks_lost=surface_set.picks_lost if picked and surface_set.picks_lost else None)
+
+    # ---- Surface sets: names, and sets picked on the surroundings (picked_surfaces.py) ------------------------------------------
+
+    def pick_surface_set(self, name: str, picks: list[SurfacePick], set_name: str | None, replace: str | None) -> InputFileInfo:
+        """Make a surface set from *picks* on the surroundings: a new stored test surface file (picked_<n>.ply, named *set_name* or
+        "Picked n"), or the picked set *replace*, whose picks they become; the criteria and studies that use it are joined again.
+
+        ProjectError 404 without surroundings or for an unknown set, 422 when no pick lies on the surroundings, for a set that was
+        not picked, or a name another set has.
+        """
+        with self.project_lock(name):
+            project_folder = self.open(name)
+            project_json = self.read_project_json(name)
+            context = picked_surfaces.load_context(project_folder)
+            if context is None:
+                raise ProjectError("The project has no surroundings to pick surfaces on.", status_code=404)
+            mesh, lost = picked_surfaces.picked_mesh(context, picks)
+            if mesh is None:
+                raise ProjectError("None of the picks is on the surroundings.", status_code=422)
+            recorded = project_json.input_files.setdefault(test_surfaces.ROLE, {})
+            if replace is not None:
+                surface_set = project_json.surface_sets.get(replace)
+                if replace not in recorded:
+                    raise ProjectError(f"There is no surface set stored as '{replace}'.", status_code=404)
+                if surface_set is None or surface_set.picks is None:
+                    raise ProjectError("Only a set picked on the surroundings takes picks.", status_code=422)
+                file_name = replace
+                if set_name is not None:
+                    surface_set.name = picked_surfaces.checked_set_name(set_name, project_json, replace)
+            else:
+                file_name = picked_surfaces.next_picked_file_name(recorded)
+                surface_set = SurfaceSetJson(name=picked_surfaces.checked_set_name(
+                    set_name if set_name is not None else picked_surfaces.next_picked_name(project_json), project_json, None))
+            surface_set.picks, surface_set.picks_lost = list(picks), lost
+            path = test_surfaces.stored_path(project_folder, file_name)
+            picked_surfaces.write_set_file(path, mesh)
+            recorded[file_name] = len(mesh.faces)
+            stored_files.record_stored_file(project_json, test_surfaces.ROLE, file_name, path)
+            project_json.surface_sets[file_name] = surface_set
+            if replace is not None:
+                stored_files.join_test_surfaces_again(project_folder, project_json, [file_name])
+            self.write_project_json(name, project_json)
+            return self._file_info(project_json, test_surfaces.ROLE, file_name)
+
+    def rename_surface_set(self, name: str, file_name: str, set_name: str) -> InputFileInfo:
+        """Show the stored test surface file *file_name* by *set_name*; the file keeps its stored name. 404 for an unknown file, 422
+        for an empty name or one another set has."""
+        with self.project_lock(name):
+            project_json = self.read_project_json(name)
+            if file_name not in project_json.input_files.get(test_surfaces.ROLE, {}):
+                raise ProjectError(f"There is no surface set stored as '{file_name}'.", status_code=404)
+            surface_set = project_json.surface_sets.setdefault(file_name, SurfaceSetJson())
+            surface_set.name = picked_surfaces.checked_set_name(set_name, project_json, file_name)
+            self.write_project_json(name, project_json)
+            return self._file_info(project_json, test_surfaces.ROLE, file_name)
+
+    def surface_set_picks(self, name: str, file_name: str) -> list[SurfacePick]:
+        """The picks of a picked set, for Edit picks; 404 for an unknown file, 422 for a set that was not picked."""
+        project_json = self.read_project_json(name)
+        if file_name not in project_json.input_files.get(test_surfaces.ROLE, {}):
+            raise ProjectError(f"There is no surface set stored as '{file_name}'.", status_code=404)
+        surface_set = project_json.surface_sets.get(file_name)
+        if surface_set is None or surface_set.picks is None:
+            raise ProjectError("This surface set was not picked on the surroundings.", status_code=422)
+        return surface_set.picks
+
+    @staticmethod
+    def rebuild_picked_sets(project_folder: Path, project_json: ProjectJson) -> list[str]:
+        """Build each picked set again from its picks on the surroundings as they are now, and join again the criteria and studies
+        that use one that changed; the files that changed. A set none of whose picks finds a face keeps its file and counts them
+        all as lost."""
+        picked = {file_name: surface_set for file_name, surface_set in project_json.surface_sets.items()
+                  if surface_set.picks and file_name in project_json.input_files.get(test_surfaces.ROLE, {})}
+        if not picked:
+            return []
+        context = picked_surfaces.load_context(project_folder)
+        changed = []
+        for file_name, surface_set in picked.items():
+            mesh, lost = (None, len(surface_set.picks)) if context is None else picked_surfaces.picked_mesh(context, surface_set.picks)
+            surface_set.picks_lost = lost
+            if mesh is None:
+                continue
+            path = test_surfaces.stored_path(project_folder, file_name)
+            picked_surfaces.write_set_file(path, mesh)
+            project_json.input_files[test_surfaces.ROLE][file_name] = len(mesh.faces)
+            stored_files.record_stored_file(project_json, test_surfaces.ROLE, file_name, path)
+            changed.append(file_name)
+        return stored_files.join_test_surfaces_again(project_folder, project_json, changed) if changed else []
 
     def _reply(self, name: str, role: str, project_json: ProjectJson) -> InputFilesReply:
         return InputFilesReply(
