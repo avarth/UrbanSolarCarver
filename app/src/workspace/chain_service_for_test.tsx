@@ -42,6 +42,8 @@ export class ChainService extends FakeService {
   readonly settingsRefusedWith: Record<string, number> = {};
   /** While set, a PATCH criteria/{id} answers once the promise resolves. */
   patchesAnswerWhen: Promise<void> | null = null;
+  /** POST runs answers once this resolves; null: at once. */
+  runsAnswerWhen: Promise<void> | null = null;
   /** The stages a run executes for each criterion (POST runs replies them as criterion_stages); null: FakeService answers. */
   runCriterionStages: Record<string, string[]> | null = null;
   /** The status and body a request to run is refused with; null: it starts. */
@@ -82,6 +84,7 @@ export class ChainService extends FakeService {
     }
     if (method === "POST" && path === "/runs" && (this.runRefusal !== null || this.runCriterionStages !== null)) {
       this.requests.push(`${method} ${fullPath}`);
+      await holdReply(this.runsAnswerWhen);
       if (this.runRefusal !== null) return json<ErrorDetailReply | MissingInputsReply | ConfigErrorReply>(this.runRefusal.body, this.runRefusal.status);
       const { produce } = JSON.parse(String(init!.body)) as { produce: string[] };
       this.runsStarted.push(produce);

@@ -299,6 +299,10 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   // shown, else straight to it (saveToCriterion); a value of a mode the criterion no longer has, or of a criterion gone, is dropped.
   // Made at the first threshold change, not during a render, as its runs read the latest render's context (*latest*).
   const thresholdQueue = useRef<ThresholdUpdateQueue<ThresholdValue> | null>(null);
+  // A change is on its way to a carving run (saved, then the run asked for): the view says Updating from the change on, not Out of
+  // date for the moment before the run starts, and nothing offers Update carving meanwhile.
+  const [carvingUpdatePending, setCarvingUpdatePending] = useState(false);
+  const queueEnded = () => setCarvingUpdatePending(false);
   const newThresholdQueue = () => createThresholdUpdateQueue<ThresholdValue>(async ({ values, mode }, isSuperseded, criterionId) => {
     const now = latest.current.context;
     if (thresholdControlOf(mode) === null) return false;
@@ -316,9 +320,10 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     // The service thresholds again from the first criterion whose carving is not current, this one, and the criteria after it.
     const runOutcome = await now.runs.start(project, CARVING_STAGES, "carving_update", { isSuperseded, chainOrder: latest.current.context.chainOrder });
     return runOutcome !== "up_to_date" && runOutcome !== "not_started";
-  }, () => latest.current.showResultsTheServiceHolds(CARVING_STAGES));
+  }, () => latest.current.showResultsTheServiceHolds(CARVING_STAGES), queueEnded);
   const submitThreshold = (values: Record<string, unknown>) => {
     thresholdQueue.current ??= newThresholdQueue();
+    setCarvingUpdatePending(true);
     thresholdQueue.current.submit({ values, mode: form.mode }, context.criterionId ?? "");
   };
 
@@ -404,7 +409,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   // is bringing up to date the stages that would ask for one. Its Update carving starts the same run for any criterion shown, on or
   // off, as it reads the chain's stages. The line of a finished update stays while the chain is current.
   const neededRun = runActionOf(stages);
-  const runAction = carvingUpdateRunning ? null : neededRun;
+  const runAction = carvingUpdateRunning || carvingUpdatePending ? null : neededRun;
   const carvingUpdatedNote = neededRun === null && record !== null && !(record.isSuperseded?.() ?? false)
     ? carvingUpdatedText(criteriaCarvedBy(record.state), context.criterionNames) : null;
   const runTheNeededStages = () => void (runAction === "carving" ? startAfterSaving(CARVING_STAGES, "carving_update") : startAfterSaving(ANALYSIS_STAGES, "carving_run_analysis"));
@@ -467,7 +472,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
                                   ...(Object.keys(unreadableNotes) as LayerName[]),
                                   ...(context.carvedByCriterionWanted === true && viewerResults.carvedByCriterion === null ? ["carved_by_criterion" as const] : [])])],
       missingLayerNotes: unreadableNotes,
-      runProgress: running ? runProgressShare(record.state) : null,
+      runProgress: running ? runProgressShare(record.state) : carvingUpdatePending ? 0 : null,
       overlayContent: runReportOpen
         ? <RunReportPanel onClose={() => setRunReportOpen(false)} />
         : null,

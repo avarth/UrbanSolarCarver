@@ -90,3 +90,21 @@ test("when the last value ends without a run, the run before it is no longer sup
   expect(runs[0].isSuperseded()).toBe(false);
   expect(queue.busy()).toBe(false);
 });
+
+test("onIdle is called once the last value is applied and none waits, not between values", async () => {
+  const releases: (() => void)[] = [];
+  const onIdle = vi.fn();
+  const queue = createThresholdUpdateQueue<number>(() => new Promise<boolean>((resolve) => { releases.push(() => resolve(true)); }), () => {}, onIdle);
+  queue.submit(1);
+  queue.submit(2);                     // waits behind 1
+  releases.shift()!();
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(onIdle).not.toHaveBeenCalled();      // 2 is being applied now
+  expect(queue.busy()).toBe(true);
+  releases.shift()!();
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(onIdle).toHaveBeenCalledOnce();
+  expect(queue.busy()).toBe(false);
+});

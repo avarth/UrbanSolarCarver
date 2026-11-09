@@ -23,10 +23,11 @@ interface Submission<Value> {
  * still runs. *isSuperseded* tells, at any time, whether a newer value of the same key is waiting or being applied: the user has
  * left this value, so the results of its run are not the ones to show, and the newer value's run brings them.
  * *onLastValueEndedWithoutRun* is called when the last value submitted ended without a run: no newer run follows any more,
- * so the run before it is not superseded now, and the results the service holds are the ones to show.
+ * so the run before it is not superseded now, and the results the service holds are the ones to show. *onIdle*, when given, is called
+ * each time the last value has been applied and no value waits.
  */
 export function createThresholdUpdateQueue<Value = number>(applyAndRun: (value: Value, isSuperseded: () => boolean, key: string) => Promise<boolean>,
-                                                          onLastValueEndedWithoutRun: () => void): ThresholdUpdateQueue<Value> {
+                                                          onLastValueEndedWithoutRun: () => void, onIdle?: () => void): ThresholdUpdateQueue<Value> {
   let applying: Submission<Value> | null = null;
   const waiting = new Map<string, Submission<Value>>();      // by key, in the order each key first waited
 
@@ -49,8 +50,9 @@ export function createThresholdUpdateQueue<Value = number>(applyAndRun: (value: 
     if (next !== undefined) {
       waiting.delete(next.key);
       void run(next);
-    } else if (!runStarted) {
-      onLastValueEndedWithoutRun();
+    } else {
+      if (!runStarted) onLastValueEndedWithoutRun();
+      onIdle?.();
     }
   };
 

@@ -417,6 +417,24 @@ test("in Carve the Out of date stamp offers Update carving when only the carving
   expect(stampButton()).toBeNull();                                  // nothing offered while the run goes
 });
 
+test("with the carving updating itself, a change shows Updating at once: no Out of date stamp or Update carving before its run starts", async () => {
+  await openChain([FACADES], { 1: CURRENT }, withScorePoints);
+  chainService.runCriterionStages = { 1: ["thresholding"] };
+  let answerRun = () => {};
+  chainService.runsAnswerWhen = new Promise((resolve) => { answerRun = resolve; });
+  chainService.criterionStages["1"] = THRESHOLD_OUT_OF_DATE;     // what the stage status says once the change is saved
+  typeAndLeave(thresholdField(), "1");
+  await waitForTheSave();
+  await settle();
+  expect(chainService.requests).toContain("POST /runs");          // asked for, not answered yet
+  expect(viewStamp()?.textContent ?? "").not.toContain("Out of date");
+  expect(stampButton()).toBeNull();
+  expect(buttonIn(pinnedBar(), "Update carving")).toBeUndefined();
+  await act(async () => answerRun());
+  await settle();
+  expect(chainService.runsStarted).toEqual([["thresholding"]]);
+});
+
 test("in Carve the Out of date stamp offers Run analysis when the analysis is out of date, and starts it", async () => {
   await openChain([FACADES], { 1: OUT_OF_DATE }, withScorePoints);
   expect(stampButton()!.textContent).toBe("Run analysis");
