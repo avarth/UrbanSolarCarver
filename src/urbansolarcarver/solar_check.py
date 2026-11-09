@@ -44,7 +44,7 @@ from typing import TYPE_CHECKING, Dict, NamedTuple, Optional, Union
 
 import numpy as np
 
-from .check_files import POINTS_FILE, SKY_FILE, SUMMARY_FILE, VALUES_FILE, file_fingerprint, run_geometry_files
+from .check_files import EXACT_SURFACE_TOLERANCE, POINTS_FILE, SKY_FILE, SUMMARY_FILE, VALUES_FILE, file_fingerprint, run_geometry_files
 from .check_settings import CHECK_METRICS, CheckSettings, settings_digest
 from .compute_device import resolve_compute_device, warp_device_name
 from .run_context import active_context, report_issue, report_progress
@@ -56,9 +56,6 @@ if TYPE_CHECKING:
 BASELINE = "max_volume"
 # The column traced with none of the geometries (the blocking meshes still block).
 OPEN_VARIANT = "open"
-# The surface tolerance of drawn geometry (maximum volume, the blocking meshes), in meters: test surfaces drawn
-# on it within this distance count as on its surface.
-EXACT_SURFACE_TOLERANCE = 0.05
 # The most test points a check samples: more would not fit the memory of the traced values (P points by D directions).
 MAX_CHECK_POINTS = 2_000_000
 # Rays per kernel launch, about: keeps every launch well under the GPU watchdog's time limit.
@@ -867,13 +864,15 @@ def simulate_study(
     out_dir,
     voxel_size: float = 1.0,
     device=None,
+    base_volume_path=None,
 ) -> SolarCheckResult:
     """Run one Simulate study: the check of its surfaces against a project's geometries, written to *out_dir*.
 
     The surfaces sampled are the test surface file (None for none) and the sources of ``settings.surfaces_from``
     (:func:`study_surfaces`: the context, the terrain, the ground around the maximum volume); the summary lists those
     sources under ``surfaces_from``; *ground_disc* (centre x, centre y, radius) is the ground's disc.  The columns are "open"
-    and the geometry of ``settings.geometry``: ``max_volume``, or the carved ``envelope`` or ``massing`` of *run_folder*
+    and the geometry of ``settings.geometry``: ``max_volume``, ``base_volume`` (*base_volume_path*, the part of the maximum volume
+    a base height keeps, design/base-height.md), or the carved ``envelope`` or ``massing`` of *run_folder*
     (:func:`run_geometries`; *voxel_size* is their surface tolerance when the manifests do not record it); "open" alone for
     ``none``.  The context and terrain files block in both columns.  The test points are sampled in the maximum volume's
     frame, its minimum corner rounded to 1 µm, as preprocessing samples
@@ -898,6 +897,11 @@ def simulate_study(
     from .errors import InputError
     from .io import load_optional_mesh
     built = run_geometries(max_volume_path, run_folder, voxel_size, only=settings.geometry)
+    if settings.geometry == "base_volume":
+        if base_volume_path is None or not Path(base_volume_path).is_file():
+            raise InputError("The study traces the base volume, but the project has no base height.")
+        from .io import load_mesh
+        built.append(CheckGeometry("base_volume", "Base volume", load_mesh(str(base_volume_path)), path=str(base_volume_path)))
     max_volume = built[0]
     geometries = [geometry for geometry in built if geometry.name == settings.geometry]
     if settings.geometry in ("envelope", "massing") and not geometries:

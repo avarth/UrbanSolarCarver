@@ -267,6 +267,23 @@ test("a study accounts for one geometry, waits for one Carve has not built, and 
   expect([...studyPopover()!.querySelectorAll(".study-subtitle")].map((title) => title.textContent)).toEqual(["Simulate", "Test surface files"]);
 });
 
+test("the base volume is a geometry to account for only while the project has a base height", async () => {
+  await openSimulate(undefined, (service) => {
+    service.heights = { max: { for_all_sites: false, value: null }, base: { for_all_sites: true, value: 8 } };
+    service.studies = [study("1", "sky_view", ["facades.obj"], "current")];
+  });
+  await openStudySettings("Sky view factor");
+  expect([...accountForSelect().options].map((option) => option.textContent)).toContain("Base volume");
+  await chooseAccountFor("base_volume");
+  expect(simulateService.studyPatches.at(-1)).toEqual({ id: "1", body: { values: { geometry: "base_volume" } } });
+});
+
+test("without a base height the base volume is not offered", async () => {
+  await openSimulate(undefined, (service) => { service.studies = [study("1", "sky_view", ["facades.obj"], "current")]; });
+  await openStudySettings("Sky view factor");
+  expect([...accountForSelect().options].map((option) => option.textContent)).not.toContain("Base volume");
+});
+
 test("a study's spacing follows Carve until typed, and Follow Carve takes it back", async () => {
   await openSimulate(undefined, (service) => { service.studies = [study("1", "sky_view", ["facades.obj"], "current")]; });
   await openStudySettings("Sky view factor");

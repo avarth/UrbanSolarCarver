@@ -19,6 +19,9 @@ SUMMARY_FILE = "check_summary.json"
 SKY_FILE = "check_sky.json"
 MANIFEST_FILE = "manifest.json"
 # The geometries a run builds: name, label, and the stage whose manifest names the mesh.
+# The surface tolerance of drawn geometry (maximum volume, base volume, the blocking meshes), in meters: test surfaces drawn
+# on it within this distance count as on its surface (solar_check; the service records it for a drawn geometry it hands over).
+EXACT_SURFACE_TOLERANCE = 0.05
 RUN_GEOMETRY_STAGES = (("envelope", "Carved envelope", "exporting"), ("massing", "Building massing", "massing"))
 
 

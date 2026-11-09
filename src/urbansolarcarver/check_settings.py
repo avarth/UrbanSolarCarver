@@ -140,8 +140,9 @@ class CheckSettings(BaseModel):
     surfaces_from: list[Literal["context", "terrain", "ground"]] = Field(
         default_factory=list, description="Also sample the context, the terrain, or a flat ground disc around the site")
     # Simulate: what stands on the plot in a study (solar_check.simulate_study), and whether its faces are sampled too.
-    geometry: Literal["none", "max_volume", "envelope", "massing"] = Field(
-        "max_volume", description="What stands on the plot and blocks: nothing, the maximum volume, the envelope or the massing")
+    geometry: Literal["none", "max_volume", "base_volume", "envelope", "massing"] = Field(
+        "max_volume", description="What stands on the plot and blocks: nothing, the maximum volume, the base volume (the part kept "
+                                  "below the base heights), the envelope or the massing")
     sample_geometry: bool = Field(False, description="Also sample the faces of the geometry that stands (not for none)")
     quick: bool = Field(False, description="sun_hours: sample the sun on every n-th day, at most about 240 positions "
                                            "(solar_check.QUICK_SUN_POSITIONS), each day counting for the days it stands for")

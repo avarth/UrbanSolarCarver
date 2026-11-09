@@ -344,7 +344,7 @@ export function ViewerPane({ maxVolume, baseVolume = null, testSurfaces, onTestS
   // score points) only while it is shown, and dropped when it is hidden again.
   // With a base volume (design/base-height.md) it is shown where the maximum volume is, and the maximum volume, then dotted edges, starts
   // hidden where it would be the solid
-  const shownAtFirst = (name: LayerName) => (name === "base_volume" ? shownByDefault.includes("max_volume")
+  const shownAtFirst = (name: LayerName) => (name === "base_volume" ? shownByDefault.includes("max_volume") || shownByDefault.includes("base_volume")
     : name === "max_volume" && hasBaseVolume && maxVolumeAppearance === "solid" ? false : shownByDefault.includes(name));
   const isVisible = (name: LayerName) => visibleByChoice[name]
     ?? (name === "inspect_surfaces" || (shownAtFirst(name) && !(name === "sky_dome" && skyDomeChoiceRemembered && skyDomeHidden)));

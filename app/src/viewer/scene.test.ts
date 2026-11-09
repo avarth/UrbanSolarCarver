@@ -3,7 +3,7 @@
 import * as THREE from "three";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { addStyleSheetForTest } from "../viewer_overlays/render_for_test";
-import { cameraOrientation, describeView, metresPerPixelAt, nextGroundAid, shiftPicture, ViewerScene } from "./scene";
+import { cameraOrientation, describeView, metresPerPixelAt, nextGroundAid, panAsPictureShift, shiftPicture, ViewerScene } from "./scene";
 
 vi.mock("three", async (importOriginal) => {
   const three = await importOriginal<typeof import("three")>();
@@ -323,4 +323,33 @@ test("a compass ring that moves after the first framing (the test surfaces load 
   scene.setSceneHemisphere({ centre: [40, 30, 0], radius: 60 });          // a test surface far out widens the ring
   expect(controls.target.distanceTo(new THREE.Vector3(40, 30, 10))).toBeLessThan(1e-9);
   expect(camera.position.clone().sub(controls.target).distanceTo(offset)).toBeLessThan(1e-9);
+});
+
+test("a pan of the controls is turned into a shift of the picture: the orbit point stays, what it looks at moves on the screen", () => {
+  const { scene } = viewerWithACube();
+  scene.frameAll(true);
+  const controls = (scene as unknown as { controls: { target: THREE.Vector3; object: THREE.PerspectiveCamera; dispatchEvent(event: { type: string }): void } }).controls;
+  const orbitPoint = controls.target.clone();
+  const before = scene.toScreen([0, 0, 0])!;
+  const camera = controls.object;
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+  controls.dispatchEvent({ type: "start" });
+  // What OrbitControls does on a drag to the right: the camera and its target move left
+  const moved = right.clone().multiplyScalar(-2);
+  controls.target.add(moved);
+  camera.position.add(moved);
+  controls.dispatchEvent({ type: "change" });
+  controls.dispatchEvent({ type: "end" });
+  expect(controls.target.distanceTo(orbitPoint)).toBeLessThan(1e-9);
+  const after = scene.toScreen([0, 0, 0])!;
+  expect(after[0] - before[0]).toBeGreaterThan(5);          // the picture moved right, with the drag
+  expect(Math.abs(after[1] - before[1])).toBeLessThan(1e-6);
+  scene.frameAll(true);                                      // a framing takes the pan back
+  expect(scene.toScreen([0, 0, 0])![0]).toBeCloseTo(before[0], 6);
+});
+
+test("a pan's movement as pixels: right of the screen for a move left, down for a move up", () => {
+  const right = new THREE.Vector3(1, 0, 0), up = new THREE.Vector3(0, 0, 1);
+  expect(panAsPictureShift(new THREE.Vector3(-2, 0, 0), right, up, 0.5)).toEqual([4, 0]);
+  expect(panAsPictureShift(new THREE.Vector3(0, 0, 1), right, up, 0.5)).toEqual([-0, 2]);
 });

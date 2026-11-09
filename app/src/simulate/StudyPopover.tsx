@@ -30,6 +30,8 @@ interface StudyPopoverProps {
   /** Carve has built the envelope, the massing: a study can account for them. */
   envelopeBuilt: boolean;
   massingBuilt: boolean;
+  /** Whether the project has a base height, whose base volume a study can stand (design/base-height.md). */
+  hasBaseVolume?: boolean;
   /** The carving's test point spacing (m), which a study follows until it has its own. */
   carvingSpacing: number;
   /** Why the study cannot be changed now (a run of the project); null when it can. */
@@ -193,16 +195,19 @@ function SwitchRow({ label, hint, checked, disabled, onChange }: { label: string
  *  switches for what it simulates: that geometry's faces, the context (waiting for the project's surroundings files), the terrain when the
  *  project has one or the ground when it has none, then each test surface file the project stores. A source or file the study samples is
  *  shown and can be turned off even when its file has gone. */
-function AccountAndSimulate({ settings, hasSurroundings, hasTerrain, envelopeBuilt, massingBuilt, fileChoices, chosenFiles, disabled, onChange,
+function AccountAndSimulate({ settings, hasSurroundings, hasTerrain, envelopeBuilt, massingBuilt, hasBaseVolume, fileChoices, chosenFiles, disabled, onChange,
                               onToggleFile }: {
   settings: Record<string, unknown>; hasSurroundings: boolean; hasTerrain: boolean; envelopeBuilt: boolean; massingBuilt: boolean;
+  hasBaseVolume: boolean;
   fileChoices: string[]; chosenFiles: string[]; disabled: boolean; onChange: (values: Record<string, unknown>) => void;
   onToggleFile: (fileName: string, on: boolean) => void;
 }) {
   const accountId = useId();
   const stand = standOf(settings);
   const chosen = surfacesFromOf(settings);
-  const built: Record<StudyStand, boolean> = { none: true, max_volume: true, envelope: envelopeBuilt, massing: massingBuilt };
+  const built: Record<StudyStand, boolean> = { none: true, max_volume: true, base_volume: hasBaseVolume, envelope: envelopeBuilt, massing: massingBuilt };
+  // The base volume is a choice only while the project has a base height (or the study already stands it)
+  const stands = STUDY_STANDS.filter((each) => each !== "base_volume" || hasBaseVolume || stand === "base_volume");
   const sources = [
     { source: "context", available: hasSurroundings, reason: messages.studyNeedsSurroundingsFiles },
     ...(hasTerrain || chosen.includes("terrain") ? [{ source: "terrain", available: hasTerrain, reason: undefined }] : []),
@@ -216,7 +221,7 @@ function AccountAndSimulate({ settings, hasSurroundings, hasTerrain, envelopeBui
         <label htmlFor={accountId} title={messages.studyAccountForHint}>{messages.studyAccountFor}</label>
         <select id={accountId} className="study-account-for" value={stand} disabled={disabled}
                 onChange={(event) => onChange({ [GEOMETRY]: event.target.value })}>
-          {STUDY_STANDS.map((each) => (
+          {stands.map((each) => (
             <option key={each} value={each} disabled={!built[each] && each !== stand}>
               {built[each] || each === stand ? messages.studyStands[each] : messages.studyStandWaiting(messages.studyStands[each], messages.buildGeometryFirst[each])}
             </option>
@@ -252,7 +257,7 @@ function AccountAndSimulate({ settings, hasSurroundings, hasTerrain, envelopeBui
   );
 }
 
-export function StudyPopover({ id, study, metrics, storedFiles, hasSurroundings, hasTerrain, envelopeBuilt, massingBuilt, carvingSpacing, disabledReason,
+export function StudyPopover({ id, study, metrics, storedFiles, hasSurroundings, hasTerrain, envelopeBuilt, massingBuilt, hasBaseVolume = false, carvingSpacing, disabledReason,
                                onChange, onUseFile, onRemoveFile, onDuplicate, onDelete, onClose }: StudyPopoverProps) {
   const { entry } = study;
   const settings = entry.settings ?? {};
@@ -327,7 +332,7 @@ export function StudyPopover({ id, study, metrics, storedFiles, hasSurroundings,
       <div className="study-files" role="group" aria-labelledby={filesTitleId}>
         <p id={filesTitleId} className="study-files-title">{messages.studySurfaces}</p>
         <AccountAndSimulate settings={settings} hasSurroundings={hasSurroundings} hasTerrain={hasTerrain} envelopeBuilt={envelopeBuilt}
-                            massingBuilt={massingBuilt} fileChoices={fileChoices} chosenFiles={files} disabled={disabled}
+                            massingBuilt={massingBuilt} hasBaseVolume={hasBaseVolume} fileChoices={fileChoices} chosenFiles={files} disabled={disabled}
                             onChange={(values) => change({ values })}
                             onToggleFile={(fileName, on) => void send(() => (on ? onUseFile(fileName) : onRemoveFile(fileName)))} />
       </div>

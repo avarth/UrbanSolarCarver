@@ -30,6 +30,8 @@ interface SimulateViewProps {
   /** Carve has built the envelope, the massing: a study can account for them. */
   envelopeBuilt: boolean;
   massingBuilt: boolean;
+  /** Whether the project has a base height: a study can then stand its base volume. */
+  hasBaseVolume?: boolean;
   /** The carving's test point spacing (m), which a study follows until it has its own. */
   carvingSpacing: number;
   runs: RunLoop;
@@ -43,7 +45,7 @@ interface SimulateViewProps {
   notice?: ReactNode;
 }
 
-export function SimulateView({ studies, criteria, storedTestSurfaces, hasSurroundings, hasTerrain, envelopeBuilt, massingBuilt, carvingSpacing, runs,
+export function SimulateView({ studies, criteria, storedTestSurfaces, hasSurroundings, hasTerrain, envelopeBuilt, massingBuilt, hasBaseVolume = false, carvingSpacing, runs,
                                onStoredFilesChange, studyView, notice }: SimulateViewProps) {
   const { project, onServiceProblem } = useProjectSession();
   const [popoverStudyId, setPopoverStudyId] = useState<string | null>(null);
@@ -84,7 +86,7 @@ export function SimulateView({ studies, criteria, storedTestSurfaces, hasSurroun
   const shown = studies.studies.find((study) => study.entry.id === popoverStudyId) ?? null;
   const popover = shown === null ? null : (
     <StudyPopover key={shown.entry.id} id={popoverId} study={shown} metrics={studies.metrics} storedFiles={storedTestSurfaces}
-                  hasSurroundings={hasSurroundings} hasTerrain={hasTerrain} envelopeBuilt={envelopeBuilt} massingBuilt={massingBuilt}
+                  hasSurroundings={hasSurroundings} hasTerrain={hasTerrain} envelopeBuilt={envelopeBuilt} massingBuilt={massingBuilt} hasBaseVolume={hasBaseVolume}
                   carvingSpacing={carvingSpacing} disabledReason={editDisabledReason} onChange={(change) => attempt(() => studies.update(shown.entry.id, change))}
                   onUseFile={(fileName) => attempt(() => studies.useFile(shown.entry.id, fileName))}
                   onRemoveFile={(fileName) => attempt(async () => {

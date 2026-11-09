@@ -436,6 +436,21 @@ def test_a_study_on_a_geometry_carve_has_not_built_is_refused(tmp_path, geometry
     assert not (tmp_path / "study").exists()
 
 
+def test_a_study_on_the_base_volume_traces_it_and_needs_its_file(tmp_path):
+    from urbansolarcarver.errors import InputError
+    from urbansolarcarver.io import save_mesh
+    from urbansolarcarver.solar_check import simulate_study
+    surface, max_volume, _context = _study_files(tmp_path)
+    settings = _settings("sky_view", sample_spacing=2.0, rays_per_patch=1, geometry="base_volume")
+    with pytest.raises(InputError, match="base height"):
+        simulate_study(surface, max_volume, settings, out_dir=tmp_path / "refused", device="cpu")
+    save_mesh(box_between([0, 0, 0], [10, 10, 3]), str(tmp_path / "base_volume.ply"))
+    result = simulate_study(surface, max_volume, settings, out_dir=tmp_path / "study", device="cpu",
+                            base_volume_path=str(tmp_path / "base_volume.ply"))
+    assert list(result.values) == ["open", "base_volume"]
+    assert "base_volume" in result.summary["fingerprints"]["geometries"]
+
+
 def test_the_geometry_of_a_study_is_one_of_four_and_defaults_to_the_maximum_volume():
     from pydantic import ValidationError
     assert _settings("sky_view").geometry == "max_volume" and _settings("sky_view").sample_geometry is False

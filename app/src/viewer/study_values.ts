@@ -5,10 +5,10 @@ import type { StudyPalette } from "./study_palettes";
 import type { StudyValues } from "./study_values_decoder";
 
 /** The geometries a study can stand on the plot; the names of the service's columns. */
-export type StudyGeometry = "max_volume" | "envelope" | "massing";
+export type StudyGeometry = "max_volume" | "base_volume" | "envelope" | "massing";
 /** What a study stands on the plot (its setting "geometry"): nothing, or one of the geometries. */
 export type StudyStand = "none" | StudyGeometry;
-export const STUDY_STANDS: readonly StudyStand[] = ["none", "max_volume", "envelope", "massing"];
+export const STUDY_STANDS: readonly StudyStand[] = ["none", "max_volume", "base_volume", "envelope", "massing"];
 
 /** The column of the values without any geometry: the no-build case, and the column a study on nothing shows. */
 export const OPEN_COLUMN = "open";

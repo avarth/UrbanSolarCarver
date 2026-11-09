@@ -164,6 +164,21 @@ def test_a_study_on_a_geometry_carve_has_not_built_waits_for_it_and_the_others_s
     assert [request.out_dir.rsplit("\\", 1)[-1].rsplit("/", 1)[-1] for request in engine.requests] == [on_max_volume]
 
 
+def test_a_study_on_the_base_volume_waits_for_a_base_height_and_hands_its_file_to_the_engine(service):
+    client, worker, engine = service
+    store = worker.store
+    study = add_study(store, "p", geometry="base_volume")
+    assert state_of(store, "p", study) == ("refused", "Set a base height in Settings")
+    reply = client.put("/api/projects/p/heights", json={"max": {"for_all_sites": False}, "base": {"for_all_sites": True, "value": 2}})
+    assert reply.status_code == 200, reply.text
+    assert state_of(store, "p", study) == ("not_run", None)
+    assert simulate_and_wait(worker)[-1]["type"] == "run_finished"
+    assert engine.requests[-1].base_volume_path.replace("\\", "/").endswith("inputs/joined/base_volume.ply")
+    assert state_of(store, "p", study) == ("current", None)
+    client.put("/api/projects/p/heights", json={"max": {"for_all_sites": False}, "base": {"for_all_sites": True, "value": 3}})
+    assert state_of(store, "p", study) == ("out_of_date", None)
+
+
 def test_a_study_of_its_geometrys_faces_alone_runs_and_counts_them(service):
     _client, worker, engine = service
     store = worker.store

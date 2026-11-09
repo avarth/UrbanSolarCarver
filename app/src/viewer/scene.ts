@@ -84,12 +84,20 @@ export function metresPerPixelAt(distanceMetres: number, fieldOfViewDegrees: num
 }
 
 /**
- * Shifts the picture *shiftPixels* to the right without moving the camera, so what the camera looks at, which it orbits about, sits
- * in the middle of the part of the view a floating panel leaves free.
+ * Shifts the picture *shiftPixels* to the right (and *downPixels* down) without moving the camera, so what the camera looks at, which
+ * it orbits about, sits in the middle of the part of the view a floating panel leaves free, moved by what the user panned.
  */
-export function shiftPicture(camera: THREE.PerspectiveCamera, shiftPixels: number, widthPixels: number, heightPixels: number): void {
-  if (shiftPixels > 0) camera.setViewOffset(widthPixels, heightPixels, -shiftPixels, 0, widthPixels, heightPixels);
+export function shiftPicture(camera: THREE.PerspectiveCamera, shiftPixels: number, widthPixels: number, heightPixels: number, downPixels = 0): void {
+  if (shiftPixels !== 0 || downPixels !== 0) camera.setViewOffset(widthPixels, heightPixels, -shiftPixels, -downPixels, widthPixels, heightPixels);
   else camera.clearViewOffset();
+}
+
+/**
+ * A pan of the orbit controls, which moved the camera and its target by *moved* (metres), as the picture shift that shows the same:
+ * [pixels right, pixels down], for a camera whose screen right and up are *right* and *up* and *metresPerPixel* at the target.
+ */
+export function panAsPictureShift(moved: THREE.Vector3, right: THREE.Vector3, up: THREE.Vector3, metresPerPixel: number): [number, number] {
+  return [-moved.dot(right) / metresPerPixel, moved.dot(up) / metresPerPixel];
 }
 
 /** The view's accessible name (UX 12): the layers on screen, with their counts and whether they are out of date. */
@@ -126,6 +134,7 @@ interface CameraMove {
   to: THREE.Spherical;
   fromShift: number;
   toShift: number;
+  fromPan: THREE.Vector2;
 }
 
 function easeInOut(t: number): number {
@@ -160,6 +169,10 @@ export class ViewerScene {
   private theme: ViewportTheme = "light";
   private northDegrees = 0;
   private pictureShift = 0;       // pixels to the right, set when framing: half of what a floating panel covers
+  // What the user panned, in pixels right and down: a pan shifts the picture and leaves the orbit point (the compass ring's centre)
+  // where it is (user, 2026-11-08). A framing brings it back to 0.
+  private readonly userPan = new THREE.Vector2();
+  private panAnchor: THREE.Vector3 | null = null;     // the orbit point when the user took hold of the view
   private skyDomeOpacity = DEFAULT_SKY_DOME_OPACITY;
   private envelopeSeeThrough = false;
   private groundAid: GroundAid = "grid";
@@ -194,8 +207,15 @@ export class ViewerScene {
     this.camera = new THREE.PerspectiveCamera(FIELD_OF_VIEW_DEGREES, 1, 0.1, 10_000);
     this.camera.up.set(0, 0, 1);
     this.controls = new OrbitControls(this.camera, canvas);
-    this.controls.addEventListener("change", () => this.cameraChanged());
-    this.controls.addEventListener("start", () => { this.cameraMove = null; });     // the user takes over from a camera move
+    this.controls.addEventListener("change", () => {
+      this.panToPicture();
+      this.cameraChanged();
+    });
+    this.controls.addEventListener("start", () => {                  // the user takes over from a camera move
+      this.cameraMove = null;
+      this.panAnchor = this.controls.target.clone();
+    });
+    this.controls.addEventListener("end", () => { this.panAnchor = null; });
 
     const skyLight = new THREE.HemisphereLight(colourToken("light-sky"), colourToken("light-ground"), 2.2);
     skyLight.position.set(0, 0, 1);
@@ -545,6 +565,7 @@ export class ViewerScene {
     const shift = this.insetPixels() / 2;
     if (instant || prefersReducedMotion()) {
       this.cameraMove = null;
+      this.userPan.set(0, 0);
       this.setPictureShift(shift);
       this.placeCamera(target, offset);
       return;
@@ -557,13 +578,33 @@ export class ViewerScene {
       to: sphericalAboutZ(offset),
       fromShift: this.pictureShift,
       toShift: shift,
+      fromPan: this.userPan.clone(),
     };
     this.requestRender();
   }
 
   private setPictureShift(shift: number): void {
     this.pictureShift = shift;
-    shiftPicture(this.camera, shift, Math.max(1, this.container.clientWidth), Math.max(1, this.container.clientHeight));
+    shiftPicture(this.camera, shift + this.userPan.x, Math.max(1, this.container.clientWidth), Math.max(1, this.container.clientHeight), this.userPan.y);
+  }
+
+  /**
+   * A pan of the controls moves their target, the point the camera orbits about. It is turned into a shift of the picture, and the
+   * camera and the target go back, so the orbit stays about the compass ring's centre however the view is panned.
+   */
+  private panToPicture(): void {
+    if (this.panAnchor === null) return;
+    const moved = this.controls.target.clone().sub(this.panAnchor);
+    if (moved.lengthSq() < 1e-18) return;
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion);
+    const metresPerPixel = metresPerPixelAt(this.camera.position.distanceTo(this.controls.target), this.camera.fov, Math.max(1, this.container.clientHeight));
+    const [rightPixels, downPixels] = panAsPictureShift(moved, right, up, metresPerPixel);
+    this.userPan.x += rightPixels;
+    this.userPan.y += downPixels;
+    this.controls.target.sub(moved);
+    this.camera.position.sub(moved);
+    this.setPictureShift(this.pictureShift);
   }
 
   private placeCamera(target: THREE.Vector3, offset: THREE.Vector3): void {
@@ -585,6 +626,7 @@ export class ViewerScene {
       move.from.theta + turn * eased,
     );
     if (t >= 1) this.cameraMove = null;
+    this.userPan.copy(move.fromPan).multiplyScalar(1 - eased);         // a framing takes the pan back to the middle
     this.setPictureShift(move.fromShift + (move.toShift - move.fromShift) * eased);
     this.placeCamera(move.fromTarget.clone().lerp(move.toTarget, eased), offsetOf(spherical));
   }

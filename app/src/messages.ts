@@ -121,10 +121,10 @@ export const messages = {
   designRunInProgress: "A carving run is in progress",
   simulationInProgress: "A simulation is in progress",
   // What a study stands on the plot (its "geometry" setting), and whether it samples the faces of it.
-  studyStands: { none: "Nothing", max_volume: "Max volume", envelope: "Envelope", massing: "Massing" } as Record<string, string>,
+  studyStands: { none: "Nothing", max_volume: "Max volume", base_volume: "Base volume", envelope: "Envelope", massing: "Massing" } as Record<string, string>,
   studyAccountFor: "Account for",
   studyAccountForHint: "What stands on the plot and blocks; the context and the terrain always block",
-  buildGeometryFirst: { envelope: "Build the envelope in Carve", massing: "Build the massing in Carve" } as Record<string, string>,
+  buildGeometryFirst: { envelope: "Build the envelope in Carve", massing: "Build the massing in Carve", base_volume: "Set a base height in Settings" } as Record<string, string>,
   studySimulate: "Simulate",
   studySimulateGeometryHint: "Test points on its facades and roofs: how much the building itself gets",
   nothingToSimulate: "Nothing stands on the plot",
@@ -135,7 +135,7 @@ export const messages = {
   studyNoTestSurfaceFiles: "The project has no test surface files yet: add them to a criterion in Carve.",
   studyStandWaiting: (stand: string, reason: string) => `${stand} (${String(reason).replace(/^./, (first) => first.toLowerCase())})`,
   // In the line of a study's row: "the massing, facades.obj, the context".
-  studyStandInLine: { max_volume: "the max volume", envelope: "the envelope", massing: "the massing" } as Record<string, string>,
+  studyStandInLine: { max_volume: "the max volume", base_volume: "the base volume", envelope: "the envelope", massing: "the massing" } as Record<string, string>,
   studySpacing: "Spacing (m)",
   studySpacingFromCarve: (spacing: string) => `${spacing}, from Carve`,
   studySpacingHint: "Test points every this many meters. Follows the carving's spacing until you type one",
@@ -159,7 +159,7 @@ export const messages = {
   resultAtTarget: (value: string) => `${value} at or above the target`,
   // The result card's blocks: the study's other surfaces, and the faces of its geometry, whole and by the way they face.
   resultSurroundings: "Study surfaces",
-  resultBuilding: { max_volume: "The max volume", envelope: "The envelope", massing: "The massing" } as Record<string, string>,
+  resultBuilding: { max_volume: "The max volume", base_volume: "The base volume", envelope: "The envelope", massing: "The massing" } as Record<string, string>,
   resultByFacing: "By facing",
   resultCardMinimise: "Minimise the result",
   resultCardShow: "Show the result",

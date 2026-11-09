@@ -20,6 +20,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
   permissible height. In Settings › Heights each height is Global or set per site (a new project starts Global, base 0 m, max 50 m); a mesh maximum volume takes a
   base height as one level above its lowest point. A criterion's card gives the volume kept and the volume built above it. A
   base height change re-runs the carving only.
+- Simulate: a study can account for the **Base volume** while the project has a base height (`CheckSettings.geometry`
+  `base_volume`, the request's `base_volume_path`).
+- 3D view: panning moves the picture and no longer the orbit point, which stays at the compass ring's centre.
 - Engine: `kept_volume_path`, a shared setting read by thresholding: the voxels inside the mesh are kept, and the threshold
   and `carve_fraction` act on the other voxels. Service: `PUT /projects/{name}/heights`.
 

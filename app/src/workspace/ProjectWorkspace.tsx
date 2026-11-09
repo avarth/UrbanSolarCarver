@@ -91,6 +91,7 @@ export const LAYERS_SHOWN_IN_STEP: Record<StepName, readonly LayerName[]> = {
 const LAYERS_SHOWN_IN_SIMULATE: Record<StudyStand, readonly LayerName[]> = {
   none: ["max_volume", "context", "terrain", "study_values"],     // the maximum volume as a ghost, so the site still reads
   max_volume: ["max_volume", "context", "terrain", "study_values"],
+  base_volume: ["base_volume", "context", "terrain", "study_values"],
   envelope: ["envelope", "context", "terrain", "study_values"],
   massing: ["building_massing", "context", "terrain", "study_values"],
 };
@@ -528,7 +529,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
   const simulateView = (theme: ViewportTheme) => (
     <SimulateView studies={studies} criteria={criteria.criteria} storedTestSurfaces={files.test_surfaces} runs={runs}
                   hasSurroundings={files.context.length > 0} hasTerrain={files.terrain.length > 0}
-                  envelopeBuilt={designResults?.envelope != null} massingBuilt={designResults?.massing != null} carvingSpacing={carvingSpacing}
+                  envelopeBuilt={designResults?.envelope != null} massingBuilt={designResults?.massing != null} hasBaseVolume={baseVolume.geometry !== null} carvingSpacing={carvingSpacing}
                   onStoredFilesChange={() => { void testSurfaceCalls.reloadStoredFiles(); refreshStageStatus(); }} studyView={studyView}
                   theme={theme} notice={inputChangesNotice} />
   );

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ..check_files import POINTS_FILE, SKY_FILE, SUMMARY_FILE, VALUES_FILE, run_geometry_files
+from ..check_files import EXACT_SURFACE_TOLERANCE, POINTS_FILE, SKY_FILE, SUMMARY_FILE, VALUES_FILE, run_geometry_files
 from ..check_settings import CHECK_METRICS, CheckSettings, build_check_settings, settings_digest
 from ..engine_requests import CheckRequest
 from ..errors import ConfigError
@@ -24,6 +24,7 @@ from ..pydantic_schemas import UserConfig, resolve_grid_step
 from .api_models import SkyDome, StudyEntry, StudyState
 from .criteria import OPTIONAL_SERVICE_PATHS, SERVICE_PATHS, active_criteria
 from .projects import RUN_FOLDER, ProjectStore
+from .site_input import BASE_VOLUME_PATH
 from .stage_records import envelope_voxel_size
 from .studies import GEOMETRY, SAMPLE_GEOMETRY, SURFACES_FROM, joined_study_surfaces_path, study_folder
 
@@ -46,6 +47,8 @@ ADD_WEATHER_FILE = "Add a weather file"
 BUILD_ENVELOPE = "Build the envelope in Carve"
 BUILD_MASSING = "Build the massing in Carve"
 BUILD_GEOMETRY = {"envelope": BUILD_ENVELOPE, "massing": BUILD_MASSING}
+# A study that traces the base volume waits for a base height (design/base-height.md).
+SET_BASE_HEIGHT = "Set a base height in Settings"
 # The share of the scene's longer plan side that is the radius of the compass ring and the ground disc (app: viewer/sky_dome.ts,
 # HEMISPHERE_RADIUS_SHARE); the radius is at least the scene's height.
 SCENE_RADIUS_SHARE = 0.75
@@ -157,6 +160,8 @@ def refusal_of(store: ProjectStore, name: str, study: StudyEntry) -> str | None:
         return ADD_MAX_VOLUME
     if geometry in BUILD_GEOMETRY and not run_geometry_files(project_folder / RUN_FOLDER, only=geometry):
         return BUILD_GEOMETRY[geometry]
+    if geometry == "base_volume" and not (project_folder / BASE_VOLUME_PATH).is_file():
+        return SET_BASE_HEIGHT
     spec = CHECK_METRICS.get(study.metric)
     if spec is not None and spec.needs_epw and store.weather_file_path(name) is None:
         return ADD_WEATHER_FILE
@@ -183,7 +188,8 @@ def study_request(store: ProjectStore, name: str, study: StudyEntry, device: str
         cmd="check", test_surface_path=test_surface_path,
         out_dir=str(study_folder(project_folder, study.id)), settings=settings.model_dump(), ground_disc=ground_disc,
         max_volume_path=str(project_folder / SERVICE_PATHS["max_volume_path"]), run_folder=str(project_folder / RUN_FOLDER),
-        voxel_size=tracing_voxel_size(store, name), device=device, **optional_paths)
+        voxel_size=tracing_voxel_size(store, name), device=device,
+        base_volume_path=str(project_folder / BASE_VOLUME_PATH) if (project_folder / BASE_VOLUME_PATH).is_file() else None, **optional_paths)
 
 
 def study_state(store: ProjectStore, name: str, study: StudyEntry) -> tuple[StudyState, str | None]:
@@ -273,10 +279,15 @@ def _inputs_of_request(request: CheckRequest) -> dict:
              "context": request.context_path, "terrain": request.terrain_path}
     geometries = (run_geometry_files(request.run_folder, request.voxel_size, only=settings.geometry)
                   if settings.geometry in BUILD_GEOMETRY else [])
+    states = {geometry.name: _file_state(geometry.path) for geometry in geometries}
+    tolerances = {geometry.name: float(geometry.surface_tolerance) for geometry in geometries}
+    if settings.geometry == "base_volume" and request.base_volume_path is not None:     # recorded as the engine records it
+        states["base_volume"] = _file_state(request.base_volume_path)
+        tolerances["base_volume"] = float(EXACT_SURFACE_TOLERANCE)
     return {"settings_digest": settings_digest(settings),
             "files": {key: _file_state(paths[key]) for key in RECORDED_FILE_KEYS},
-            "geometries": {geometry.name: _file_state(geometry.path) for geometry in geometries},
-            "surface_tolerances": {geometry.name: float(geometry.surface_tolerance) for geometry in geometries},
+            "geometries": states,
+            "surface_tolerances": tolerances,
             "ground_disc": _rounded_disc(request.ground_disc)}
 
 
