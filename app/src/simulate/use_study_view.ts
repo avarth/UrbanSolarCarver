@@ -18,7 +18,7 @@ import { messages } from "../messages";
 import type { RunLoop } from "../common/run_state";
 import type { StudyPalette } from "../viewer/study_palettes";
 import { columnOf, distributionOf, FACING_GROUPS, facingGroups, highestOf, keptShareOf, OPEN_COLUMN, percentile, shareAtOrAbove, valuesAt, type ColourBy,
-  type FacingGroup, type StudyGeometry, type StudyStand, type StudyStatistics, type StudyView } from "../viewer/study_values";
+  type FacingGroup, type StudyGeometry, type StudyStand, type StudyStatistics, type StudyView, STUDY_STANDS } from "../viewer/study_values";
 import { decodeStudyValues, type StudyValues } from "../viewer/study_values_decoder";
 import type { StudiesHook } from "./use_studies";
 
@@ -100,7 +100,7 @@ const PALETTE_OF: Record<ColourBy, StudyPalette> = { value: "magma", share: "vir
 /** What a study stands on the plot, from its settings: the maximum volume until one is chosen. */
 export function standOf(settings: Record<string, unknown> | undefined): StudyStand {
   const stand = settings?.geometry;
-  return stand === "none" || stand === "envelope" || stand === "massing" ? stand : "max_volume";
+  return STUDY_STANDS.find((each) => each === stand) ?? "max_volume";
 }
 
 /** The part of the statistics that does not depend on the target, of *values* and of their no-build values *open*; null for no points. */
