@@ -76,7 +76,7 @@ def _missing_inputs_message(roles: list[str], criterion_names: dict[str, str]) -
     for role in roles:
         if role.startswith(test_surfaces_prefix):
             criterion_id = role.removeprefix(test_surfaces_prefix)
-            sentences.append(f"Add test surfaces to {criterion_names.get(criterion_id, criterion_id)}.")
+            sentences.append(f"Choose test surfaces for {criterion_names.get(criterion_id, criterion_id)}.")
     return " ".join(sentences)
 
 

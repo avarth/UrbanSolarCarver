@@ -401,11 +401,13 @@ def test_an_upload_with_the_same_name_drops_the_kept_original(store_after_a_run)
     assert project_inspection(store, "p").files[1].original_kept is False
 
 
-def test_a_discarded_file_drops_its_kept_original(store_after_a_run):
+def test_a_removed_set_drops_its_kept_original(store_after_a_run):
     store = store_after_a_run
     save_turned_surfaces(store, "p", "facades.obj", [0])
     assert _kept(store).is_file()
     store.remove_criterion_test_surface("p", "1", "facades.obj")
+    assert _kept(store).is_file()                       # the set stays in the project
+    store.delete_surface_set("p", "facades.obj")
     assert not _kept(store).exists()
 
 

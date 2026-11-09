@@ -1849,6 +1849,8 @@ export interface components {
             picked?: boolean | null;
             /** Picks Lost */
             picks_lost?: number | null;
+            /** Used By */
+            used_by?: string[] | null;
         };
         /**
          * InputFilesReply

@@ -186,10 +186,3 @@ export function orderAfterDropping(ids: readonly string[], draggedId: string, ta
   order.splice(to, 0, draggedId);
   return order;
 }
-
-/** The test surface files the other criteria use and *id* does not, each once, in the order of the cards. */
-export function filesOfOtherCriteria(criteria: CriterionEntry[], id: string): string[] {
-  const own = new Set(criteria.find((criterion) => criterion.id === id)?.test_surface_files ?? []);
-  const others = criteria.filter((criterion) => criterion.id !== id).flatMap((criterion) => criterion.test_surface_files ?? []);
-  return [...new Set(others)].filter((name) => !own.has(name));
-}

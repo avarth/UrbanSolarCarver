@@ -943,14 +943,6 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 .mode-menu-line { color: var(--colour-muted); font-size: var(--text-secondary); line-height: 1.25; }
 .mode-menu [role="menuitem"][aria-disabled="true"] .mode-tile-symbol { opacity: 0.45; }
 
-/* Use a file from another criterion, under the test surfaces box. */
-.protects { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
-.protects-reuse { display: flex; flex-direction: column; gap: var(--space-unit); }
-.protects-reuse-title { margin: 0; font-size: var(--text-secondary); font-weight: 600; }
-.protects-reuse-files { display: flex; flex-direction: column; gap: var(--space-unit); margin: 0; padding: 0; list-style: none; }
-.protects-reuse-files li { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--space-unit) * 2); }
-.protects-reuse-name { overflow-wrap: anywhere; }
-
 /* Carving (UX 5.5) -------------------------------------------------------------------------------------------------------- */
 
 .carving-step,
@@ -1180,3 +1172,13 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
   color: var(--colour-muted);
   font-size: var(--text-secondary);
 }
+
+/* A criterion's test surfaces: one switch per surface set of the project (criteria/SurfaceSetSwitches.tsx) */
+.surface-set-switches { display: flex; flex-direction: column; gap: var(--space-unit); }
+.surface-set-switches .input-box-hint { margin: 0; }
+.surface-set-note { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
+.surface-set-list { display: flex; flex-direction: column; gap: var(--space-unit); }
+.surface-set-row { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--space-unit) * 2); cursor: pointer; }
+.surface-set-label { display: flex; flex-direction: column; min-width: 0; }
+.surface-set-label .input-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.surface-set-row .setting-switch { flex: none; margin: 0; }

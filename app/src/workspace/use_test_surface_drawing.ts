@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { BufferGeometry } from "three";
 import type { CriterionEntry } from "../api_client/client";
 import type { InputGeometry } from "../steps/input_meshes";
-import { testSurfaceGroupsOf, testSurfaceOwners } from "../steps/test_surface_groups";
+import { testSurfaceGroupsOf, testSurfaceOwners, UNUSED_SETS } from "../steps/test_surface_groups";
 
 export function useTestSurfaceDrawing(criteriaList: CriterionEntry[], selected: CriterionEntry | null, testSurfacesMesh: InputGeometry, testSurfaces: BufferGeometry | null) {
   // Each criterion's test surfaces are drawn in its colour; the layers menu has a toggle for each (kept here, so a change of criterion or
@@ -18,7 +18,7 @@ export function useTestSurfaceDrawing(criteriaList: CriterionEntry[], selected: 
     return next;
   });
   // A criterion gone takes its toggle with it.
-  const hiddenOfListedCriteria = new Set([...hiddenTestSurfaceCriteria].filter((id) => criteriaList.some((entry) => entry.id === id)));
+  const hiddenOfListedCriteria = new Set([...hiddenTestSurfaceCriteria].filter((id) => id === UNUSED_SETS || criteriaList.some((entry) => entry.id === id)));
   if (hiddenOfListedCriteria.size !== hiddenTestSurfaceCriteria.size) setHiddenTestSurfaceCriteria(hiddenOfListedCriteria);
   // What the groups hold, not which criterion is selected: a selection that moves no file to another criterion draws nothing again.
   const testSurfaceDrawingKey = JSON.stringify([criteriaList.map((entry) => [entry.id, entry.name, entry.colour, entry.bypassed]),

@@ -354,13 +354,23 @@ test("a file that several criteria list is drawn once: in the selected criterion
   expect(FakeViewerScene.latest!.layers.get("test_surfaces") ?? null).toBeNull();
 });
 
-test("with one criterion the menu has a single Test surfaces entry, drawn in that criterion's colour; a stored file it does not list is not drawn", async () => {
-  await openChain([FACADES], undefined, twoFiles, ["windows.obj"]);
+test("with one criterion the menu has a single Test surfaces entry, drawn in that criterion's colour", async () => {
+  await openChain([FACADES], undefined, twoFiles);
   expect(verticesOf("1")).toBe(3);
   expect((layer("test_surfaces") as THREE.Group).children).toHaveLength(1);
   expect(colourOf("1")).toBe(hex("#4477aa"));
   const { parent, parts } = testSurfaceEntries();
   expect([parent.label, parent.checked, parts]).toEqual(["Test surfaces", true, []]);
+});
+
+test("a stored set no criterion uses is drawn too, under its own entry without a colour", async () => {
+  await openChain([FACADES], undefined, twoFiles, ["windows.obj"]);
+  expect([verticesOf("1"), verticesOf("unused_sets")]).toEqual([3, 6]);
+  expect((layer("test_surfaces") as THREE.Group).children).toHaveLength(2);
+  expect(testSurfaceEntries().parts).toEqual([
+    { label: "Winter sun on facades", checked: true, swatch: "rgb(68, 119, 170)" },
+    { label: "Test surfaces no criterion uses", checked: true, swatch: null },
+  ]);
 });
 
 test("a criterion that is switched off keeps its entry, marked as off, and its test surfaces stay", async () => {
@@ -394,13 +404,14 @@ test("a criterion that was hidden and then deleted leaves nothing behind: one ad
   ]);
 });
 
-test("deleting a criterion takes it from the menu and the files only it used out of the 3D view", async () => {
+test("deleting a criterion takes it from the menu; the files only it used stay, drawn as sets no criterion uses", async () => {
   await openChain([FACADES, WINDOWS, { ...ROOFS, test_surface_files: ["facades.obj"] }], undefined, twoFiles);
   expect([verticesOf("1"), verticesOf("2"), verticesOf("3")]).toEqual([3, 6, null]);
   await deleteCriterion("Spring sun on windows");
   expect([verticesOf("1"), verticesOf("2"), verticesOf("3")]).toEqual([3, null, null]);       // facades.obj, which criteria 1 and 3 use, is drawn once
-  expect(testSurfaceEntries().parts.map((part) => part.label)).toEqual(["Winter sun on facades", "Daylight on roofs"]);
+  expect(verticesOf("unused_sets")).toBe(6);                                                    // windows.obj stays in the project
+  expect(testSurfaceEntries().parts.map((part) => part.label)).toEqual(["Winter sun on facades", "Daylight on roofs", "Test surfaces no criterion uses"]);
   await deleteCriterion("Daylight on roofs");
-  expect(verticesOf("1")).toBe(3);                                         // one criterion: a single entry
-  expect(testSurfaceEntries().parts).toEqual([]);
+  expect(verticesOf("1")).toBe(3);
+  expect(testSurfaceEntries().parts.map((part) => part.label)).toEqual(["Winter sun on facades", "Test surfaces no criterion uses"]);
 });

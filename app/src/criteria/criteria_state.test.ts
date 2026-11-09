@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import type { CriterionCarvingSummary, CriterionEntry } from "../api_client/client";
 import type { StageState } from "../stages";
 import {
-  activeCriteria, cardLineOf, cardResultLine, cardStatusText, carvingUpdatedText, chainSummaryLine, criterionStatus, filesOfOtherCriteria, orderAfterDropping, orderAfterMoving,
+  activeCriteria, cardLineOf, cardResultLine, cardStatusText, carvingUpdatedText, chainSummaryLine, criterionStatus, orderAfterDropping, orderAfterMoving,
   runActionOf, selectionAfterRemoving, criteriaProtectingNothing, stagesByCriterionOf, stagesDuringRun,
 } from "./criteria_state";
 import { formatPercent, groupedDigits } from "../format_numbers";
@@ -110,7 +110,7 @@ test("the words of each status; a current criterion has none because its result 
   expect(cardStatusText({ kind: "updates_from", from: "Daylight" })).toBe("Updates from Daylight");
   expect(cardStatusText({ kind: "running" })).toBe("Running");
   expect(cardStatusText({ kind: "bypassed" })).toBe("Off");
-  expect(cardStatusText({ kind: "no_test_surfaces" })).toBe("Add test surfaces");
+  expect(cardStatusText({ kind: "no_test_surfaces" })).toBe("Choose test surfaces");
   expect(cardStatusText({ kind: "not_run" })).toBe("Not run yet");
 });
 
@@ -173,14 +173,6 @@ test("a card dropped on another takes its place, the cards between moving one pl
   expect(orderAfterDropping(["1", "2", "3"], "3", "1")).toEqual(["3", "1", "2"]);
   expect(orderAfterDropping(["1", "2", "3"], "2", "2")).toBeNull();
   expect(orderAfterDropping(["1", "2", "3"], "4", "2")).toBeNull();
-});
-
-test("the files of other criteria are those they use and this one does not, each once", () => {
-  const criteria = [entry("1", { test_surface_files: ["roofs.obj"] }), entry("2", { test_surface_files: ["windows.obj", "roofs.obj"] }),
-                    entry("3", { test_surface_files: ["windows.obj", "courtyard.obj"] })];
-  expect(filesOfOtherCriteria(criteria, "1")).toEqual(["windows.obj", "courtyard.obj"]);
-  expect(filesOfOtherCriteria(criteria, "2")).toEqual(["courtyard.obj"]);
-  expect(filesOfOtherCriteria([entry("1")], "1")).toEqual([]);
 });
 
 test("a card's line is its result while current, else its status", () => {

@@ -102,7 +102,10 @@ export class FakeService {
   criterionSettings: Record<string, unknown> = {};
   /** The test surface files of criterion 1 (openWorkspace gives the opened project's), changed by its test surface routes. */
   criterionTestSurfaceFiles: string[] = ["surfaces.obj"];
-  /** Every stored test surface file, as GET inputs/test_surfaces lists them. */
+  /**
+   * Every stored test surface file (the project's surface sets), as GET inputs/test_surfaces lists them; each is listed with the criteria
+   * that use it in used_by (storedSetsWithUsers).
+   */
   storedTestSurfaces: InputFileInfo[] = [{ name: "surfaces.obj", triangle_count: 1 }];
   /** The input files changed in the project folder or missing from it, as the stage status lists them; DELETE input-changes drops the changed ones. */
   inputChanges: InputFileChange[] = [];
@@ -192,13 +195,31 @@ export class FakeService {
       if (!this.storedTestSurfaces.some((file) => file.name === fileName)) this.storedTestSurfaces = [...this.storedTestSurfaces, { name: fileName, triangle_count: 1 }];
       return json<CriterionEntry>(criterionEntry(this.criterionSettings, this.criterionTestSurfaceFiles));
     }
-    if (method === "DELETE" && path.startsWith("/criteria/1/test-surfaces/")) {
+    // A surface set switched on (PUT) or off (DELETE) for criterion 1: the set stays in the project either way
+    if ((method === "PUT" || method === "DELETE") && path.startsWith("/criteria/1/test-surfaces/")) {
+      if (this.refuseSavesWith !== null) return json<ErrorDetailReply>({ detail: "A run of this project is in progress." }, this.refuseSavesWith);
       const fileName = decodeURIComponent(path.replace("/criteria/1/test-surfaces/", ""));
-      this.criterionTestSurfaceFiles = this.criterionTestSurfaceFiles.filter((name) => name !== fileName);
-      this.storedTestSurfaces = this.storedTestSurfaces.filter((file) => file.name !== fileName);       // no other criterion uses it
+      if (!this.storedTestSurfaces.some((file) => file.name === fileName)) return json<ErrorDetailReply>({ detail: "Not found" }, 404);
+      this.criterionTestSurfaceFiles = method === "PUT"
+        ? [...this.criterionTestSurfaceFiles.filter((name) => name !== fileName), fileName] : this.criterionTestSurfaceFiles.filter((name) => name !== fileName);
       return json<CriterionEntry>(criterionEntry(this.criterionSettings, this.criterionTestSurfaceFiles));
     }
-    if (method === "GET" && path === "/inputs/test_surfaces") return json<InputFileInfo[]>(this.storedTestSurfaces);
+    if (method === "GET" && path === "/inputs/test_surfaces") return json<InputFileInfo[]>(this.storedSetsWithUsers());
+    // The Site step's Test surfaces box: a set uploaded to the project (used by nothing yet), or removed unless criterion 1 uses it
+    if (method === "POST" && path === "/inputs/test_surfaces") {
+      await holdReply(this.uploadsAnswerWhen);
+      const fileName = ((init!.body as FormData).get("file") as File).name;
+      if (!this.storedTestSurfaces.some((file) => file.name === fileName)) this.storedTestSurfaces = [...this.storedTestSurfaces, { name: fileName, triangle_count: 1 }];
+      return this.testSurfacesReply();
+    }
+    if (method === "DELETE" && path.startsWith("/inputs/test_surfaces/")) {
+      const fileName = decodeURIComponent(path.replace("/inputs/test_surfaces/", ""));
+      if (!this.storedTestSurfaces.some((file) => file.name === fileName)) return json<ErrorDetailReply>({ detail: "Not found" }, 404);
+      const users = this.storedSetsWithUsers().find((file) => file.name === fileName)?.used_by ?? [];
+      if (users.length > 0) return json<ErrorDetailReply>({ detail: `${fileName} is used by ${users.join(" and ")}. Switch it off there first.` }, 422);
+      this.storedTestSurfaces = this.storedTestSurfaces.filter((file) => file.name !== fileName);
+      return this.testSurfacesReply();
+    }
     if (path.startsWith("/surface-sets/")) return this.answerSurfaceSets(method, path, init);
     if (path === "/sites" || path === "/max-volume-source" || path === "/heights") {
       if (method === "PUT" && path === "/heights") {
@@ -347,6 +368,17 @@ export class FakeService {
     return json<ErrorDetailReply>({ detail: "Not found" }, 404);
   }
 
+  /** The stored test surface files, each with criterion 1 in used_by while it uses the file. */
+  storedSetsWithUsers(): InputFileInfo[] {
+    const criterionName = criterionEntry(this.criterionSettings).name;
+    return this.storedTestSurfaces.map((file) => ({ ...file, used_by: this.criterionTestSurfaceFiles.includes(file.name) ? [criterionName] : [] }));
+  }
+
+  private testSurfacesReply(): Response {
+    return json<InputFilesReply>({ role: "test_surfaces", files: this.storedSetsWithUsers(), joined_bounds: [[0, 0, 0], [1, 1, 0]],
+                                   weather_location: this.uploadedWeather.location, weather_latitude: this.uploadedWeather.latitude });
+  }
+
   count(request: string): number {
     return this.requests.filter((made) => made === request).length;
   }
@@ -384,7 +416,7 @@ export function project(stages: Record<PipelineStage, StageState>, settings: Rec
   const criterionSettings = Object.fromEntries(Object.entries(flatSettings).filter(([name]) => CRITERION_KEYS.has(name)));
   return {
     name: "p", created: "2026-10-17T09:00:00", modified: "2026-10-17T09:00:00", settings: flatSettings,
-    inputs: { max_volume: [{ name: "volume.obj", triangle_count: 1 }], test_surfaces: [{ name: "surfaces.obj", triangle_count: 1 }],
+    inputs: { max_volume: [{ name: "volume.obj", triangle_count: 1 }], test_surfaces: [{ name: "surfaces.obj", triangle_count: 1, used_by: ["time-based"] }],
               weather: [{ name: "weather.epw", triangle_count: 0 }] },
     joined_bounds: [[0, 0, 0], [1, 1, 0]], weather_location: "Golden, CO, USA", weather_latitude: 39.74, stage_status: { stages }, grid_plan: null,
     criteria: [criterionEntry(criterionSettings)], criterion_status: { 1: stages }, mode_to_choose: false, carving_updates_itself: true,
@@ -476,6 +508,14 @@ export const stepIsOpen = (title: string) => stepRow(title).querySelector(".step
 export function openStep(title: string) {
   act(() => stepRow(title).querySelector<HTMLButtonElement>(".step-header")!.click());
 }
+
+/** The Test surfaces box of the Site step: the project's surface sets (SurfaceSetsBox); undefined while the step is closed. */
+export const surfaceSetsBox = () => [...stepRow("Site").querySelectorAll<HTMLElement>(".input-box")]
+  .find((box) => box.querySelector(".input-box-title")?.textContent === "Test surfaces");
+
+/** The switches of the shown criterion's surface sets, by set name, each with whether the criterion uses it. */
+export const surfaceSetSwitches = () => [...container().querySelectorAll<HTMLInputElement>('.criterion-panel .surface-set-switches [role="switch"]')]
+  .map((input) => [input.getAttribute("aria-label")!.replace(/^Use /, ""), input.checked] as const);
 
 /** The Settings button of the top bar, which the open project draws into the place kept for it. */
 export const settingsButton = () => container().querySelector<HTMLButtonElement>(".top-bar-settings-button")!;

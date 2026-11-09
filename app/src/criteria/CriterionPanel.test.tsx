@@ -23,7 +23,8 @@ function formFor(mode: string): FormState {
 function panelProps(overrides: Partial<CriterionPanelProps> = {}): CriterionPanelProps {
   return {
     openSections: new Set(PANEL_SECTIONS), onToggleSection: () => {}, onOpenSections: () => {},
-    testSurfaces: [{ name: "windows.ply", triangle_count: 12 }], onAddTestSurfaces: async () => [], onRemoveTestSurface: async () => null,
+    testSurfaces: [{ name: "windows.ply", triangle_count: 12 }],
+    surfaceSets: [{ name: "roofs.ply", triangle_count: 4 }, { name: "windows.ply", triangle_count: 12 }], onToggleTestSurface: async () => null, onOpenSite: () => {},
     form: formFor("time-based"), stepErrors: [], criterionKeys: CRITERION_KEYS, onChange: () => {}, disabledReason: null,
     weatherDropZone: null, carvingRule: <div className="carving-rule-for-test">carving rule</div>,
     ...overrides,
@@ -35,12 +36,28 @@ const follows = (earlier: Element, later: Element) => (earlier.compareDocumentPo
 
 test("the panel holds the test surfaces, the criterion's settings and the carving rule, in that order, and no Run analysis", () => {
   rendered = renderForTest(<CriterionPanel {...panelProps()} />);
-  const parts = [find(".input-box"), find('[data-setting="start_month"]'), find(".carving-rule-for-test")];
+  const parts = [find(".surface-set-switches"), find('[data-setting="start_month"]'), find(".carving-rule-for-test")];
   expect(parts.every((part) => part !== null)).toBe(true);
   expect([...rendered.container.querySelectorAll("button")].map((button) => button.textContent)).not.toContain("Run analysis");
   for (let index = 1; index < parts.length; index++) expect(follows(parts[index - 1]!, parts[index]!)).toBe(true);
-  expect(find(".input-box")!.getAttribute("aria-label")).toBe("Test surfaces");
-  expect(find(".input-file-name")!.textContent).toBe("windows.ply");
+  // One switch per set of the project, on for the ones the criterion uses
+  const switches = [...rendered.container.querySelectorAll<HTMLInputElement>('.surface-set-switches [role="switch"]')];
+  expect(switches.map((input) => [input.getAttribute("aria-label"), input.checked])).toEqual([["Use roofs.ply", false], ["Use windows.ply", true]]);
+});
+
+test("a switch of the panel switches the set on or off for the criterion", async () => {
+  const onToggleTestSurface = vi.fn(async (_fileName: string, _on: boolean) => null as string | null);
+  rendered = renderForTest(<CriterionPanel {...panelProps({ onToggleTestSurface })} />);
+  await act(async () => click(find('[aria-label="Use roofs.ply"]')!));
+  expect(onToggleTestSurface).toHaveBeenCalledExactlyOnceWith("roofs.ply", true);
+});
+
+test("without any set in the project the panel links to the Site step", () => {
+  const onOpenSite = vi.fn();
+  rendered = renderForTest(<CriterionPanel {...panelProps({ testSurfaces: [], surfaceSets: [], onOpenSite })} />);
+  expect(find(".surface-set-note")!.textContent).toContain("The project has no test surfaces yet.");
+  click([...rendered.container.querySelectorAll("button")].find((button) => button.textContent === "Open the Site step")!);
+  expect(onOpenSite).toHaveBeenCalledOnce();
 });
 
 test("the criterion's settings leave out the shared ones, which the project settings show", () => {
@@ -158,14 +175,13 @@ test("a closed section with a problem says so to screen readers in its header; o
   expect(sectionHeader("test_surfaces").querySelector(".visually-hidden")).toBeNull();
 });
 
-test("inside the sections the test surfaces box is named by an aria-label, not a hidden heading; the setting groups' titles are h4", () => {
+test("inside the sections the test surfaces are switches named by their sets, under no heading of their own; the setting groups' titles are h4", () => {
   rendered = renderForTest(<PanelInStep {...panelProps()} />);
   click(sectionHeader("test_surfaces"));
-  const box = find('.panel-section[data-section="test_surfaces"] .input-box')!;
-  expect(box.getAttribute("aria-label")).toBe("Test surfaces");
-  expect(box.hasAttribute("aria-labelledby")).toBe(false);
-  expect(box.querySelector("h3, h4")).toBeNull();
-  expect(find(".input-box .input-add")).not.toBeNull();              // its Add button stays
+  const switches = find('.panel-section[data-section="test_surfaces"] .surface-set-switches')!;
+  expect(switches.querySelector("h3, h4")).toBeNull();
+  expect([...switches.querySelectorAll('[role="switch"]')].map((input) => input.getAttribute("aria-label"))).toEqual(["Use roofs.ply", "Use windows.ply"]);
+  expect(find(".input-box")).toBeNull();                              // nothing is uploaded here: the sets are added in the Site step
   click(sectionHeader("settings"));
   const groupTitles = [...rendered.container.querySelectorAll(".panel-section .setting-group-title")];
   expect(groupTitles.length).toBeGreaterThan(0);

@@ -17,7 +17,8 @@ import {
   failureTextOf, getSurfacePicks, markModeChosen, pickSurfaceSet, readOutlines, renameSurfaceSet, reportServiceProblem, setCarvingUpdates, terrainHeights, type HealthReply, type OutlinesReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
 import { ProjectSessionContext } from "../api_client/project_session";
-import { activeCriteria, filesOfOtherCriteria } from "../criteria/criteria_state";
+import { activeCriteria } from "../criteria/criteria_state";
+import { SurfaceSetsBox } from "../common/SurfaceSetsBox";
 import { CriteriaStep, type CriteriaShows } from "../criteria/CriteriaStep";
 import { firstCriteriaShows } from "../criteria/criteria_shows";
 import { CriterionPanel } from "../criteria/CriterionPanel";
@@ -164,10 +165,8 @@ export interface OpenProjectSettingsSaver {
   waitForInputChanges: () => Promise<void>;
 }
 
-/** Who picks surfaces on the surroundings: a criterion (Carve) or a study (Simulate). */
-type PickingFor = { kind: "criterion"; id: string } | { kind: "study"; id: string };
+/** Picking test surfaces on the surroundings, from the Site step (design/test-surfaces-on-context.md). */
 interface PickingState {
-  for: PickingFor;
   /** Edit picks: the set edited, with its name and picks. */
   editing?: { file: string; name: string; picks: SurfacePick[] };
   busy: boolean;
@@ -591,11 +590,11 @@ function OpenProject(props: ProjectWorkspaceProps) {
     ) : (scene: ViewerScene) => (
       <SitePicker scene={scene} origin={origin} sites={siteInput.sites} onPick={(index) => setSiteTool({ kind: "edit", index })} />
     );
-  // Test surfaces picked on the surroundings (design/test-surfaces-on-context.md): picking is for the criterion shown in Carve, or a
-  // study in Simulate; it ends when that is not shown any more. Use makes a surface set (or adds to one, or saves an edit), which the
-  // criterion or study then uses; the stored files and the test surfaces drawn are read again.
+  // Test surfaces picked on the surroundings (design/test-surfaces-on-context.md): picking starts in the Site step's Test surfaces box
+  // and ends when the step is not shown any more. Use makes a surface set (or adds to one, or saves an edit), which no criterion uses
+  // until it is switched on there; the stored files and the test surfaces drawn are read again.
   const hasSurroundingsFiles = files.context.length > 0;
-  const setNames = Object.fromEntries(files.test_surfaces.map((file) => [file.name, file.shown_name ?? file.name]));
+  const setNames: Record<string, string> = Object.fromEntries(files.test_surfaces.map((file) => [file.name, file.shown_name ?? file.name]));
   const pickedSets = files.test_surfaces.filter((file) => file.picked === true).map((file) => ({ file: file.name, name: file.shown_name ?? file.name }));
   const nextPickedName = () => {
     const shown = new Set(files.test_surfaces.map((file) => (file.shown_name ?? file.name).toLowerCase()));
@@ -603,17 +602,16 @@ function OpenProject(props: ProjectWorkspaceProps) {
     while (shown.has(`picked ${number}`)) number += 1;
     return `Picked ${number}`;
   };
-  const pickingApplies = picking !== null && (picking.for.kind === "criterion"
-    ? props.mode === "design" && picking.for.id === criterionId : props.mode === "simulate");
+  const pickingApplies = picking !== null && props.mode === "design" && openStep === "inputs";
   if (picking !== null && !pickingApplies) setPicking(null);
-  const startPicking = (target: PickingFor) => setPicking({ for: target, busy: false, problem: null });
+  const startPicking = () => setPicking({ busy: false, problem: null });
   const reportPickProblem = (error: unknown) => {
     if (!reportServiceProblem(error, onServiceProblem)) setPicking((now) => now && { ...now, busy: false, problem: failureTextOf(error) });
   };
-  const editPicks = async (fileName: string, target: PickingFor) => {
+  const editPicks = async (fileName: string) => {
     try {
       const reply = await getSurfacePicks(token, project.name, fileName);
-      setPicking({ for: target, editing: { file: fileName, name: setNames[fileName] ?? fileName, picks: reply.picks }, busy: false, problem: null });
+      setPicking({ editing: { file: fileName, name: setNames[fileName] ?? fileName, picks: reply.picks }, busy: false, problem: null });
     } catch (error) {
       reportServiceProblem(error, onServiceProblem);
     }
@@ -632,21 +630,13 @@ function OpenProject(props: ProjectWorkspaceProps) {
     const now = picking;
     setPicking({ ...now, busy: true, problem: null });
     try {
-      let stored: string;
       if (now.editing !== undefined) {
-        stored = (await pickSurfaceSet(token, project.name, { picks, replace: now.editing.file })).name;
+        await pickSurfaceSet(token, project.name, { picks, replace: now.editing.file });
       } else if (target.kind === "add") {
         const before = await getSurfacePicks(token, project.name, target.file);
-        stored = (await pickSurfaceSet(token, project.name, { picks: [...before.picks, ...picks], replace: target.file })).name;
+        await pickSurfaceSet(token, project.name, { picks: [...before.picks, ...picks], replace: target.file });
       } else {
-        stored = (await pickSurfaceSet(token, project.name, { picks, name: target.name.trim() })).name;
-      }
-      if (now.editing === undefined) {
-        const refused = now.for.kind === "criterion" ? await testSurfaceCalls.use(stored) : (await studies.useFile(now.for.id, stored), null);
-        if (refused !== null) {
-          setPicking({ ...now, busy: false, problem: refused });
-          return;
-        }
+        await pickSurfaceSet(token, project.name, { picks, name: target.name.trim() });
       }
       await testSurfaceCalls.reloadStoredFiles();
       reloadRoles(["test_surfaces"]);
@@ -656,17 +646,21 @@ function OpenProject(props: ProjectWorkspaceProps) {
       reportPickProblem(error);
     }
   };
-  const pickingColour = picking?.for.kind === "study"
-    ? studies.studies.find((study) => study.entry.id === picking.for.id)?.entry.colour ?? "#4477aa" : criterion?.colour ?? "#4477aa";
+  const pickingColour = "#4477aa";
   const pickerTool = picking === null || !pickingApplies || contextMesh.geometry === null ? null : (scene: ViewerScene) => (
     <ContextPicker scene={scene} origin={origin} geometry={contextMesh.geometry!} colour={pickingColour}
                    editing={picking.editing === undefined ? undefined : { name: picking.editing.name, picks: picking.editing.picks }}
                    pickedSets={pickedSets} newSetName={nextPickedName()} busy={picking.busy} problem={picking.problem}
                    onUse={(picks, target) => { void savePicks(picks, target); }} onCancel={() => setPicking(null)} />
   );
+  const testSurfacesBox = (
+    <SurfaceSetsBox files={files.test_surfaces} onAddFiles={addFiles} onRemoveFile={removeFile} disabledReason={inputsDisabledReason}
+                    drawingProblems={testSurfacesMesh.drawingProblems} onPickFromSurroundings={hasSurroundingsFiles && props.mode === "design" ? startPicking : undefined}
+                    onRenameSet={renameSet} onEditPicks={(fileName) => { void editPicks(fileName); }} />
+  );
   const stepContent: Record<StepName, ReactNode> = {
     inputs: (
-      <InputsStep files={files} inputsBounds={inputsBounds} onAddFiles={addFiles}
+      <InputsStep files={files} inputsBounds={inputsBounds} onAddFiles={addFiles} testSurfacesBox={testSurfacesBox}
                   onRemoveFile={removeFile} disabledReason={inputsDisabledReason} maxVolumeNote={carvedByNote(project.carving_chain ?? [])}
                   maxVolumeBox={maxVolumeBox} maxVolumeFooter={maxVolumeFooter}
                   drawingProblems={{ max_volume: maxVolumeMesh.drawingProblems, context: contextMesh.drawingProblems, terrain: terrainMesh.drawingProblems }} />
@@ -675,12 +669,10 @@ function OpenProject(props: ProjectWorkspaceProps) {
       <CriteriaStep list={cards.list} load={selection.load} chainLine={cards.chainLine} shows={criteriaShows ?? firstCriteriaShows(criteriaCount)} onShowsChange={setCriteriaShows}
                     firstMode={modeToChoose ? <FirstMode onChoose={chooseFirstMode} disabledReason={inputsDisabledReason} /> : null}
                     panelProblem={workspaceCriteria.panelProblem} panel={
-        <CriterionPanel key={criterionId} {...panelSections} testSurfaces={criterionTestSurfaces} criterionOn={criterionOn} testSurfaceDrawingProblems={testSurfacesMesh.drawingProblems} onAddTestSurfaces={testSurfaceCalls.add}
-                        onRemoveTestSurface={testSurfaceCalls.remove} otherTestSurfaces={filesOfOtherCriteria(criteria.criteria, criterionId)}
-                        onUseTestSurface={testSurfaceCalls.use} form={form}
-                        onPickFromSurroundings={hasSurroundingsFiles ? () => startPicking({ kind: "criterion", id: criterionId }) : undefined}
-                        onRenameSet={renameSet} onEditPicks={(fileName) => { void editPicks(fileName, { kind: "criterion", id: criterionId }); }}
-                        setNames={setNames} stepErrors={criterionForm.form.stepErrors} criterionKeys={criterionKeys}
+        <CriterionPanel key={criterionId} {...panelSections} testSurfaces={criterionTestSurfaces} criterionOn={criterionOn} testSurfaceDrawingProblems={testSurfacesMesh.drawingProblems}
+                        surfaceSets={files.test_surfaces} onOpenSite={() => openTheStep("inputs")}
+                        onToggleTestSurface={(fileName, on) => (on ? testSurfaceCalls.use(fileName) : testSurfaceCalls.remove(fileName))} form={form}
+                        stepErrors={criterionForm.form.stepErrors} criterionKeys={criterionKeys}
                         onChange={changeSettings} disabledReason={inputsDisabledReason}
                         weatherDropZone={criterionOn && modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} inputRoles={inputRolesWithFiles}
                         coldPeriod={coldPeriod} hemisphere={hemisphereOfLatitude(weather.latitude)}
@@ -754,7 +746,6 @@ function OpenProject(props: ProjectWorkspaceProps) {
                   hasSurroundings={files.context.length > 0} hasTerrain={files.terrain.length > 0}
                   envelopeBuilt={designResults?.envelope != null} massingBuilt={designResults?.massing != null} hasBaseVolume={baseVolume.geometry !== null} carvingSpacing={carvingSpacing}
                   onStoredFilesChange={() => { void testSurfaceCalls.reloadStoredFiles(); refreshStageStatus(); }} studyView={studyView}
-                  onPickSurfaces={hasSurroundingsFiles ? (studyId) => startPicking({ kind: "study", id: studyId }) : undefined}
                   theme={theme} notice={inputChangesNotice} />
   );
   const simulateViewer = { overlayContent: simulateView, study: studyView.view, studyOutOfDate: studyView.studyOutOfDate,

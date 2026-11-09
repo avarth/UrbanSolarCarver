@@ -103,7 +103,7 @@ export interface CriteriaOfResults {
   analysisWaitsFor?: { name: string; protectsNothing: boolean } | null;
   /**
    * Why the builds wait while the analysis of the chain is not current, naming the criterion (with several criteria): "Run the
-   * analysis for {name} first", "Add test surfaces to {name} first". Absent or null: the settings changed since the analysis.
+   * analysis for {name} first", "Choose test surfaces for {name} first". Absent or null: the settings changed since the analysis.
    */
   buildWaitReason?: string | null;
   /** The selected criterion is off: its panel says so in place of a carving rule. */

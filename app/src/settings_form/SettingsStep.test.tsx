@@ -42,7 +42,7 @@ test("Run analysis says what blocks it, in order: a run, the inputs, the weather
   expect(runAnalysisBlocker(conditions({ warmUpState: "cpu" }))).toBeNull();
   expect(runAnalysisBlocker(conditions({ warmUpState: "failed" }))).toBeNull();
   expect(runAnalysisBlocker(conditions({ runActive: true, testSurfaceFiles: 0 }))).toBe("A run is in progress");
-  expect(runAnalysisBlocker(conditions({ testSurfaceFiles: 0, hasWeatherFile: false }))).toBe("Add test surfaces to run the analysis");
+  expect(runAnalysisBlocker(conditions({ testSurfaceFiles: 0, hasWeatherFile: false }))).toBe("Choose test surfaces to run the analysis");
   expect(runAnalysisBlocker(conditions({ maxVolumeFiles: 0 }))).toBe("Add a maximum volume to run the analysis");
   expect(runAnalysisBlocker(conditions({ hasWeatherFile: false, warmUpState: "running" }))).toBe("Add a weather file in Settings to run this mode");
   expect(runAnalysisBlocker(conditions({ hasWeatherFile: false, modeNeedsWeatherFile: false }))).toBeNull();
@@ -177,7 +177,7 @@ test("a setting to fix in another place is named with that place under the run b
 
 test("with several criteria the reasons Criteria gives about the shown criterion name it", () => {
   const named = { shownIn: "criteria" as const, shownCriterionName: "Daylight on roofs" };
-  expect(runAnalysisBlocker(conditions({ ...named, testSurfaceFiles: 0 }))).toBe("Add test surfaces to Daylight on roofs to run the analysis");
+  expect(runAnalysisBlocker(conditions({ ...named, testSurfaceFiles: 0 }))).toBe("Choose test surfaces for Daylight on roofs to run the analysis");
   expect(runAnalysisBlocker(conditions({ ...named, hasWeatherFile: false }))).toBe("Add a weather file in Settings to run Daylight on roofs");
   const slopeRefused = rejected([{ field: "max_slope_deg", message: "Input should be greater than 0" }]);
   expect(runAnalysisBlocker(conditions({ ...named, form: slopeRefused }))).toBe("Fix the steepest slope of the envelope of Daylight on roofs to run the analysis");

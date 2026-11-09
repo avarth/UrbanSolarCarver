@@ -28,7 +28,7 @@ interface RefusalSelectionSource {
   showCriterion: (id: string) => void;
 }
 
-/** What the shown criterion's panel says over its settings about the refusal: "Add test surfaces to {name}.", or null. */
+/** What the shown criterion's panel says over its settings about the refusal: "Choose test surfaces for {name}.", or null. */
 export function useRefusalSelection({ record, criteria, selectedId, shownCriterion, showCriterion }: RefusalSelectionSource): string | null {
   const askedFor = record?.missingInputs?.filter((role) => role.startsWith(TEST_SURFACES_ROLE_PREFIX))
     .map((role) => role.slice(TEST_SURFACES_ROLE_PREFIX.length)) ?? [];

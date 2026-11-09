@@ -41,8 +41,6 @@ interface StudyPopoverProps {
   onUseFile: (fileName: string) => Promise<string | null>;
   onRemoveFile: (fileName: string) => Promise<string | null>;
   onDuplicate: () => Promise<string | null>;
-  /** Opens picking on the surroundings for this study (design/test-surfaces-on-context.md); absent without surroundings. */
-  onPickFromSurroundings?: () => void;
   onDelete: () => Promise<string | null>;
   onClose: () => void;
 }
@@ -198,14 +196,13 @@ function SwitchRow({ label, hint, checked, disabled, onChange }: { label: string
  *  project has one or the ground when it has none, then each test surface file the project stores. A source or file the study samples is
  *  shown and can be turned off even when its file has gone. */
 function AccountAndSimulate({ settings, hasSurroundings, hasTerrain, envelopeBuilt, massingBuilt, hasBaseVolume, fileChoices, chosenFiles, disabled, onChange,
-                              onToggleFile, setNames, onPickFromSurroundings }: {
+                              onToggleFile, setNames }: {
   settings: Record<string, unknown>; hasSurroundings: boolean; hasTerrain: boolean; envelopeBuilt: boolean; massingBuilt: boolean;
   hasBaseVolume: boolean;
   fileChoices: string[]; chosenFiles: string[]; disabled: boolean; onChange: (values: Record<string, unknown>) => void;
   onToggleFile: (fileName: string, on: boolean) => void;
   /** The name each stored file is shown by (its surface set's). */
   setNames: Readonly<Record<string, string>>;
-  onPickFromSurroundings?: () => void;
 }) {
   const accountId = useId();
   const stand = standOf(settings);
@@ -259,15 +256,12 @@ function AccountAndSimulate({ settings, hasSurroundings, hasTerrain, envelopeBui
             ))}
           </div>
         )}
-      {onPickFromSurroundings !== undefined && (
-        <button type="button" className="secondary-button study-pick-surfaces" disabled={disabled} onClick={onPickFromSurroundings}>{messages.pickFromSurroundings}</button>
-      )}
     </>
   );
 }
 
 export function StudyPopover({ id, study, metrics, storedFiles, hasSurroundings, hasTerrain, envelopeBuilt, massingBuilt, hasBaseVolume = false, carvingSpacing, disabledReason,
-                               onChange, onUseFile, onRemoveFile, onDuplicate, onDelete, onClose, onPickFromSurroundings }: StudyPopoverProps) {
+                               onChange, onUseFile, onRemoveFile, onDuplicate, onDelete, onClose }: StudyPopoverProps) {
   const { entry } = study;
   const settings = entry.settings ?? {};
   const files = entry.test_surface_files ?? [];
@@ -344,8 +338,7 @@ export function StudyPopover({ id, study, metrics, storedFiles, hasSurroundings,
                             massingBuilt={massingBuilt} hasBaseVolume={hasBaseVolume} fileChoices={fileChoices} chosenFiles={files} disabled={disabled}
                             onChange={(values) => change({ values })}
                             onToggleFile={(fileName, on) => void send(() => (on ? onUseFile(fileName) : onRemoveFile(fileName)))}
-                            setNames={Object.fromEntries(storedFiles.map((file) => [file.name, file.shown_name ?? file.name]))}
-                            onPickFromSurroundings={onPickFromSurroundings} />
+                            setNames={Object.fromEntries(storedFiles.map((file) => [file.name, file.shown_name ?? file.name]))} />
       </div>
       {problem !== null && <p className="studies-panel-problem" role="alert">{problem}</p>}
       <div className="study-popover-actions">

@@ -1,5 +1,6 @@
 // The open project's steps for one criterion, against a fake service: Site holds the site, the project settings the shared settings,
-// and Criteria opens straight on the criterion, whose test surfaces go through its own routes. The last tests are of what the
+// and Criteria opens straight on the criterion, which switches the project's surface sets (the Site step's Test surfaces) on and off
+// through its own routes. The last tests are of what the
 // Criteria step shows, the list or the editor of one criterion: how it opens, what it keeps, and what leads to a criterion's settings.
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -11,7 +12,7 @@ import { FACADES, ROOFS, WINDOWS, deleteCriterion, openChain, select, service as
 import {
   CARVED, CARVING, ENVELOPE, FakeService, MASSING, NOTHING_RUN, TRIANGLE_OBJ, addWeatherFileInSettings, buttonIn, container, criterionEntry, endWorkspaceTest, openStep, closeProjectSettings, openProjectSettings, projectSettings, settingsButton,
   openPanelSection, openWorkspace, pinnedBar, pressRunAnalysis, project, reasonOf, settle, showCriterionCards, showCriterionEditor, startWorkspaceTest, stepIsOpen, stepRow, type,
-  unmountWorkspace, voxelSizeField,
+  surfaceSetSwitches, surfaceSetsBox, unmountWorkspace, voxelSizeField,
 } from "./project_workspace_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
@@ -24,8 +25,9 @@ afterEach(endWorkspaceTest);
 
 const EVERY_STAGE_CURRENT: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" };
 const panel = () => container().querySelector<HTMLElement>(".criterion-panel");
-const protectsBox = () => panel()!.querySelector<HTMLElement>(".input-box")!;
-const protectedFiles = () => [...protectsBox().querySelectorAll(".input-file-name")].map((name) => name.textContent);
+const setSwitches = () => panel()!.querySelector<HTMLElement>(".surface-set-switches")!;
+const setSwitch = (name: string) => setSwitches().querySelector<HTMLInputElement>(`[aria-label="Use ${name}"]`)!;
+const setNamesIn = (box: HTMLElement) => [...box.querySelectorAll(".input-file-name")].map((name) => name.textContent);
 const field = (setting: string) => container().querySelector(`[data-setting="${setting}"]`);
 const stepTitles = () => [...container().querySelectorAll(".step-title")].map((title) => title.textContent);
 
@@ -66,7 +68,7 @@ test("one criterion shows its row in the list, with the switch on and no drag ha
   expect(step.querySelector(".chain-summary")).toBeNull();
   showCriterionEditor();
   openPanelSection("Test surfaces");
-  expect(protectedFiles()).toEqual(["surfaces.obj"]);
+  expect(surfaceSetSwitches()).toEqual([["surfaces.obj", true]]);
   expect(buttonIn(pinnedBar(), "Build envelope and massing")).toBeDefined();
   expect(stepRow("Criteria").querySelector(".step-summary")).toBeNull();               // open, no setting to fix
   openStep("Site");
@@ -129,7 +131,9 @@ test("during a run the criterion's controls are disabled and the pinned bar says
   expect(pinnedBar().textContent!.split("A run is in progress")).toHaveLength(2);
   expect(panel()!.textContent).not.toContain("A run is in progress");
   openPanelSection("Test surfaces");
-  expect(protectsBox().querySelector<HTMLButtonElement>(".input-add")!.disabled).toBe(true);
+  expect(setSwitch("surfaces.obj").disabled).toBe(true);
+  openStep("Site");
+  expect(surfaceSetsBox()!.querySelector<HTMLButtonElement>(".input-add")!.disabled).toBe(true);
 });
 
 test("an earlier project shows its test surfaces in the criterion", async () => {
@@ -145,19 +149,20 @@ test("an earlier project shows its test surfaces in the criterion", async () => 
   await openWorkspace(service, opened);
   openStep("Criteria");
   openPanelSection("Test surfaces");
-  expect(protectedFiles()).toEqual(["roofs.ply", "windows.ply"]);
-  expect(protectsBox().querySelector(".input-file-detail")!.textContent).toBe("20 triangles");
+  expect(surfaceSetSwitches()).toEqual([["roofs.ply", true], ["windows.ply", true]]);
+  expect(setSwitches().querySelector(".input-file-detail")!.textContent).toBe("20 triangles");
   for (const title of ["Site", "Criteria", "Envelope and massing", "Export"]) {
     expect(stepRow(title).querySelector(".step-mark-done"), title).not.toBeNull();
   }
   expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);      // the 3D view still draws them
 });
 
-test("the Site step holds only the site's geometry; the weather file is first in Location in the project settings", async () => {
+test("the Site step holds the site's geometry, then the project's test surfaces; the weather file is first in Location in the project settings", async () => {
   service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, project(NOTHING_RUN));
   const titles = [...stepRow("Site").querySelectorAll(".input-box h3")].map((title) => title.textContent);
-  expect(titles).toEqual(["Maximum volume", "Existing surroundings", "Terrain"]);
+  expect(titles).toEqual(["Maximum volume", "Existing surroundings", "Terrain", "Test surfaces"]);
+  expect(setNamesIn(surfaceSetsBox()!)).toEqual(["surfaces.obj"]);
   openProjectSettings();
   const location = projectSettings()!.querySelector(".setting-group-essential")!;
   expect(location.parentElement!.querySelector(".setting-group-title")!.textContent).toBe("Location");
@@ -183,46 +188,87 @@ test("the project settings show only shared settings, and no run button", async 
   expect(field("voxel_size")).toBeNull();
 });
 
-test("a criterion without test surfaces says what to add", async () => {
+test("a criterion of a project without test surfaces says where to add them, and its link opens the Site step", async () => {
   service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, { ...project(NOTHING_RUN, { mode: "daylight" }), inputs: { ...project(NOTHING_RUN).inputs, test_surfaces: [] },
                                  criteria: [criterionEntry({ mode: "daylight" }, [])] });
   openStep("Criteria");
-  expect(protectsBox().querySelector(".input-box-hint")!.textContent).toBe("Windows or facades that need daylight. Flat panels; a curved or folded one is skipped.");
-  expect(buttonIn(protectsBox(), "Add test surfaces")).toBeDefined();
+  expect(setSwitches().querySelector(".input-box-hint")!.textContent).toBe("Windows or facades that need daylight. Flat panels; a curved or folded one is skipped.");
+  expect(setSwitches().querySelector(".surface-set-note")!.textContent).toContain("The project has no test surfaces yet.");
   const runButton = buttonIn(pinnedBar(), "Run analysis");
   expect(runButton.disabled).toBe(true);
-  expect(reasonOf(runButton)).toBe("Add test surfaces to run the analysis");
+  expect(reasonOf(runButton)).toBe("Choose test surfaces to run the analysis");
+  act(() => buttonIn(setSwitches(), "Open the Site step").click());
+  expect(stepIsOpen("Site")).toBe(true);
+  expect(surfaceSetsBox()!.classList.contains("input-box-empty")).toBe(true);
 });
 
-test("test surfaces added to and removed from the criterion go to its routes; the stored files and the stage status follow", async () => {
+test("a criterion that uses none of the project's sets shows them switched off, and Run analysis waits", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  await openWorkspace(service, { ...project(NOTHING_RUN), inputs: { ...project(NOTHING_RUN).inputs, test_surfaces: [{ name: "surfaces.obj", triangle_count: 1, used_by: [] }] },
+                                 criteria: [criterionEntry({ mode: "time-based" }, [])] });
+  openStep("Criteria");
+  expect(surfaceSetSwitches()).toEqual([["surfaces.obj", false]]);
+  expect(setSwitches().querySelector(".surface-set-note")).toBeNull();
+  expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Choose test surfaces to run the analysis");
+});
+
+test("test surfaces added in the Site step go to the project's routes and are used by no criterion until switched on", async () => {
   service = new FakeService(CARVED, CARVING);
   await openWorkspace(service, project(CARVED));
-  openStep("Criteria");
   const statusReadsBefore = service.count("GET /stage-status");
-  openPanelSection("Test surfaces");
-  const picker = protectsBox().querySelector<HTMLInputElement>('input[type="file"]')!;
+  const picker = surfaceSetsBox()!.querySelector<HTMLInputElement>('input[type="file"]')!;
   Object.defineProperty(picker, "files", { value: [new File([TRIANGLE_OBJ], "windows.obj")], configurable: true });
-  service.stages = { ...CARVED, preprocessing: "out_of_date", thresholding: "out_of_date" };
   act(() => picker.dispatchEvent(new Event("change", { bubbles: true })));
   await settle();
-  expect(service.requests).toContain("POST /criteria/1/test-surfaces");
-  expect(service.requests.some((request) => request.startsWith("POST /inputs/"))).toBe(false);
-  expect(service.requests).toContain("GET /inputs/test_surfaces");
-  expect(protectedFiles()).toEqual(["surfaces.obj", "windows.obj"]);
-  const fileReads = (fileName: string) => service.count(`GET /inputs/test_surfaces/${fileName}`);
-  expect(fileReads("windows.obj")).toBe(1);                                          // the 3D view draws the new file
+  expect(service.requests).toContain("POST /inputs/test_surfaces");
+  expect(service.requests.some((request) => request.startsWith("POST /criteria/") || request.startsWith("PUT /criteria/"))).toBe(false);
+  expect(setNamesIn(surfaceSetsBox()!)).toEqual(["surfaces.obj", "windows.obj"]);
+  expect(service.count("GET /inputs/test_surfaces/windows.obj")).toBe(1);             // the 3D view draws the new set
+  expect(service.count("GET /stage-status")).toBe(statusReadsBefore + 1);
+  // The set the criterion uses cannot be removed; the new one can
+  const removeSurfaces = surfaceSetsBox()!.querySelector<HTMLButtonElement>('[aria-label="Remove surfaces.obj"]')!;
+  expect(removeSurfaces.disabled).toBe(true);
+  expect(removeSurfaces.title).toBe("Used by time-based: switch it off there to remove it");
+  expect(surfaceSetsBox()!.textContent).toContain("Used by time-based");
+  openStep("Criteria");
+  openPanelSection("Test surfaces");
+  expect(surfaceSetSwitches()).toEqual([["surfaces.obj", true], ["windows.obj", false]]);
+  openStep("Site");
+  await act(async () => surfaceSetsBox()!.querySelector<HTMLButtonElement>('[aria-label="Remove windows.obj"]')!.click());
+  await settle();
+  expect(service.requests).toContain("DELETE /inputs/test_surfaces/windows.obj");
+  expect(service.requests.some((request) => request.startsWith("DELETE /criteria/"))).toBe(false);
+  expect(setNamesIn(surfaceSetsBox()!)).toEqual(["surfaces.obj"]);
+  expect(service.count("GET /stage-status")).toBe(statusReadsBefore + 2);
+});
+
+test("a criterion's switch puts a set on or takes it off through the criterion's routes; the stored files and the stage status follow", async () => {
+  service = new FakeService(CARVED, CARVING);
+  const opened = project(CARVED);
+  await openWorkspace(service, { ...opened, inputs: { ...opened.inputs, test_surfaces: [...opened.inputs.test_surfaces!, { name: "windows.obj", triangle_count: 1, used_by: [] }] } });
+  openStep("Criteria");
+  const statusReadsBefore = service.count("GET /stage-status");
+  const storedReadsBefore = service.count("GET /inputs/test_surfaces");
+  openPanelSection("Test surfaces");
+  service.stages = { ...CARVED, preprocessing: "out_of_date", thresholding: "out_of_date" };
+  await act(async () => setSwitch("windows.obj").click());
+  await settle();
+  expect(service.requests).toContain("PUT /criteria/1/test-surfaces/windows.obj");
+  expect(service.count("GET /inputs/test_surfaces")).toBe(storedReadsBefore + 1);     // the sets read again, for who uses them
+  expect(surfaceSetSwitches()).toEqual([["surfaces.obj", true], ["windows.obj", true]]);
   expect(service.count("GET /stage-status")).toBe(statusReadsBefore + 1);
   expect(buttonIn(pinnedBar(), "Build envelope and massing").disabled).toBe(true);   // the carving is out of date: nothing to build from
 
-  await act(async () => protectsBox().querySelector<HTMLButtonElement>('[aria-label="Remove surfaces.obj"]')!.click());
+  await act(async () => setSwitch("surfaces.obj").click());
   await settle();
   expect(service.requests).toContain("DELETE /criteria/1/test-surfaces/surfaces.obj");
   expect(service.requests.some((request) => request.startsWith("DELETE /inputs/"))).toBe(false);
-  expect(protectedFiles()).toEqual(["windows.obj"]);
+  expect(surfaceSetSwitches()).toEqual([["surfaces.obj", false], ["windows.obj", true]]);       // the set stays in the project
   expect(service.count("GET /stage-status")).toBe(statusReadsBefore + 2);
-  expect(fileReads("windows.obj")).toBe(2);                                          // the test surfaces drawn again, without the removed file
-  expect(fileReads("surfaces.obj")).toBe(2);                                         // drawn at the start and after the upload only
+  openStep("Site");
+  expect(surfaceSetsBox()!.querySelector<HTMLButtonElement>('[aria-label="Remove surfaces.obj"]')!.disabled).toBe(false);
+  expect(surfaceSetsBox()!.querySelector<HTMLButtonElement>('[aria-label="Remove windows.obj"]')!.disabled).toBe(true);
 });
 
 // ---- What the Criteria step shows: the list or the editor of one criterion ----

@@ -92,6 +92,11 @@ export class ChainService extends FakeService {
       const stages = PIPELINE_STAGES.filter((stage) => ofCriteria.includes(stage) || (produce.includes(stage) && (stage === "exporting" || stage === "massing")));
       return json<StartRunReply>({ status: "started", run_id: `r${this.runsStarted.length}`, stages, criterion_stages: this.runCriterionStages! });
     }
+    // A set uploaded in the Site step under the name of a stored one replaces it, in every criterion that uses it
+    if (method === "POST" && path === "/inputs/test_surfaces") {
+      const name = ((init!.body as FormData).get("file") as File).name;
+      for (const user of this.entries.filter((candidate) => candidate.test_surface_files?.includes(name))) this.criterionStages[user.id] = OUT_OF_DATE;
+    }
     if (!path.startsWith("/criteria")) return answerOfFakeService(address, init);
     this.requests.push(`${method} ${fullPath}`);
     const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : {};
@@ -135,10 +140,7 @@ export class ChainService extends FakeService {
     if (method === "DELETE" && part === undefined) {
       if (this.entries.length === 1) return json<ErrorDetailReply>({ detail: "A project needs at least one criterion." }, 422);
       this.entries = this.entries.filter((candidate) => candidate.id !== id);
-      // The stored files no criterion left uses go, as the service discards them.
-      this.storedTestSurfaces = this.storedTestSurfaces.filter((file) => !(entry.test_surface_files ?? []).includes(file.name)
-        || this.entries.some((candidate) => candidate.test_surface_files?.includes(file.name)));
-      return new Response(null, { status: 204 });
+      return new Response(null, { status: 204 });         // its sets stay in the project, used or not
     }
     if (method === "POST" && part === "duplicate") {
       const copy = { ...entry, id: String(Math.max(...this.entries.map((candidate) => Number(candidate.id))) + 1), name: `${entry.name} copy` };
@@ -158,17 +160,29 @@ export class ChainService extends FakeService {
       if (!files.includes(name)) this.criterionStages[id] = OUT_OF_DATE;
       return replace({ ...entry, test_surface_files: files.includes(name) ? files : [...files, name] });
     }
-    if (method === "PUT" && part === "test-surfaces") {
+    // A surface set of the project switched on (PUT) or off (DELETE) for the criterion; the set stays in the project
+    if ((method === "PUT" || method === "DELETE") && part === "test-surfaces") {
+      const name = decodeURIComponent(fileName);
+      if (!this.storedTestSurfaces.some((file) => file.name === name)) return json<ErrorDetailReply>({ detail: "Not found" }, 404);
       this.criterionStages[id] = OUT_OF_DATE;
-      return replace({ ...entry, test_surface_files: [...files, decodeURIComponent(fileName)] });
+      return replace({ ...entry, test_surface_files: method === "PUT" ? [...files.filter((file) => file !== name), name] : files.filter((file) => file !== name) });
     }
     return json<ErrorDetailReply>({ detail: "Not found" }, 404);
+  }
+
+  /** The stored test surface files, each with the names of the criteria that use it (used_by). */
+  override storedSetsWithUsers() {
+    return this.storedTestSurfaces.map((file) => ({ ...file, used_by: usersOf(this.entries, file.name) }));
   }
 
   storedFileCount(name: string): number {
     return this.storedTestSurfaces.filter((file) => file.name === name).length;
   }
 }
+
+/** The names of the criteria that use a stored test surface file, as the service lists them in used_by. */
+export const usersOf = (entries: readonly CriterionEntry[], fileName: string) =>
+  entries.filter((entry) => (entry.test_surface_files ?? []).includes(fileName)).map((entry) => entry.name);
 
 export function criterion(id: string, name: string, settings: Record<string, unknown>, files: string[], colour = "#4477aa"): CriterionEntry {
   return { id, name, named_by_user: true, colour, bypassed: false, energy_weighted: false, test_surface_files: files, settings };
@@ -220,7 +234,7 @@ export async function openChainWith<Service extends ChainService>(
   prepare(chainService);
   service.stages = { ...CARVED, ...summedStages(stages) };
   service.summaryCriteria = entries.filter((entry) => !entry.bypassed).map((entry, index) => carvingSummaryOf(entry, [61, 80, 90][index]));
-  const files = [...new Set([...entries.flatMap((entry) => entry.test_surface_files ?? []), ...unlistedTestSurfaceFiles])].map((name) => ({ name, triangle_count: 1 }));
+  const files = [...new Set([...entries.flatMap((entry) => entry.test_surface_files ?? []), ...unlistedTestSurfaceFiles])].map((name) => ({ name, triangle_count: 1, used_by: usersOf(entries, name) }));
   const opened: ProjectDetail = {
     ...project(service.stages), settings: { voxel_size: 1, ...entries[0].settings }, criteria: entries, criterion_status: stages,
     inputs: { max_volume: [{ name: "volume.obj", triangle_count: 1 }], test_surfaces: files, weather: [{ name: "weather.epw", triangle_count: 0 }] },
@@ -240,7 +254,9 @@ export const card = (name: string) => cards().find((candidate) => candidate.quer
 export const cardLine = (name: string) => card(name).querySelector(".criterion-card-line")!.textContent;
 export const selectedCardName = () => (showCriterionCards(), container().querySelector('.criterion-card[aria-current="true"] .criterion-card-name')!.textContent);
 export const panel = () => (showCriterionEditor(), container().querySelector<HTMLElement>(".criterion-panel")!);
-export const protectedFiles = () => [...panel().querySelectorAll(".input-box .input-file-name")].map((name) => name.textContent);
+/** The sets the shown criterion uses, by their shown names: its switches that are on. */
+export const protectedFiles = () => [...panel().querySelectorAll<HTMLInputElement>('.surface-set-switches [role="switch"]')]
+  .filter((input) => input.checked).map((input) => input.getAttribute("aria-label")!.replace(/^Use /, ""));
 /** The text of the shown criterion's period field, its Settings section opened first. */
 export function periodFieldText() {
   openPanelSection("Settings");

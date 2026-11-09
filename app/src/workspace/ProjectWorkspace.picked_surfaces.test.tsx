@@ -1,14 +1,16 @@
 // Test surfaces picked on the surroundings (design/test-surfaces-on-context.md), in the open workspace against a fake service: From
-// surroundings in a criterion's Test surfaces box (Carve) or a study's popover (Simulate), the picker over the view, Use making a
-// surface set (new, added to, or edited) and using it, and Rename.
+// surroundings in the Site step's Test surfaces box (Carve only), the picker over the view, Use making a surface set (new, added to, or
+// edited) that no criterion or study uses until it is switched on there, and Rename.
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import * as THREE from "three";
 import type { CriterionEntry, InputFileInfo, ProjectDetail } from "../api_client/client";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
 import { byRole, type } from "../viewer_overlays/render_for_test";
-import { FACADES, WINDOWS, criterion, openChain, panel, protectedFiles, select, service } from "./chain_service_for_test";
-import { buttonIn, container, endWorkspaceTest, openPanelSection, settle, startWorkspaceTest } from "./project_workspace_for_test";
+import { FACADES, WINDOWS, criterion, openChain, protectedFiles, service } from "./chain_service_for_test";
+import {
+  buttonIn, container, endWorkspaceTest, openPanelSection, openStep, settle, startWorkspaceTest, stepIsOpen, surfaceSetSwitches, surfaceSetsBox, switchMode,
+} from "./project_workspace_for_test";
 import { openSimulate, openStudySettings, simulateService, study, studyPopover } from "./simulate_service_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
@@ -33,11 +35,12 @@ function rayTo(point: number[]): number[] {
 }
 
 /**
- * Opens the project of these criteria at the Criteria step, with the surroundings (city.obj) unless *withSurroundings* is false, and
+ * Opens the project of these criteria at the Site step, with the surroundings (city.obj) unless *withSurroundings* is false, and
  * *sets* stored besides the criteria's files (a set a criterion lists is given here with its name and whether it was picked).
  */
 async function openCarve(entries: CriterionEntry[], { sets = [], withSurroundings = true }: { sets?: InputFileInfo[]; withSurroundings?: boolean } = {}) {
-  const storedOf = (names: string[]) => names.map((name) => sets.find((set) => set.name === name) ?? { name, triangle_count: 1 });
+  const usersOf = (name: string) => entries.filter((entry) => (entry.test_surface_files ?? []).includes(name)).map((entry) => entry.name);
+  const storedOf = (names: string[]) => names.map((name) => ({ ...(sets.find((set) => set.name === name) ?? { name, triangle_count: 1 }), used_by: usersOf(name) }));
   const listed = [...new Set([...entries.flatMap((entry) => entry.test_surface_files ?? []), ...sets.map((set) => set.name)])];
   await openChain(entries, undefined, (chain) => {
     chain.inputFileContents["/inputs/context/city.obj"] = CITY_OBJ;
@@ -46,14 +49,24 @@ async function openCarve(entries: CriterionEntry[], { sets = [], withSurrounding
     ...opened, inputs: { ...opened.inputs, test_surfaces: storedOf(listed), ...(withSurroundings ? { context: [CITY] } : {}) },
   }));
   service.storedTestSurfaces = storedOf(listed);
-  openPanelSection("Test surfaces");
+  openStep("Site");
 }
 
-const protects = () => panel().querySelector<HTMLElement>(".protects")!;
-const pickButton = () => [...protects().querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "From surroundings") ?? null;
+const box = () => surfaceSetsBox()!;
+const pickButton = () => [...box().querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "From surroundings") ?? null;
 const bar = () => container().querySelector<HTMLFormElement>("form.context-picker-bar");
 const useButton = () => bar()!.querySelector<HTMLButtonElement>('button[type="submit"]')!;
 const surfaceSetRequests = () => service.requests.filter((request) => request.includes("/surface-sets/") || request.includes("/test-surfaces/"));
+const setNames = () => [...box().querySelectorAll(".input-file-name")].map((name) => name.textContent);
+/** The detail lines of the box's row of the set shown as *name*. */
+const detailsOf = (name: string) => [...[...box().querySelectorAll<HTMLElement>(".input-file-row")]
+  .find((row) => row.querySelector(".input-file-name")!.textContent === name)!.querySelectorAll(".input-file-detail")].map((line) => line.textContent);
+/** The sets criterion 1 uses, read in its panel (the Criteria step is opened, which ends picking). */
+function setsOfCriterion() {
+  openStep("Criteria");
+  openPanelSection("Test surfaces");
+  return protectedFiles();
+}
 
 function clickFace(faceIndex: number, point: number[]) {
   act(() => FakeViewerScene.latest!.clickLayer("context", {
@@ -67,22 +80,26 @@ async function press(button: HTMLButtonElement) {
 }
 
 async function chooseFromSetMenu(setName: string, item: string) {
-  act(() => byRole<HTMLButtonElement>(protects(), "button", `Actions for ${setName}`).click());
-  await press([...protects().querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((candidate) => candidate.textContent === item)!);
+  act(() => byRole<HTMLButtonElement>(box(), "button", `Actions for ${setName}`).click());
+  await press([...box().querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((candidate) => candidate.textContent === item)!);
 }
 
-test("From surroundings is in the Test surfaces box only while the project has surroundings files", async () => {
+test("From surroundings is in the Site step's Test surfaces box only while the project has surroundings files", async () => {
   await openCarve([FACADES], { withSurroundings: false });
-  expect(protects().querySelector(".input-box-title-row button")!.textContent).toBe("Add test surfaces");
+  expect(box().querySelector(".input-box-title-row button")!.textContent).toBe("Add files");
   expect(pickButton()).toBeNull();
   endWorkspaceTest();
   startWorkspaceTest();
   await openCarve([FACADES]);
   expect(pickButton()).not.toBeNull();
   expect(bar()).toBeNull();
+  // The criterion's panel offers no picking: only its switches
+  openStep("Criteria");
+  openPanelSection("Test surfaces");
+  expect(container().querySelector(".criterion-panel")!.textContent).not.toContain("From surroundings");
 });
 
-test("Carve: pick a face, Use makes a new set from the pick and the criterion uses it; the box lists it by its name", async () => {
+test("Carve: pick a face, Use makes a new set from the pick, which no criterion uses; the box lists it by its name", async () => {
   await openCarve([FACADES]);
   await press(pickButton()!);
   expect(bar()!.querySelector<HTMLInputElement>('input[aria-label="Name of the new set"]')!.value).toBe("Picked 1");
@@ -95,11 +112,14 @@ test("Carve: pick a face, Use makes a new set from the pick and the criterion us
   expect(sent.replace).toBeUndefined();
   expect(sent.picks.map((pick) => pick.point)).toEqual([[0, 0.2, 0.8]]);
   sent.picks[0].ray.forEach((value, axis) => expect(value).toBeCloseTo(rayTo([0, 0.2, 0.8])[axis], 12));
-  expect(surfaceSetRequests()).toEqual(["POST /surface-sets/picked", "PUT /criteria/1/test-surfaces/picked_1.ply"]);
-  expect(service.requests.indexOf("GET /inputs/test_surfaces")).toBeGreaterThan(service.requests.indexOf("PUT /criteria/1/test-surfaces/picked_1.ply"));
+  expect(surfaceSetRequests()).toEqual(["POST /surface-sets/picked"]);           // no criterion is made to use it
+  expect(service.requests.lastIndexOf("GET /inputs/test_surfaces")).toBeGreaterThan(service.requests.indexOf("POST /surface-sets/picked"));
   expect(bar()).toBeNull();
-  expect(protectedFiles()).toEqual(["facades.obj", "Picked 1"]);
-  expect(protects().querySelectorAll(".input-file-detail")[1].textContent).toBe("2 triangles, picked on the surroundings");
+  expect(setNames()).toEqual(["facades.obj", "Picked 1"]);
+  expect(detailsOf("Picked 1")).toEqual(["2 triangles, picked on the surroundings"]);
+  expect(detailsOf("facades.obj")).toEqual(["1 triangle", "Used by Winter sun on facades"]);
+  expect(setsOfCriterion()).toEqual(["facades.obj"]);
+  expect(surfaceSetSwitches()).toEqual([["facades.obj", true], ["Picked 1", false]]);
 });
 
 test("Carve: the name typed for the new set is sent", async () => {
@@ -109,10 +129,10 @@ test("Carve: the name typed for the new set is sent", async () => {
   type(bar()!.querySelector<HTMLInputElement>('input[aria-label="Name of the new set"]')!, "  Courtyard floor ");
   await press(useButton());
   expect(service.pickedSetRequests[0].name).toBe("Courtyard floor");
-  expect(protectedFiles()).toEqual(["facades.obj", "Courtyard floor"]);
+  expect(setNames()).toEqual(["facades.obj", "Courtyard floor"]);
 });
 
-test("Carve: Add to a picked set another criterion uses joins its picks with the new ones, then this criterion uses it too", async () => {
+test("Carve: Add to a picked set another criterion uses joins its picks with the new ones; no other criterion is made to use it", async () => {
   const windows = criterion("2", WINDOWS.name, WINDOWS.settings!, ["picked_1.ply"], WINDOWS.colour);
   await openCarve([FACADES, windows], { sets: [ROOFS_SET] });
   await press(pickButton()!);
@@ -121,14 +141,15 @@ test("Carve: Add to a picked set another criterion uses joins its picks with the
   type(target, "picked_1.ply");
   clickFace(2, [0, 0.5, 0.5]);
   await press(useButton());
-  expect(surfaceSetRequests()).toEqual(["GET /surface-sets/picked_1.ply/picks", "POST /surface-sets/picked", "PUT /criteria/1/test-surfaces/picked_1.ply"]);
+  expect(surfaceSetRequests()).toEqual(["GET /surface-sets/picked_1.ply/picks", "POST /surface-sets/picked"]);
   const sent = service.pickedSetRequests[0];
   expect(sent.replace).toBe("picked_1.ply");
   expect(sent.name).toBeUndefined();
   expect(sent.picks.map((pick) => pick.point)).toEqual([[0.5, 0.25, 0], [0, 0.5, 0.5]]);
   expect(sent.picks[0]).toEqual(FLOOR_PICK);
   expect(bar()).toBeNull();
-  expect(protectedFiles()).toEqual(["facades.obj", "Roofs"]);
+  expect(detailsOf("Roofs")).toEqual(["4 triangles, picked on the surroundings", "Used by Spring sun on windows"]);
+  expect(setsOfCriterion()).toEqual(["facades.obj"]);
 });
 
 test("Carve: Edit picks opens the set's picks and Save picks replaces them, without using the set again", async () => {
@@ -144,8 +165,8 @@ test("Carve: Edit picks opens the set's picks and Save picks replaces them, with
   expect(service.pickedSetRequests).toEqual([{ picks: [FLOOR_PICK, { point: [0, 0.2, 0.8], ray: expect.any(Array) }], replace: "picked_1.ply" }]);
   expect(service.requests.filter((request) => request.startsWith("PUT /criteria/"))).toEqual([]);
   expect(bar()).toBeNull();
-  expect(protectedFiles()).toEqual(["facades.obj", "Roofs"]);
-  expect(protects().querySelectorAll(".input-file-detail")[1].textContent).toBe("4 triangles, picked on the surroundings");
+  expect(detailsOf("Roofs")[0]).toBe("4 triangles, picked on the surroundings");
+  expect(setsOfCriterion()).toEqual(["facades.obj", "Roofs"]);
 });
 
 test("Carve: a refused Use is said in the bar, which stays open with its picks", async () => {
@@ -160,7 +181,7 @@ test("Carve: a refused Use is said in the bar, which stays open with its picks",
   expect(service.requests.filter((request) => request.startsWith("PUT /criteria/"))).toEqual([]);
 });
 
-test("Carve: Cancel closes the picker and sends nothing; picking ends when another criterion is shown", async () => {
+test("Carve: Cancel closes the picker and sends nothing; picking ends when the Site step closes, or the mode leaves Carve", async () => {
   await openCarve([FACADES, WINDOWS]);
   await press(pickButton()!);
   clickFace(0, [0.5, 0.25, 0]);
@@ -169,8 +190,20 @@ test("Carve: Cancel closes the picker and sends nothing; picking ends when anoth
   expect(service.pickedSetRequests).toEqual([]);
   await press(pickButton()!);
   expect(bar()).not.toBeNull();
-  await select(WINDOWS.name);
+  openStep("Criteria");
+  expect(stepIsOpen("Site")).toBe(false);
   expect(bar()).toBeNull();
+  openStep("Site");
+  expect(bar()).toBeNull();                       // it does not come back with the step
+  await press(pickButton()!);
+  expect(bar()).not.toBeNull();
+  await switchMode("simulate");
+  await settle();
+  expect(bar()).toBeNull();
+  await switchMode("design");
+  await settle();
+  expect(bar()).toBeNull();
+  expect(service.pickedSetRequests).toEqual([]);
 });
 
 test("Carve: Rename shows the set by its new name", async () => {
@@ -184,7 +217,8 @@ test("Carve: Rename shows the set by its new name", async () => {
   expect(service.setRenames).toEqual([{ fileName: "picked_1.ply", name: "South roofs" }]);
   expect(service.requests).toContain("PUT /surface-sets/picked_1.ply/name");
   expect(container().querySelector('[role="dialog"]')).toBeNull();
-  expect(protectedFiles()).toEqual(["facades.obj", "South roofs"]);
+  expect(setNames()).toEqual(["facades.obj", "South roofs"]);
+  expect(setsOfCriterion()).toEqual(["facades.obj", "South roofs"]);
 });
 
 test("Simulate: without surroundings a study offers no picking", async () => {
@@ -193,26 +227,27 @@ test("Simulate: without surroundings a study offers no picking", async () => {
   expect(studyPopover()!.querySelector(".study-pick-surfaces")).toBeNull();
 });
 
-test("Simulate: the study's From surroundings closes its popover, and Use puts the new set on that study", async () => {
+test("Simulate: a study picks nothing itself; a set picked in the Site step is offered to it by its name, switched off", async () => {
   await openSimulate(undefined, (chain) => {
     chain.surroundingsFiles = [CITY];
     chain.inputFileContents["/inputs/context/city.obj"] = CITY_OBJ;
     chain.studies = [study("1", "sky_view", ["facades.obj"])];
   });
   await openStudySettings("Sky view factor");
-  const pick = studyPopover()!.querySelector<HTMLButtonElement>(".study-pick-surfaces")!;
-  expect(pick.textContent).toBe("From surroundings");
-  await press(pick);
-  expect(studyPopover()).toBeNull();
-  expect(bar()).not.toBeNull();
+  expect(studyPopover()!.querySelector(".study-pick-surfaces")).toBeNull();
+  expect(studyPopover()!.textContent).not.toContain("From surroundings");
+  await switchMode("design");
+  await settle();
+  openStep("Site");
+  await press(pickButton()!);
   clickFace(0, [0.5, 0.25, 0]);
   await press(useButton());
   expect(simulateService.pickedSetRequests.map((request) => request.name)).toEqual(["Picked 1"]);
-  expect(simulateService.requests).toEqual(expect.arrayContaining(["POST /surface-sets/picked", "PUT /studies/1/test-surfaces/picked_1.ply"]));
-  expect(simulateService.requests.filter((request) => request.startsWith("PUT /criteria/"))).toEqual([]);
-  expect(simulateService.studies[0].entry.test_surface_files).toEqual(["facades.obj", "picked_1.ply"]);
-  expect(bar()).toBeNull();
-  // The study's file switches name the new set by its name
+  expect(simulateService.requests.filter((request) => request.startsWith("PUT /studies/") || request.startsWith("PUT /criteria/"))).toEqual([]);
+  expect(simulateService.studies[0].entry.test_surface_files).toEqual(["facades.obj"]);
+  await switchMode("simulate");
+  await settle();
   await openStudySettings("Sky view factor");
-  expect([...studyPopover()!.querySelectorAll(".study-file-switches label")].map((label) => label.textContent)).toContain("Picked 1");
+  const picked = [...studyPopover()!.querySelectorAll<HTMLElement>(".study-file-switches label")].find((label) => label.textContent!.includes("Picked 1"))!;
+  expect(picked.querySelector("input")!.checked).toBe(false);
 });

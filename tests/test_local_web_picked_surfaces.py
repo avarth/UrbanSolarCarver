@@ -125,3 +125,16 @@ def test_a_picked_set_follows_the_surroundings_and_counts_the_picks_that_found_n
     files = {file["name"]: file for file in client.get("/api/projects/p").json()["inputs"]["test_surfaces"]}
     assert files["picked_1.ply"]["picks_lost"] == 1 and files["picked_1.ply"]["triangle_count"] == 2
     assert np.allclose(_stored_mesh(projects_folder, "picked_1.ply").face_normals, [0, 1, 0])
+
+
+def test_sets_are_added_and_deleted_as_inputs_of_the_project_and_a_set_in_use_is_kept(with_building):
+    client = with_building
+    reply = client.post("/api/projects/p/inputs/test_surfaces", files={"file": ("roof.ply", box_bytes([0, 30, 0], extents=(4, 4, 0.1)))})
+    assert reply.status_code == 200, reply.text
+    assert {file["name"]: file["used_by"] for file in reply.json()["files"]}["roof.ply"] == []
+    client.put("/api/projects/p/criteria/1/test-surfaces/roof.ply")
+    refused = client.delete("/api/projects/p/inputs/test_surfaces/roof.ply")
+    assert refused.status_code == 422 and "Switch it off there first" in refused.json()["detail"]
+    client.delete("/api/projects/p/criteria/1/test-surfaces/roof.ply")
+    assert client.delete("/api/projects/p/inputs/test_surfaces/roof.ply").status_code == 200
+    assert "roof.ply" not in {file["name"] for file in client.get("/api/projects/p").json()["inputs"]["test_surfaces"]}

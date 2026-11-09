@@ -10,7 +10,7 @@ import {
 } from "./chain_service_for_test";
 import {
   buttonIn, container, endWorkspaceTest, openPanelSection, openPanelSections, openStep, pinnedBar, reasonOf, settle, showCriterionCards, startWorkspaceTest, stepRow, thresholdField,
-  togglePanelSection, type, typeAndLeave, unmountWorkspace, waitForTheSave,
+  surfaceSetSwitches, surfaceSetsBox, togglePanelSection, type, typeAndLeave, unmountWorkspace, waitForTheSave,
 } from "./project_workspace_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
@@ -211,7 +211,7 @@ test("Add criterion with one criterion opens a menu of the modes; choosing one a
   expect(cardNames()).toEqual(["Winter sun on facades", "Daylight"]);
   expect(selectedCardName()).toBe("Daylight");
   expect(service.requests).toContain("GET /criteria/2/settings");
-  expect(cardLine("Daylight")).toBe("Add test surfaces");
+  expect(cardLine("Daylight")).toBe("Choose test surfaces");
   expect(protectedFiles()).toEqual([]);
   expect(openPanelSections()).toEqual(["Test surfaces", "Carving rule"]);
   // It has not run: its score points and sky dome are not asked for (the service has none).
@@ -302,35 +302,48 @@ test("reordering with the keyboard sends the new order and the cards follow it",
   expect(document.activeElement).toBe(card("Spring sun on windows").querySelector(".criterion-card-handle"));     // the focus stays on the handle moved
 });
 
-test("a new file under the name of a file two criteria use is sent under that name, listed once, and dates both", async () => {
-  // Criterion 1 uses criterion 2's windows.obj too (taking it is `use a file from another criterion`); both are current.
+test("a new file under the name of a set two criteria use, added in the Site step, is sent under that name, listed once, and dates both", async () => {
+  // Criterion 1 uses criterion 2's windows.obj too (switched on in its panel); both are current.
   await openChain([{ ...FACADES, test_surface_files: ["facades.obj", "windows.obj"] }, WINDOWS]);
   expect(cardLine("Winter sun on facades")).not.toBe("Out of date");
   expect(cardLine("Spring sun on windows")).not.toBe("Out of date");
-  openPanelSection("Test surfaces");
-  // A new windows.obj dropped on criterion 1 is an upload under the stored name, which the service takes as a replacement.
+  openStep("Site");
+  // A new windows.obj dropped on the Test surfaces box is an upload under the stored name, which the service takes as a replacement.
   const drop = new Event("drop", { bubbles: true, cancelable: true });
   Object.defineProperty(drop, "dataTransfer", { value: { files: [new File(["v 0 0 1"], "windows.obj")] } });
-  await act(async () => panel().querySelector(".input-box")!.dispatchEvent(drop));
+  await act(async () => surfaceSetsBox()!.dispatchEvent(drop));
   await settle();
-  const upload = vi.mocked(fetch).mock.calls.find(([address, init]) => String(address).endsWith("/criteria/1/test-surfaces") && init?.method === "POST")!;
+  const upload = vi.mocked(fetch).mock.calls.find(([address, init]) => String(address).endsWith("/inputs/test_surfaces") && init?.method === "POST")!;
   expect(((upload[1]!.body as FormData).get("file") as File).name).toBe("windows.obj");
-  expect(protectedFiles()).toEqual(["facades.obj", "windows.obj"]);
-  // Criterion 2 was not the one the file was dropped on: the app reads the stages again and shows it out of date as well.
+  expect([...surfaceSetsBox()!.querySelectorAll(".input-file-name")].map((name) => name.textContent)).toEqual(["facades.obj", "windows.obj"]);
+  expect(service.storedFileCount("windows.obj")).toBe(1);
+  // The app reads the stages again and shows both criteria that use the set out of date.
+  openStep("Criteria");
   expect(cardLine("Winter sun on facades")).toBe("Out of date");
   expect(cardLine("Spring sun on windows")).toBe("Out of date");
 });
 
-test("use a file from another criterion", async () => {
+test("a criterion switches on a set another criterion uses: both use it, the set says so, and only the criterion switched is dated", async () => {
   await openChain([FACADES, WINDOWS]);
   openPanelSection("Test surfaces");
-  const reuse = panel().querySelector<HTMLElement>(".protects-reuse")!;
-  expect([...reuse.querySelectorAll(".protects-reuse-name")].map((name) => name.textContent)).toEqual(["windows.obj"]);
-  await act(async () => reuse.querySelector<HTMLButtonElement>('[aria-label="Use windows.obj"]')!.click());
+  expect(surfaceSetSwitches()).toEqual([["facades.obj", true], ["windows.obj", false]]);
+  await act(async () => panel().querySelector<HTMLInputElement>('[aria-label="Use windows.obj"]')!.click());
   await settle();
+  expect(service.requests).toContain("PUT /criteria/1/test-surfaces/windows.obj");
   expect(protectedFiles()).toEqual(["facades.obj", "windows.obj"]);
-  expect(panel().querySelector(".protects-reuse")).toBeNull();            // nothing more to use
   expect(cardLine("Winter sun on facades")).toBe("Out of date");
+  expect(cardLine("Spring sun on windows")).not.toBe("Out of date");
+  openStep("Site");
+  const removeWindows = surfaceSetsBox()!.querySelector<HTMLButtonElement>('[aria-label="Remove windows.obj"]')!;
+  expect(removeWindows.disabled).toBe(true);
+  expect(removeWindows.title).toBe("Used by Winter sun on facades and Spring sun on windows: switch it off there to remove it");
+  // Switched off again: criterion 2 still uses it
+  openStep("Criteria");
+  await act(async () => panel().querySelector<HTMLInputElement>('[aria-label="Use windows.obj"]')!.click());
+  await settle();
+  expect(service.requests).toContain("DELETE /criteria/1/test-surfaces/windows.obj");
+  expect(protectedFiles()).toEqual(["facades.obj"]);
+  expect(service.storedFileCount("windows.obj")).toBe(1);
 });
 
 test("renaming a card sends the new name and the card shows it", async () => {

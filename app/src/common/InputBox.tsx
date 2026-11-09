@@ -1,10 +1,10 @@
 // One box of input files (UX 5.2): dashed with its hint while empty, one row per file with a remove button once it has files,
-// "Add files" by the picker or by dropping files onto the box. The Inputs step draws one per role of the site, a criterion's
-// and a study's test surfaces one each (ProtectsBox). While a run is active the service refuses uploads and removals, so both
-// are disabled with the reason.
+// "Add files" by the picker or by dropping files onto the box. The Site step draws one per role of the site and one for the
+// project's test surfaces (SurfaceSetsBox). While a run is active the service refuses uploads and removals, so both are disabled
+// with the reason.
 import { useId, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { ApiError, failureTextOf, type InputFileInfo } from "../api_client/client";
-import { messages } from "../messages";
+import { listedWithAnd, messages } from "../messages";
 import { WarningIcon } from "../settings_form/SettingField";
 import { Subheading } from "../settings_form/Subheading";
 import "../theme/panels.css";
@@ -61,6 +61,8 @@ interface InputBoxProps {
   extraAction?: ReactNode;
   /** A menu at the end of a file's row, before its remove button (Rename, Edit picks of a surface set); null for none. */
   fileMenu?: (file: InputFileInfo) => ReactNode;
+  /** Why a file cannot be removed (a surface set in use), shown on its disabled remove button; null when it can. */
+  removeRefusal?: (file: InputFileInfo) => string | null;
 }
 
 const TITLES: Record<InputRole, string> = {
@@ -91,7 +93,7 @@ const NO_PROBLEMS: string[] = [];
 
 export function InputBox({ role, files, weatherLocation = null, weatherHint = "", onAddFiles, onRemoveFile, disabledReason, weatherNeeded = false,
                            drawingProblems = NO_PROBLEMS, note = null, title, titleHidden = false, hint: hintGiven, addLabel,
-                           showsDisabledReason = true, footer = null, extraAction = null, fileMenu }: InputBoxProps) {
+                           showsDisabledReason = true, footer = null, extraAction = null, fileMenu, removeRefusal }: InputBoxProps) {
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -164,7 +166,9 @@ export function InputBox({ role, files, weatherLocation = null, weatherHint = ""
       )}
       {filled && (
         <ul className="input-file-list">
-          {files.map((file) => (
+          {files.map((file) => {
+            const refusal = removeRefusal?.(file) ?? null;
+            return (
             <li key={file.name} className="input-file-row">
               <div>
                 <div className="input-file-name" title={file.shown_name && file.shown_name !== file.name ? file.name : undefined}>{file.shown_name ?? file.name}</div>
@@ -172,15 +176,18 @@ export function InputBox({ role, files, weatherLocation = null, weatherHint = ""
                   {isWeather ? weatherLocation ?? "" : messages.triangleCount(file.triangle_count)}
                   {file.picked === true && `, ${messages.pickedOnSurroundings}`}
                 </div>
+                {(file.used_by ?? []).length > 0 && <div className="input-file-detail">{messages.usedBy(listedWithAnd(file.used_by ?? []))}</div>}
                 {(file.picks_lost ?? 0) > 0 && <div className="input-box-problem"><WarningIcon />{messages.picksLost(file.picks_lost ?? 0)}</div>}
               </div>
               {fileMenu?.(file)}
-              <button type="button" className="input-remove" aria-label={messages.removeFile(file.name)} title={messages.removeFile(file.name)}
-                      disabled={disabled} onClick={() => void remove(file.name)}>
+              <button type="button" className="input-remove" aria-label={messages.removeFile(file.shown_name ?? file.name)}
+                      title={refusal ?? messages.removeFile(file.shown_name ?? file.name)}
+                      disabled={disabled || refusal !== null} onClick={() => void remove(file.name)}>
                 <RemoveIcon />
               </button>
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
       {filled && note !== null && <p className="input-box-hint">{note}</p>}

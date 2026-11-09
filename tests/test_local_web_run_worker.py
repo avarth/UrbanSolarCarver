@@ -285,7 +285,7 @@ def test_a_run_refuses_without_test_surfaces_in_an_active_criterion(chain_of_two
     worker = make_worker(store, handle_request=engine)
     with pytest.raises(MissingInputs) as refused:
         worker.start(name, ["thresholding"])
-    assert str(refused.value) == "Add test surfaces to East facade." and refused.value.status_code == 422
+    assert str(refused.value) == "Choose test surfaces for East facade." and refused.value.status_code == 422
     assert refused.value.roles == ["test_surfaces:2"]
     assert engine.requests == [] and worker.active_project() is None
     assert store.read_project_json(name).criterion_records == {}
@@ -312,7 +312,7 @@ def test_the_refusals_name_every_missing_input(tmp_path):
     with pytest.raises(MissingInputs) as refused:
         make_worker(store).start("p", ["thresholding"])
     assert str(refused.value) == ("Upload the missing input files first: max_volume, weather. "
-                                  f"Add test surfaces to {store.criteria('p')[0].name}.")
+                                  f"Choose test surfaces for {store.criteria('p')[0].name}.")
 
 
 def _break_the_stored_settings_of(store, name, criterion_id):

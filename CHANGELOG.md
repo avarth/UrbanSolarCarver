@@ -23,10 +23,15 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - Simulate: a study can account for the **Base volume** while the project has a base height (`CheckSettings.geometry`
   `base_volume`, the request's `base_volume_path`).
 - 3D view: panning moves the picture and no longer the orbit point, which stays at the compass ring's centre.
-- **Test surfaces picked on the surroundings.** **From surroundings** in a criterion's Test surfaces box or a study's files
-  picks whole flat faces of the surroundings in the view and stores them as a surface set (`POST /projects/{name}/surface-sets/picked`),
-  turned to face the side they were clicked from. Picked sets keep their picks (**Edit picks**) and are built again when the
-  surroundings change. Every test surface file is shown by a set name, which **Rename** changes (`PUT .../surface-sets/{file}/name`).
+- **Test surfaces are sets of the project, in the Site step.** The Site step's **Test surfaces** box lists every set (a file added,
+  or faces picked on the surroundings) with the criteria and studies that use it; a criterion's Test surfaces section is one switch
+  per set, which replaces its own upload and "Use a file from another criterion". A set stays until it is removed from the box, and
+  one in use cannot be removed (`POST`/`DELETE /projects/{name}/inputs/test_surfaces`, `InputFileInfo.used_by`). Run reasons read
+  "Choose test surfaces for *name*".
+- **Test surfaces picked on the surroundings.** **From surroundings** in the Site step's Test surfaces box picks whole flat faces of
+  the surroundings in the view and stores them as a set (`POST /projects/{name}/surface-sets/picked`), turned to face the side they
+  were clicked from. Picked sets keep their picks (**Edit picks**) and are built again when the surroundings change. Every set is
+  shown by a name, which **Rename** changes (`PUT .../surface-sets/{file}/name`).
 - **Update the carving as I change its settings** moved from each criterion's Carving rule to Settings > Carving, kept in
   the project (`project.json` `carving_updates_itself`, `PUT /projects/{name}/carving-updates`) instead of the browser. The
   view's Out of date stamp in Carve has the run that brings the results up to date (Update carving or Run analysis); it never

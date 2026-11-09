@@ -1,8 +1,8 @@
 // The Site step (UX 5.2, spec 7.1; named Inputs until design/new-project-setup.md): the site's geometry, one box per input role with
 // its files (the maximum volume, the existing surroundings and the terrain, which are optional), "Add files" (picker, or drop the
 // files onto the box) and a remove button per file; under the boxes the size of all inputs together and the warning when it does not
-// look like metres. The boxes are common/InputBox.tsx; the test surfaces belong to the criteria (ProtectsBox), the weather file to the
-// project settings (ProjectSettingsDialog).
+// look like metres. The boxes are common/InputBox.tsx; then the project's test surfaces as surface sets (SurfaceSetsBox), which the
+// criteria and studies choose among; the weather file is in the project settings (ProjectSettingsDialog).
 // While a run of the project is active the service refuses uploads and removals, so both are disabled with the reason.
 import type { ReactNode } from "react";
 import type { InputFileInfo } from "../api_client/client";
@@ -50,10 +50,12 @@ interface InputsStepProps {
   maxVolumeBox?: ReactNode;
   /** At the end of the maximum volume's box: the link to a site instead. */
   maxVolumeFooter?: ReactNode;
+  /** After the terrain: the project's test surfaces as surface sets (SurfaceSetsBox). */
+  testSurfacesBox?: ReactNode;
 }
 
 export function InputsStep({ files, inputsBounds, onAddFiles, onRemoveFile, disabledReason, drawingProblems = {},
-                             maxVolumeNote = null, maxVolumeBox, maxVolumeFooter = null }: InputsStepProps) {
+                             maxVolumeNote = null, maxVolumeBox, maxVolumeFooter = null, testSurfacesBox = null }: InputsStepProps) {
   const warning = inputsBounds === null ? null : sizeWarning(inputsBounds);
   return (
     <div className="inputs-step">
@@ -62,6 +64,7 @@ export function InputsStep({ files, inputsBounds, onAddFiles, onRemoveFile, disa
                   onAddFiles={onAddFiles} onRemoveFile={onRemoveFile} disabledReason={disabledReason} drawingProblems={drawingProblems[role]}
                   note={role === "max_volume" ? maxVolumeNote : null} footer={role === "max_volume" ? maxVolumeFooter : null} />
       )))}
+      {testSurfacesBox}
       {inputsBounds !== null && (
         <div className="inputs-size">
           <div className="inputs-size-title">{messages.inputsSizeTitle}</div>

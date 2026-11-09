@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { expect, test } from "vitest";
 import type { CriterionEntry } from "../api_client/client";
-import { testSurfaceGroupsOf } from "./test_surface_groups";
+import { UNUSED_SETS, testSurfaceGroupsOf } from "./test_surface_groups";
 
 /** A mesh of *triangles* triangles. */
 const meshOf = (triangles: number) => new THREE.BufferGeometry().setAttribute("position", new THREE.BufferAttribute(new Float32Array(9 * triangles), 3));
@@ -20,8 +20,9 @@ test("each criterion's files are one group in its colour, in chain order, whiche
   expect(groups.map(({ id, name, colour, off, shown }) => ({ id, name, colour, off, shown }))).toEqual([
     { id: "1", name: "Criterion 1", colour: "#4477aa", off: false, shown: true },
     { id: "2", name: "Criterion 2", colour: "#ee6677", off: false, shown: true },
+    { id: UNUSED_SETS, name: "Test surfaces no criterion uses", colour: null, off: false, shown: true },        // roofs.obj
   ]);
-  expect(groups.map(verticesOf)).toEqual([3, 6]);
+  expect(groups.map(verticesOf)).toEqual([3, 6, 12]);
 });
 
 test("a file several criteria list is drawn once: for the selected criterion, else for the first that lists it", () => {
@@ -35,21 +36,27 @@ test("a file several criteria list is drawn once: for the selected criterion, el
   expect(drawn("1", ["1", "2", "3"])).toEqual([null, null, null]);       // every owner hidden: not drawn
 });
 
-test("a hidden criterion stays in the list, with nothing drawn; a stored file no criterion lists is not drawn", () => {
-  const groups = testSurfaceGroupsOf([FACADES, WINDOWS], "1", new Set(["2"]), { ...BY_FILE, "stray.obj": meshOf(8) }, null);
-  expect(groups.map(({ id, shown }) => [id, shown])).toEqual([["1", true], ["2", false]]);
-  expect(groups.map(verticesOf)).toEqual([3, null]);
+test("a hidden criterion stays in the list, with nothing drawn; stored files no criterion lists are one last group, with its own toggle", () => {
+  const byFile = { ...BY_FILE, "stray.obj": meshOf(8) };
+  const groups = testSurfaceGroupsOf([FACADES, WINDOWS], "1", new Set(["2"]), byFile, null);
+  expect(groups.map(({ id, shown }) => [id, shown])).toEqual([["1", true], ["2", false], [UNUSED_SETS, true]]);
+  expect(groups.map(verticesOf)).toEqual([3, null, 36]);         // roofs.obj and stray.obj
+  const unusedHidden = testSurfaceGroupsOf([FACADES, WINDOWS], "1", new Set([UNUSED_SETS]), byFile, null);
+  expect(unusedHidden.map(({ id, shown }) => [id, shown])).toEqual([["1", true], ["2", true], [UNUSED_SETS, false]]);
+  expect(unusedHidden[2].geometry).toBeNull();                    // a hidden group draws nothing, as a hidden criterion's
+  // Every stored file listed: no such group
+  expect(testSurfaceGroupsOf([FACADES, WINDOWS, ROOFS], "1", NONE_HIDDEN, BY_FILE, null).map(({ id }) => id)).toEqual(["1", "2", "3"]);
 });
 
 test("a criterion that is switched off is marked, and its files are drawn as any other's", () => {
   const groups = testSurfaceGroupsOf([FACADES, entry("2", "#ee6677", ["windows.obj"], true)], "1", NONE_HIDDEN, BY_FILE, null);
-  expect(groups.map(({ off }) => off)).toEqual([false, true]);
-  expect(groups.map(verticesOf)).toEqual([3, 6]);
+  expect(groups.map(({ off }) => off)).toEqual([false, true, false]);
+  expect(groups.map(verticesOf)).toEqual([3, 6, 12]);
 });
 
 test("a file that is not loaded (unreadable, or not yet) is left out of its criterion's mesh", () => {
   const groups = testSurfaceGroupsOf([entry("1", "#4477aa", ["facades.obj", "missing.obj"]), entry("2", "#ee6677", ["missing.obj"])], "1", NONE_HIDDEN, BY_FILE, null);
-  expect(groups.map(verticesOf)).toEqual([3, null]);
+  expect(groups.map(verticesOf)).toEqual([3, null, 18]);       // windows.obj and roofs.obj no criterion lists
 });
 
 test("a project that lists no criteria draws all its stored files in one group without a colour", () => {
@@ -59,8 +66,8 @@ test("a project that lists no criteria draws all its stored files in one group w
   expect(testSurfaceGroupsOf([], null, NONE_HIDDEN, {}, null)).toEqual([{ id: "", name: "", colour: null, off: false, shown: true, geometry: null }]);
 });
 
-test("one criterion draws its own files in its colour", () => {
+test("one criterion draws its own files in its colour, the sets it does not use without a colour", () => {
   const groups = testSurfaceGroupsOf([ROOFS], "3", NONE_HIDDEN, BY_FILE, null);
-  expect(groups.map(({ colour }) => colour)).toEqual(["#228833"]);
-  expect(groups.map(verticesOf)).toEqual([12]);
+  expect(groups.map(({ colour }) => colour)).toEqual(["#228833", null]);
+  expect(groups.map(verticesOf)).toEqual([12, 9]);
 });

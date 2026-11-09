@@ -5,7 +5,7 @@ import pytest
 import send2trash
 import trimesh
 
-from local_web_test_support import FakeRecycleBin, box_bytes, has_vertex_normals, pretend_to_be_on_windows_volume
+from local_web_test_support import FakeRecycleBin, box_bytes, has_vertex_normals
 from urbansolarcarver.local_web_service import test_surfaces
 from urbansolarcarver.local_web_service.projects import ProjectError, ProjectStore
 from urbansolarcarver.local_web_service.stage_records import missing_inputs
@@ -82,55 +82,61 @@ def test_removing_a_file_from_one_criterion_keeps_it_for_the_other(tmp_path):
     assert _fingerprints(store, "2") == second_before
 
 
-def test_a_file_no_criterion_uses_goes_to_the_recycle_bin(tmp_path, monkeypatch):
+def test_a_set_no_criterion_uses_stays_until_it_is_deleted_and_then_goes_to_the_recycle_bin(tmp_path, monkeypatch):
     recycle_bin = FakeRecycleBin()
     monkeypatch.setattr(send2trash, "send2trash", recycle_bin)
     store = _store_with_criteria(tmp_path)
     store.add_criterion_test_surface("p", "1", "facade.ply", _panel(0))
-    store.add_criterion_test_surface("p", "2", "facade.ply", _panel(0))
     store.add_criterion_test_surface("p", "2", "roof.ply", _panel(50))
     store.remove_criterion_test_surface("p", "1", "facade.ply")
-    assert recycle_bin.files == []                                      # criterion 2 still uses it
-    store.remove_criterion_test_surface("p", "2", "facade.ply")
+    store.delete_criterion("p", "2")
+    assert _stored_file_names(store) == ["facade.ply", "roof.ply"] and recycle_bin.files == []
+    store.remove_input("p", "test_surfaces", "facade.ply")
     assert _stored_file_names(store) == ["roof.ply"]
     assert [file.name for file in store.input_files("p", "test_surfaces")] == ["roof.ply"]
-    store.delete_criterion("p", "2")
-    assert _stored_file_names(store) == [] and store.input_files("p", "test_surfaces") == []
-    assert not test_surfaces.joined_path(store.open("p"), "2").exists()
-    stored_folder = store.open("p") / "inputs" / "test_surfaces"
-    assert recycle_bin.files == [stored_folder / "facade.ply", stored_folder / "roof.ply"]
+    assert recycle_bin.files == [store.open("p") / "inputs" / "test_surfaces" / "facade.ply"]
 
 
-def test_on_a_drive_without_a_recycle_bin_a_file_no_criterion_uses_is_deleted(tmp_path, monkeypatch):
-    monkeypatch.setattr(send2trash, "send2trash", FakeRecycleBin(error=AssertionError("this drive has no recycle bin")))
-    store = _store_with_criteria(tmp_path)
-    store.add_criterion_test_surface("p", "1", "facade.ply", _panel(0))
-    store.add_criterion_test_surface("p", "2", "roof.ply", _panel(50))
-    pretend_to_be_on_windows_volume(monkeypatch, "E:\\", 2)          # a removable drive
-    store.remove_criterion_test_surface("p", "1", "facade.ply")
-    store.delete_criterion("p", "2")
-    assert _stored_file_names(store) == [] and store.input_files("p", "test_surfaces") == []
-
-
-def test_a_file_the_recycle_bin_refuses_stays_and_the_change_is_made(tmp_path, monkeypatch):
-    store = _store_with_criteria(tmp_path)
-    store.add_criterion_test_surface("p", "1", "facade.ply", _panel(0))
-    store.add_criterion_test_surface("p", "2", "roof.ply", _panel(50))
+def test_a_set_the_recycle_bin_refuses_stays_on_disk_and_leaves_the_project(tmp_path, monkeypatch):
+    store = _store_with_criteria(tmp_path, count=1)
+    store.add_input("p", "test_surfaces", "facade.ply", _panel(0))
     monkeypatch.setattr(send2trash, "send2trash", FakeRecycleBin(error=OSError("the file is open in another program")))
-    store.remove_criterion_test_surface("p", "1", "facade.ply")
-    store.delete_criterion("p", "2")
-    assert _uses(store, "1") == [] and [criterion.id for criterion in store.criteria("p")] == ["1"]
-    assert store.input_files("p", "test_surfaces") == []                # project.json no longer lists them
-    assert _stored_file_names(store) == ["facade.ply", "roof.ply"]      # the files stay where they are
+    store.delete_surface_set("p", "facade.ply")
+    assert store.input_files("p", "test_surfaces") == [] and _stored_file_names(store) == ["facade.ply"]
 
 
-def test_deleting_a_criterion_keeps_the_files_another_criterion_uses(tmp_path):
+def test_a_set_added_to_the_project_is_used_by_nothing_until_switched_on(tmp_path):
+    store = _store_with_criteria(tmp_path, count=1)
+    reply = store.add_input("p", "test_surfaces", "facade.ply", _panel(0))
+    assert [(file.name, file.used_by) for file in reply.files] == [("facade.ply", [])]
+    assert _uses(store, "1") == [] and not test_surfaces.joined_path(store.open("p"), "1").exists()
+    store.use_test_surface("p", "1", "facade.ply")
+    assert store.input_files("p", "test_surfaces")[0].used_by == [store.criteria("p")[0].name]
+    first = _fingerprints(store, "1")
+    store.add_input("p", "test_surfaces", "facade.ply", _panel(0, extents=(8, 8, 0.1)))      # replaced: its criterion is joined again
+    assert _fingerprints(store, "1") != first
+
+
+def test_a_set_in_use_is_not_deleted_and_the_reason_names_its_users(tmp_path):
+    store = _store_with_criteria(tmp_path, count=1)
+    store.add_criterion_test_surface("p", "1", "facade.ply", _panel(0))
+    study = store.add_study("p", from_criterion="1")
+    before = store.read_project_json("p")
+    with pytest.raises(ProjectError) as refused:
+        store.remove_input("p", "test_surfaces", "facade.ply")
+    criterion_name = store.criteria("p")[0].name
+    assert refused.value.status_code == 422
+    assert str(refused.value) == f"facade is used by {criterion_name} and {study.name}. Switch it off there first."
+    assert store.read_project_json("p") == before and _stored_file_names(store) == ["facade.ply"]
+
+
+def test_deleting_a_criterion_keeps_its_sets_in_the_project(tmp_path):
     store = _store_with_criteria(tmp_path)
     store.add_criterion_test_surface("p", "1", "facade.ply", _panel(0))
     store.add_criterion_test_surface("p", "2", "facade.ply", _panel(0))
     store.add_criterion_test_surface("p", "2", "roof.ply", _panel(50))
     store.delete_criterion("p", "2")
-    assert _stored_file_names(store) == ["facade.ply"] and _uses(store, "1") == ["facade.ply"]
+    assert _stored_file_names(store) == ["facade.ply", "roof.ply"] and _uses(store, "1") == ["facade.ply"]
 
 
 def test_a_missing_criterion_or_file_is_a_404(tmp_path):
@@ -230,20 +236,6 @@ def test_a_run_needs_test_surfaces_in_every_active_criterion(tmp_path):
     assert missing_inputs(store, "p") == ["criteria"]
 
 
-def test_test_surfaces_are_refused_as_a_project_input(tmp_path):
-    """Test surfaces belong to a criterion (or a study): the inputs path refuses them, and nothing changes."""
-    store = _store_with_criteria(tmp_path, count=1)
-    store.add_criterion_test_surface("p", "1", "facade.ply", _panel(0))
-    before = store.read_project_json("p")
-    for refuse in (lambda: store.add_input("p", "test_surfaces", "other.ply", _panel(1)),
-                   lambda: store.remove_input("p", "test_surfaces", "facade.ply")):
-        with pytest.raises(ProjectError, match=r"^Test surfaces belong to a criterion") as refused:
-            refuse()
-        assert refused.value.status_code == 422
-    assert store.read_project_json("p") == before and _stored_file_names(store) == ["facade.ply"]
-    assert [file.name for file in store.input_files("p", "test_surfaces")] == ["facade.ply"]     # listing them stays
-
-
 def test_the_same_file_uploaded_twice_to_one_criterion_is_listed_once(tmp_path):
     store = _store_with_criteria(tmp_path, count=1)
     store.add_criterion_test_surface("p", "1", "facade.ply", _panel(0))
@@ -265,21 +257,3 @@ def test_a_name_that_differs_only_in_letter_case_is_the_stored_file(tmp_path):
     assert _uses(store, "1") == ["Facade.ply"] and _uses(store, "2") == ["Facade.ply"]
     assert [file.name for file in store.input_files("p", "test_surfaces")] == ["Facade.ply"]
     assert all(after != earlier for after, earlier in zip(_fingerprints(store, "1", "2"), before))
-
-
-def test_deleting_a_criterion_does_not_fail_when_a_stored_file_cannot_be_deleted(tmp_path, monkeypatch):
-    store = _store_with_criteria(tmp_path)
-    store.add_criterion_test_surface("p", "2", "roof.ply", _panel(50))
-    stored = store.open("p") / "inputs" / "test_surfaces" / "roof.ply"
-    original_unlink = type(stored).unlink
-
-    def refuse_roof(path, *args, **kwargs):
-        if path.name == "roof.ply":
-            raise PermissionError("in use")
-        return original_unlink(path, *args, **kwargs)
-
-    monkeypatch.setattr(type(stored), "unlink", refuse_roof)
-    pretend_to_be_on_windows_volume(monkeypatch, "E:\\", 2)          # no recycle bin there, so the file is deleted
-    store.delete_criterion("p", "2")
-    assert [entry.id for entry in store.criteria("p")] == ["1"] and store.input_files("p", "test_surfaces") == []
-    assert stored.exists()

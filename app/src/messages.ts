@@ -321,7 +321,7 @@ export const messages = {
   criterionRunning: "Running",
   criterionOff: "Off",
   allCriteriaOff: "All off",
-  criterionNeedsTestSurfaces: "Add test surfaces",
+  criterionNeedsTestSurfaces: "Choose test surfaces",
   criterionNotRunYet: "Not run yet",
   // Criteria with several criteria: the ones that are on in order, each with the share it kept, "Daylight on windows 70 %, then
   // Solar heating 80 %"
@@ -342,7 +342,7 @@ export const messages = {
   // The panel of a card just selected, until its settings are in
   loadingCriterion: (criterionName: string) => `Loading the settings of ${criterionName}`,
   // A run refused because a criterion that is on protects nothing: said in that criterion's panel (7.3)
-  addTestSurfacesTo: (criterionName: string) => `Add test surfaces to ${criterionName}.`,
+  addTestSurfacesTo: (criterionName: string) => `Choose test surfaces for ${criterionName}.`,
   // A run's stage of one criterion, with several criteria (7.3): "Daylight on windows: Carving"
   criterionStage: (criterionName: string, stageName: string) => `${criterionName}: ${stageName}`,
   moveCriterion: (criterionName: string) => `Move ${criterionName}`,
@@ -395,13 +395,6 @@ export const messages = {
   // A file the service accepted (the engine reads it) that the 3D view cannot draw, said in its box as fileProblem(name, reason)
   meshCannotBeDrawn: "The 3D view cannot read this file, so it is not drawn. Runs still use it.",
   meshTypeCannotBeShown: (extension: string) => `Meshes of type '${extension}' cannot be shown.`,
-  // A criterion's test surfaces (7.2): the add button of its drop box, titled testSurfacesTitle; its hint for the mode is in
-  // mode_tiles.json (protects_hint).
-  addTestSurfaces: "Add test surfaces",
-  // Under the box with several criteria: the stored files the other criteria use, each with a button that adds it to this one.
-  useFileOfOtherCriterion: "Use a file from another criterion",
-  useFile: "Use",
-  useFileNamed: (fileName: string) => `Use ${fileName}`,
   // A site as the input (design/site-input.md): the choice between a maximum volume and a site, the Site card, drawing and editing
   inputChoiceTitle: "Start from",
   inputChoiceMaxVolume: "Maximum volume",
@@ -434,6 +427,13 @@ export const messages = {
   editPicks: "Edit picks",
   surfaceSetActions: (name: string) => `Actions for ${name}`,
   pickedOnSurroundings: "picked on the surroundings",
+  surfaceSetsHint: "Surfaces whose sun or sky the carving protects, such as neighbouring facades. Each file or set of picks is a set; criteria and studies choose among them.",
+  usedBy: (names: string) => `Used by ${names}`,
+  surfaceSetInUse: (names: string) => `Used by ${names}: switch it off there to remove it`,
+  noSurfaceSets: "The project has no test surfaces yet. Add files or pick them on the surroundings in the Site step.",
+  openSiteStep: "Open the Site step",
+  unusedSurfaceSets: "Test surfaces no criterion uses",
+  useSurfaceSet: (name: string) => `Use ${name}`,
   picksLost: (count: number) => `${count} picked ${count === 1 ? "face is" : "faces are"} gone from the surroundings`,
   importSitesTitle: (fileName: string) => `Import sites from ${fileName}`,
   importSitesFound: (count: number, unit: string) =>
@@ -528,10 +528,10 @@ export const messages = {
   runAnalysis: "Run analysis",
   runInProgress: "A run is in progress",
   addMaxVolumeToRun: "Add a maximum volume to run the analysis",
-  addTestSurfacesToRun: "Add test surfaces to run the analysis",
-  addMaxVolumeAndTestSurfacesToRun: "Add a maximum volume and test surfaces to run the analysis",
+  addTestSurfacesToRun: "Choose test surfaces to run the analysis",
+  addMaxVolumeAndTestSurfacesToRun: "Add a maximum volume and choose test surfaces to run the analysis",
   // Another criterion that is on protects nothing (7.2: the run refuses to start until every one protects something)
-  addTestSurfacesOfCriterionToRun: (criterionName: string) => `Add test surfaces to ${criterionName} to run the analysis`,
+  addTestSurfacesOfCriterionToRun: (criterionName: string) => `Choose test surfaces for ${criterionName} to run the analysis`,
   // Every criterion is off (the service's words for the refusal)
   turnOnCriterionToRun: "Turn on a criterion to run",
   fixSettingsToRun: "Fix the settings above to run the analysis",
@@ -672,7 +672,7 @@ export const messages = {
   // Why a carving change of the selected criterion runs nothing while another criterion's analysis is out of date: the carving
   // run would trace that criterion first, which only Run analysis starts (M10). The same while that criterion protects nothing.
   carvingWaitsForAnalysisOf: (criterionName: string) => `Run the analysis for ${criterionName} first`,
-  addTestSurfacesFirst: (criterionName: string) => `Add test surfaces to ${criterionName} first`,
+  addTestSurfacesFirst: (criterionName: string) => `Choose test surfaces for ${criterionName} first`,
   // The panel of a criterion that is off, in place of its carving rule
   criterionOffNote: "Off: the chain skips this criterion",
   // The folded sections of a criterion's panel, each saying in one line what it holds while it is closed

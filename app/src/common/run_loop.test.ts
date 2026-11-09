@@ -159,9 +159,9 @@ test("a start refused for a criterion's settings names the criterion; one refuse
   const { loop, unmount } = renderedLoop();
   await act(async () => { await loop().start("p", ["thresholding"], "carving_run_analysis"); });
   expect(loop().current!.state.failure).toMatchObject({ criterion: "2", field_errors: [{ field: "max_slope_deg", message: "too steep" }] });
-  vi.stubGlobal("fetch", replyWith({ detail: "Add test surfaces to Daylight.", missing_inputs: ["test_surfaces:3"] }, 422));
+  vi.stubGlobal("fetch", replyWith({ detail: "Choose test surfaces for Daylight.", missing_inputs: ["test_surfaces:3"] }, 422));
   await act(async () => { await loop().start("p", ["thresholding"], "carving_run_analysis"); });
-  expect(loop().current!.refusal).toBe("Add test surfaces to Daylight.");
+  expect(loop().current!.refusal).toBe("Choose test surfaces for Daylight.");
   expect(loop().current!.missingInputs).toEqual(["test_surfaces:3"]);
   unmount();
 });

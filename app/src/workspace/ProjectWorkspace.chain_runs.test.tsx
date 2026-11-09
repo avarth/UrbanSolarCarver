@@ -114,7 +114,7 @@ test("a run refused for criterion 2's settings selects its card, says so in its 
 test("a run refused for missing test surfaces selects that criterion and asks for them once, in the pinned bar", async () => {
   await openChain([FACADES, WINDOWS], { 1: CURRENT, 2: OUT_OF_DATE });
   // The service found criterion 2's test surfaces gone (removed in another tab, say).
-  const refusal = "Add test surfaces to Spring sun on windows.";
+  const refusal = "Choose test surfaces for Spring sun on windows.";
   chainService.runRefusal = { status: 422, body: { detail: refusal, missing_inputs: ["test_surfaces:2"] } };
   expect(editorName()).toBeNull();                                // two criteria: the step opens on the list
   await pressRunAnalysis();                                       // the pinned Run analysis, which says the refusal itself
@@ -127,7 +127,7 @@ test("a run refused for missing test surfaces selects that criterion and asks fo
 
 test("a build refused for missing test surfaces is said in that criterion's panel, once", async () => {
   await openChain([FACADES, WINDOWS]);
-  const refusal = "Add test surfaces to Spring sun on windows.";
+  const refusal = "Choose test surfaces for Spring sun on windows.";
   chainService.runRefusal = { status: 422, body: { detail: refusal, missing_inputs: ["test_surfaces:2"] } };
   showCriterionCards();                                           // the list shown, so the refusal has to open the editor
   await act(async () => buttonIn(pinnedBar(), "Build envelope and massing").click());     // it opens Envelope and massing
@@ -145,13 +145,13 @@ test("Run analysis waits for the test surfaces of every criterion that is on, an
   await openChain([FACADES, { ...WINDOWS, test_surface_files: [] }], { 1: CURRENT, 2: NOT_RUN });
   const runButton = () => buttonIn(pinnedBar(), "Run analysis");
   expect(runButton().disabled).toBe(true);
-  expect(reasonOf(runButton())).toBe("Add test surfaces to Spring sun on windows to run the analysis");
+  expect(reasonOf(runButton())).toBe("Choose test surfaces for Spring sun on windows to run the analysis");
   // A carving change of criterion 1 waits for criterion 2, which needs test surfaces before any analysis.
-  expect(panel().textContent).toContain("Add test surfaces to Spring sun on windows first");
+  expect(panel().textContent).toContain("Choose test surfaces for Spring sun on windows first");
   expect(panel().textContent).not.toContain("Run the analysis for Spring sun on windows first");
   // Shown, it is named too: with several criteria the bar says which one the reason is about.
   await select("Spring sun on windows");
-  expect(reasonOf(runButton())).toBe("Add test surfaces to Spring sun on windows to run the analysis");
+  expect(reasonOf(runButton())).toBe("Choose test surfaces for Spring sun on windows to run the analysis");
   await bypass("Spring sun on windows");
   expect(runButton()).toBeUndefined();                            // criterion 1, alone on, is current: nothing to run
   expect(buttonIn(pinnedBar(), "Build envelope and massing").disabled).toBe(false);

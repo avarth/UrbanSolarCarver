@@ -258,6 +258,7 @@ class InputFileInfo(BaseModel):
     shown_name: str | None = None
     picked: bool | None = None
     picks_lost: int | None = None
+    used_by: list[str] | None = None        # the names of the criteria, then the studies, that use a surface set
 
 
 class InputFilesReply(BaseModel):

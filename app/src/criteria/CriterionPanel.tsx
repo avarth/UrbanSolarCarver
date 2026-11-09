@@ -1,4 +1,4 @@
-// A criterion's panel (spec 7.1, 7.2), in three folded sections (PanelSection): Test surfaces (ProtectsBox), Settings (the criterion's mode by name, a note on it,
+// A criterion's panel (spec 7.1, 7.2), in three folded sections (PanelSection): Test surfaces (SurfaceSetSwitches), Settings (the criterion's mode by name, a note on it,
 // the weather box and the values reset by the mode, then the analysis settings that are criterion keys, SettingsStep) and Carving rule
 // (CarvingStep, put together in result_steps.tsx). Run analysis is in the bar pinned under the steps
 // (CriteriaRunBar). The shared settings are in the project settings window (ProjectSettingsDialog). The open sections are the workspace's (usePanelSections); a section opens
@@ -19,7 +19,7 @@ import { SettingTooltip } from "../settings_form/SettingTooltip";
 import { useDialogRequest } from "../common/dialogs";
 import { SettingsStep, WeatherChangeRegion, type WeatherChangeNoticeContent } from "../settings_form/SettingsStep";
 import { PanelSection, type PanelSections } from "./PanelSection";
-import { ProtectsBox } from "../common/ProtectsBox";
+import { SurfaceSetSwitches } from "./SurfaceSetSwitches";
 import { TypicalBuildingBox, TypicalBuildingSheet } from "./TypicalBuildingSheet";
 import type { TypicalBuildingHook } from "./use_typical_building";
 import {
@@ -34,16 +34,12 @@ export interface CriterionPanelProps extends PanelSections {
   criterionOn?: boolean;
   /** The files of the test surfaces the 3D view cannot draw. */
   testSurfaceDrawingProblems?: string[];
-  onAddTestSurfaces: (files: File[]) => Promise<string[]>;
-  onRemoveTestSurface: (fileName: string) => Promise<string | null>;
-  /** The stored test surface files other criteria use and this one does not, offered for use (several criteria only). */
-  otherTestSurfaces?: string[];
-  onUseTestSurface?: (fileName: string) => Promise<string | null>;
-  /** Picking test surfaces on the surroundings and the surface sets' names (design/test-surfaces-on-context.md). */
-  onPickFromSurroundings?: () => void;
-  onRenameSet?: (fileName: string, name: string) => Promise<string | null>;
-  onEditPicks?: (fileName: string) => void;
-  setNames?: Readonly<Record<string, string>>;
+  /** The project's surface sets, each with a switch (design/test-surfaces-on-context.md). */
+  surfaceSets: InputFileInfo[];
+  /** Switches a set on or off for the criterion; resolves with the reason it could not, or null. */
+  onToggleTestSurface: (fileName: string, on: boolean) => Promise<string | null>;
+  /** Opens the Site step, where the sets are added. */
+  onOpenSite: () => void;
   /** The settings the panel shows: the criterion's, with the shared ones they are read with. */
   form: FormState;
   /** The messages of the criterion's last save that name no setting. */
@@ -159,7 +155,7 @@ export function CriterionPanel(props: CriterionPanelProps) {
   useLayoutEffect(() => openAppeared(), [callingKey]);
 
   const summaries: Record<PanelSectionId, string> = {
-    test_surfaces: testSurfacesSummary(props.testSurfaces.map((file) => file.name)),
+    test_surfaces: testSurfacesSummary(props.testSurfaces.map((file) => file.shown_name ?? file.name)),
     settings: needsWeatherFile ? messages.needsWeatherFileSummary
       : energyWeighted ? messages.energyWeightedSummary(criterionSettingsSummary(form, readKeys)) : criterionSettingsSummary(form, readKeys),
     carving: criterionOn ? carvingRuleSummary(form, props.scoreUnit) : messages.criterionOff,
@@ -178,10 +174,9 @@ export function CriterionPanel(props: CriterionPanelProps) {
   return (
     <div className="criterion-panel">
       {section("test_surfaces", (
-        <ProtectsBox files={props.testSurfaces} mode={form.mode} onAddFiles={props.onAddTestSurfaces} onRemoveFile={props.onRemoveTestSurface}
-                     disabledReason={disabledReason} drawingProblems={props.testSurfaceDrawingProblems} otherFiles={props.otherTestSurfaces}
-                     onUseFile={props.onUseTestSurface} onPickFromSurroundings={props.onPickFromSurroundings} onRenameSet={props.onRenameSet}
-                     onEditPicks={props.onEditPicks} setNames={props.setNames} />
+        <SurfaceSetSwitches sets={props.surfaceSets} chosen={props.testSurfaces.map((file) => file.name)} mode={form.mode}
+                            onToggle={props.onToggleTestSurface} onOpenSite={props.onOpenSite} disabledReason={disabledReason}
+                            drawingProblems={props.testSurfaceDrawingProblems} />
       ))}
       {section("settings", (
         <>

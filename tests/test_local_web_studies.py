@@ -464,12 +464,11 @@ def test_a_file_a_study_takes_out_or_a_deleted_study_listed_stays_in_the_project
     assert not _study_joined(store, name, "1").exists() and not _study_joined(store, name, "2").exists()
 
 
-def test_a_file_no_criterion_and_no_study_lists_goes_to_the_recycle_bin_when_its_criterion_lets_it_go(project_with_inputs, monkeypatch):
+def test_a_file_no_criterion_and_no_study_lists_stays_as_a_surface_set(project_with_inputs, monkeypatch):
     store, name = project_with_inputs
     recycle_bin = _with_recycle_bin(monkeypatch)
-    stored = store.open(name) / "inputs" / "test_surfaces"
     store.remove_criterion_test_surface(name, "1", "surface.ply")
-    assert recycle_bin.files == [stored / "surface.ply"] and _stored_files(store, name) == []
+    assert recycle_bin.files == [] and _stored_files(store, name) == ["surface.ply"]
 
 
 def test_a_study_joins_its_files_and_has_no_joined_file_without_any(project_with_inputs):
