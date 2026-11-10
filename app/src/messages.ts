@@ -942,7 +942,6 @@ export const messages = {
     ? SKY_PATCH_WEIGHT_OF_MODE[mode] : "Sky patch weight"),
   studySkyDomeLegend: (metric: string | undefined) => (metric !== undefined && Object.hasOwn(STUDY_SKY_PATCH_VALUE_OF_METRIC, metric)
     ? STUDY_SKY_PATCH_VALUE_OF_METRIC[metric] : "Sky patch weight"),
-  buildingMassingLegend: "Building massing, by storey",
   carvedByCriterionLegend: "Carved voxels, by the criterion that removed them",
   legend: "Legend",
   // Simulate's sun tool (the Sun panel) and the hours in shade on the view.

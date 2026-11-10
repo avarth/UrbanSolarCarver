@@ -161,7 +161,7 @@ test("the Site step holds the site's geometry, then the project's test surfaces;
   service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, project(NOTHING_RUN));
   const titles = [...stepRow("Site").querySelectorAll(".input-box h3")].map((title) => title.textContent);
-  expect(titles).toEqual(["Maximum volume", "Context", "Terrain", "Test surfaces"]);
+  expect(titles).toEqual(["Context", "Test surfaces", "Terrain", "Maximum volume"]);   // what is around the site first
   expect(setNamesIn(surfaceSetsBox()!)).toEqual(["surfaces.obj"]);
   openProjectSettings();
   const location = projectSettings()!.querySelector(".setting-group-essential")!;

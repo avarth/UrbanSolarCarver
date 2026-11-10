@@ -169,18 +169,6 @@
   border-top: 3px solid var(--colour-sun);
 }
 
-.viewer-storey-swatches { display: flex; flex-wrap: wrap; gap: 4px; }
-
-.viewer-storey-swatch {
-  display: grid;
-  place-items: center;
-  min-width: 20px;
-  height: 20px;
-  border-radius: 3px;
-  font-size: var(--text-secondary);
-  font-weight: 600;
-}
-
 .viewer-criterion-legend { margin: 0; padding: 0; list-style: none; }
 .viewer-criterion-legend li { display: flex; align-items: center; gap: 6px; }
 

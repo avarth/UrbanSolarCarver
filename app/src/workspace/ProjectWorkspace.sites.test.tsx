@@ -40,7 +40,7 @@ test("a new project offers the two inputs; Sites makes the maximum volume from t
   await settle();
   expect(service.count("PUT /max-volume-source")).toBe(1);
   expect(service.siteSource).toBe("sites");
-  const sitesCard = panel().querySelector<HTMLElement>(".input-box")!;
+  const sitesCard = [...panel().querySelectorAll<HTMLElement>(".input-box")].find((box) => box.querySelector(".input-box-title-row h3")?.textContent === "Sites")!;
   expect(sitesCard.querySelector(".input-box-title-row h3")!.textContent).toBe("Sites");
   expect(sitesCard.querySelector(".input-box-title-row button")!.textContent).toBe("Draw");
   expect([...sitesCard.querySelectorAll(".input-box-title-row button")].map((button) => button.textContent)).toEqual(["Draw", "Import"]);

@@ -556,7 +556,8 @@ test("the saver of the open project waits for an upload in flight, so a rename, 
   service.uploadsAnswerWhen = new Promise((resolve) => { answerUpload = resolve; });
   let saver: OpenProjectSettingsSaver | null = null;
   await openWorkspace(service, project(CARVED), { onSettingsSaverReady: (ready) => { saver = ready; } });
-  const maximumVolumePicker = container().querySelector<HTMLInputElement>('input[type="file"]')!;
+  const maximumVolumeBox = [...container().querySelectorAll<HTMLElement>(".input-box")].find((box) => box.querySelector("h3")?.textContent === "Maximum volume")!;
+  const maximumVolumePicker = maximumVolumeBox.querySelector<HTMLInputElement>('input[type="file"]')!;
   Object.defineProperty(maximumVolumePicker, "files", { value: [new File([TRIANGLE_OBJ], "more.obj")], configurable: true });
   act(() => maximumVolumePicker.dispatchEvent(new Event("change", { bubbles: true })));
   await settle();

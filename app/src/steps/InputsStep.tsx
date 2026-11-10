@@ -1,8 +1,8 @@
-// The Site step (UX 5.2, spec 7.1; named Inputs until design/new-project-setup.md): the site's geometry, one box per input role with
-// its files (the maximum volume, the existing surroundings and the terrain, which are optional), "Add files" (picker, or drop the
-// files onto the box) and a remove button per file; under the boxes the size of all inputs together and the warning when it does not
-// look like metres. The boxes are common/InputBox.tsx; then the project's test surfaces as surface sets (SurfaceSetsBox), which the
-// criteria and studies choose among; the weather file is in the project settings (ProjectSettingsDialog).
+// The Site step (UX 5.2, spec 7.1; named Inputs until design/new-project-setup.md): one box per input, in this order: the context
+// (optional), the project's test surfaces as surface sets (SurfaceSetsBox), which the criteria and studies choose among, the terrain
+// (optional), and the sites or the maximum volume. Each has "Add files" (picker, or drop the files onto the box) and a remove button
+// per file; under the boxes the size of all inputs together and the warning when it does not look like metres. The boxes are
+// common/InputBox.tsx; the weather file is in the project settings (ProjectSettingsDialog).
 // While a run of the project is active the service refuses uploads and removals, so both are disabled with the reason. Under the boxes,
 // how many removed files the project folder keeps (inputs/removed/), with Show to open that folder.
 import { useState, type ReactNode } from "react";
@@ -16,8 +16,6 @@ import { formatNumber, formattedNumber } from "../format_numbers";
 import { plainModeName } from "../modes";
 import "../theme/panels.css";
 
-/** The roles of the Site step: the site's geometry (the test surfaces are each criterion's, the weather file is in Settings). */
-export const INPUT_ROLES: readonly InputRole[] = ["max_volume", "context", "terrain"];
 /**
  * "Carved by Daylight, then Sun hours. ..." for a project that was carved further with an earlier version of the app (its
  * record stays, spec 9); null for one that was not.
@@ -61,14 +59,19 @@ export function InputsStep({ files, inputsBounds, onAddFiles, onRemoveFile, disa
                              maxVolumeNote = null, maxVolumeBox, maxVolumeFooter = null, testSurfacesBox = null, removedFiles }: InputsStepProps) {
   const warning = inputsBounds === null ? null : sizeWarning(inputsBounds);
   const [showProblem, setShowProblem] = useState<string | null>(null);
+  const roleBox = (role: InputRole) => (role === "max_volume" && maxVolumeBox !== undefined ? <div key={role}>{maxVolumeBox}</div> : (
+    <InputBox key={role} role={role} files={files[role] ?? NO_FILES}
+              onAddFiles={onAddFiles} onRemoveFile={onRemoveFile} disabledReason={disabledReason} drawingProblems={drawingProblems[role]}
+              note={role === "max_volume" ? maxVolumeNote : null} footer={role === "max_volume" ? maxVolumeFooter : null} />
+  ));
+  // Context first, then the test surfaces picked on it, the terrain, and last the sites or the maximum volume: what is around
+  // the site is added before the site is drawn (user, 2026-11-10).
   return (
     <div className="inputs-step">
-      {INPUT_ROLES.map((role) => (role === "max_volume" && maxVolumeBox !== undefined ? <div key={role}>{maxVolumeBox}</div> : (
-        <InputBox key={role} role={role} files={files[role] ?? NO_FILES}
-                  onAddFiles={onAddFiles} onRemoveFile={onRemoveFile} disabledReason={disabledReason} drawingProblems={drawingProblems[role]}
-                  note={role === "max_volume" ? maxVolumeNote : null} footer={role === "max_volume" ? maxVolumeFooter : null} />
-      )))}
+      {roleBox("context")}
       {testSurfacesBox}
+      {roleBox("terrain")}
+      {roleBox("max_volume")}
       {removedFiles !== undefined && removedFiles.count > 0 && (
         <p className="inputs-removed">
           {messages.removedFilesKept(removedFiles.count)}{" "}

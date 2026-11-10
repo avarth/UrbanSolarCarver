@@ -13,6 +13,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
   now **Context** everywhere in the app (the box, From context, the Settings group, the layer). A file row shows its name
   only; its triangle count and, for a test surface set, who uses it are in the remove button's tooltip. The drop line
   reads "You can also drag files onto this box.", and the Sites box no longer repeats the heights set for all sites.
+  The boxes come in the order Context, Test surfaces, Terrain, Sites, so the context and the test surfaces picked on it
+  come before the site is drawn.
+- **No building massing legend.** The 3D view no longer shows the "Building massing, by storey" legend with its
+  numbered storey swatches; the massing keeps its storey colours.
 - **A removed file is kept.** Removing a file in the Site step (maximum volume, surroundings, terrain, weather, test
   surfaces) takes it out of the project and its calculations; the stored copy moves to `inputs/removed/<role>/` in the
   project folder instead of being deleted, so a removal by mistake is undone by adding the file again. Right after a removal the box offers **Undo**; under the

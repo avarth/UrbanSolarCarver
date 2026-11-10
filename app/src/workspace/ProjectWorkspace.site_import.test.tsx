@@ -31,7 +31,7 @@ const FOUND: OutlinesReply = {
 };
 
 const panel = () => container().querySelector(".workspace-panel")!;
-const sitesBox = () => panel().querySelector<HTMLElement>(".input-box")!;
+const sitesBox = () => [...panel().querySelectorAll<HTMLElement>(".input-box")].find((box) => box.querySelector(".input-box-title-row h3")?.textContent === "Sites")!;
 const importWindow = () => [...document.body.querySelectorAll<HTMLElement>("[role='dialog']")]
   .find((dialog) => dialog.querySelector("h2")?.textContent?.startsWith("Import sites from")) ?? null;
 

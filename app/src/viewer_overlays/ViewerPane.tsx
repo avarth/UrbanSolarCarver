@@ -23,7 +23,7 @@ import type { StudyView } from "../viewer/study_values";
 import { patchCorners } from "../viewer/study_values_decoder";
 import {
   buildingMassingLayer, carvedByCriterionLayer, carvedVoxelsLayer, contextLayer, envelopeLayer, inspectSurfacesLayer, keptColumnTops, keptVoxelsLayer, maxVolumeLayer,
-  skippedSurfacesLayer, skyDomeLayer, baseVolumeLayer, splitScorePoints, storeyOfPart, studyValuesLayer, sunPathLayer, sunStudyLayer, terrainLayer, testSurfacesLayer, volumeOutline, type InspectLayerFile, type MaxVolumeAppearance,
+  skippedSurfacesLayer, skyDomeLayer, baseVolumeLayer, splitScorePoints, studyValuesLayer, sunPathLayer, sunStudyLayer, terrainLayer, testSurfacesLayer, volumeOutline, type InspectLayerFile, type MaxVolumeAppearance,
   type VolumeOutline,
 } from "../viewer/layers";
 import { layerHooks } from "../viewer/layer_hooks";
@@ -256,12 +256,6 @@ function browserHasWebGl(): boolean {
   return context !== null;
 }
 
-/** The number of storeys of a building massing mesh: the highest storey of its parts, plus one. */
-function storeyCountOf(massing: THREE.BufferGeometry): number {
-  const partNames: string[] = massing.userData.partNames ?? [];
-  return partNames.reduce((count, name) => Math.max(count, (storeyOfPart(name) ?? 0) + 1), 0);
-}
-
 export function ViewerPane({ maxVolume, baseVolume = null, testSurfaces, onTestSurfacesShownChange, criteria = NO_CRITERIA, context = null, terrain = null, sunPath, hemisphere,
                              maxVolumeAppearance, shownByDefault,
                              northDegrees, framingRequest, centreContent, results = NO_VIEWER_RESULTS, localOrigin = NO_SHIFT, dimmedLayers = NO_LAYERS,
@@ -490,7 +484,6 @@ export function ViewerPane({ maxVolume, baseVolume = null, testSurfaces, onTestS
           lowestWeight: Math.min(...skyDome.weights),
           highestWeight: Math.max(...skyDome.weights) }
       : undefined,
-    buildingMassing: shown("building_massing") && massing ? { storeyCount: storeyCountOf(massing) } : undefined,
     carvedByCriterion: shown("carved_by_criterion") && carvedByCriterion
       ? { criteria: carvedByCriterion.criterionIds.flatMap((id) => criteria.filter((entry) => entry.id === id).map(({ name, colour }) => ({ name, colour }))),
           thinningStep: carvedVoxelsOfCriteria?.thinningStep ?? 1 }

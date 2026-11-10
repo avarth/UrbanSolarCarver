@@ -133,7 +133,7 @@ test("a file the 3D view cannot draw is named in its box, next to the files, whi
 test("the Site step holds only the site's geometry: no test surfaces, no weather file", () => {
   rendered = renderForTest(inputsStep(NO_FILES));
   const titles = [...rendered.container.querySelectorAll(".input-box h3")].map((title) => title.textContent);
-  expect(titles).toEqual(["Maximum volume", "Context", "Terrain"]);
+  expect(titles).toEqual(["Context", "Terrain", "Maximum volume"]);
   expect(rendered.container.textContent).not.toContain("Test surfaces");
   expect(rendered.container.textContent).not.toContain("Weather file");
 });

@@ -55,12 +55,11 @@ test("a kept range from 0 to a positive cutoff keeps the colour ramp", () => {
   expect(rendered.container.textContent).not.toContain("All kept voxels");
 });
 
-test("the sun path and the building massing swatches", () => {
-  rendered = renderForTest(<Legend theme="dark" content={{ sunPath: "Sun path, 21 Dec; sun at 10, 12 and 14\u00a0h", buildingMassing: { storeyCount: 3 } }} />);
+test("the sun path swatch; the building massing has no legend", () => {
+  rendered = renderForTest(<Legend theme="dark" content={{ sunPath: "Sun path, 21 Dec; sun at 10, 12 and 14\u00a0h" }} />);
   const text = rendered.container.textContent;
   expect(text).toContain("Sun path, 21 Dec; sun at 10, 12 and 14\u00a0h");
-  expect(text).toContain("Building massing, by storey");
-  expect(Array.from(rendered.container.querySelectorAll(".viewer-storey-swatch")).map((swatch) => swatch.textContent)).toEqual(["1", "2", "3"]);
+  expect(rendered.container.querySelector(".viewer-storey-swatch")).toBeNull();
   expect(rendered.container.querySelector("[data-viewport-theme='dark']")).not.toBeNull();
 });
 

@@ -1,7 +1,7 @@
 // The legend of UX 8.1 and 8.2, bottom right of the 3D view: the colourings on screen and their units.
 import { messages } from "../messages";
 import { formattedNumber, withUnit } from "../format_numbers";
-import { cividis, colourToken, keptScoreRange, storeyColour, sunRamp } from "../viewer/colour_scales";
+import { cividis, keptScoreRange, sunRamp } from "../viewer/colour_scales";
 import type { ViewportTheme } from "../viewer/scene";
 import "./overlays.css";
 
@@ -9,7 +9,6 @@ export interface LegendContent {
   keptVoxels?: { title: string; mode?: string; cutoff: number; unit?: string; thinningStep: number };
   skyDome?: { title: string; lowestWeight: number; highestWeight: number };
   sunPath?: string;                               // sunPathLegend(sunPath)
-  buildingMassing?: { storeyCount: number };
   carvedByCriterion?: { criteria: { name: string; colour: string }[]; thinningStep: number };     // one swatch and name per criterion that was on
 }
 
@@ -19,22 +18,6 @@ interface LegendProps {
 }
 
 const RAMP_STOPS = 11;
-
-function relativeLuminance(hex: string): number {
-  const channels = [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16) / 255)
-    .map((channel) => (channel <= 0.04045 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4)));
-  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
-}
-
-/** Ink or white (the panel colour), whichever has the higher contrast on the background (WCAG 2.1 contrast ratio). */
-function textColourOn(background: string): string {
-  const contrast = (first: string, second: string) => {
-    const [lighter, darker] = [relativeLuminance(first), relativeLuminance(second)].sort((a, b) => b - a);
-    return (lighter + 0.05) / (darker + 0.05);
-  };
-  const ink = colourToken("ink"), white = colourToken("panel");
-  return contrast(background, white) > contrast(background, ink) ? white : ink;
-}
 
 function rampGradient(colourAt: (t: number) => string): string {
   const stops = Array.from({ length: RAMP_STOPS }, (_, stop) => colourAt(stop / (RAMP_STOPS - 1)));
@@ -60,8 +43,8 @@ function KeptVoxelsRange({ cutoff, unit }: { cutoff: number; unit?: string }) {
 }
 
 export function Legend({ content, theme }: LegendProps) {
-  const { keptVoxels, skyDome, sunPath, buildingMassing, carvedByCriterion } = content;
-  if (!keptVoxels && !skyDome && !sunPath && !buildingMassing && !carvedByCriterion) return null;
+  const { keptVoxels, skyDome, sunPath, carvedByCriterion } = content;
+  if (!keptVoxels && !skyDome && !sunPath && !carvedByCriterion) return null;
   return (
     <div className="viewer-overlay viewer-legend" data-viewport-theme={theme} role="group" aria-label={messages.legend}>
       {keptVoxels && (
@@ -104,21 +87,6 @@ export function Legend({ content, theme }: LegendProps) {
       {sunPath && (
         <section>
           <p><span className="viewer-sun-path-swatch" aria-hidden="true" />{sunPath}</p>
-        </section>
-      )}
-      {buildingMassing && (
-        <section>
-          <h3>{messages.buildingMassingLegend}</h3>
-          <div className="viewer-storey-swatches">
-            {Array.from({ length: buildingMassing.storeyCount }, (_, storey) => {
-              const background = storeyColour(storey, buildingMassing.storeyCount);
-              return (
-                <span key={storey} className="viewer-storey-swatch" style={{ background, color: textColourOn(background) }}>
-                  {storey + 1}
-                </span>
-              );
-            })}
-          </div>
         </section>
       )}
     </div>
