@@ -44,7 +44,7 @@ test("the 3D view and Export use the envelope file that was built, not a format 
 test("a project carved further with an earlier version keeps its note on the maximum volume", async () => {
   service = new FakeService(CARVED, CARVING);
   await openWorkspace(service, { ...project(CARVED), carving_chain: [{ mode: "daylight" }, { mode: "time-based" }] } as ProjectDetail);
-  expect(container().querySelector(".inputs-step .input-box-hint")!.textContent).toContain(
+  expect([...container().querySelectorAll(".inputs-step .input-box-hint")].map((hint) => hint.textContent)).toContain(
     "Carved by Daylight, then Sun hours. The earlier maximum volumes are kept in the project folder, in inputs/earlier_max_volumes.");
 });
 

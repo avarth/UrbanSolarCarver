@@ -134,7 +134,7 @@ def test_a_study_that_samples_the_surroundings_or_the_terrain_waits_for_their_fi
     store = worker.store
     on_context = add_study(store, "p", files=(), surfaces_from=["context"])
     on_terrain = add_study(store, "p", surfaces_from=["terrain"])
-    assert state_of(store, "p", on_context) == ("refused", "Add surroundings")
+    assert state_of(store, "p", on_context) == ("refused", "Add context")
     assert state_of(store, "p", on_terrain) == ("refused", "Add a terrain")
     store.add_input("p", "context", "context.ply", box_bytes([30, 0, 5]))
     store.add_input("p", "terrain", "terrain.ply", box_bytes([0, 0, -1], extents=(80, 80, 0.5)))

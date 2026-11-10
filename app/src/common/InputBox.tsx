@@ -172,30 +172,29 @@ export function InputBox({ role, files, weatherLocation = null, weatherHint = ""
         {extraAction === null ? addButton : <span className="site-box-actions">{addButton}{extraAction}</span>}
       </div>
       {subtitle !== null && <p className="input-box-subtitle">{subtitle}</p>}
-      {!filled && (
-        <>
-          <p className="input-box-hint">{hint}</p>
-          {adds && <p className="input-box-drop-hint">{isWeather ? messages.orDropWeatherFileHere : messages.orDropFilesHere}</p>}
-        </>
-      )}
+      {hint !== "" && <p className="input-box-hint">{hint}</p>}
+      {!filled && adds && <p className="input-box-drop-hint">{isWeather ? messages.orDropWeatherFileHere : messages.orDropFilesHere}</p>}
       {filled && (
         <ul className="input-file-list">
           {files.map((file) => {
             const refusal = removeRefusal?.(file) ?? null;
+            const shownName = file.shown_name ?? file.name;
+            // What the file is, in the remove button's tooltip, under what the button does (user, 2026-11-10)
+            const details = [
+              ...(isWeather ? [] : [messages.triangleCount(file.triangle_count) + (file.picked === true ? `, ${messages.pickedOnSurroundings}` : "")]),
+              // a refused removal already names the users
+              ...(refusal === null && (file.used_by ?? []).length > 0 ? [messages.usedBy(listedWithAnd(file.used_by ?? []))] : []),
+            ];
             return (
             <li key={file.name} className="input-file-row">
               <div>
-                <div className="input-file-name" title={file.shown_name && file.shown_name !== file.name ? file.name : undefined}>{file.shown_name ?? file.name}</div>
-                <div className="input-file-detail">
-                  {isWeather ? weatherLocation ?? "" : messages.triangleCount(file.triangle_count)}
-                  {file.picked === true && `, ${messages.pickedOnSurroundings}`}
-                </div>
-                {(file.used_by ?? []).length > 0 && <div className="input-file-detail">{messages.usedBy(listedWithAnd(file.used_by ?? []))}</div>}
+                <div className="input-file-name" title={file.shown_name && file.shown_name !== file.name ? file.name : undefined}>{shownName}</div>
+                {isWeather && weatherLocation !== null && <div className="input-file-detail">{weatherLocation}</div>}
                 {(file.picks_lost ?? 0) > 0 && <div className="input-box-problem"><WarningIcon />{messages.picksLost(file.picks_lost ?? 0)}</div>}
               </div>
               {fileMenu?.(file)}
-              <button type="button" className="input-remove" aria-label={messages.removeFile(file.shown_name ?? file.name)}
-                      title={refusal ?? messages.removeFileTitle(file.shown_name ?? file.name)}
+              <button type="button" className="input-remove" aria-label={messages.removeFile(shownName)}
+                      title={[refusal ?? messages.removeFileTitle(shownName), ...details].join("\n")}
                       disabled={disabled || refusal !== null} onClick={() => void remove(file.name)}>
                 <RemoveIcon />
               </button>

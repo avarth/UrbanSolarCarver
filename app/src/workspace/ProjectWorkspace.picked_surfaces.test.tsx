@@ -1,5 +1,5 @@
-// Test surfaces picked on the surroundings (design/test-surfaces-on-context.md), in the open workspace against a fake service: From
-// surroundings in the Site step's Test surfaces box (Carve only), the picker over the view, Use making a surface set (new, added to, or
+// Test surfaces picked on the context (design/test-surfaces-on-context.md), in the open workspace against a fake service: From
+// context in the Site step's Test surfaces box (Carve only), the picker over the view, Use making a surface set (new, added to, or
 // edited) that no criterion or study uses until it is switched on there, and Rename.
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -53,14 +53,13 @@ async function openCarve(entries: CriterionEntry[], { sets = [], withSurrounding
 }
 
 const box = () => surfaceSetsBox()!;
-const pickButton = () => [...box().querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "From surroundings") ?? null;
+const pickButton = () => [...box().querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "From context") ?? null;
 const bar = () => container().querySelector<HTMLFormElement>("form.context-picker-bar");
 const useButton = () => bar()!.querySelector<HTMLButtonElement>('button[type="submit"]')!;
 const surfaceSetRequests = () => service.requests.filter((request) => request.includes("/surface-sets/") || request.includes("/test-surfaces/"));
 const setNames = () => [...box().querySelectorAll(".input-file-name")].map((name) => name.textContent);
-/** The detail lines of the box's row of the set shown as *name*. */
-const detailsOf = (name: string) => [...[...box().querySelectorAll<HTMLElement>(".input-file-row")]
-  .find((row) => row.querySelector(".input-file-name")!.textContent === name)!.querySelectorAll(".input-file-detail")].map((line) => line.textContent);
+/** What the box says of the set shown as *name*: the lines of its remove button's title under what the button does. */
+const detailsOf = (name: string) => byRole<HTMLButtonElement>(box(), "button", `Remove ${name}`).title.split("\n").slice(1);
 /** The sets criterion 1 uses, read in its panel (the Criteria step is opened, which ends picking). */
 function setsOfCriterion() {
   openStep("Criteria");
@@ -84,7 +83,7 @@ async function chooseFromSetMenu(setName: string, item: string) {
   await press([...box().querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((candidate) => candidate.textContent === item)!);
 }
 
-test("From surroundings is in the Site step's Test surfaces box only while the project has surroundings files", async () => {
+test("From context is in the Site step's Test surfaces box only while the project has context files", async () => {
   await openCarve([FACADES], { withSurroundings: false });
   expect(box().querySelector(".input-box-title-row button")!.textContent).toBe("Add files");
   expect(pickButton()).toBeNull();
@@ -96,7 +95,7 @@ test("From surroundings is in the Site step's Test surfaces box only while the p
   // The criterion's panel offers no picking: only its switches
   openStep("Criteria");
   openPanelSection("Test surfaces");
-  expect(container().querySelector(".criterion-panel")!.textContent).not.toContain("From surroundings");
+  expect(container().querySelector(".criterion-panel")!.textContent).not.toContain("From context");
 });
 
 test("Carve: pick a face, Use makes a new set from the pick, which no criterion uses; the box lists it by its name", async () => {
@@ -116,8 +115,8 @@ test("Carve: pick a face, Use makes a new set from the pick, which no criterion 
   expect(service.requests.lastIndexOf("GET /inputs/test_surfaces")).toBeGreaterThan(service.requests.indexOf("POST /surface-sets/picked"));
   expect(bar()).toBeNull();
   expect(setNames()).toEqual(["facades.obj", "Picked 1"]);
-  expect(detailsOf("Picked 1")).toEqual(["2 triangles, picked on the surroundings"]);
-  expect(detailsOf("facades.obj")).toEqual(["1 triangle", "Used by Winter sun on facades"]);
+  expect(detailsOf("Picked 1")).toEqual(["2 triangles, picked on the context"]);
+  expect(detailsOf("facades.obj")).toEqual(["1 triangle"]);       // its users are in the refusal, the first line
   expect(setsOfCriterion()).toEqual(["facades.obj"]);
   expect(surfaceSetSwitches()).toEqual([["facades.obj", true], ["Picked 1", false]]);
 });
@@ -148,7 +147,7 @@ test("Carve: Add to a picked set another criterion uses joins its picks with the
   expect(sent.picks.map((pick) => pick.point)).toEqual([[0.5, 0.25, 0], [0, 0.5, 0.5]]);
   expect(sent.picks[0]).toEqual(FLOOR_PICK);
   expect(bar()).toBeNull();
-  expect(detailsOf("Roofs")).toEqual(["4 triangles, picked on the surroundings", "Used by Spring sun on windows"]);
+  expect(detailsOf("Roofs")).toEqual(["4 triangles, picked on the context"]);
   expect(setsOfCriterion()).toEqual(["facades.obj"]);
 });
 
@@ -165,7 +164,7 @@ test("Carve: Edit picks opens the set's picks and Save picks replaces them, with
   expect(service.pickedSetRequests).toEqual([{ picks: [FLOOR_PICK, { point: [0, 0.2, 0.8], ray: expect.any(Array) }], replace: "picked_1.ply" }]);
   expect(service.requests.filter((request) => request.startsWith("PUT /criteria/"))).toEqual([]);
   expect(bar()).toBeNull();
-  expect(detailsOf("Roofs")[0]).toBe("4 triangles, picked on the surroundings");
+  expect(detailsOf("Roofs")[0]).toBe("4 triangles, picked on the context");
   expect(setsOfCriterion()).toEqual(["facades.obj", "Roofs"]);
 });
 
@@ -221,7 +220,7 @@ test("Carve: Rename shows the set by its new name", async () => {
   expect(setsOfCriterion()).toEqual(["facades.obj", "South roofs"]);
 });
 
-test("Simulate: without surroundings a study offers no picking", async () => {
+test("Simulate: without context a study offers no picking", async () => {
   await openSimulate(undefined, (chain) => { chain.studies = [study("1", "sky_view", ["facades.obj"])]; });
   await openStudySettings("Sky view factor");
   expect(studyPopover()!.querySelector(".study-pick-surfaces")).toBeNull();
@@ -235,7 +234,7 @@ test("Simulate: a study picks nothing itself; a set picked in the Site step is o
   });
   await openStudySettings("Sky view factor");
   expect(studyPopover()!.querySelector(".study-pick-surfaces")).toBeNull();
-  expect(studyPopover()!.textContent).not.toContain("From surroundings");
+  expect(studyPopover()!.textContent).not.toContain("From context");
   await switchMode("design");
   await settle();
   openStep("Site");

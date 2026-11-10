@@ -149,8 +149,8 @@ test("a setting to fix is counted and marked on the step that holds it", () => {
   expect(stepSummary("export", stateWith({ settingsToFix: { export: 1 } }))).toBe("1 setting to fix");
 });
 
-test("the inputs summary counts the surroundings files and names the terrain when there are some", () => {
-  expect(stepSummary("inputs", stateWith({ maxVolume: 1, context: 3 }))).toBe("1 volume, 3 surroundings files");
-  expect(stepSummary("inputs", stateWith({ maxVolume: 1, context: 1, terrain: 1, weather: true }))).toBe("1 volume, 1 surroundings file, terrain");
+test("the inputs summary counts the context files and names the terrain when there are some", () => {
+  expect(stepSummary("inputs", stateWith({ maxVolume: 1, context: 3 }))).toBe("1 volume, 3 context files");
+  expect(stepSummary("inputs", stateWith({ maxVolume: 1, context: 1, terrain: 1, weather: true }))).toBe("1 volume, 1 context file, terrain");
   expect(stepSummary("inputs", stateWith({ maxVolume: 1, terrain: 2 }))).toBe("1 volume, terrain");
 });

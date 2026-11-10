@@ -161,7 +161,7 @@ test("the Site step holds the site's geometry, then the project's test surfaces;
   service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, project(NOTHING_RUN));
   const titles = [...stepRow("Site").querySelectorAll(".input-box h3")].map((title) => title.textContent);
-  expect(titles).toEqual(["Maximum volume", "Existing surroundings", "Terrain", "Test surfaces"]);
+  expect(titles).toEqual(["Maximum volume", "Context", "Terrain", "Test surfaces"]);
   expect(setNamesIn(surfaceSetsBox()!)).toEqual(["surfaces.obj"]);
   openProjectSettings();
   const location = projectSettings()!.querySelector(".setting-group-essential")!;
@@ -229,8 +229,8 @@ test("test surfaces added in the Site step go to the project's routes and are us
   // The set the criterion uses cannot be removed; the new one can
   const removeSurfaces = surfaceSetsBox()!.querySelector<HTMLButtonElement>('[aria-label="Remove surfaces.obj"]')!;
   expect(removeSurfaces.disabled).toBe(true);
-  expect(removeSurfaces.title).toBe("Used by time-based: switch it off there to remove it");
-  expect(surfaceSetsBox()!.textContent).toContain("Used by time-based");
+  expect(removeSurfaces.title.split("\n")).toEqual(["Used by time-based: switch it off there to remove it", "1 triangle"]);
+  expect(surfaceSetsBox()!.textContent).not.toContain("Used by time-based");     // said in the remove button's title, not in the row
   openStep("Criteria");
   openPanelSection("Test surfaces");
   expect(surfaceSetSwitches()).toEqual([["surfaces.obj", true], ["windows.obj", false]]);

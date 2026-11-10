@@ -203,7 +203,7 @@ test("a setting whose inputs are missing is left out, or greyed out with the rea
   rendered.rerender(<SettingsStep form={form()} onChange={() => {}} disabledReason={null} settingShown={shared} withoutInputs="disabled" />);
   const contextSwitch = rendered.container.querySelector<HTMLElement>('[data-setting="context_blocks_rays"]')!;
   expect(contextSwitch.querySelector<HTMLInputElement>("input")!.disabled).toBe(true);
-  expect(contextSwitch.querySelector(".setting-note")!.textContent).toBe("Add existing surroundings or terrain in Site to use this.");
+  expect(contextSwitch.querySelector(".setting-note")!.textContent).toBe("Add context or terrain in Site to use this.");
   rendered.rerender(<SettingsStep form={form()} onChange={() => {}} disabledReason={null} settingShown={shared} withoutInputs="disabled" inputRoles={["context"]} />);
   expect(rendered.container.querySelector<HTMLInputElement>('[data-setting="context_blocks_rays"] input')!.disabled).toBe(false);
   expect(rendered.container.querySelector('[data-setting="context_blocks_rays"] .setting-note')).toBeNull();
@@ -244,7 +244,7 @@ test("the line keeps its place under an over-budget voxel size, and before the g
   expect(notesUnder("voxel_size")).toEqual(["Test surfaces sampled every 0.5\u00a0m"]);
 });
 
-test("a project with surroundings shows Account for context blocking, on by default, and changing it reaches onChange", () => {
+test("a project with context shows Account for context blocking, on by default, and changing it reaches onChange", () => {
   const withSwitch = initialFormState({ schema: SCHEMA, modes: MODES, settings: { mode: "time-based" }, gridPlan: PLAN_WITHIN_BUDGET });
   const onChange = vi.fn();
   rendered = renderForTest(<SettingsStep form={withSwitch} onChange={onChange} disabledReason={null} inputRoles={["context"]} />);

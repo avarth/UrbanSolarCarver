@@ -92,7 +92,7 @@ test("opening Inspect lists the files by role with triangles and area; a row sel
   expect(service.count("GET /inspect")).toBe(1);
   expect(service.count("GET /inspect/test_surfaces/facades.obj/geometry")).toBe(1);
   expect(service.count("GET /inspect/test_surfaces/box.obj/geometry")).toBe(1);
-  expect(roleTitles()).toEqual(["Maximum volume", "Test surfaces", "Existing surroundings", "Terrain"]);
+  expect(roleTitles()).toEqual(["Maximum volume", "Test surfaces", "Context", "Terrain"]);
   expect(fileNames()).toEqual(["volume.obj", "facades.obj", "box.obj", "broken.obj", "ground.obj"]);
   expect(fileLine("volume.obj")).toBe("12 triangles, 600 m²");
   expect(fileLine("facades.obj")).toBe("3 triangles, 4.5 m²");

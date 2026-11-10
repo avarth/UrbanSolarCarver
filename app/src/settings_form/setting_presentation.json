@@ -1,6 +1,6 @@
 {
   "steps": {
-    "settings": ["Location", "When", "Mode specific", "Surroundings", "Detail"],
+    "settings": ["Location", "When", "Mode specific", "Context", "Detail"],
     "carving": ["How much to carve"],
     "envelope_and_massing": ["Envelope", "Building massing"],
     "export": ["Export"]
@@ -111,8 +111,8 @@
     },
     "context_blocks_rays": {
       "label": "Account for context blocking", "unit": "on/off",
-      "help": "On: sun and sky that the existing surroundings or the terrain already block count for no voxel, so the carving keeps more where they shade. Off: they still take their voxels, but block nothing, to compare with the carving without them.",
-      "step": "settings", "group": "Surroundings", "essential": "all",
+      "help": "On: sun and sky that the context or the terrain already block count for no voxel, so the carving keeps more where they shade. Off: they still take their voxels, but block nothing, to compare with the carving without them.",
+      "step": "settings", "group": "Context", "essential": "all",
       "modes": ["time-based", "irradiance", "benefit", "daylight", "radiative_cooling"], "shown_with_inputs": ["context", "terrain"]
     },
     "threshold": {

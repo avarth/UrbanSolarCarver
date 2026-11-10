@@ -77,9 +77,8 @@ export function SwitchInputLink({ toSite, asks, onSwitch, disabledReason }: Swit
 
 interface SiteBoxProps {
   sites: Site[];
-  /** The max and base heights: a height for all sites is shown read-only, and a click opens Settings on it. */
+  /** The max and base heights: a height set per site is a column of the table (a height for all sites is in Settings). */
   heights: Heights;
-  onOpenSettings: (settingName: "max_height" | "base_height") => void;
   tool: SiteTool | null;
   onDraw: () => void;
   onEdit: (index: number) => void;
@@ -102,7 +101,7 @@ interface SiteBoxProps {
 
 /** The Sites card: Draw site at the right of its title, a line for the heights set for all sites, a table of the sites (a line each:
  * name, the heights set per site, the menu), and at its foot the link back to a maximum volume. */
-export function SiteBox({ sites, heights, onOpenSettings, tool, onDraw, onEdit, onChangeSite, onDeleteSite, onSwitch, onImport, onPlaceOnTerrain,
+export function SiteBox({ sites, heights, tool, onDraw, onEdit, onChangeSite, onDeleteSite, onSwitch, onImport, onPlaceOnTerrain,
                           onRestoreOriginal, hasTerrain, refusal, note = null, disabledReason }: SiteBoxProps) {
   const titleId = useId();
   const picker = useRef<HTMLInputElement>(null);
@@ -130,15 +129,7 @@ export function SiteBox({ sites, heights, onOpenSettings, tool, onDraw, onEdit, 
           <button type="button" className="input-add" disabled={disabledReason !== null} onClick={() => picker.current?.click()}>{messages.importSites}</button>
         </span>
       </div>
-      {(heights.base.for_all_sites || heights.max.for_all_sites) && (
-        <p className="site-shared-heights">
-          <span>{messages.sharedHeights(heights.base.for_all_sites ? heights.base.value ?? null : undefined,
-                                        heights.max.for_all_sites ? heights.max.value ?? null : undefined)}</span>
-          <button type="button" className="link-button" onClick={() => onOpenSettings(heights.base.for_all_sites ? "base_height" : "max_height")}>
-            {messages.changeInSettings}
-          </button>
-        </p>
-      )}
+      <p className="input-box-hint">{messages.siteHint}</p>
       {sites.length === 0 ? <><p className="input-box-hint">{messages.siteEmptyHint}</p><p className="input-box-drop-hint">{messages.siteDropHint}</p></> : (
         <div className="site-table" style={{ "--site-table-columns": tableColumns(columns) } as CSSProperties}>
           {columns > 0 && (

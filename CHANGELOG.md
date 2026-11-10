@@ -9,6 +9,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Inputs
 
+- **Site step wording.** Every box says in a line what geometry it expects, filled or empty. "Existing surroundings" is
+  now **Context** everywhere in the app (the box, From context, the Settings group, the layer). A file row shows its name
+  only; its triangle count and, for a test surface set, who uses it are in the remove button's tooltip. The drop line
+  reads "You can also drag files onto this box.", and the Sites box no longer repeats the heights set for all sites.
 - **A removed file is kept.** Removing a file in the Site step (maximum volume, surroundings, terrain, weather, test
   surfaces) takes it out of the project and its calculations; the stored copy moves to `inputs/removed/<role>/` in the
   project folder instead of being deleted, so a removal by mistake is undone by adding the file again. Right after a removal the box offers **Undo**; under the

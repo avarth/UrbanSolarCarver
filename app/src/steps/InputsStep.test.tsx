@@ -19,7 +19,7 @@ const SOME_FILES = {
   context: [{ name: "neighbour_blocks.ply", triangle_count: 2040 }, { name: "neighbour_trees.ply", triangle_count: 1730 }],
 };
 const WEATHER_FILES = [{ name: "weather.epw", triangle_count: 0 }];
-const CONTEXT_TITLE = "Existing surroundings";
+const CONTEXT_TITLE = "Context";
 
 function boxTitled(title: string): HTMLElement {
   return [...rendered!.container.querySelectorAll<HTMLElement>(".input-box")].find((box) => box.querySelector("h3")!.textContent === title)!;
@@ -49,7 +49,7 @@ test("empty boxes: dashed, Add files in the title row and no badge, the hint, th
   expect(maxVolume.querySelector(".input-box-title-row button")!.textContent).toBe("Add files");
   expect(maxVolume.textContent).toContain("The largest building you would allow, as one or more closed meshes.");
   expect(maxVolume.querySelector(".input-box-actions")).toBeNull();
-  expect(maxVolume.querySelector("p.input-box-drop-hint")!.textContent).toBe("Or drop the files here.");
+  expect(maxVolume.querySelector("p.input-box-drop-hint")!.textContent).toBe("You can also drag files onto this box.");
   expect(rendered.container.textContent).not.toContain("Overall size");
   rendered.unmount();
   rendered = renderForTest(weatherBox([]));
@@ -57,17 +57,21 @@ test("empty boxes: dashed, Add files in the title row and no badge, the hint, th
   expect(weather.querySelector(".input-box-required")).toBeNull();
   expect(weather.querySelector(".input-box-title-row button")!.textContent).toBe("Add files");
   expect(weather.textContent).toContain(WEATHER_HINT);
-  expect(weather.querySelector("p.input-box-drop-hint")!.textContent).toBe("Or drop the .epw file here.");
+  expect(weather.querySelector("p.input-box-drop-hint")!.textContent).toBe("You can also drag the .epw file onto this box.");
 });
 
-test("filled boxes: a row per file with its triangle count or location, a named remove button, Replace for the weather", () => {
+test("filled boxes: the hint, a row per file with a named remove button whose title gives its triangle count, the location, Replace for the weather", () => {
   rendered = renderForTest(inputsStep(SOME_FILES));
   const context = boxTitled(CONTEXT_TITLE);
   expect(context.classList.contains("input-box-filled")).toBe(true);
   expect(context.querySelector(".input-box-title-row button")!.textContent).toBe("Add files");
   expect(context.querySelector(".input-box-drop-hint")).toBeNull();
   expect([...context.querySelectorAll(".input-file-name")].map((name) => name.textContent)).toEqual(["neighbour_blocks.ply", "neighbour_trees.ply"]);
-  expect(context.querySelector(".input-file-detail")!.textContent).toBe("2 040 triangles");
+  expect(context.querySelector(".input-box-hint")!.textContent).toBe(
+    "Buildings and large trees that stay. They block sun and sky, and nothing is built in their place.");
+  expect(context.querySelector(".input-file-detail")).toBeNull();
+  expect(context.querySelector<HTMLButtonElement>('[aria-label="Remove neighbour_blocks.ply"]')!.title).toBe(
+    "Remove neighbour_blocks.ply from the project. The file is kept in the project folder, under inputs/removed\n2 040 triangles");
   expect(context.querySelector('[aria-label="Remove neighbour_trees.ply"]')).not.toBeNull();
   expect(rendered.container.querySelector(".inputs-size")!.textContent).toBe("Overall size52 × 44 × 30 m");
   rendered.unmount();
@@ -129,14 +133,14 @@ test("a file the 3D view cannot draw is named in its box, next to the files, whi
 test("the Site step holds only the site's geometry: no test surfaces, no weather file", () => {
   rendered = renderForTest(inputsStep(NO_FILES));
   const titles = [...rendered.container.querySelectorAll(".input-box h3")].map((title) => title.textContent);
-  expect(titles).toEqual(["Maximum volume", "Existing surroundings", "Terrain"]);
+  expect(titles).toEqual(["Maximum volume", "Context", "Terrain"]);
   expect(rendered.container.textContent).not.toContain("Test surfaces");
   expect(rendered.container.textContent).not.toContain("Weather file");
 });
 
-test("the optional boxes for the existing surroundings and the terrain follow the maximum volume, with Optional under their titles", () => {
+test("the optional boxes for the context and the terrain follow the maximum volume, with Optional under their titles", () => {
   rendered = renderForTest(inputsStep(NO_FILES));
-  const context = boxTitled("Existing surroundings");
+  const context = boxTitled(CONTEXT_TITLE);
   expect(context.querySelector(".input-box-required")).toBeNull();
   expect(context.querySelector("p.input-box-subtitle")!.textContent).toBe("Optional");
   expect(context.textContent).toContain("Buildings and large trees that stay. They block sun and sky, and nothing is built in their place.");
@@ -145,7 +149,7 @@ test("the optional boxes for the existing surroundings and the terrain follow th
   expect(terrain.querySelector("p.input-box-subtitle")!.textContent).toBe("Optional");
   expect(terrain.textContent).toContain("The ground. It blocks sun and sky; the site stays buildable above it.");
   expect(terrain.querySelector(".input-box-title-row button")!.textContent).toBe("Add files");
-  expect(terrain.querySelector("p.input-box-drop-hint")!.textContent).toBe("Or drop the files here.");
+  expect(terrain.querySelector("p.input-box-drop-hint")!.textContent).toBe("You can also drag files onto this box.");
 });
 
 test("a project carved further with an earlier version keeps its note on the maximum volume", () => {
@@ -156,7 +160,9 @@ test("a project carved further with an earlier version keeps its note on the max
   rendered = renderForTest(
     <InputsStep files={SOME_FILES} inputsBounds={null} onAddFiles={async () => []}
                 onRemoveFile={async () => null} disabledReason={null} maxVolumeNote={carvedByNote(chain)} />);
-  expect(boxTitled("Maximum volume").querySelector(".input-box-hint")!.textContent).toBe(note);
+  expect([...boxTitled("Maximum volume").querySelectorAll(".input-box-hint")].map((hint) => hint.textContent)).toEqual([
+    "The largest building you would allow, as one or more closed meshes.", note,
+  ]);
   expect(boxTitled(CONTEXT_TITLE).textContent).not.toContain("Carved by");
 });
 

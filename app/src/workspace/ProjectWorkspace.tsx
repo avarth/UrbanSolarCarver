@@ -571,7 +571,6 @@ function OpenProject(props: ProjectWorkspaceProps) {
                  onChooseSite={() => { void siteInput.setSource("sites"); }} />
   ) : usesSites ? (
     <SiteBox sites={siteInput.sites} heights={siteInput.heights} tool={siteTool} refusal={siteInput.refusal} disabledReason={inputsDisabledReason}
-             onOpenSettings={(name) => { setSettingsOpen(true); setSettingToFocus({ name }); }}
              onDraw={() => setSiteTool({ kind: "draw" })} onEdit={(index) => setSiteTool({ kind: "edit", index })}
              onChangeSite={changeSite} onDeleteSite={deleteSite} onImport={importOutlines} onPlaceOnTerrain={(index) => { void placeSiteOnTerrain(index); }}
              onRestoreOriginal={restoreOriginal} hasTerrain={hasTerrain} note={siteNote}

@@ -336,7 +336,9 @@ test("a criterion switches on a set another criterion uses: both use it, the set
   openStep("Site");
   const removeWindows = surfaceSetsBox()!.querySelector<HTMLButtonElement>('[aria-label="Remove windows.obj"]')!;
   expect(removeWindows.disabled).toBe(true);
-  expect(removeWindows.title).toBe("Used by Winter sun on facades and Spring sun on windows: switch it off there to remove it");
+  expect(removeWindows.title.split("\n")).toEqual([
+    "Used by Winter sun on facades and Spring sun on windows: switch it off there to remove it", "1 triangle",
+  ]);
   // Switched off again: criterion 2 still uses it
   openStep("Criteria");
   await act(async () => panel().querySelector<HTMLInputElement>('[aria-label="Use windows.obj"]')!.click());

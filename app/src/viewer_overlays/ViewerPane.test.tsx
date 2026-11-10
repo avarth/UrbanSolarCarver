@@ -139,7 +139,7 @@ test("while a dimmed result is shown, a stamp at the top of the view says it is 
   expect(stamp()).toBeNull();
 });
 
-test("with surroundings and terrain, the layers menu lists them after the test surfaces, shown as the step asks", async () => {
+test("with context and terrain, the layers menu lists them after the test surfaces, shown as the step asks", async () => {
   const { BoxGeometry } = await import("three");
   const { LAYERS_SHOWN_IN_STEP } = await import("../workspace/ProjectWorkspace");
   rendered = renderForTest(<ViewerPane {...viewWithSkyDome("daylight")} testSurfaces={[group("1", "#4477aa", new BoxGeometry(1, 1, 0.1))]} context={new BoxGeometry(2, 2, 2)}
@@ -149,7 +149,7 @@ test("with surroundings and terrain, the layers menu lists them after the test s
   expect(FakeViewerScene.latest!.visibleLayers.has("terrain")).toBe(true);
   click(rendered.container.querySelector<HTMLButtonElement>(".viewer-layers-menu > button")!);
   const names = [...rendered.container.querySelectorAll(".viewer-layers-panel label")].map((label) => label.textContent);
-  expect(names.slice(0, 3)).toEqual(["Test surfaces", "Existing surroundings", "Terrain"]);
+  expect(names.slice(0, 3)).toEqual(["Test surfaces", "Context", "Terrain"]);
   for (const step of Object.values(LAYERS_SHOWN_IN_STEP)) expect(step).toEqual(expect.arrayContaining(["context", "terrain"]));
 });
 

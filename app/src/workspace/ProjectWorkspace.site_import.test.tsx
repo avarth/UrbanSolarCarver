@@ -81,7 +81,9 @@ async function chooseInMenu(siteIndex: number, label: string) {
 test("the Sites box has Draw and Import, and an empty box says a file can be dropped on it", async () => {
   await openWith(new FakeService(NOTHING_RUN, null));
   expect([...sitesBox().querySelectorAll(".site-box-actions button")].map((button) => button.textContent)).toEqual(["Draw", "Import"]);
-  expect(sitesBox().textContent).toContain("Or drop a DXF or OBJ file of closed polylines here.");
+  expect(sitesBox().textContent).toContain(
+    "The plots you may build on: closed outlines in plan, drawn in the 3D view or imported, each with its base and max height.");
+  expect(sitesBox().textContent).toContain("You can also drag a DXF or OBJ file of closed polylines onto this box.");
 });
 
 test("a chosen file is read and the window shows the outlines found, what was left out and how far they are", async () => {

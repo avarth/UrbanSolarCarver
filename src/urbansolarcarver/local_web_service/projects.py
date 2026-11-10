@@ -1347,17 +1347,17 @@ class ProjectStore:
             project_json = self.read_project_json(name)
             context = picked_surfaces.load_context(project_folder)
             if context is None:
-                raise ProjectError("The project has no surroundings to pick surfaces on.", status_code=404)
+                raise ProjectError("The project has no context to pick surfaces on.", status_code=404)
             mesh, lost = picked_surfaces.picked_mesh(context, picks)
             if mesh is None:
-                raise ProjectError("None of the picks is on the surroundings.", status_code=422)
+                raise ProjectError("None of the picks is on the context.", status_code=422)
             recorded = project_json.input_files.setdefault(test_surfaces.ROLE, {})
             if replace is not None:
                 surface_set = project_json.surface_sets.get(replace)
                 if replace not in recorded:
                     raise ProjectError(f"There is no surface set stored as '{replace}'.", status_code=404)
                 if surface_set is None or surface_set.picks is None:
-                    raise ProjectError("Only a set picked on the surroundings takes picks.", status_code=422)
+                    raise ProjectError("Only a set picked on the context takes picks.", status_code=422)
                 file_name = replace
                 if set_name is not None:
                     surface_set.name = picked_surfaces.checked_set_name(set_name, project_json, replace)
@@ -1395,7 +1395,7 @@ class ProjectStore:
             raise ProjectError(f"There is no surface set stored as '{file_name}'.", status_code=404)
         surface_set = project_json.surface_sets.get(file_name)
         if surface_set is None or surface_set.picks is None:
-            raise ProjectError("This surface set was not picked on the surroundings.", status_code=422)
+            raise ProjectError("This surface set was not picked on the context.", status_code=422)
         return surface_set.picks
 
     @staticmethod

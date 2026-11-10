@@ -87,4 +87,3 @@
 .height-row-value input { width: 5.5em; font: inherit; text-align: right; }
 .heights-help { color: var(--colour-muted); font-size: var(--text-secondary); margin: 0; }
 .site-row-height { width: 100%; box-sizing: border-box; font: inherit; text-align: right; }
-.site-shared-heights { display: flex; flex-wrap: wrap; gap: 0 var(--space-unit); margin: 0 0 var(--space-unit); color: var(--colour-muted); font-size: var(--text-secondary); }

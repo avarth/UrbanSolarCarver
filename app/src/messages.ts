@@ -5,7 +5,7 @@ import { formattedNumber, groupedDigits, withUnit } from "./format_numbers";
 
 // The words for an input role inside a sentence.
 const INPUT_ROLE_WORDS: Record<string, string> = {
-  max_volume: "maximum volume", test_surfaces: "test surface", context: "existing surroundings", terrain: "terrain", weather: "weather file",
+  max_volume: "maximum volume", test_surfaces: "test surface", context: "context", terrain: "terrain", weather: "weather file",
 };
 
 const MONTH_ABBREVIATIONS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -109,12 +109,12 @@ export const messages = {
   studyNoSurfaceFiles: "No study surface files yet",
   addStudySurfaces: "Add study surfaces",
   studySurfacesFrom: { context: "Context", terrain: "Terrain", ground: "Ground" } as Record<string, string>,
-  studySurfacesFromHint: { context: "The faces of the surroundings files, without their bottoms",
+  studySurfacesFromHint: { context: "The faces of the context files, without their bottoms",
                            terrain: "The terrain file",
                            ground: "A flat disc on the compass circle, at the foot of the max volume" } as Record<string, string>,
   // The same in the line of a study's row: "the massing, facades.obj, the context".
   studySurfacesFromInLine: { context: "the context", terrain: "the terrain", ground: "the ground" } as Record<string, string>,
-  studyNeedsSurroundingsFiles: "The project has no surroundings files: add them in Site",
+  studyNeedsSurroundingsFiles: "The project has no context files: add them in Site",
   useFileOfProject: "Use a file of the project",
   deleteStudy: "Delete study",
   closeStudySettings: "Close",
@@ -253,7 +253,7 @@ export const messages = {
   // The site's files (the test surfaces belong to the criteria, the weather file to Settings): "1 volume, 2 surroundings files, terrain".
   inputsSummary: (volumeCount: number, contextCount = 0, hasTerrain = false) =>
     `${volumeCount} ${volumeCount === 1 ? "volume" : "volumes"}` +
-    (contextCount > 0 ? `, ${contextCount} ${contextCount === 1 ? "surroundings file" : "surroundings files"}` : "") +
+    (contextCount > 0 ? `, ${contextCount} ${contextCount === 1 ? "context file" : "context files"}` : "") +
     (hasTerrain ? ", terrain" : ""),
   maxVolumeMissing: "Maximum volume missing",
   // The project settings, in the Settings button's tooltip: "THESSALONIKI, GRC. North 10°, 0.5 m voxels"
@@ -282,12 +282,12 @@ export const messages = {
   skipSetup: "Skip setup",
   openProjectSettings: "Open settings",
   // A setting that needs the surroundings or the terrain, shown greyed out in the window without them
-  needsSurroundingsOrTerrain: "Add existing surroundings or terrain in Site to use this.",
+  needsSurroundingsOrTerrain: "Add context or terrain in Site to use this.",
   siteMissing: "Site missing",
   // A project that uses its sites: "2 sites, 3,450 m², terrain"
   sitesInputsSummary: (siteCount: number, area: number, contextCount = 0, hasTerrain = false) =>
     `${siteCount} ${siteCount === 1 ? "site" : "sites"}, ${groupedDigits(Math.round(area))}\u00a0m²` +
-    (contextCount > 0 ? `, ${contextCount} ${contextCount === 1 ? "surroundings file" : "surroundings files"}` : "") +
+    (contextCount > 0 ? `, ${contextCount} ${contextCount === 1 ? "context file" : "context files"}` : "") +
     (hasTerrain ? ", terrain" : ""),
   addSiteToRun: "Draw a site to run the analysis",
   // Criteria with one criterion: its mode and its carving, "Solar heating, 56 % kept"
@@ -375,7 +375,7 @@ export const messages = {
   // Inputs (5.2)
   maxVolumeTitle: "Maximum volume",
   testSurfacesTitle: "Test surfaces",
-  contextTitle: "Existing surroundings",
+  contextTitle: "Context",
   terrainTitle: "Terrain",
   weatherFileTitle: "Weather file",
   // The muted line under the title of a box (design/new-project-setup.md, section 5)
@@ -386,8 +386,8 @@ export const messages = {
   contextHint: "Buildings and large trees that stay. They block sun and sky, and nothing is built in their place.",
   terrainHint: "The ground. It blocks sun and sky; the site stays buildable above it.",
   weatherNeededFor: (modeNames: string) => `Needed for ${modeNames}.`,
-  orDropFilesHere: "Or drop the files here.",
-  orDropWeatherFileHere: "Or drop the .epw file here.",
+  orDropFilesHere: "You can also drag files onto this box.",
+  orDropWeatherFileHere: "You can also drag the .epw file onto this box.",
   replaceFile: "Replace",
   removeFile: (fileName: string) => `Remove ${fileName}`,
   fileRemoved: (fileName: string) => `${fileName} was removed.`,
@@ -413,13 +413,14 @@ export const messages = {
     + "you can switch back.",
   switchInput: "Switch",
   siteTitle: "Sites",
+  siteHint: "The plots you may build on: closed outlines in plan, drawn in the 3D view or imported, each with its base and max height.",
   drawSite: "Draw",
   // Sites from DXF and OBJ files (design/site-import.md)
   importSites: "Import",
   // Test surfaces picked on the surroundings, and surface sets (design/test-surfaces-on-context.md)
-  pickFromSurroundings: "From surroundings",
-  pickingSurfaces: "Picking test surfaces on the surroundings",
-  pickingSteps: "Click the facades and roofs of the surroundings to protect. Click a picked face again to drop it.",
+  pickFromSurroundings: "From context",
+  pickingSurfaces: "Picking test surfaces on the context",
+  pickingSteps: "Click the facades and roofs of the context to protect. Click a picked face again to drop it.",
   pickedSetTarget: "Where the picked faces go",
   newSurfaceSet: "New set",
   addToSurfaceSet: (name: string) => `Add to ${name}`,
@@ -431,15 +432,15 @@ export const messages = {
   renameSurfaceSetTitle: (name: string) => `Rename ${name}`,
   editPicks: "Edit picks",
   surfaceSetActions: (name: string) => `Actions for ${name}`,
-  pickedOnSurroundings: "picked on the surroundings",
-  surfaceSetsHint: "Surfaces whose sun or sky the carving protects, such as neighbouring facades. Each file or set of picks is a set; criteria and studies choose among them.",
+  pickedOnSurroundings: "picked on the context",
+  surfaceSetsHint: "Windows, facades or roofs whose sun or sky the carving protects, as files or as faces picked on the context. Each criterion and study chooses which of them to use.",
   usedBy: (names: string) => `Used by ${names}`,
   surfaceSetInUse: (names: string) => `Used by ${names}: switch it off there to remove it`,
-  noSurfaceSets: "The project has no test surfaces yet. Add files or pick them on the surroundings in the Site step.",
+  noSurfaceSets: "The project has no test surfaces yet. Add files or pick them on the context in the Site step.",
   openSiteStep: "Open the Site step",
   unusedSurfaceSets: "Test surfaces no criterion uses",
   useSurfaceSet: (name: string) => `Use ${name}`,
-  picksLost: (count: number) => `${count} picked ${count === 1 ? "face is" : "faces are"} gone from the surroundings`,
+  picksLost: (count: number) => `${count} picked ${count === 1 ? "face is" : "faces are"} gone from the context`,
   importSitesTitle: (fileName: string) => `Import sites from ${fileName}`,
   importSitesFound: (count: number, unit: string) =>
     `${count} closed ${count === 1 ? "polyline" : "polylines"}, read in ${unit}. Their elevations are kept relative to each other, from the level new sites start at.`,
@@ -451,21 +452,13 @@ export const messages = {
   placeOnTerrainHint: "Each vertex takes the height of the terrain below it.",
   placeOnTerrainNeedsTerrain: "Add terrain in the Site step to use this",
   placedOffTerrain: (count: number) => `${count} ${count === 1 ? "vertex has" : "vertices have"} no terrain under ${count === 1 ? "it" : "them"} and kept ${count === 1 ? "its" : "their"} elevation.`,
-  siteDropHint: "Or drop a DXF or OBJ file of closed polylines here.",
+  siteDropHint: "You can also drag a DXF or OBJ file of closed polylines onto this box.",
   siteEmptyHint: "Draw the site boundary in the 3D view, then click its vertices to set their elevations.",
   siteName: (number: number) => `Site ${number}`,
   siteHeightOf: (siteName: string) => `Max height of ${siteName}`,
   siteBaseOf: (siteName: string) => `Base height of ${siteName}`,
   siteNoBase: "none",
   doubleClickToRename: "Double click to rename",
-  // The heights set for all sites, once above the table of sites; undefined for a height set per site.
-  sharedHeights: (base: number | null | undefined, max: number | null | undefined) => {
-    const parts = [];
-    if (base !== undefined) parts.push(`base ${base === null ? "none" : `${formattedNumber(base)}\u00a0m`}`);
-    if (max !== undefined) parts.push(`max ${max === null ? "none" : `${formattedNumber(max)}\u00a0m`}`);
-    return `Global: ${parts.join(", ")}.`;
-  },
-  changeInSettings: "Change in Settings",
   siteBaseNotBelowMax: (base: number, top: number) =>
     `its base height (${formattedNumber(base)} m) must be less than its max height (${formattedNumber(top)} m)`,
   heightsGroup: "Heights",
@@ -628,12 +621,12 @@ export const messages = {
     edgeTaperIgnored: "The edge strip with less weight has no effect in this mode.",
     edgeTaperExcluded: "A test surface is narrower than about twice the edge strip with less weight, so it is only partly protected.",
     testPointsBlocked: (blocked: string, total: string) =>
-      `${blocked} of ${total} test points see no sky: they lie inside or below a surrounding mass or the terrain, or face into one, so they protect nothing. Check the test surfaces there.`,
+      `${blocked} of ${total} test points see no sky: they lie inside or below the context or the terrain, or face into it, so they protect nothing. Check the test surfaces there.`,
     testSurfacesSkipped: (counts: string) =>
       `Test surfaces skipped and not protected: ${counts}. Each one must be a single flat face. The Layers menu shows them.`,
     horizontalTestSurfaces: (flat: string, total: string) =>
       `${flat} of ${total} sample points lie on horizontal test surfaces, which face no direction a tilted plane can follow; there the plane protects only the sky straight above.`,
-    contextNotClosed: "The surroundings are not a closed mesh, so where they reach the grid the voxels they remove may be too few or too many. They still block rays.",
+    contextNotClosed: "The context is not a closed mesh, so where it reaches the grid the voxels it removes may be too few or too many. It still blocks rays.",
     footprintUnreadable: "The footprint of the maximum volume could not be read; the building massing uses the voxel footprint.",
     footprintMismatch: (percent: string) =>
       `The footprint of the maximum volume does not match the voxels (${percent}% of them lie outside it); the building massing uses the voxel footprint.`,
@@ -889,7 +882,7 @@ export const messages = {
     base_volume: "Base volume",
     test_surfaces: "Test surfaces",
     skipped_surfaces: "Skipped test surfaces",
-    context: "Existing surroundings",
+    context: "Context",
     terrain: "Terrain",
     kept_voxels: "Kept voxels, coloured by score",
     carved_voxels: "Carved voxels",

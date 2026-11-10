@@ -1,4 +1,4 @@
-// Picking test surfaces on the surroundings (design/test-surfaces-on-context.md): a click on the context layer picks the flat piece
+// Picking test surfaces on the context (design/test-surfaces-on-context.md): a click on the context layer picks the flat piece
 // under it, a click on a picked piece drops it, the pieces are drawn over the view, and the bar sends the picks (in the input files'
 // coordinates, with the click's ray) to a new set, to a picked set, or back to the set being edited.
 import { act } from "react";
@@ -59,9 +59,9 @@ function clickFace(scene: FakeViewerScene, faceIndex: number, point: Point3) {
 
 test("a click picks the flat piece under it, a second click on the piece drops it; the button counts the picks", () => {
   const { scene } = openPicker();
-  expect(bar().getAttribute("aria-label")).toBe("Picking test surfaces on the surroundings");
+  expect(bar().getAttribute("aria-label")).toBe("Picking test surfaces on the context");
   expect(bar().querySelector(".site-editor-steps")!.textContent).toBe(
-    "Click the facades and roofs of the surroundings to protect. Click a picked face again to drop it.");
+    "Click the facades and roofs of the context to protect. Click a picked face again to drop it.");
   expect(useButton().textContent).toBe("Use 0 faces");
   expect(useButton().disabled).toBe(true);
   expect(polygons()).toEqual([]);

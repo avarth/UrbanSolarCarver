@@ -150,7 +150,7 @@ test("a mesh maximum volume with a base height of 0 has no base volume to read",
   expect(service.requests.filter((request) => request.startsWith("GET /base-volume"))).toEqual([]);
 });
 
-test("a base height for all sites is typed in Settings, said once above the sites, and its link opens Settings on it", async () => {
+test("a base height for all sites is typed in Settings and not repeated above the sites, which have no column for it", async () => {
   const service = new FakeService(NOTHING_RUN, null);
   service.siteSource = "sites";
   service.sites = [FLAT_SITE];
@@ -164,12 +164,10 @@ test("a base height for all sites is typed in Settings, said once above the site
   expect(service.savedHeights.at(-1)).toEqual({ max: { for_all_sites: false, value: null }, base: { for_all_sites: true, value: 8 } });
   closeProjectSettings();
   await settle();
-  expect(panel().querySelector(".site-shared-heights")!.textContent).toContain("Global: base 8 m.");
+  expect(panel().querySelector(".site-shared-heights")).toBeNull();
+  expect(panel().textContent).not.toContain("Global:");
+  expect(panel().textContent).not.toContain("Change in Settings");
   expect(panel().querySelector('[aria-label="Base height of Site 1"]')).toBeNull();      // no column for a height set for all sites
-  act(() => { buttonIn(panel(), "Change in Settings").click(); });
-  await settle();
-  expect(projectSettings()).not.toBeNull();
-  expect(document.activeElement).toBe(projectSettings()!.querySelector('[data-setting="base_height"] input'));
 });
 
 test("with Per site each row takes its own base height, and one not below the max is refused in the row and not sent", async () => {
@@ -199,7 +197,7 @@ test("a max height for all sites starts from the first site's height when switch
   expect(service.savedHeights.at(-1)!.max).toEqual({ for_all_sites: true, value: 30 });
   closeProjectSettings();
   await settle();
-  expect(panel().querySelector(".site-shared-heights")!.textContent).toContain("Global: base none, max 30 m.");
+  expect(panel().querySelector(".site-shared-heights")).toBeNull();
   expect(panel().querySelector('[aria-label="Max height of Site 1"]')).toBeNull();
 });
 

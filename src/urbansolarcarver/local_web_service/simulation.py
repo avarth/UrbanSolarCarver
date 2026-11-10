@@ -41,7 +41,7 @@ RECORDED_FILE_KEYS = ("test_surface", "max_volume", "weather", "context", "terra
 ADD_STUDY_SURFACES = "Add study surfaces"
 ADD_MAX_VOLUME = "Add a maximum volume"
 # A study that samples the surroundings or the terrain (its settings' surfaces_from) waits for the project's file of that role.
-ADD_SOURCE_FILE = {"context": "Add surroundings", "terrain": "Add a terrain"}
+ADD_SOURCE_FILE = {"context": "Add context", "terrain": "Add a terrain"}
 ADD_WEATHER_FILE = "Add a weather file"
 # A study on the envelope or the massing waits until Carve has built it.
 BUILD_ENVELOPE = "Build the envelope in Carve"
