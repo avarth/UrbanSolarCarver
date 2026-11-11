@@ -76,19 +76,35 @@ def test_no_packaged_example_file_is_ignored_by_git():
 
 def app_source_sha256(app_folder: Path) -> str:
     """The hash that app/scripts/write_build_info.mjs records: package.json, package-lock.json, index.html, vite.config.ts,
-    tsconfig.json and every file under src/.
+    tsconfig.json and every file under src/, leaving out node_modules folders (a cache vitest or vite leaves after a run
+    started from app/src).
 
     Files are taken in the order of their paths relative to app/ (written with "/"); each adds its relative path,
     a newline, and its bytes with every CRLF turned into LF, so a Windows checkout gives the same hash as a Linux one.
     """
     source_files = [*(app_folder / name for name in ("package.json", "package-lock.json", "index.html", "vite.config.ts", "tsconfig.json")),
-                    *(path for path in (app_folder / "src").rglob("*") if path.is_file())]
+                    *(path for path in (app_folder / "src").rglob("*")
+                      if path.is_file() and "node_modules" not in path.relative_to(app_folder).parts)]
     relative_paths = sorted(path.relative_to(app_folder).as_posix() for path in source_files)
     digest = hashlib.sha256()
     for relative_path in relative_paths:
         digest.update((relative_path + "\n").encode("utf-8"))
         digest.update((app_folder / relative_path).read_bytes().replace(b"\r\n", b"\n"))
     return digest.hexdigest()
+
+
+def test_the_source_hash_leaves_out_a_node_modules_folder_under_src(tmp_path):
+    for name in ("package.json", "package-lock.json", "index.html", "vite.config.ts", "tsconfig.json"):
+        (tmp_path / name).write_text("{}", encoding="utf-8")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.ts").write_text("export {};", encoding="utf-8")
+    before = app_source_sha256(tmp_path)
+    cache = tmp_path / "src" / "node_modules" / ".vite" / "vitest"
+    cache.mkdir(parents=True)
+    (cache / "CACHEDIR.TAG").write_text("Signature: 8a477f597d28d172789f06886806bc55", encoding="utf-8")
+    assert app_source_sha256(tmp_path) == before
+    (tmp_path / "src" / "other.ts").write_text("export {};", encoding="utf-8")
+    assert app_source_sha256(tmp_path) != before
 
 
 def test_front_end_build_matches_its_sources():

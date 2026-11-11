@@ -8,10 +8,13 @@ import { fileURLToPath } from "node:url";
 const appFolder = join(dirname(fileURLToPath(import.meta.url)), "..");
 const buildInfoPath = join(appFolder, "..", "src", "urbansolarcarver", "ui_static", "build_info.json");
 
+/** The files under *folder*, leaving out node_modules folders: a cache vitest or vite leaves there (after a run started from
+ * app/src) is not a source and is not committed, so it must not make a build look fresh or stale. */
 function relativePathsUnder(folder) {
   return readdirSync(join(appFolder, folder), { withFileTypes: true }).flatMap((entry) => {
     const relativePath = `${folder}/${entry.name}`;
-    return entry.isDirectory() ? relativePathsUnder(relativePath) : [relativePath];
+    if (!entry.isDirectory()) return [relativePath];
+    return entry.name === "node_modules" ? [] : relativePathsUnder(relativePath);
   });
 }
 

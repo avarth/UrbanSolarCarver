@@ -91,7 +91,9 @@ src.zip
 fullText.pdf
 
 # Front-end (app/): installed packages, the intermediate OpenAPI file and the TypeScript build cache; the build goes to src/urbansolarcarver/ui_static/ and is committed
-app/node_modules/
+# installed packages, and the cache vitest or vite leave in a node_modules folder under the folder they are started from
+# (app/src/node_modules/ after a run from app/src): at any depth
+node_modules/
 app/openapi.json
 app/*.tsbuildinfo
 
