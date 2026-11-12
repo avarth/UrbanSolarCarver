@@ -830,7 +830,7 @@ def study_surfaces(test_surface_path, surfaces_from, max_volume, *, context_path
         if source == "context":
             paths = _paths_of(context_path)
             if not paths:
-                raise InputError("The study samples the surroundings, but there is no surroundings file.")
+                raise InputError("The study samples the context, but there is no context file.")
             meshes += [flat_pieces(without_downward_faces(load_mesh(path, fix_normals=True))) for path in paths]
         elif source == "terrain":
             if terrain_path is None:
@@ -847,7 +847,7 @@ def study_surfaces(test_surface_path, surfaces_from, max_volume, *, context_path
         else:
             raise InputError(f"'{source}' is not a surface a study can sample: use context, terrain or ground.")
     if not meshes:
-        raise InputError("The study has no surface to sample: add study surface files, or choose the surroundings, the "
+        raise InputError("The study has no surface to sample: add study surface files, or choose the context, the "
                          "terrain or the ground.")
     return meshes[0] if len(meshes) == 1 else trimesh.util.concatenate(meshes)
 

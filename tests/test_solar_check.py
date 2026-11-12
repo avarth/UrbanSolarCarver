@@ -626,7 +626,7 @@ def test_a_study_refuses_a_source_without_its_file_and_a_study_with_nothing_to_s
     from urbansolarcarver.errors import InputError
     from urbansolarcarver.solar_check import simulate_study
     surface, max_volume, _context = _study_files(tmp_path)
-    for source, named in (("context", "surroundings"), ("terrain", "terrain")):
+    for source, named in (("context", "context"), ("terrain", "terrain")):
         with pytest.raises(InputError, match=f"samples the {named}, but there is no {named} file"):
             simulate_study(surface, max_volume, _settings("sky_view", surfaces_from=[source]), out_dir=tmp_path / "study",
                            device="cpu")
