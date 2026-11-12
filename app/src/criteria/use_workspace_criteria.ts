@@ -128,6 +128,8 @@ export interface WorkspaceCriteria {
   runBlocker: string | null;
   /** The place of the setting to fix that the run's reason names, when it is not Criteria (the project settings window); else null. */
   runBlockerPlace: SettingPlace | null;
+  /** The other criterion that is on and protects nothing, when that is why Run analysis waits; null otherwise. */
+  runBlockerCriterion: { id: string; name: string } | null;
   /** The shown criterion's own analysis and carving stages, as shown; absent when the project lists none. */
   ownStages: CriterionStages | undefined;
   ofResults: CriteriaOfResults;
@@ -187,10 +189,11 @@ export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): Workspace
   const severalCriteria = criteria.criteria.length >= 2;
   const modeOf = (entry: CriterionEntry) => (entry.id === criterion?.id ? form.mode : entry.settings?.mode);
   const needingWeatherFile = active.filter((entry) => source.modes.find((mode) => mode.name === modeOf(entry))?.needs_epw);
+  const otherProtectingNothing = protectingNothing.find((entry) => entry.id !== criterion?.id);
   const runConditions = {
     runActive: runs.activeRun !== null, simulationActive: runs.activeRun?.origin === "simulate", maxVolumeFiles: source.maxVolumeFiles, maxVolumeFromSites: source.maxVolumeFromSites,
     testSurfaceFiles: criterion === null ? source.testSurfaceFiles : criterion.bypassed ? 1 : (criterion.test_surface_files ?? []).length,
-    otherCriterionWithoutTestSurfaces: protectingNothing.find((entry) => entry.id !== criterion?.id)?.name ?? null,
+    otherCriterionWithoutTestSurfaces: otherProtectingNothing?.name ?? null,
     noCriterionOn: criteria.criteria.length > 0 && active.length === 0,
     modeNeedsWeatherFile: source.modeNeedsWeatherFile && !(criterion?.bypassed ?? false),
     otherCriterionNeedingWeatherFile: needingWeatherFile.find((entry) => entry.id !== criterion?.id)?.name ?? null,
@@ -201,6 +204,9 @@ export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): Workspace
   const runBlock = runAnalysisBlockOf({ ...runConditions, shownIn: "criteria" });
   const runBlocker = runBlock?.reason ?? null;
   const runBlockerPlace = runBlock?.settingsElsewhere ?? null;
+  // The other criterion that holds the run because it protects nothing: the reason leads to it (user, 2026-11-11)
+  const runBlockerCriterion = runBlock?.criterionElsewhere === true && otherProtectingNothing !== undefined
+    ? { id: otherProtectingNothing.id, name: otherProtectingNothing.name } : null;
 
   // The shown criterion's own analysis and carving: its carving rule locks while its analysis is out of date; another criterion's
   // analysis out of date keeps a carving change from running (result_steps.tsx).
@@ -275,7 +281,7 @@ export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): Workspace
   };
 
   return {
-    selection, active, runBlocker, runBlockerPlace, ownStages,
+    selection, active, runBlocker, runBlockerPlace, runBlockerCriterion, ownStages,
     ofResults, goToSetting, panelProblem, cardsOf,
   };
 }

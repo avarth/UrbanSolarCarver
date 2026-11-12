@@ -157,6 +157,24 @@ test("Run analysis waits for the test surfaces of every criterion that is on, an
   expect(buttonIn(pinnedBar(), "Build envelope and massing").disabled).toBe(false);
 });
 
+test("the reason names the other criterion without test surfaces with a link that opens its Test surfaces; its card is marked", async () => {
+  await openChain([FACADES, { ...WINDOWS, test_surface_files: [] }], { 1: CURRENT, 2: NOT_RUN });
+  const link = buttonIn(pinnedBar(), "Open Spring sun on windows");
+  expect(link).toBeDefined();
+  await act(async () => link.click());
+  await settle();
+  expect(editorName()).toBe("Spring sun on windows");
+  const testSurfaces = panelFrame().querySelector<HTMLElement>('[data-section="test_surfaces"] .panel-section-header')!;
+  expect(testSurfaces.getAttribute("aria-expanded")).toBe("true");
+  // Shown, the criterion is no longer "another" one: the reason stays, without the link
+  expect(buttonIn(pinnedBar(), "Open Spring sun on windows")).toBeUndefined();
+  showCriterionCards();
+  const lineOf = (name: string) => [...container().querySelectorAll(".criterion-card")]
+    .find((card) => card.querySelector(".criterion-card-name")?.textContent === name)!.querySelector(".criterion-card-line")!;
+  expect(lineOf("Spring sun on windows").classList.contains("criterion-card-line-warning")).toBe(true);
+  expect(lineOf("Winter sun on facades").classList.contains("criterion-card-line-warning")).toBe(false);
+});
+
 test("with every criterion bypassed Run analysis says to turn one on", async () => {
   await openChain([FACADES, WINDOWS]);
   await bypass("Winter sun on facades");

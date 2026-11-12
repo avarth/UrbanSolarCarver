@@ -853,6 +853,7 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 }
 .criterion-card-line { grid-column: 1 / -1; grid-row: 3; color: var(--colour-muted); font-size: var(--text-secondary); cursor: pointer; }
 /* The criterion a run works on: its line in the accent colour. */
+.criterion-card-line-warning { display: flex; align-items: center; gap: 4px; color: var(--colour-error); }
 .criterion-card-running .criterion-card-line { color: var(--colour-accent); font-weight: 600; }
 .criterion-card .mode-tile-symbol { flex: none; width: 22px; height: 22px; margin: 0; }
 .criterion-card-switch { flex: none; }

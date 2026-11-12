@@ -530,6 +530,7 @@ export const messages = {
   addMaxVolumeAndTestSurfacesToRun: "Add a maximum volume and choose test surfaces to run the analysis",
   // Another criterion that is on protects nothing (7.2: the run refuses to start until every one protects something)
   addTestSurfacesOfCriterionToRun: (criterionName: string) => `Choose test surfaces for ${criterionName} to run the analysis`,
+  openCriterion: (criterionName: string) => `Open ${criterionName}`,
   // Every criterion is off (the service's words for the refusal)
   turnOnCriterionToRun: "Turn on a criterion to run",
   fixSettingsToRun: "Fix the settings above to run the analysis",

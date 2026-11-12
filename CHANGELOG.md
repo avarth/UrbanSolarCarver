@@ -7,6 +7,11 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Criteria
+
+- **The criterion that holds the run is easy to find.** When Run analysis waits for another criterion's test surfaces, **Open *name*** beside
+  the reason shows that criterion with its Test surfaces open, and its card's status line carries a warning sign.
+
 ### Inputs
 
 - **Site step wording.** Every box says in a line what geometry it expects, filled or empty. "Existing surroundings" is

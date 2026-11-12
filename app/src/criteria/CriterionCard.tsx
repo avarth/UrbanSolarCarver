@@ -10,6 +10,7 @@ import { messages } from "../messages";
 import { ActionMenu } from "../common/ActionMenu";
 import { ModeTileSymbol } from "./ModeTileSymbols";
 import { MODE_TILES } from "../modes";
+import { WarningIcon } from "../settings_form/SettingField";
 import "../theme/panels.css";
 
 export type CriterionMenuItem = "rename" | "duplicate" | "delete";
@@ -58,6 +59,8 @@ export function CriterionCard(props: CriterionCardProps) {
   const disabled = disabledReason !== null;
   const hintId = useId();
   const lineId = useId();
+  // A criterion that is on and protects nothing holds every run: its line is marked (user, 2026-11-11)
+  const holdsTheRun = !props.entry.bypassed && (props.entry.test_surface_files ?? []).length === 0;
   const mode = String(entry.settings?.mode ?? "");
   const symbol = MODE_TILES.find((tile) => tile.engine_name === mode)?.symbol;
   const moveWithKeys = (event: KeyboardEvent) => {
@@ -94,7 +97,9 @@ export function CriterionCard(props: CriterionCardProps) {
                     { key: "duplicate", label: messages.duplicateCriterion, disabledReason },
                     { key: "delete", label: messages.deleteCriterion, disabledReason: disabledReason ?? props.deleteDisabledReason },
                   ]} />
-      <span id={lineId} className="criterion-card-line" onClick={props.onSelect}>{props.line}</span>
+      <span id={lineId} className={`criterion-card-line${holdsTheRun ? " criterion-card-line-warning" : ""}`} onClick={props.onSelect}>
+        {holdsTheRun && <WarningIcon />}{props.line}
+      </span>
     </li>
   );
 }

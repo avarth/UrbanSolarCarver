@@ -86,6 +86,8 @@ export interface RunAnalysisBlock {
   reason: string;
   /** The place that holds the setting to fix, when it is not the step of the button (the project settings window, a later step); else null. */
   settingsElsewhere: SettingPlace | null;
+  /** The reason is another criterion that is on and has no test surfaces: the button can lead to it. */
+  criterionElsewhere?: boolean;
 }
 
 /** Why Run analysis cannot start, the first of: a run, the inputs, the weather file, a setting, the warm-up; null when it can. */
@@ -104,7 +106,9 @@ export function runAnalysisBlockOf(conditions: RunAnalysisConditions): RunAnalys
   if (!hasMaxVolume && !hasTestSurfaces) return plain(messages.addMaxVolumeAndTestSurfacesToRun);
   if (!hasMaxVolume) return plain(conditions.maxVolumeFromSites === true ? messages.addSiteToRun : messages.addMaxVolumeToRun);
   if (!hasTestSurfaces) return plain(criterionName === null ? messages.addTestSurfacesToRun : messages.addTestSurfacesOfCriterionToRun(criterionName));
-  if (conditions.otherCriterionWithoutTestSurfaces != null) return plain(messages.addTestSurfacesOfCriterionToRun(conditions.otherCriterionWithoutTestSurfaces));
+  if (conditions.otherCriterionWithoutTestSurfaces != null) {
+    return { reason: messages.addTestSurfacesOfCriterionToRun(conditions.otherCriterionWithoutTestSurfaces), settingsElsewhere: null, criterionElsewhere: true };
+  }
   // The weather file is in the project settings: the reason leads there (Open settings)
   const inSettings = (reason: string): RunAnalysisBlock => ({ reason, settingsElsewhere: "project_settings" });
   if (conditions.modeNeedsWeatherFile && !conditions.hasWeatherFile) {

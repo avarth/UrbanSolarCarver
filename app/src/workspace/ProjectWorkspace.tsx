@@ -417,8 +417,16 @@ function OpenProject(props: ProjectWorkspaceProps) {
     form, currentForm, dispatch, flushSave, changeAndSave, isWeightedMode: modeInfo?.score_kind === "weighted_sum", stages: shownStages,
     refreshStageStatus, runs, runBlocker: workspaceCriteria.runBlocker, everyCriterionCarved, projectRunActive: runActive, origin, openStep: openTheStep,
     carvingUpdatesItself,
-    // A reason that names a setting of the project settings leads there: the window opens on that field.
-    runBlockerAction: workspaceCriteria.runBlockerPlace === "project_settings" && (
+    // A reason that names a setting of the project settings leads there: the window opens on that field. A reason that names another
+    // criterion without test surfaces leads to that criterion, its Test surfaces section open.
+    runBlockerAction: workspaceCriteria.runBlockerCriterion !== null ? (
+      <button type="button" className="link-button run-button-reason-action" onClick={() => {
+        const blocking = workspaceCriteria.runBlockerCriterion;
+        if (blocking === null) return;
+        openTheStep("criteria");
+        selection.showCriterion(blocking.id, () => panelSections.onOpenSections(["test_surfaces"]));
+      }}>{messages.openCriterion(workspaceCriteria.runBlockerCriterion.name)}</button>
+    ) : workspaceCriteria.runBlockerPlace === "project_settings" && (
       <button type="button" className="link-button run-button-reason-action" onClick={() => {
         const firstShared = Object.keys(sharedForm.form.fieldErrors)[0];
         if (firstShared !== undefined) focusSettingInPanel(fieldSettingOf(firstShared));
