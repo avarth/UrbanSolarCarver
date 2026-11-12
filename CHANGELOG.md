@@ -15,9 +15,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 ### Inputs
 
 - **Holes in sites.** A site may have holes, closed outlines strictly inside it (a courtyard): the maximum volume and the base
-  volume leave them out from the ground to the top. An outline drawn wholly inside a site, or nested inside another in an
-  imported DXF or OBJ file, becomes its hole; holes are edited with the outline. Each hole has Make a separate site and Delete
-  hole; a site lying inside another has Make a hole of. The Sites box warns about sites that overlap or lie inside another.
+  volume leave them out from the ground to the top. **Draw hole** in a site's editor draws a hole, and an outline nested inside
+  another in an imported DXF or OBJ file becomes its hole; holes are edited with the outline and have Delete hole. Sites may no
+  longer overlap or lie inside one another: such a change is refused, and an import leaves the overlapping outline out. Overlaps
+  a project already has are warned about, and a site lying inside another has Make a hole of.
   Engine: `Site.holes` in `sites.py`.
 - **Site step wording.** Every box says in a line what geometry it expects, filled or empty. "Existing surroundings" is
   now **Context** everywhere in the app (the box, From context, the Settings group, the layer). A file row shows its name

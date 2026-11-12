@@ -148,14 +148,6 @@ def test_an_outline_inside_another_is_its_hole_and_one_inside_the_hole_is_a_site
     assert reply.json()["overlaps"] == []
 
 
-def test_outlines_that_partly_overlap_stay_two_sites(client_with_inputs):
-    def build(space):
-        space.add_lwpolyline(_rectangle(0, 0, 30, 20), close=True, dxfattribs={"layer": "A"})
-        space.add_lwpolyline(_rectangle(20, 5, 50, 15), close=True, dxfattribs={"layer": "B"})
-    body = _import(client_with_inputs, "two.dxf", _dxf_bytes(build)).json()
-    assert [(outline["name"], outline["holes"]) for outline in body["outlines"]] == [("A", []), ("B", [])]
-
-
 def test_holes_that_touch_each_other_are_left_out_and_the_outline_stays_a_site(client_with_inputs):
     def build(space):
         space.add_lwpolyline(_rectangle(0, 0, 60, 40), close=True, dxfattribs={"layer": "Block"})
@@ -164,3 +156,16 @@ def test_holes_that_touch_each_other_are_left_out_and_the_outline_stays_a_site(c
     body = _import(client_with_inputs, "touching.dxf", _dxf_bytes(build)).json()
     assert [(outline["name"], outline["holes"]) for outline in body["outlines"]] == [("Block", [])]
     assert body["left_out"] == ["the holes of Block: hole 1 and hole 2 touch or cross"]
+
+
+def test_an_outline_overlapping_an_earlier_one_or_a_site_of_the_project_is_left_out(client_with_inputs):
+    client = client_with_inputs
+    client.put("/api/projects/p/sites", json={"sites": [{"name": "Old", "points": [[100, 0, 0], [120, 0, 0], [120, 20, 0], [100, 20, 0]], "height": 10}]})
+    def build(space):
+        space.add_lwpolyline(_rectangle(0, 0, 30, 20), close=True, dxfattribs={"layer": "A"})
+        space.add_lwpolyline(_rectangle(20, 5, 50, 15), close=True, dxfattribs={"layer": "B"})
+        space.add_lwpolyline(_rectangle(110, 5, 130, 15), close=True, dxfattribs={"layer": "C"})
+        space.add_lwpolyline(_rectangle(30, 0, 40, -10), close=True, dxfattribs={"layer": "D"})      # touches A at a corner
+    body = _import(client, "overlaps.dxf", _dxf_bytes(build)).json()
+    assert [outline["name"] for outline in body["outlines"]] == ["A", "D"]
+    assert body["left_out"] == ["B: it overlaps A", "C: it overlaps Old"]

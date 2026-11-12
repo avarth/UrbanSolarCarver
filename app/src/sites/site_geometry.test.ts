@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { constrainedToAngle, drawingLevel, placePoint, type ToScreen } from "./site_drawing";
 import {
   allPoints, baseHeightOf, containsPoint, crossesItself, differsFromOriginal, maxHeightOf, nextSiteName, outlinePoints, planArea, pointAlong, ringInside,
-  ringsMeet, ringsOf, siteArea, siteAreaContains, siteHoleIsDrawnIn, siteProblems, siteRise, withRings, type SitePoint,
+  ringsMeet, ringsOf, siteArea, siteAreaContains, siteProblems, siteRise, withRings, type SitePoint,
 } from "./site_geometry";
 
 const SQUARE: SitePoint[] = [[0, 0, 100], [40, 0, 102], [40, 30, 106], [0, 30, 101]];
@@ -124,18 +124,6 @@ describe("holes (design/site-holes.md)", () => {
     expect(siteProblems({ ...block, holes: [[[20, 15, 0], [40, 35, 0], [40, 15, 0], [20, 35, 0]]] })).toEqual(["hole 1 crosses itself"]);
     expect(siteProblems({ ...block, holes: [[[20, 15, 0], [20.5, 15, 0], [20.5, 15.5, 0]]] })[0]).toBe("hole 1's area is 0.13\u00a0m², less than 1\u00a0m²");
     expect(siteProblems({ ...block, holes: [[[20, 15, 0], [40, 15, 0]]] })).toEqual(["hole 1 needs at least 3 vertices"]);
-  });
-
-  test("an outline drawn wholly in a site's area is a hole of it; drawn in a hole, partly over a site or elsewhere, a new site", () => {
-    const sites = [block, { name: "Next door", points: [[70, 0, 0], [90, 0, 0], [90, 20, 0]] as SitePoint[], height: 10 }];
-    expect(siteHoleIsDrawnIn(sites, [[5, 5, 0], [15, 5, 0], [15, 10, 0]])).toBe(0);
-    expect(siteHoleIsDrawnIn(sites, [[25, 20, 0], [30, 20, 0], [30, 25, 0]])).toBeNull();            // inside the courtyard
-    expect(siteHoleIsDrawnIn(sites, [[10, 10, 0], [45, 10, 0], [45, 40, 0], [10, 40, 0]])).toBeNull(); // around the courtyard
-    expect(siteHoleIsDrawnIn(sites, [[50, 10, 0], [70, 10, 0], [70, 20, 0]])).toBeNull();            // partly over the block
-    expect(siteHoleIsDrawnIn(sites, [[100, 0, 0], [110, 0, 0], [110, 10, 0]])).toBeNull();
-    // An island in the courtyard: a ring drawn inside it is the island's hole
-    const island = { name: "Island", points: [[22, 17, 0], [38, 17, 0], [38, 33, 0], [22, 33, 0]] as SitePoint[], height: 5 };
-    expect(siteHoleIsDrawnIn([...sites, island], [[25, 20, 0], [30, 20, 0], [30, 25, 0]])).toBe(2);
   });
 
   test("the rings of a site, and a site without holes carries no holes field; Restore original is offered when a hole changed", () => {

@@ -71,7 +71,7 @@ import { HeightsSettings } from "../sites/HeightsSettings";
 import { SiteEditor, SitePicker, type SiteTool } from "../sites/SiteEditor";
 import { drawingLevel } from "../sites/site_drawing";
 import {
-  allPoints, elevationRange, holesOf, nextSiteName, ringsOf, siteArea, siteHoleIsDrawnIn, siteRise, withRings, type Site, type SitePoint,
+  allPoints, elevationRange, holesOf, nextSiteName, ringsOf, siteArea, siteRise, withRings, type Site, type SitePoint,
 } from "../sites/site_geometry";
 import { InputChangesNotice } from "./InputChangesNotice";
 import { useProjectForms } from "./use_project_forms";
@@ -495,16 +495,18 @@ function OpenProject(props: ProjectWorkspaceProps) {
   };
   // The height a new site gets: the last site's, or more when the site rises more
   const newSiteHeight = (points: SitePoint[]) => Math.max(lastHeight, Math.ceil(siteRise(points) + 1));
-  // A closed outline drawn wholly inside a site's area is a hole of that site, its vertices at the site's lowest elevation; else a new
-  // site (design/site-holes.md). Either is one save, so one undo.
+  // Draw makes a new site; Draw hole in a site's editor draws a hole of that site, its vertices at the site's lowest elevation
+  // (user, 2026-11-12: holes are drawn on purpose, and sites may not overlap or nest, which the service refuses). One save, one undo;
+  // a refused hole leaves the drawing open with the reason.
   const finishDrawing = (points: SitePoint[]) => {
-    const outer = siteHoleIsDrawnIn(siteInput.sites, points);
-    if (outer !== null) {
-      const site = siteInput.sites[outer];
+    if (siteTool?.kind === "draw_hole") {
+      const index = siteTool.index;
+      const site = siteInput.sites[index];
+      if (!site) return;
       const lowest = elevationRange(allPoints(site))[0];
       const hole = points.map((point): SitePoint => [point[0], point[1], lowest]);
-      void siteInput.save(siteInput.sites.map((other, at) => (at === outer ? withRings(site, [...ringsOf(site), hole]) : other)))
-        .then((refused) => { if (refused === null) setSiteTool({ kind: "edit", index: outer }); });
+      void siteInput.save(siteInput.sites.map((other, at) => (at === index ? withRings(site, [...ringsOf(site), hole]) : other)))
+        .then((refused) => { if (refused === null) setSiteTool({ kind: "edit", index }); });
       return;
     }
     const added = [...siteInput.sites, { name: nextSiteName(siteInput.sites), points, height: newSiteHeight(points) }];
@@ -516,13 +518,6 @@ function OpenProject(props: ProjectWorkspaceProps) {
     if (!inner || !outer) return;
     if (siteTool?.kind === "edit") setSiteTool(null);
     void siteInput.save(siteInput.sites.flatMap((site, at) => (at === index ? [] : at === outerIndex ? [withRings(outer, [...ringsOf(outer), inner.points])] : [site])));
-  };
-  const separateHole = (index: number, hole: number) => {
-    const site = siteInput.sites[index];
-    const points = holesOf(site)[hole];
-    if (!points) return;
-    const kept = siteInput.sites.map((other, at) => (at === index ? withRings(site, ringsOf(site).filter((_, ring) => ring !== hole + 1)) : other));
-    void siteInput.save([...kept, { name: nextSiteName(kept), points, height: newSiteHeight(points) }]);
   };
   const deleteHole = (index: number, hole: number) => {
     const site = siteInput.sites[index];
@@ -617,7 +612,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
              onDraw={() => setSiteTool({ kind: "draw" })} onEdit={(index) => setSiteTool({ kind: "edit", index })}
              onChangeSite={changeSite} onDeleteSite={deleteSite} onImport={importOutlines} onPlaceOnTerrain={(index) => { void placeSiteOnTerrain(index); }}
              onRestoreOriginal={restoreOriginal} hasTerrain={hasTerrain} note={siteNote} overlaps={siteInput.overlaps}
-             onMakeHole={makeHoleOf} onSeparateHole={separateHole} onDeleteHole={deleteHole}
+             onMakeHole={makeHoleOf} onDeleteHole={deleteHole}
              onSwitch={() => { setSiteTool(null); setMaxVolumeChosen(true); void siteInput.setSource("mesh"); }} />
   ) : undefined;
   const maxVolumeFooter = siteInput.source === "mesh" && !choosingInput ? (
@@ -628,7 +623,9 @@ function OpenProject(props: ProjectWorkspaceProps) {
   const sceneTool = props.mode !== "design" || openStep !== "inputs" || !usesSites || inputsDisabledReason !== null ? null
     : siteToolShown !== null ? (scene: ViewerScene) => (
       <SiteEditor scene={scene} origin={origin} sites={siteInput.sites} tool={siteToolShown} level={siteLevel} newSiteName={nextSiteName(siteInput.sites)}
-                  onFinishDrawing={finishDrawing} onChangeSite={(index, site) => { void changeSite(index, site); }} onClose={() => setSiteTool(null)}
+                  onFinishDrawing={finishDrawing} onChangeSite={(index, site) => { void changeSite(index, site); }}
+                  onClose={() => setSiteTool(siteTool?.kind === "draw_hole" ? { kind: "edit", index: siteTool.index } : null)}
+                  onDrawHole={(index) => setSiteTool({ kind: "draw_hole", index })}
                   onUndo={siteInput.undo} onRedo={siteInput.redo} canUndo={siteInput.canUndo} canRedo={siteInput.canRedo} refusal={siteInput.refusal}
                   heights={siteInput.heights} />
     ) : (scene: ViewerScene) => (

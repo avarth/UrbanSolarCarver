@@ -481,7 +481,6 @@ export const messages = {
   holeName: (number: number) => `Hole ${number}`,
   holeActions: (siteName: string, number: number) => `Actions for hole ${number} of ${siteName}`,
   makeHoleOf: (siteName: string) => `Make a hole of ${siteName}`,
-  makeSeparateSite: "Make a separate site",
   deleteHole: "Delete hole",
   holeVertexHandle: (hole: number, index: number) => `Hole ${hole} vertex ${index}`,
   sitesOverlap: (first: string, second: string) => `${first} and ${second} overlap: check their outlines.`,
@@ -506,6 +505,8 @@ export const messages = {
   siteTooLow: (rise: number) => `this site rises ${rise.toFixed(2)}\u00a0m, so its height must be more than ${rise.toFixed(2)}\u00a0m`,
   siteNotSaved: (reason: string) => `Not saved: ${reason}.`,
   drawingSite: (siteName: string) => `Drawing ${siteName}`,
+  drawingHole: (siteName: string) => `Drawing a hole in ${siteName}`,
+  drawHole: "Draw hole",
   drawingSteps: "Click to add points · click the first point or press Enter to close · Backspace removes the last · Esc cancels",
   editingSite: (siteName: string) => `Editing ${siteName}`,
   editingSteps: "Drag a vertex to move it · click it to type its elevation · double click an edge to add a vertex · Delete removes the "

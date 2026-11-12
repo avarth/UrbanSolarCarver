@@ -227,23 +227,6 @@ export function ringsMeet(a: readonly SitePoint[], b: readonly SitePoint[]): boo
   return (a.length > 0 && containsPoint(b, a[0][0], a[0][1])) || (b.length > 0 && containsPoint(a, b[0][0], b[0][1]));
 }
 
-/**
- * What a closed outline drawn in the view becomes (design/site-holes.md): a hole of the site whose area holds it wholly (strictly
- * inside its outline, and clear of its holes), the smallest such site when there are several; else, drawn inside a hole, partly over a
- * site or over no site, a new site. Returns the index of the site it is a hole of, or null for a new site.
- */
-export function siteHoleIsDrawnIn(sites: readonly Site[], drawn: readonly SitePoint[]): number | null {
-  const ring = outlinePoints(drawn);
-  let found: { index: number; area: number } | null = null;
-  sites.forEach((site, index) => {
-    const outline = outlinePoints(site.points);
-    if (!ringInside(ring, outline) || holesOf(site).some((hole) => ringsMeet(ring, outlinePoints(hole)))) return;
-    const area = planArea(outline);
-    if (found === null || area < found.area) found = { index, area };
-  });
-  return (found as { index: number } | null)?.index ?? null;
-}
-
 /** Whether the plan point lies in the site's area: inside its outline and outside its holes. */
 export function siteAreaContains(site: Pick<Site, "points" | "holes">, x: number, y: number): boolean {
   return containsPoint(site.points, x, y) && !holesOf(site).some((hole) => containsPoint(hole, x, y));

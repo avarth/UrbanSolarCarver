@@ -1,4 +1,5 @@
 """A site as the input: the sites routes, the source of the maximum volume and the joined file built from the sites."""
+import json
 import pytest
 import trimesh
 import yaml
@@ -243,16 +244,52 @@ def test_a_site_with_a_hole_makes_a_maximum_volume_without_it_and_a_hole_outside
     assert refused.status_code == 422 and "Block: hole 1 is not strictly inside the outline." in refused.json()["detail"]
 
 
-def test_the_reply_names_sites_that_overlap_and_a_site_inside_another(client_with_inputs):
+def _write_sites(projects_folder, sites, name="p"):
+    """Sites put straight into project.json, as a project made before overlaps were refused may hold them."""
+    path = projects_folder / name / "project.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["sites"] = sites
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+OVERLAPPING_SITES = [
+    {"name": "Block", "points": _flat(0, 0, 40, 30), "height": 20},
+    {"name": "Inner", "points": _flat(10, 10, 20, 20), "height": 20},              # wholly inside Block
+    {"name": "Across", "points": _flat(35, 5, 60, 25), "height": 20},              # partly over Block
+    {"name": "Beside", "points": _flat(60, 0, 80, 30), "height": 20},              # shares an edge with Across only
+]
+
+
+def test_a_change_that_makes_sites_overlap_or_nest_is_refused_and_sites_sharing_an_edge_are_not(client_with_inputs):
     client = client_with_inputs
-    sites = [
-        {"name": "Block", "points": _flat(0, 0, 40, 30), "height": 20},
-        {"name": "Inner", "points": _flat(10, 10, 20, 20), "height": 20},              # wholly inside Block
-        {"name": "Across", "points": _flat(35, 5, 60, 25), "height": 20},              # partly over Block
-        {"name": "Beside", "points": _flat(60, 0, 80, 30), "height": 20},              # shares an edge with Across only
-    ]
-    overlaps = client.put("/api/projects/p/sites", json={"sites": sites}).json()["overlaps"]
-    assert overlaps == [{"first": 1, "second": 0, "inside": True}, {"first": 0, "second": 2, "inside": False}]
-    # A site inside another's hole overlaps nothing
-    sites[0]["holes"] = [_flat(5, 5, 25, 25)]
-    assert client.put("/api/projects/p/sites", json={"sites": sites}).json()["overlaps"] == [{"first": 0, "second": 2, "inside": False}]
+    block, inner, across, beside = OVERLAPPING_SITES
+    assert client.put("/api/projects/p/sites", json={"sites": [block, beside]}).status_code == 200
+    refused = client.put("/api/projects/p/sites", json={"sites": [block, beside, inner, across]})
+    assert refused.status_code == 422
+    assert refused.json()["detail"] == ("Inner lies inside Block: draw a hole in Block instead. "
+                                        "Block and Across overlap: sites may share an edge, not an area.")
+    assert [site["name"] for site in client.get("/api/projects/p/sites").json()["sites"]] == ["Block", "Beside"]     # nothing changed
+    # Moving a site onto another is refused too
+    moved = {**beside, "points": _flat(30, 0, 50, 30)}
+    assert client.put("/api/projects/p/sites", json={"sites": [block, moved]}).status_code == 422
+
+
+def test_overlaps_a_project_already_has_are_reported_and_kept_until_one_of_the_sites_is_edited(client_with_inputs, projects_folder):
+    client = client_with_inputs
+    _write_sites(projects_folder, OVERLAPPING_SITES)
+    reply = client.get("/api/projects/p/sites").json()
+    assert reply["overlaps"] == [{"first": 1, "second": 0, "inside": True}, {"first": 0, "second": 2, "inside": False}]
+    # A change elsewhere (a rename, another site's height) is stored with the old overlaps
+    renamed = [{**OVERLAPPING_SITES[0], "name": "Big block"}, *OVERLAPPING_SITES[1:3], {**OVERLAPPING_SITES[3], "height": 25}]
+    assert client.put("/api/projects/p/sites", json={"sites": renamed}).status_code == 200
+    # Editing an outline of an overlapping pair is refused while they still overlap
+    reshaped = [*renamed[:2], {**renamed[2], "points": _flat(36, 5, 60, 25)}, renamed[3]]
+    assert client.put("/api/projects/p/sites", json={"sites": reshaped}).status_code == 422
+    # Making the inner site a hole of the block removes that overlap
+    holed = [{**renamed[0], "holes": [renamed[1]["points"]]}, renamed[2], renamed[3]]
+    reply = client.put("/api/projects/p/sites", json={"sites": holed})
+    assert reply.status_code == 422          # the block's outline changed while it still overlaps Across
+    holed_apart = [{**renamed[0], "holes": [renamed[1]["points"]]}, {**renamed[2], "points": _flat(40, 5, 60, 25)}, renamed[3]]
+    reply = client.put("/api/projects/p/sites", json={"sites": holed_apart})
+    assert reply.status_code == 200, reply.text
+    assert reply.json()["overlaps"] == []

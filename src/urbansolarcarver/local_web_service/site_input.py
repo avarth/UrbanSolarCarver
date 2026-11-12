@@ -79,6 +79,26 @@ def sites_reply(store, name: str) -> SitesReply:
 OVERLAP_AREA = 1e-3         # m²: sites sharing less than this (an edge, a vertex, a sliver of rounding) do not overlap
 
 
+def _outline_key(entry: SiteJson) -> tuple:
+    """A site's outline and holes in plan, to tell whether a change touched them."""
+    return (tuple(tuple(point[:2]) for point in entry.points), tuple(tuple(tuple(point[:2]) for point in hole) for hole in entry.holes))
+
+
+def refused_overlaps(before: list[SiteJson], entries: list[SiteJson]) -> list[str]:
+    """One sentence for each overlap that a change would make (user, 2026-11-12): a pair of overlapping sites is refused when either
+    site's outline or holes are new or changed, so overlaps a project already has stay (and are warned about) until one of the two is
+    edited. A site wholly inside another is told to be drawn as a hole."""
+    unchanged = {_outline_key(entry) for entry in before}
+    sentences = []
+    for overlap in site_overlaps(entries):
+        first, second = entries[overlap.first], entries[overlap.second]
+        if _outline_key(first) in unchanged and _outline_key(second) in unchanged:
+            continue
+        sentences.append(f"{first.name} lies inside {second.name}: draw a hole in {second.name} instead." if overlap.inside
+                         else f"{first.name} and {second.name} overlap: sites may share an edge, not an area.")
+    return sentences
+
+
 def site_overlaps(entries: list[SiteJson]) -> list[SiteOverlap]:
     """The pairs of sites whose areas in plan (outline minus holes) share more than OVERLAP_AREA; a pair where one site's outline lies
     wholly inside the other's area is reported with that one first and inside true. Sites that cannot make a volume are left out."""
@@ -130,10 +150,10 @@ def _volumes_of(entries: list[SiteJson], heights: HeightsJson) -> list[Site]:
 def save_sites(store, name: str, entries: list[SiteJson]) -> SitesReply:
     """Store the whole list of sites; while the project uses them, build the joined max volume again when a site's volume changed
     (a change of base heights alone keeps it, and the analysis stays current) and write the kept volume. ProjectError 422 names every
-    site that cannot make a volume, and then nothing changes."""
+    site that cannot make a volume, and every new overlap (refused_overlaps), and then nothing changes."""
     with store.project_lock(name):
         project_json = store.read_project_json(name)
-        refused = refused_sites(entries, project_json.heights)
+        refused = refused_sites(entries, project_json.heights) or refused_overlaps(project_json.sites, entries)
         if refused:
             raise ProjectError(" ".join(refused), status_code=422)
         project_folder = store.open(name)

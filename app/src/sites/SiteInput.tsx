@@ -102,8 +102,7 @@ interface SiteBoxProps {
   overlaps?: SiteOverlap[];
   /** Make a hole of: the site at *index* (lying wholly inside the one at *outerIndex*) becomes that site's hole. */
   onMakeHole?: (index: number, outerIndex: number) => void;
-  /** A hole's menu: Make a separate site and Delete hole (*hole* counts from 0). */
-  onSeparateHole?: (index: number, hole: number) => void;
+  /** A hole's menu: Delete hole (*hole* counts from 0). */
   onDeleteHole?: (index: number, hole: number) => void;
   disabledReason: string | null;
 }
@@ -111,7 +110,7 @@ interface SiteBoxProps {
 /** The Sites card: Draw site at the right of its title, a line for the heights set for all sites, a table of the sites (a line each:
  * name, the heights set per site, the menu), and at its foot the link back to a maximum volume. */
 export function SiteBox({ sites, heights, tool, onDraw, onEdit, onChangeSite, onDeleteSite, onSwitch, onImport, onPlaceOnTerrain,
-                          onRestoreOriginal, hasTerrain, refusal, note = null, overlaps = [], onMakeHole = () => {}, onSeparateHole = () => {},
+                          onRestoreOriginal, hasTerrain, refusal, note = null, overlaps = [], onMakeHole = () => {},
                           onDeleteHole = () => {}, disabledReason }: SiteBoxProps) {
   // Overlaps whose sites are not (or no longer) in the list are left out: the list shown may be ahead of the service's reply
   const shownOverlaps = overlaps.filter((overlap) => sites[overlap.first] && sites[overlap.second] && overlap.first !== overlap.second);
@@ -181,8 +180,7 @@ export function SiteBox({ sites, heights, tool, onDraw, onEdit, onChangeSite, on
               {holesOf(site).map((hole, holeIndex) => (
                 <HoleRow key={`hole-${holeIndex}`} siteName={site.name} number={holeIndex + 1} hole={hole} disabledReason={disabledReason}
                          onChoose={(key) => {
-                           if (key === "separate") onSeparateHole(index, holeIndex);
-                           else if (key === "delete_hole") onDeleteHole(index, holeIndex);
+                           if (key === "delete_hole") onDeleteHole(index, holeIndex);
                          }} />
               ))}
               </Fragment>
@@ -298,7 +296,8 @@ interface HoleRowProps {
   onChoose: (key: string) => void;
 }
 
-/** A line under its site for each hole: "Hole 1" with its area, and its menu (Make a separate site, Delete hole). */
+/** A line under its site for each hole: "Hole 1" with its area, and its menu (Delete hole). A hole cannot become a site: it would lie
+ * inside the site around it, which is refused (user, 2026-11-12). */
 function HoleRow({ siteName, number, hole, disabledReason, onChoose }: HoleRowProps) {
   const name = messages.holeName(number);
   return (
@@ -306,7 +305,6 @@ function HoleRow({ siteName, number, hole, disabledReason, onChoose }: HoleRowPr
       <span className="site-hole-name" title={`${name}: ${messages.siteArea(planArea(outlinePoints(hole)))}`}>{name}</span>
       <ActionMenu label={messages.holeActions(siteName, number)} symbol={<span aria-hidden="true">⋯</span>} onChoose={onChoose}
                   items={[
-                    { key: "separate", label: messages.makeSeparateSite, disabledReason },
                     { key: "delete_hole", label: messages.deleteHole, disabledReason },
                   ]} />
     </li>

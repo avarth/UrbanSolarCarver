@@ -10,8 +10,9 @@ level, and survey elevations do not move the model. The drawing level is the one
 lowest vertex of the sites already there; for the first sites the lowest level of the existing surroundings and terrain, else 0.
 
 Nesting (design/site-holes.md): an outline wholly inside another becomes a hole of the smallest outline around it; one inside a hole
-is a site again (an island), and so on: outlines inside an even number of others are sites, inside an odd number holes. Outlines
-that partly overlap stay separate sites.
+is a site again (an island), and so on: outlines inside an even number of others are sites, inside an odd number holes. Sites may not
+overlap (user, 2026-11-12): an outline that shares an area with an earlier one of the file, or with a site already in the project, is
+left out with the reason.
 """
 from __future__ import annotations
 
@@ -27,6 +28,7 @@ from ..errors import InputError
 from ..outlines import read_outlines
 from ..sites import Site, check_site, site_polygon, site_rise
 from .api_models import ImportedOutline, OutlinesReply, TerrainHeightsReply
+from .site_input import OVERLAP_AREA, site_of
 from .project_names import ProjectError
 
 SITES_FOLDER = "inputs/sites"               # the imported outline files, kept so the originals can be traced
@@ -124,6 +126,7 @@ def read_outline_file(store, name: str, file_name: str, data: bytes) -> Outlines
                                           for role in ("max_volume", "context", "terrain")) if bounds is not None]
     gap = _plan_gap(placed_points, other_bounds)
     outlines = []
+    taken = [(entry.name, site_polygon(site_of(entry))) for entry in project_json.sites if not check_site(site_of(entry))]
     for index, hole_indices in nested(placed_points):
         outline_name, points = kept[index][0], placed_points[index]
         holes = tuple(tuple(map(tuple, placed_points[hole].tolist())) for hole in hole_indices)
@@ -133,8 +136,17 @@ def read_outline_file(store, name: str, file_name: str, data: bytes) -> Outlines
         if hole_reasons:
             left_out.append(f"the holes of {outline_name or f'Outline {index + 1}'}: {'; '.join(hole_reasons)}")
             site = Site(outline_name, site.points, 1.0)
+        polygon = site_polygon(site)
+        shown = outline_name or f"Outline {index + 1}"
+        over = next((other for other, area in taken if polygon.intersects(area) and polygon.intersection(area).area > OVERLAP_AREA), None)
+        if over is not None:
+            left_out.append(f"{shown}: it overlaps {over or 'another outline'}")
+            continue
+        taken.append((shown, polygon))
         outlines.append(ImportedOutline(name=outline_name, points=points.tolist(), area=float(site_polygon(site).area),
                                         rise=float(site_rise(site)), holes=[[list(point) for point in hole] for hole in site.holes]))
+    if not outlines:
+        raise ProjectError(f"No closed polyline in {clean_name} can be a site: {'; '.join(left_out)}.", status_code=422)
     return OutlinesReply(file=clean_name, unit=found.unit, outlines=outlines, left_out=left_out,
                          distance_from_inputs=gap if gap is not None and gap > FAR_FROM_INPUTS else None)
 

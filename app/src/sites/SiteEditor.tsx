@@ -18,7 +18,8 @@ import {
 } from "./site_geometry";
 import "./sites.css";
 
-export type SiteTool = { kind: "draw" } | { kind: "edit"; index: number };
+/** Drawing a new site, drawing a hole in a site (Draw hole in its editor, design/site-holes.md), or editing a site. */
+export type SiteTool = { kind: "draw" } | { kind: "draw_hole"; index: number } | { kind: "edit"; index: number };
 
 /** A vertex of the edited site: its ring (0 the outline, then the holes from 1) and its place in the ring. */
 interface VertexAt {
@@ -50,6 +51,8 @@ export interface SiteEditorProps {
   onFinishDrawing: (points: SitePoint[]) => void;
   onChangeSite: (index: number, site: Site) => void;
   onClose: () => void;
+  /** Starts drawing a hole in the edited site (Draw hole); absent: no button. */
+  onDrawHole?: (index: number) => void;
   onUndo: () => void;
   onRedo: () => void;
   canUndo: boolean;
@@ -95,7 +98,8 @@ export function SiteEditor(props: SiteEditorProps) {
   };
 
   // Drawing starts from the top view, north up
-  const startsDrawing = tool.kind === "draw";
+  const drawing = tool.kind !== "edit";
+  const startsDrawing = drawing;
   useEffect(() => {
     if (startsDrawing) scene.viewTop();
   }, [scene, startsDrawing]);
@@ -116,7 +120,7 @@ export function SiteEditor(props: SiteEditorProps) {
     setHover(null);
   };
   const viewClicked = useEffectEvent((x: number, y: number, shift: boolean) => {
-    if (tool.kind !== "draw") return;
+    if (!drawing) return;
     const placed = placeAt(x, y, shift);
     if (!placed) return;
     if (placed.snap === "first_point") finishDrawing();
@@ -124,7 +128,7 @@ export function SiteEditor(props: SiteEditorProps) {
   });
   useEffect(() => scene.onViewClick(({ x, y, shift }) => viewClicked(x, y, shift)), [scene]);
   const pointerMoved = useEffectEvent((event: PointerEvent) => {
-    if (tool.kind !== "draw" || !overlay.current) return;
+    if (!drawing || !overlay.current) return;
     const bounds = overlay.current.getBoundingClientRect();
     const x = event.clientX - bounds.left, y = event.clientY - bounds.top;
     setHover(x < 0 || y < 0 || x > bounds.width || y > bounds.height ? null : placeAt(x, y, event.shiftKey));
@@ -213,7 +217,7 @@ export function SiteEditor(props: SiteEditorProps) {
   };
 
   // A new tool, or another site to edit: nothing drawn, nothing selected
-  const toolKey = tool.kind === "edit" ? `edit-${tool.index}` : "draw";
+  const toolKey = tool.kind === "draw" ? "draw" : `${tool.kind}-${tool.index}`;
   const [shownToolKey, setShownToolKey] = useState(toolKey);
   if (shownToolKey !== toolKey) {
     setShownToolKey(toolKey);
@@ -238,7 +242,7 @@ export function SiteEditor(props: SiteEditorProps) {
       props.onRedo();
       return;
     }
-    if (tool.kind === "draw") {
+    if (drawing) {
       if (event.key === "Enter") finishDrawing();
       else if (event.key === "Backspace") setDrawn((points) => points.slice(0, -1));
       else if (event.key === "Escape") props.onClose();
@@ -284,17 +288,23 @@ export function SiteEditor(props: SiteEditorProps) {
   const selectedPoint = selected === null ? undefined : shownRings[selected.ring]?.[selected.vertex];
   const selectedScreen = selectedPoint ? toScreen(selectedPoint) : null;
   const shownProblem = problem ?? props.refusal;
+  const holeOf = tool.kind === "draw_hole" ? sites[tool.index] : undefined;
+  const barTitle = tool.kind === "draw" ? messages.drawingSite(props.newSiteName)
+    : tool.kind === "draw_hole" ? messages.drawingHole(holeOf?.name ?? "") : messages.editingSite(edited?.name ?? "");
 
   return (
     <div ref={overlay} className="site-editor">
-      <div className="site-editor-bar" role="toolbar" aria-label={tool.kind === "draw" ? messages.drawingSite(props.newSiteName) : messages.editingSite(edited?.name ?? "")}>
-        <strong>{tool.kind === "draw" ? messages.drawingSite(props.newSiteName) : messages.editingSite(edited?.name ?? "")}</strong>
-        <span className="site-editor-steps">{tool.kind === "draw" ? messages.drawingSteps : messages.editingSteps}</span>
+      <div className="site-editor-bar" role="toolbar" aria-label={barTitle}>
+        <strong>{barTitle}</strong>
+        <span className="site-editor-steps">{drawing ? messages.drawingSteps : messages.editingSteps}</span>
         <span className="site-editor-buttons">
+          {tool.kind === "edit" && edited && props.onDrawHole && (
+            <button type="button" className="secondary-button" onClick={() => props.onDrawHole?.(tool.index)}>{messages.drawHole}</button>
+          )}
           <button type="button" className="secondary-button" onClick={props.onUndo} disabled={!props.canUndo}>{messages.undoSiteChange}</button>
           <button type="button" className="secondary-button" onClick={props.onRedo} disabled={!props.canRedo}>{messages.redoSiteChange}</button>
-          {tool.kind === "draw" && <button type="button" className="secondary-button" onClick={props.onClose}>{messages.cancelDrawing}</button>}
-          <button type="button" className="primary-button" onClick={tool.kind === "draw" && drawn.length >= 3 ? finishDrawing : props.onClose}>
+          {drawing && <button type="button" className="secondary-button" onClick={props.onClose}>{messages.cancelDrawing}</button>}
+          <button type="button" className="primary-button" onClick={drawing && drawn.length >= 3 ? finishDrawing : props.onClose}>
             {messages.doneDrawing}
           </button>
         </span>
@@ -304,7 +314,7 @@ export function SiteEditor(props: SiteEditorProps) {
         <g className="site-editor-others">
           {otherOutlines.map((points, index) => <g key={index}>{screenPath(points, true)}</g>)}
         </g>
-        {tool.kind === "draw" && (
+        {drawing && (
           <g className="site-editor-drawn">
             {screenPath(drawn, false)}
             {lastScreen && hoverScreen && <line className="site-editor-rubber" x1={lastScreen[0]} y1={lastScreen[1]} x2={hoverScreen[0]} y2={hoverScreen[1]} />}

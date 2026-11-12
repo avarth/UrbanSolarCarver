@@ -1,5 +1,5 @@
-// Holes in sites (design/site-holes.md): an outline drawn inside a site makes its hole, a hole's vertices are edited as the outline's,
-// the row says how many holes a site has, the menus turn a site inside another into its hole and a hole back into a site or away,
+// Holes in sites (design/site-holes.md): Draw hole in a site's editor draws its hole, a hole's vertices are edited as the outline's,
+// the row says how many holes a site has, the menus turn a site inside another into its hole and delete a hole,
 // imported holes come with their outlines, and overlapping sites are warned about under the table.
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -76,11 +76,17 @@ async function typeElevation(label: string, value: string) {
   await settle();
 }
 
-test("an outline drawn inside a site becomes its hole at the site's lowest level, in one save that one undo takes back", async () => {
+test("Draw hole in a site's editor draws a hole at the site's lowest level, in one save that one undo takes back", async () => {
   const service = new FakeService(NOTHING_RUN, null);
   service.sites = [{ ...block(), points: [[0, 0, 2], [60, 0, 3], [60, 50, 2], [0, 50, 2]] }];
   await openWith(service);
-  await drawOutline(SECOND_COURTYARD);
+  await choose(siteRows()[0], "Edit outline");
+  const drawHole = [...editor()!.querySelectorAll("button")].find((button) => button.textContent === "Draw hole")!;
+  act(() => { drawHole.click(); });
+  await settle();
+  expect(editor()!.textContent).toContain("Drawing a hole in Block");
+  for (const [x, y] of SECOND_COURTYARD) await clickAt(x, y);
+  await clickAt(SECOND_COURTYARD[0][0], SECOND_COURTYARD[0][1]);
   expect(service.savedSites).toHaveLength(1);
   expect(service.savedSites[0]).toHaveLength(1);
   expect(service.savedSites[0][0].holes).toEqual([[[5, 5, 2], [15, 5, 2], [15, 10, 2]]]);
@@ -92,16 +98,21 @@ test("an outline drawn inside a site becomes its hole at the site's lowest level
   expect("holes" in service.savedSites[1][0]).toBe(false);
 });
 
-test("an outline drawn inside a hole, or partly over a site, is a new site", async () => {
+test("Cancel while drawing a hole goes back to the site's editor; Draw makes a new site, and the service's refusal of a site inside another is shown", async () => {
   const service = new FakeService(NOTHING_RUN, null);
-  service.sites = [block([COURTYARD])];
+  service.sites = [block()];
   await openWith(service);
-  await drawOutline([[25, 20], [30, 20], [30, 25]]);
-  expect(service.savedSites[0].map((site) => site.name)).toEqual(["Block", "Site 2"]);
-  expect(service.savedSites[0][0].holes).toEqual([COURTYARD]);
+  await choose(siteRows()[0], "Edit outline");
+  act(() => { [...editor()!.querySelectorAll("button")].find((button) => button.textContent === "Draw hole")!.click(); });
+  await settle();
   await key("Escape");
-  await drawOutline([[50, 10], [70, 10], [70, 20]]);
-  expect(service.savedSites[1].map((site) => site.name)).toEqual(["Block", "Site 2", "Site 3"]);
+  expect(editor()!.textContent).toContain("Editing Block");
+  expect(service.savedSites).toHaveLength(0);
+  await key("Escape");
+  service.sitesRefusal = "Site 2 lies inside Block: draw a hole in Block instead.";
+  await drawOutline(SECOND_COURTYARD);
+  expect(service.savedSites).toHaveLength(0);
+  expect(editor()!.querySelector("[role='alert']")!.textContent).toBe("Site 2 lies inside Block: draw a hole in Block instead.");
 });
 
 test("a hole's vertex takes a typed elevation in the same history; a change the service refuses shows its reason", async () => {
@@ -170,16 +181,15 @@ test("Make a hole of: a site lying inside another becomes its hole in one save",
   expect(service.savedSites[0]).toEqual([block([COURTYARD]), other]);
 });
 
-test("a hole's menu makes it a separate site, named and given a height as a new site, or deletes it, in one save each", async () => {
+test("a hole's menu deletes it in one save; a hole cannot become a site, which would lie inside its site", async () => {
   const service = new FakeService(NOTHING_RUN, null);
   service.sites = [block([COURTYARD, SECOND_COURTYARD])];
   await openWith(service);
-  expect(menuOf(holeRows()[0]).map((item) => item.textContent)).toEqual(["Make a separate site", "Delete hole"]);
-  await choose(holeRows()[0], "Make a separate site");
-  expect(service.savedSites[0]).toEqual([block([SECOND_COURTYARD]), { name: "Site 2", points: COURTYARD, height: 20 }]);
+  expect(menuOf(holeRows()[0]).map((item) => item.textContent)).toEqual(["Delete hole"]);
   await choose(holeRows()[0], "Delete hole");
-  expect(service.savedSites).toHaveLength(2);
-  expect(service.savedSites[1]).toEqual([block(), { name: "Site 2", points: COURTYARD, height: 20 }]);
+  expect(service.savedSites).toEqual([[block([SECOND_COURTYARD])]]);
+  await choose(holeRows()[0], "Delete hole");
+  expect(service.savedSites[1]).toEqual([block()]);
   expect("holes" in service.savedSites[1][0]).toBe(false);
   expect(holeRows()).toHaveLength(0);
 });
