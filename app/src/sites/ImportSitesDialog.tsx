@@ -1,6 +1,7 @@
 // The window of an outline import (design/site-import.md, section 7): what the file holds before anything is added. The closed
-// polylines found, each with its area and rise; what was left out; a warning when the outlines lie far from the other inputs in plan;
-// Place on terrain, on by default while the project has terrain; and Import n sites, which adds them as one undoable change.
+// polylines found, each with its area, rise and holes (an outline inside another is its hole, design/site-holes.md); what was left
+// out; a warning when the outlines lie far from the other inputs in plan; Place on terrain, on by default while the project has
+// terrain; and Import n sites, which adds them as one undoable change.
 import { useId, useState, type FormEvent } from "react";
 import type { OutlinesReply } from "../api_client/client";
 import { DialogButtons, DialogFrame } from "../common/dialogs";
@@ -34,7 +35,7 @@ export function ImportSitesDialog({ found, names, hasTerrain, busy, onImport, on
           {found.outlines.map((outline, index) => (
             <li key={index}>
               <span>{names[index] ?? outline.name}</span>
-              <span className="import-sites-detail">{messages.importSiteLine(groupedDigits(Math.round(outline.area)), formattedNumber(outline.rise))}</span>
+              <span className="import-sites-detail">{messages.importSiteLine(groupedDigits(Math.round(outline.area)), formattedNumber(outline.rise), outline.holes?.length ?? 0)}</span>
             </li>
           ))}
         </ul>

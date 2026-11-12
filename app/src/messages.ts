@@ -444,7 +444,8 @@ export const messages = {
   importSitesTitle: (fileName: string) => `Import sites from ${fileName}`,
   importSitesFound: (count: number, unit: string) =>
     `${count} closed ${count === 1 ? "polyline" : "polylines"}, read in ${unit}. Their elevations are kept relative to each other, from the level new sites start at.`,
-  importSiteLine: (areaText: string, riseText: string) => `${areaText}\u00a0m², rise ${riseText}\u00a0m`,
+  importSiteLine: (areaText: string, riseText: string, holeCount = 0) =>
+    `${areaText}\u00a0m², rise ${riseText}\u00a0m${holeCount > 0 ? `, ${holeCount} ${holeCount === 1 ? "hole" : "holes"}` : ""}`,
   importLeftOut: "Left out:",
   importFarFromInputs: (kilometres: string) => `The outlines are ${kilometres}\u00a0km from the other inputs. Are they in the same coordinates?`,
   importSitesButton: (count: number) => `Import ${count} ${count === 1 ? "site" : "sites"}`,
@@ -474,6 +475,23 @@ export const messages = {
   heightNotPositive: "A height must be more than 0 m.",
   siteNameOf: (siteName: string) => `Name of ${siteName}`,
   siteArea: (area: number) => `${groupedDigits(Math.round(area))}\u00a0m²`,
+  // A site's area and its holes (design/site-holes.md): "2 697 m², 1 hole"
+  siteAreaAndHoles: (area: number, holeCount: number) =>
+    `${groupedDigits(Math.round(area))}\u00a0m²${holeCount > 0 ? `, ${holeCount} ${holeCount === 1 ? "hole" : "holes"}` : ""}`,
+  holeName: (number: number) => `Hole ${number}`,
+  holeActions: (siteName: string, number: number) => `Actions for hole ${number} of ${siteName}`,
+  makeHoleOf: (siteName: string) => `Make a hole of ${siteName}`,
+  makeSeparateSite: "Make a separate site",
+  deleteHole: "Delete hole",
+  holeVertexHandle: (hole: number, index: number) => `Hole ${hole} vertex ${index}`,
+  sitesOverlap: (first: string, second: string) => `${first} and ${second} overlap: check their outlines.`,
+  siteLiesInside: (inner: string, outer: string) => `${inner} lies inside ${outer}: make it a hole of ${outer}, or move it.`,
+  siteOverlapsAnother: "This site overlaps another site",
+  holeTooFewVertices: (number: number) => `hole ${number} needs at least 3 vertices`,
+  holeCrossesItself: (number: number) => `hole ${number} crosses itself`,
+  holeTooSmall: (number: number, area: number) => `hole ${number}'s area is ${area.toFixed(2)}\u00a0m², less than 1\u00a0m²`,
+  holeNotInside: (number: number) => `hole ${number} is not strictly inside the outline`,
+  holesTouch: (first: number, second: number) => `hole ${first} and hole ${second} touch or cross`,
   siteElevations: (rise: number) => (rise < 0.005 ? "Flat" : `Elevations 0 to ${formattedNumber(rise)}\u00a0m`),
   siteActions: (siteName: string) => `Actions for ${siteName}`,
   renameSite: "Rename",

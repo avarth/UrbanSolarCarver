@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
 import { constrainedToAngle, drawingLevel, placePoint, type ToScreen } from "./site_drawing";
 import {
-  baseHeightOf, containsPoint, crossesItself, differsFromOriginal, maxHeightOf, nextSiteName, outlinePoints, planArea, pointAlong, siteProblems, siteRise, type SitePoint,
+  allPoints, baseHeightOf, containsPoint, crossesItself, differsFromOriginal, maxHeightOf, nextSiteName, outlinePoints, planArea, pointAlong, ringInside,
+  ringsMeet, ringsOf, siteArea, siteAreaContains, siteHoleIsDrawnIn, siteProblems, siteRise, withRings, type SitePoint,
 } from "./site_geometry";
 
 const SQUARE: SitePoint[] = [[0, 0, 100], [40, 0, 102], [40, 30, 106], [0, 30, 101]];
@@ -91,4 +92,62 @@ test("a site differs from its original when a vertex moved, was added or was rem
   expect(differsFromOriginal({ ...site, points: [...SQUARE, [0, 15, 100]] })).toBe(true);
   expect(differsFromOriginal({ name: "B", points: SQUARE, height: 20 })).toBe(false);
   expect(differsFromOriginal({ name: "B", points: SQUARE, height: 20, original: null })).toBe(false);
+});
+
+describe("holes (design/site-holes.md)", () => {
+  const BLOCK: SitePoint[] = [[0, 0, 0], [60, 0, 0], [60, 50, 0], [0, 50, 0]];                 // 3 000 m²
+  const COURTYARD: SitePoint[] = [[20, 15, 0], [40, 15, 0], [40, 35, 0], [20, 35, 0]];         // 400 m²
+  const block = { name: "Block", points: BLOCK, height: 20, holes: [COURTYARD] };
+
+  test("the area is the outline's less the holes'; the rise counts the holes' vertices", () => {
+    expect(siteArea(block)).toBe(2600);
+    expect(siteArea({ points: BLOCK })).toBe(3000);
+    expect(allPoints({ points: BLOCK, holes: [[[20, 15, -3], [40, 15, 0], [40, 35, 0]]] })).toHaveLength(7);
+    expect(siteProblems({ ...block, height: 3, holes: [[[20, 15, -4], [40, 15, 0], [40, 35, 0]]] })).toEqual([
+      "this site rises 4.00 m, so its height must be more than 4.00 m",
+    ]);
+  });
+
+  test("a ring is strictly inside another only with no edges meeting: touching is not inside", () => {
+    expect(ringInside(COURTYARD, BLOCK)).toBe(true);
+    expect(ringInside(BLOCK, COURTYARD)).toBe(false);
+    expect(ringInside([[0, 10, 0], [10, 10, 0], [10, 20, 0]], BLOCK)).toBe(false);                 // a vertex on the outline
+    expect(ringInside([[50, 10, 0], [70, 10, 0], [70, 20, 0], [50, 20, 0]], BLOCK)).toBe(false);   // partly out
+    expect(ringsMeet(COURTYARD, [[25, 20, 0], [30, 20, 0], [30, 25, 0]])).toBe(true);               // one inside the other
+    expect(ringsMeet(COURTYARD, [[1, 1, 0], [5, 1, 0], [5, 5, 0]])).toBe(false);
+  });
+
+  test("a site with holes is checked as the engine checks it", () => {
+    expect(siteProblems(block)).toEqual([]);
+    expect(siteProblems({ ...block, holes: [[[50, 10, 0], [70, 10, 0], [70, 20, 0], [50, 20, 0]]] })).toEqual(["hole 1 is not strictly inside the outline"]);
+    expect(siteProblems({ ...block, holes: [COURTYARD, [[40, 20, 0], [45, 20, 0], [45, 25, 0]]] })).toEqual(["hole 1 and hole 2 touch or cross"]);
+    expect(siteProblems({ ...block, holes: [[[20, 15, 0], [40, 35, 0], [40, 15, 0], [20, 35, 0]]] })).toEqual(["hole 1 crosses itself"]);
+    expect(siteProblems({ ...block, holes: [[[20, 15, 0], [20.5, 15, 0], [20.5, 15.5, 0]]] })[0]).toBe("hole 1's area is 0.13\u00a0m², less than 1\u00a0m²");
+    expect(siteProblems({ ...block, holes: [[[20, 15, 0], [40, 15, 0]]] })).toEqual(["hole 1 needs at least 3 vertices"]);
+  });
+
+  test("an outline drawn wholly in a site's area is a hole of it; drawn in a hole, partly over a site or elsewhere, a new site", () => {
+    const sites = [block, { name: "Next door", points: [[70, 0, 0], [90, 0, 0], [90, 20, 0]] as SitePoint[], height: 10 }];
+    expect(siteHoleIsDrawnIn(sites, [[5, 5, 0], [15, 5, 0], [15, 10, 0]])).toBe(0);
+    expect(siteHoleIsDrawnIn(sites, [[25, 20, 0], [30, 20, 0], [30, 25, 0]])).toBeNull();            // inside the courtyard
+    expect(siteHoleIsDrawnIn(sites, [[10, 10, 0], [45, 10, 0], [45, 40, 0], [10, 40, 0]])).toBeNull(); // around the courtyard
+    expect(siteHoleIsDrawnIn(sites, [[50, 10, 0], [70, 10, 0], [70, 20, 0]])).toBeNull();            // partly over the block
+    expect(siteHoleIsDrawnIn(sites, [[100, 0, 0], [110, 0, 0], [110, 10, 0]])).toBeNull();
+    // An island in the courtyard: a ring drawn inside it is the island's hole
+    const island = { name: "Island", points: [[22, 17, 0], [38, 17, 0], [38, 33, 0], [22, 33, 0]] as SitePoint[], height: 5 };
+    expect(siteHoleIsDrawnIn([...sites, island], [[25, 20, 0], [30, 20, 0], [30, 25, 0]])).toBe(2);
+  });
+
+  test("the rings of a site, and a site without holes carries no holes field; Restore original is offered when a hole changed", () => {
+    expect(ringsOf(block)).toEqual([BLOCK, COURTYARD]);
+    expect(withRings(block, [BLOCK])).toEqual({ name: "Block", points: BLOCK, height: 20 });
+    expect("holes" in withRings(block, [BLOCK])).toBe(false);
+    expect(withRings({ name: "A", points: BLOCK, height: 2 }, [BLOCK, COURTYARD]).holes).toEqual([COURTYARD]);
+    const imported = { ...block, original: { file: "block.dxf", points: BLOCK, holes: [COURTYARD] } };
+    expect(differsFromOriginal(imported)).toBe(false);
+    expect(differsFromOriginal({ ...imported, holes: [] })).toBe(true);
+    expect(differsFromOriginal({ ...imported, holes: [[[21, 15, 0], ...COURTYARD.slice(1)]] })).toBe(true);
+    expect(siteAreaContains(block, 5, 5)).toBe(true);
+    expect(siteAreaContains(block, 30, 25)).toBe(false);
+  });
 });

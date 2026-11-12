@@ -1876,6 +1876,8 @@ export interface components {
             area: number;
             /** Rise */
             rise: number;
+            /** Holes */
+            holes?: number[][][];
         };
         /**
          * InputFileChange
@@ -2282,6 +2284,8 @@ export interface components {
             /** Base Height */
             base_height?: number | null;
             original?: components["schemas"]["SiteOriginal"] | null;
+            /** Holes */
+            holes?: number[][][];
         };
         /**
          * SiteOriginal
@@ -2293,10 +2297,25 @@ export interface components {
             file: string;
             /** Points */
             points: number[][];
+            /** Holes */
+            holes?: number[][][];
+        };
+        /**
+         * SiteOverlap
+         * @description Two sites whose areas in plan share more than a line (design/site-holes.md): their indices in the list of sites, and whether
+         *     the first lies wholly inside the second (so it could be the second's hole).
+         */
+        SiteOverlap: {
+            /** First */
+            first: number;
+            /** Second */
+            second: number;
+            /** Inside */
+            inside: boolean;
         };
         /**
          * SitesReply
-         * @description What the maximum volume is made from, the sites, and what the joined max volume came out as.
+         * @description What the maximum volume is made from, the sites, what the joined max volume came out as, and the sites that overlap.
          */
         SitesReply: {
             /**
@@ -2310,6 +2329,8 @@ export interface components {
             joined_bounds: number[][] | null;
             grid_plan: components["schemas"]["GridPlanReply"] | null;
             heights: components["schemas"]["HeightsJson"];
+            /** Overlaps */
+            overlaps?: components["schemas"]["SiteOverlap"][];
         };
         /**
          * SitesRequest

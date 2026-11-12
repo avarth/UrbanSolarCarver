@@ -126,11 +126,15 @@ export class FakeService {
   /** What GET sites answers, and what PUT sites and PUT max-volume-source change. */
   siteSource: "mesh" | "sites" = "mesh";
   sites: SiteJson[] = [];
+  /** The overlapping pairs of sites GET and PUT sites report (design/site-holes.md). */
+  siteOverlaps: NonNullable<SitesReply["overlaps"]> = [];
   /** What PUT heights stored (design/base-height.md). */
   heights: Heights = { max: { for_all_sites: false, value: null }, base: { for_all_sites: true, value: null } };
   savedHeights: Heights[] = [];
   /** The bodies of every PUT sites. */
   readonly savedSites: SiteJson[][] = [];
+  /** While set, PUT sites is refused (422) with this reason, as the service refuses a site that cannot make a volume. */
+  sitesRefusal: string | null = null;
   /** What POST outlines answers (design/site-import.md): the outlines read, or a refusal with its status and reason. */
   outlinesReply: OutlinesReply | { status: number; detail: string } = { file: "plots.dxf", unit: "metres", outlines: [], left_out: [], distance_from_inputs: null };
   /** The name of the file of every POST outlines. */
@@ -226,13 +230,14 @@ export class FakeService {
         this.heights = JSON.parse(String(init!.body)) as Heights;
         this.savedHeights.push(this.heights);
       }
+      if (method === "PUT" && path === "/sites" && this.sitesRefusal !== null) return json<ErrorDetailReply>({ detail: this.sitesRefusal }, 422);
       if (method === "PUT" && path === "/sites") {
         this.sites = (JSON.parse(String(init!.body)) as { sites: SiteJson[] }).sites;
         this.savedSites.push(this.sites);
       }
       if (method === "PUT" && path === "/max-volume-source") this.siteSource = (JSON.parse(String(init!.body)) as { source: "mesh" | "sites" }).source;
       const bounds = this.siteSource === "sites" && this.sites.length ? [[0, 0, 0], [10, 10, 30]] : null;
-      return json<SitesReply>({ source: this.siteSource, sites: this.sites, joined_bounds: bounds, grid_plan: null, heights: this.heights });
+      return json<SitesReply>({ source: this.siteSource, sites: this.sites, joined_bounds: bounds, grid_plan: null, heights: this.heights, overlaps: this.siteOverlaps });
     }
     if (method === "POST" && path === "/outlines") {
       this.outlineFilesRead.push(((init!.body as FormData).get("file") as File).name);

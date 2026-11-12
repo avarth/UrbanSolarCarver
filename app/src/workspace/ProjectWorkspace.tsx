@@ -70,7 +70,9 @@ import { Subheading } from "../settings_form/Subheading";
 import { HeightsSettings } from "../sites/HeightsSettings";
 import { SiteEditor, SitePicker, type SiteTool } from "../sites/SiteEditor";
 import { drawingLevel } from "../sites/site_drawing";
-import { nextSiteName, outlinePoints, planArea, type Site, type SitePoint } from "../sites/site_geometry";
+import {
+  allPoints, elevationRange, holesOf, nextSiteName, ringsOf, siteArea, siteHoleIsDrawnIn, siteRise, withRings, type Site, type SitePoint,
+} from "../sites/site_geometry";
 import { InputChangesNotice } from "./InputChangesNotice";
 import { useProjectForms } from "./use_project_forms";
 import { useTestSurfaceDrawing } from "./use_test_surface_drawing";
@@ -442,7 +444,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
   const viewState = projectViewStateOf({
     files, form, sharedForm: sharedForm.form, criterionForm: criterionForm.form, criterionKeys, northDegrees, stages: shownStages,
     summary: resultSteps.results.summary, criteria: criteria.criteria, active,
-    sites: siteInput.source === "sites" ? { count: siteInput.sites.length, area: siteInput.sites.reduce((sum, site) => sum + planArea(outlinePoints(site.points)), 0) } : null,
+    sites: siteInput.source === "sites" ? { count: siteInput.sites.length, area: siteInput.sites.reduce((sum, site) => sum + siteArea(site), 0) } : null,
   });
 
   const weatherHint = messages.weatherNeededFor(listedWithAnd(modes.filter((mode) => mode.needs_epw).map((mode) => plainModeName(mode.name))));
@@ -485,32 +487,64 @@ function OpenProject(props: ProjectWorkspaceProps) {
     && (project.carving_chain ?? []).length === 0;
   const lastHeight = siteInput.sites.length ? siteInput.sites[siteInput.sites.length - 1].height : DEFAULT_SITE_HEIGHT;
   const surroundings = boundsOf([contextMesh.geometry, terrainMesh.geometry]);
-  const siteLevel = drawingLevel(siteInput.sites.map((site) => site.points), surroundings === null ? null : surroundings[0][2] + origin[2]);
+  const siteLevel = drawingLevel(siteInput.sites.map((site) => allPoints(site)), surroundings === null ? null : surroundings[0][2] + origin[2]);
   const changeSite = (index: number, site: Site) => siteInput.save(siteInput.sites.map((other, at) => (at === index ? site : other)));
   const deleteSite = (index: number) => {
     if (siteTool?.kind === "edit") setSiteTool(null);
     void siteInput.save(siteInput.sites.filter((_, at) => at !== index));
   };
+  // The height a new site gets: the last site's, or more when the site rises more
+  const newSiteHeight = (points: SitePoint[]) => Math.max(lastHeight, Math.ceil(siteRise(points) + 1));
+  // A closed outline drawn wholly inside a site's area is a hole of that site, its vertices at the site's lowest elevation; else a new
+  // site (design/site-holes.md). Either is one save, so one undo.
   const finishDrawing = (points: SitePoint[]) => {
-    const height = Math.max(lastHeight, Math.ceil(Math.max(...points.map((point) => point[2])) - Math.min(...points.map((point) => point[2])) + 1));
-    const added = [...siteInput.sites, { name: nextSiteName(siteInput.sites), points, height }];
+    const outer = siteHoleIsDrawnIn(siteInput.sites, points);
+    if (outer !== null) {
+      const site = siteInput.sites[outer];
+      const lowest = elevationRange(allPoints(site))[0];
+      const hole = points.map((point): SitePoint => [point[0], point[1], lowest]);
+      void siteInput.save(siteInput.sites.map((other, at) => (at === outer ? withRings(site, [...ringsOf(site), hole]) : other)))
+        .then((refused) => { if (refused === null) setSiteTool({ kind: "edit", index: outer }); });
+      return;
+    }
+    const added = [...siteInput.sites, { name: nextSiteName(siteInput.sites), points, height: newSiteHeight(points) }];
     void siteInput.save(added).then((refused) => { if (refused === null) setSiteTool({ kind: "edit", index: added.length - 1 }); });
+  };
+  // A site lying wholly inside another made that one's hole, and a hole made a site again or deleted (design/site-holes.md): one save each
+  const makeHoleOf = (index: number, outerIndex: number) => {
+    const inner = siteInput.sites[index], outer = siteInput.sites[outerIndex];
+    if (!inner || !outer) return;
+    if (siteTool?.kind === "edit") setSiteTool(null);
+    void siteInput.save(siteInput.sites.flatMap((site, at) => (at === index ? [] : at === outerIndex ? [withRings(outer, [...ringsOf(outer), inner.points])] : [site])));
+  };
+  const separateHole = (index: number, hole: number) => {
+    const site = siteInput.sites[index];
+    const points = holesOf(site)[hole];
+    if (!points) return;
+    const kept = siteInput.sites.map((other, at) => (at === index ? withRings(site, ringsOf(site).filter((_, ring) => ring !== hole + 1)) : other));
+    void siteInput.save([...kept, { name: nextSiteName(kept), points, height: newSiteHeight(points) }]);
+  };
+  const deleteHole = (index: number, hole: number) => {
+    const site = siteInput.sites[index];
+    if (!site || !holesOf(site)[hole]) return;
+    void changeSite(index, withRings(site, ringsOf(site).filter((_, ring) => ring !== hole + 1)));
   };
   // Sites from DXF and OBJ files and Place on terrain (design/site-import.md): the service reads and places the outlines; they are
   // added here as one undoable change, as a drawing adds a site
   const hasTerrain = files.terrain.length > 0;
-  const onTerrain = async (points: SitePoint[]): Promise<{ points: SitePoint[]; off: number }> => {
-    const reply = await terrainHeights(token, project.name, points.map((point) => [point[0], point[1]]));
-    let off = 0;
-    const placed = points.map((point, index): SitePoint => {
-      const height = reply.heights[index];
+  // Each vertex of the rings (an outline and its holes) takes the terrain's height below it, in one request
+  const onTerrain = async (rings: SitePoint[][]): Promise<{ rings: SitePoint[][]; off: number }> => {
+    const reply = await terrainHeights(token, project.name, rings.flat().map((point) => [point[0], point[1]]));
+    let off = 0, at = 0;
+    const placed = rings.map((ring) => ring.map((point): SitePoint => {
+      const height = reply.heights[at++];
       if (height === null || height === undefined) {
         off += 1;
         return point;
       }
       return [point[0], point[1], height];
-    });
-    return { points: placed, off };
+    }));
+    return { rings: placed, off };
   };
   const reportSiteProblem = (error: unknown) => {
     if (reportServiceProblem(error, onServiceProblem)) return;
@@ -537,16 +571,17 @@ function OpenProject(props: ProjectWorkspaceProps) {
       const names = importedNames(importing.found);
       let off = 0;
       for (const [index, outline] of importing.found.outlines.entries()) {
-        const original = outline.points.map((point) => [point[0], point[1], point[2]] as SitePoint);
-        let points = original;
+        const asRing = (ring: number[][]) => ring.map((point) => [point[0], point[1], point[2]] as SitePoint);
+        const originalRings = [asRing(outline.points), ...(outline.holes ?? []).map(asRing)];
+        let rings = originalRings;
         if (placeOnTerrain) {
-          const placed = await onTerrain(original);
-          points = placed.points;
+          const placed = await onTerrain(originalRings);
+          rings = placed.rings;
           off += placed.off;
         }
-        const rise = Math.max(...points.map((point) => point[2])) - Math.min(...points.map((point) => point[2]));
-        sites.push({ name: names[index], points, height: Math.max(lastHeight, Math.ceil(rise + 1)),
-                     original: { file: importing.found.file, points: original } });
+        const original = originalRings.length > 1 ? { file: importing.found.file, points: originalRings[0], holes: originalRings.slice(1) }
+          : { file: importing.found.file, points: originalRings[0] };
+        sites.push(withRings({ name: names[index], points: rings[0], height: newSiteHeight(rings.flat()), original }, rings));
       }
       setImporting(null);
       const refused = await siteInput.save(sites);
@@ -563,8 +598,8 @@ function OpenProject(props: ProjectWorkspaceProps) {
     setSiteNote(null);
     try {
       const site = siteInput.sites[index];
-      const placed = await onTerrain(site.points);
-      const refused = await changeSite(index, { ...site, points: placed.points });
+      const placed = await onTerrain(ringsOf(site));
+      const refused = await changeSite(index, withRings(site, placed.rings));
       if (refused === null && placed.off > 0) setSiteNote({ text: messages.placedOffTerrain(placed.off), warning: false });
     } catch (error) {
       reportSiteProblem(error);
@@ -572,7 +607,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
   };
   const restoreOriginal = (index: number) => {
     const site = siteInput.sites[index];
-    if (site.original) void changeSite(index, { ...site, points: site.original.points });
+    if (site.original) void changeSite(index, withRings(site, [site.original.points, ...(site.original.holes ?? [])]));
   };
   const maxVolumeBox = siteInput.source === null ? undefined : choosingInput ? (
     <InputChoice disabledReason={inputsDisabledReason} onChooseMaxVolume={() => setMaxVolumeChosen(true)}
@@ -581,7 +616,8 @@ function OpenProject(props: ProjectWorkspaceProps) {
     <SiteBox sites={siteInput.sites} heights={siteInput.heights} tool={siteTool} refusal={siteInput.refusal} disabledReason={inputsDisabledReason}
              onDraw={() => setSiteTool({ kind: "draw" })} onEdit={(index) => setSiteTool({ kind: "edit", index })}
              onChangeSite={changeSite} onDeleteSite={deleteSite} onImport={importOutlines} onPlaceOnTerrain={(index) => { void placeSiteOnTerrain(index); }}
-             onRestoreOriginal={restoreOriginal} hasTerrain={hasTerrain} note={siteNote}
+             onRestoreOriginal={restoreOriginal} hasTerrain={hasTerrain} note={siteNote} overlaps={siteInput.overlaps}
+             onMakeHole={makeHoleOf} onSeparateHole={separateHole} onDeleteHole={deleteHole}
              onSwitch={() => { setSiteTool(null); setMaxVolumeChosen(true); void siteInput.setSource("mesh"); }} />
   ) : undefined;
   const maxVolumeFooter = siteInput.source === "mesh" && !choosingInput ? (

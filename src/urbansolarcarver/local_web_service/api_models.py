@@ -5,7 +5,7 @@ with the browser app. This module holds no behaviour.
 """
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -95,6 +95,11 @@ class SiteOriginal(BaseModel):
     it came from (kept in inputs/sites/) and its points as placed then."""
     file: str = Field(min_length=1, max_length=255)
     points: list[list[float]] = Field(min_length=3, max_length=2000)
+    holes: list[list[list[float]]] = Field(default_factory=list, max_length=50)
+
+
+# A hole of a site (design/site-holes.md): a closed ring strictly inside the outline, [[x, y, z], ...], not repeated at the end
+HoleRing = Annotated[list[list[float]], Field(min_length=3, max_length=2000)]
 
 
 class SiteJson(BaseModel):
@@ -105,10 +110,11 @@ class SiteJson(BaseModel):
     height: float = Field(gt=0, allow_inf_nan=False)     # the site's own max height, used while the max height is Per site
     base_height: float | None = Field(None, ge=0, allow_inf_nan=False)    # its own base height (Per site); None or 0: no lower limit
     original: SiteOriginal | None = None    # an imported site's outline as imported; None for a drawn site
+    holes: list[HoleRing] = Field(default_factory=list, max_length=50)    # closed outlines strictly inside, left out of the volume
 
     @model_validator(mode="after")
     def _points_are_xyz(self):
-        if any(len(point) != 3 for point in self.points):
+        if any(len(point) != 3 for point in [*self.points, *(point for hole in self.holes for point in hole)]):
             raise ValueError("every point is [x, y, z]")
         return self
 
@@ -281,8 +287,9 @@ class ImportedOutline(BaseModel):
     points [[x, y, z], ...] in the input files' coordinates, its plan area (m²) and its rise (m, its highest vertex above its lowest)."""
     name: str
     points: list[list[float]]
-    area: float
+    area: float                 # the outline's area minus its holes'
     rise: float
+    holes: list[list[list[float]]] = Field(default_factory=list)    # outlines of the file nested inside it (design/site-holes.md)
 
 
 class OutlinesReply(BaseModel):
@@ -348,13 +355,22 @@ class MaxVolumeSourceRequest(BaseModel):
     source: MaxVolumeSource
 
 
+class SiteOverlap(BaseModel):
+    """Two sites whose areas in plan share more than a line (design/site-holes.md): their indices in the list of sites, and whether
+    the first lies wholly inside the second (so it could be the second's hole)."""
+    first: int
+    second: int
+    inside: bool
+
+
 class SitesReply(BaseModel):
-    """What the maximum volume is made from, the sites, and what the joined max volume came out as."""
+    """What the maximum volume is made from, the sites, what the joined max volume came out as, and the sites that overlap."""
     source: MaxVolumeSource
     sites: list[SiteJson]
     joined_bounds: list[list[float]] | None     # of the joined max volume; None without one
     grid_plan: "GridPlanReply | None"           # the grid of the stored settings on it; None without a max volume
     heights: HeightsJson
+    overlaps: list[SiteOverlap] = Field(default_factory=list)
 
 
 class ProjectSummary(BaseModel):

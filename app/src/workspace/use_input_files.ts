@@ -9,7 +9,7 @@ import {
   reportServiceProblem, restoreRemovedInput, saveSites, setHeights as storeHeights, setMaxVolumeSource,
   type InputFileInfo, type InputFilesReply, type MaxVolumeSource, type ModeInfo, type ProjectDetail, type SitesReply,
 } from "../api_client/client";
-import { NO_HEIGHTS, baseHeightOf, heightsOf, type Heights, type Site } from "../sites/site_geometry";
+import { NO_HEIGHTS, baseHeightOf, heightsOf, type Heights, type Site, type SiteOverlap } from "../sites/site_geometry";
 import { useProjectSession } from "../api_client/project_session";
 import { hemisphereOfLatitude, seasonsOfLatitude, type Hemisphere } from "../settings_form/analysis_period";
 import type { FormState, SettingsForm } from "../settings_form/form_state";
@@ -82,6 +82,8 @@ export interface SitesInput {
   /** Null until the service has said. */
   source: MaxVolumeSource | null;
   sites: Site[];
+  /** The pairs of sites that overlap in plan, as the service's last reply said (design/site-holes.md). */
+  overlaps: SiteOverlap[];
   /** Store the whole list; resolves to null once saved, or the service's reason it was refused (the sites shown go back). */
   save: (sites: Site[]) => Promise<string | null>;
   setSource: (source: MaxVolumeSource) => Promise<void>;
@@ -131,6 +133,7 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
 
   const [source, setSourceState] = useState<MaxVolumeSource | null>(null);
   const [sites, setSites] = useState<Site[]>([]);
+  const [overlaps, setOverlaps] = useState<SiteOverlap[]>([]);
   const [heights, setHeightsState] = useState<Heights>(NO_HEIGHTS);
   const [undoStack, setUndoStack] = useState<Site[][]>([]);
   const [redoStack, setRedoStack] = useState<Site[][]>([]);
@@ -141,6 +144,7 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
       if (stale) return;
       setSourceState(reply.source);
       setSites(reply.sites as Site[]);
+      setOverlaps(reply.overlaps ?? []);
       setHeightsState(heightsOf(reply.heights));
     }).catch((error) => {
       // Lost access is reported; another failure leaves the project on its mesh files, as before sites
@@ -300,6 +304,7 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
   const applySitesReply = (reply: SitesReply) => {
     setSourceState(reply.source);
     setSites(reply.sites as Site[]);
+    setOverlaps(reply.overlaps ?? []);
     setHeightsState(heightsOf(reply.heights));
     setJoinedBounds(reply.joined_bounds as Bounds3 | null);
     setInputRevisions((current) => ({ ...current, max_volume: current.max_volume + 1 }));
@@ -369,7 +374,7 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
   };
 
   return {
-    sites: { source, sites, save: saveSitesUndoable, setSource, heights, setHeights, undo, redo, canUndo: undoStack.length > 0, canRedo: redoStack.length > 0, refusal },
+    sites: { source, sites, overlaps, save: saveSitesUndoable, setSource, heights, setHeights, undo, redo, canUndo: undoStack.length > 0, canRedo: redoStack.length > 0, refusal },
     files, joinedBounds, origin,
     weather: { location: weatherLocation, latitude: weatherLatitude, fileRevision: weatherFileRevision, fileChange: weatherFileChange,
                setFileChange: setWeatherFileChange },

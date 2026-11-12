@@ -2,14 +2,16 @@
 // tiles before either has content, the Site card (a row per site with its name, height, area and elevations, Draw site), and the
 // link that switches the input, which asks first when the input has content. The sites themselves are drawn and edited in the view
 // (SiteEditor.tsx).
-import { useId, useRef, useState, type CSSProperties, type DragEvent, type FormEvent } from "react";
+import { Fragment, useId, useRef, useState, type CSSProperties, type DragEvent, type FormEvent } from "react";
 import { ActionMenu } from "../common/ActionMenu";
 import { DialogButtons, DialogFrame } from "../common/dialogs";
 import { messages } from "../messages";
 import { Subheading } from "../settings_form/Subheading";
 import { WarningIcon } from "../settings_form/SettingField";
 import { formattedNumber } from "../format_numbers";
-import { differsFromOriginal, outlinePoints, planArea, siteProblems, siteRise, type Heights, type Site } from "./site_geometry";
+import {
+  allPoints, differsFromOriginal, holesOf, outlinePoints, planArea, siteArea, siteProblems, siteRise, type Heights, type Site, type SiteOverlap, type SitePoint,
+} from "./site_geometry";
 import type { SiteTool } from "./SiteEditor";
 import "./sites.css";
 
@@ -96,13 +98,28 @@ interface SiteBoxProps {
   refusal: string | null;
   /** What the last import or Place on terrain said ("2 vertices have no terrain under them ..."), or why an import failed. */
   note?: { text: string; warning: boolean } | null;
+  /** The pairs of sites that overlap (design/site-holes.md): a line each under the table, and a warning sign on their rows. */
+  overlaps?: SiteOverlap[];
+  /** Make a hole of: the site at *index* (lying wholly inside the one at *outerIndex*) becomes that site's hole. */
+  onMakeHole?: (index: number, outerIndex: number) => void;
+  /** A hole's menu: Make a separate site and Delete hole (*hole* counts from 0). */
+  onSeparateHole?: (index: number, hole: number) => void;
+  onDeleteHole?: (index: number, hole: number) => void;
   disabledReason: string | null;
 }
 
 /** The Sites card: Draw site at the right of its title, a line for the heights set for all sites, a table of the sites (a line each:
  * name, the heights set per site, the menu), and at its foot the link back to a maximum volume. */
 export function SiteBox({ sites, heights, tool, onDraw, onEdit, onChangeSite, onDeleteSite, onSwitch, onImport, onPlaceOnTerrain,
-                          onRestoreOriginal, hasTerrain, refusal, note = null, disabledReason }: SiteBoxProps) {
+                          onRestoreOriginal, hasTerrain, refusal, note = null, overlaps = [], onMakeHole = () => {}, onSeparateHole = () => {},
+                          onDeleteHole = () => {}, disabledReason }: SiteBoxProps) {
+  // Overlaps whose sites are not (or no longer) in the list are left out: the list shown may be ahead of the service's reply
+  const shownOverlaps = overlaps.filter((overlap) => sites[overlap.first] && sites[overlap.second] && overlap.first !== overlap.second);
+  const overlapping = new Set(shownOverlaps.flatMap((overlap) => [overlap.first, overlap.second]));
+  const outerOf = (index: number) => {
+    const overlap = shownOverlaps.find((candidate) => candidate.inside && candidate.first === index);
+    return overlap && holesOf(sites[index]).length === 0 ? overlap.second : null;
+  };
   const titleId = useId();
   const picker = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -142,7 +159,9 @@ export function SiteBox({ sites, heights, tool, onDraw, onEdit, onChangeSite, on
           )}
           <ul className="site-list">
             {sites.map((site, index) => (
-              <SiteRow key={`${index}-${site.name}`} site={site} heights={heights} perSite={perSite}
+              <Fragment key={`${index}-${site.name}`}>
+              <SiteRow site={site} heights={heights} perSite={perSite} overlaps={overlapping.has(index)}
+                       outerName={outerOf(index) === null ? null : sites[outerOf(index)!].name}
                        editing={tool?.kind === "edit" && tool.index === index} renaming={renaming === index}
                        disabledReason={disabledReason} onRenamed={(name) => {
                          setRenaming(null);
@@ -156,12 +175,28 @@ export function SiteBox({ sites, heights, tool, onDraw, onEdit, onChangeSite, on
                          else if (key === "edit") onEdit(index);
                          else if (key === "place_on_terrain") onPlaceOnTerrain(index);
                          else if (key === "restore_original") onRestoreOriginal(index);
+                         else if (key === "make_hole" && outerOf(index) !== null) onMakeHole(index, outerOf(index)!);
                          else if (key === "delete") onDeleteSite(index);
                        }} />
+              {holesOf(site).map((hole, holeIndex) => (
+                <HoleRow key={`hole-${holeIndex}`} siteName={site.name} number={holeIndex + 1} hole={hole} disabledReason={disabledReason}
+                         onChoose={(key) => {
+                           if (key === "separate") onSeparateHole(index, holeIndex);
+                           else if (key === "delete_hole") onDeleteHole(index, holeIndex);
+                         }} />
+              ))}
+              </Fragment>
             ))}
           </ul>
         </div>
       )}
+      {shownOverlaps.map((overlap) => (
+        <p key={`${overlap.first}-${overlap.second}`} className="input-box-problem site-overlap">
+          <WarningIcon />
+          {overlap.inside ? messages.siteLiesInside(sites[overlap.first].name, sites[overlap.second].name)
+            : messages.sitesOverlap(sites[overlap.first].name, sites[overlap.second].name)}
+        </p>
+      ))}
       {refusal !== null && <p className="input-box-problem" role="alert"><WarningIcon />{refusal}</p>}
       {note !== null && (note.warning ? <p className="input-box-problem" role="alert"><WarningIcon />{note.text}</p>
         : <p className="input-box-hint" role="status">{note.text}</p>)}
@@ -189,11 +224,16 @@ interface SiteRowProps {
   onBase: (base: number | null) => Promise<string | null>;
   onChoose: (key: string) => void;
   hasTerrain: boolean;
+  /** Whether the site overlaps another: its row carries a warning sign. */
+  overlaps: boolean;
+  /** The site it lies wholly inside, offered in Make a hole of; null when none. */
+  outerName: string | null;
 }
 
-/** One line per site; its area and elevations are in the name's tooltip, and under the name while the site is edited. */
-function SiteRow({ site, heights, perSite, editing, renaming, disabledReason, onRenamed, onHeight, onBase, onChoose, hasTerrain }: SiteRowProps) {
-  const points = outlinePoints(site.points);
+/** One line per site; its area (less its holes, with their count) and elevations are in the name's tooltip, and under the name while
+ * the site is edited. */
+function SiteRow({ site, heights, perSite, editing, renaming, disabledReason, onRenamed, onHeight, onBase, onChoose, hasTerrain, overlaps,
+                   outerName }: SiteRowProps) {
   const [typedProblems, setTypedProblems] = useState<string[]>([]);
   // A typed height is checked as the site would be with it; a problem keeps it unsaved and is shown in the row
   const check = (changed: Site) => {
@@ -203,7 +243,7 @@ function SiteRow({ site, heights, perSite, editing, renaming, disabledReason, on
   };
   const problems = siteProblems(site, heights);
   const disabled = disabledReason !== null;
-  const details = `${messages.siteArea(planArea(points))} · ${messages.siteElevations(siteRise(points))}`;
+  const details = `${messages.siteAreaAndHoles(siteArea(site), holesOf(site).length)} · ${messages.siteElevations(siteRise(allPoints(site)))}`;
   return (
     <li className={`site-row${editing ? " site-row-editing" : ""}`}>
       <span className="site-row-name" title={`${site.name}: ${details}. ${messages.doubleClickToRename}`}
@@ -216,6 +256,7 @@ function SiteRow({ site, heights, perSite, editing, renaming, disabledReason, on
                    else if (event.key === "Escape") onRenamed(site.name);
                  }} />
         ) : site.name}
+        {overlaps && !renaming && <span className="site-row-warning" title={messages.siteOverlapsAnother} aria-label={messages.siteOverlapsAnother}><WarningIcon /></span>}
       </span>
       {perSite.base && (
         <HeightField ariaLabel={messages.siteBaseOf(site.name)} value={site.base_height ?? null} optional
@@ -239,10 +280,35 @@ function SiteRow({ site, heights, perSite, editing, renaming, disabledReason, on
                     { key: "edit", label: messages.editSite, disabledReason },
                     { key: "place_on_terrain", label: messages.placeOnTerrain, disabledReason: hasTerrain ? disabledReason : messages.placeOnTerrainNeedsTerrain },
                     ...(differsFromOriginal(site) ? [{ key: "restore_original", label: messages.restoreOriginal, disabledReason }] : []),
+                    ...(outerName !== null ? [{ key: "make_hole", label: messages.makeHoleOf(outerName), disabledReason }] : []),
                     { key: "delete", label: messages.deleteSite, disabledReason },
                   ]} />
       {editing && <span className="site-row-details">{details}</span>}
       {(typedProblems.length > 0 ? typedProblems : problems).map((problem) => <span key={problem} className="site-row-problem">{problem}</span>)}
+    </li>
+  );
+}
+
+interface HoleRowProps {
+  siteName: string;
+  /** Counted from 1. */
+  number: number;
+  hole: SitePoint[];
+  disabledReason: string | null;
+  onChoose: (key: string) => void;
+}
+
+/** A line under its site for each hole: "Hole 1" with its area, and its menu (Make a separate site, Delete hole). */
+function HoleRow({ siteName, number, hole, disabledReason, onChoose }: HoleRowProps) {
+  const name = messages.holeName(number);
+  return (
+    <li className="site-hole-row">
+      <span className="site-hole-name" title={`${name}: ${messages.siteArea(planArea(outlinePoints(hole)))}`}>{name}</span>
+      <ActionMenu label={messages.holeActions(siteName, number)} symbol={<span aria-hidden="true">⋯</span>} onChoose={onChoose}
+                  items={[
+                    { key: "separate", label: messages.makeSeparateSite, disabledReason },
+                    { key: "delete_hole", label: messages.deleteHole, disabledReason },
+                  ]} />
     </li>
   );
 }

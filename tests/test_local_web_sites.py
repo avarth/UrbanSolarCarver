@@ -61,7 +61,7 @@ def test_a_change_of_the_sites_builds_the_maximum_volume_again_and_switching_bac
     assert client.put("/api/projects/p/sites", json={"sites": [taller]}).status_code == 200
     assert joined_max_volume(projects_folder).bounds[1][2] == 130
     reply = client.put("/api/projects/p/max-volume-source", json={"source": "mesh"})
-    assert reply.json()["sites"] == [{**taller, "base_height": None, "original": None}] and reply.json()["source"] == "mesh"
+    assert reply.json()["sites"] == [{**taller, "base_height": None, "original": None, "holes": []}] and reply.json()["source"] == "mesh"
     assert joined_max_volume(projects_folder).bounds.tolist() == mesh_bounds
 
 
@@ -221,3 +221,38 @@ def test_a_base_height_of_0_is_no_lower_limit(client_with_inputs, projects_folde
     assert kept_files(projects_folder) == [] and client.get("/api/projects/p/base-volume").status_code == 404
     assert joined_max_volume(projects_folder).bounds[1][2] == 150
     assert client.put("/api/projects/p/heights", json={"max": {"for_all_sites": True, "value": 0}, "base": {"for_all_sites": True}}).status_code == 422
+
+
+# ---- Holes and overlaps (design/site-holes.md) ----
+
+def _flat(x0, y0, x1, y1, z=100):
+    return [[x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z]]
+
+
+def test_a_site_with_a_hole_makes_a_maximum_volume_without_it_and_a_hole_outside_is_refused(client_with_inputs, projects_folder):
+    client = client_with_inputs
+    client.put("/api/projects/p/max-volume-source", json={"source": "sites"})
+    block = {"name": "Block", "points": _flat(0, 0, 40, 30), "holes": [_flat(10, 10, 30, 20)], "height": 20}
+    reply = client.put("/api/projects/p/sites", json={"sites": [block]})
+    assert reply.status_code == 200, reply.text
+    volume = joined_max_volume(projects_folder)
+    assert volume.volume == pytest.approx((40 * 30 - 20 * 10) * 20)
+    assert not volume.contains([[20, 15, 110]])[0]
+    outside = {**block, "holes": [_flat(30, 10, 50, 20)]}
+    refused = client.put("/api/projects/p/sites", json={"sites": [outside]})
+    assert refused.status_code == 422 and "Block: hole 1 is not strictly inside the outline." in refused.json()["detail"]
+
+
+def test_the_reply_names_sites_that_overlap_and_a_site_inside_another(client_with_inputs):
+    client = client_with_inputs
+    sites = [
+        {"name": "Block", "points": _flat(0, 0, 40, 30), "height": 20},
+        {"name": "Inner", "points": _flat(10, 10, 20, 20), "height": 20},              # wholly inside Block
+        {"name": "Across", "points": _flat(35, 5, 60, 25), "height": 20},              # partly over Block
+        {"name": "Beside", "points": _flat(60, 0, 80, 30), "height": 20},              # shares an edge with Across only
+    ]
+    overlaps = client.put("/api/projects/p/sites", json={"sites": sites}).json()["overlaps"]
+    assert overlaps == [{"first": 1, "second": 0, "inside": True}, {"first": 0, "second": 2, "inside": False}]
+    # A site inside another's hole overlaps nothing
+    sites[0]["holes"] = [_flat(5, 5, 25, 25)]
+    assert client.put("/api/projects/p/sites", json={"sites": sites}).json()["overlaps"] == [{"first": 0, "second": 2, "inside": False}]

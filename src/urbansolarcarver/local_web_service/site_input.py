@@ -20,9 +20,11 @@ import os
 import tempfile
 from pathlib import Path
 
+from shapely.geometry import Polygon
+
 from ..io import save_mesh
-from ..sites import Site, check_site, outline_points, site_base_volume, site_volume, sites_volume
-from .api_models import HeightsJson, MaxVolumeSource, ProjectJson, SiteJson, SitesReply
+from ..sites import Site, check_site, outline_points, site_base_volume, site_polygon, site_rise, site_volume, sites_volume
+from .api_models import HeightsJson, MaxVolumeSource, ProjectJson, SiteJson, SiteOverlap, SitesReply
 from .criteria import KEPT_VOLUME_GLOB, KEPT_VOLUME_PATH
 from .project_names import ProjectError
 
@@ -55,7 +57,8 @@ def base_height_of(entry: SiteJson, heights: HeightsJson) -> float | None:
 def site_of(entry: SiteJson, heights: HeightsJson | None = None) -> Site:
     """The engine's site of *entry*, with its max height (its own without *heights*)."""
     height = entry.height if heights is None else max_height_of(entry, heights)
-    return Site(entry.name, tuple(tuple(point) for point in entry.points), height)
+    return Site(entry.name, tuple(tuple(point) for point in entry.points), height,
+                tuple(tuple(tuple(point) for point in hole) for hole in entry.holes))
 
 
 def site_reasons(entry: SiteJson, heights: HeightsJson) -> list[str]:
@@ -70,7 +73,32 @@ def site_reasons(entry: SiteJson, heights: HeightsJson) -> list[str]:
 def sites_reply(store, name: str) -> SitesReply:
     project_json = store.read_project_json(name)
     return SitesReply(source=project_json.max_volume_source, sites=project_json.sites, joined_bounds=store.joined_bounds(name),
-                      grid_plan=store.stored_grid_plan(name), heights=project_json.heights)
+                      grid_plan=store.stored_grid_plan(name), heights=project_json.heights, overlaps=site_overlaps(project_json.sites))
+
+
+OVERLAP_AREA = 1e-3         # m²: sites sharing less than this (an edge, a vertex, a sliver of rounding) do not overlap
+
+
+def site_overlaps(entries: list[SiteJson]) -> list[SiteOverlap]:
+    """The pairs of sites whose areas in plan (outline minus holes) share more than OVERLAP_AREA; a pair where one site's outline lies
+    wholly inside the other's area is reported with that one first and inside true. Sites that cannot make a volume are left out."""
+    polygons = []
+    for index, entry in enumerate(entries):
+        site = site_of(entry)
+        if not check_site(Site(site.name, site.points, site_rise(site) + 1.0, site.holes)):
+            polygons.append((index, site_polygon(site)))
+    overlaps = []
+    for position, (first, polygon) in enumerate(polygons):
+        for second, other in polygons[position + 1:]:
+            if not polygon.intersects(other) or polygon.intersection(other).area <= OVERLAP_AREA:
+                continue
+            if other.contains(Polygon(polygon.exterior)):
+                overlaps.append(SiteOverlap(first=first, second=second, inside=True))
+            elif polygon.contains(Polygon(other.exterior)):
+                overlaps.append(SiteOverlap(first=second, second=first, inside=True))
+            else:
+                overlaps.append(SiteOverlap(first=first, second=second, inside=False))
+    return overlaps
 
 
 def base_volume_path(store, name: str) -> Path:

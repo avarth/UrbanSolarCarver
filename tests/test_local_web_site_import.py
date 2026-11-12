@@ -84,7 +84,7 @@ def test_an_imported_site_keeps_its_original(client_with_inputs):
     site = {"name": "Plots", "points": [[0, 0, 0], [20, 0, 0], [20, 15, 2], [0, 15, 0]], "height": 10, "original": original}
     reply = client_with_inputs.put("/api/projects/p/sites", json={"sites": [site]})
     assert reply.status_code == 200, reply.text
-    assert client_with_inputs.get("/api/projects/p/sites").json()["sites"][0]["original"] == original
+    assert client_with_inputs.get("/api/projects/p/sites").json()["sites"][0]["original"] == {**original, "holes": []}
 
 
 def _terrain_bytes() -> bytes:
@@ -122,3 +122,45 @@ def test_a_dxf_mesh_is_an_input_and_a_dxf_of_outlines_is_refused_with_a_pointer_
     assert reply.status_code == 422
     assert reply.json()["detail"].startswith("plots.dxf has polylines but no faces")
     assert reply.json()["detail"].endswith("use Import in the Sites box.")
+
+
+# ---- Nesting into holes (design/site-holes.md) ----
+
+def _rectangle(x0, y0, x1, y1):
+    return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+
+
+def test_an_outline_inside_another_is_its_hole_and_one_inside_the_hole_is_a_site_again(client_with_inputs):
+    def build(space):
+        space.add_lwpolyline(_rectangle(0, 0, 60, 40), close=True, dxfattribs={"layer": "Block"})
+        space.add_lwpolyline(_rectangle(10, 10, 50, 30), close=True, dxfattribs={"layer": "Courtyard"})
+        space.add_lwpolyline(_rectangle(20, 15, 30, 25), close=True, dxfattribs={"layer": "Pavilion"})
+    body = _import(client_with_inputs, "block.dxf", _dxf_bytes(build)).json()
+    assert body["left_out"] == []
+    assert [(outline["name"], len(outline["holes"])) for outline in body["outlines"]] == [("Block", 1), ("Pavilion", 0)]
+    block = body["outlines"][0]
+    assert block["holes"][0] == [[x, y, 0.0] for x, y in _rectangle(10, 10, 50, 30)]
+    assert block["area"] == pytest.approx(60 * 40 - 40 * 20)
+    # The block with its courtyard is a site the service accepts as it is
+    site = {"name": "Block", "points": block["points"], "holes": block["holes"], "height": 20}
+    reply = client_with_inputs.put("/api/projects/p/sites", json={"sites": [site]})
+    assert reply.status_code == 200, reply.text
+    assert reply.json()["overlaps"] == []
+
+
+def test_outlines_that_partly_overlap_stay_two_sites(client_with_inputs):
+    def build(space):
+        space.add_lwpolyline(_rectangle(0, 0, 30, 20), close=True, dxfattribs={"layer": "A"})
+        space.add_lwpolyline(_rectangle(20, 5, 50, 15), close=True, dxfattribs={"layer": "B"})
+    body = _import(client_with_inputs, "two.dxf", _dxf_bytes(build)).json()
+    assert [(outline["name"], outline["holes"]) for outline in body["outlines"]] == [("A", []), ("B", [])]
+
+
+def test_holes_that_touch_each_other_are_left_out_and_the_outline_stays_a_site(client_with_inputs):
+    def build(space):
+        space.add_lwpolyline(_rectangle(0, 0, 60, 40), close=True, dxfattribs={"layer": "Block"})
+        space.add_lwpolyline(_rectangle(10, 10, 30, 30), close=True, dxfattribs={"layer": "West"})
+        space.add_lwpolyline(_rectangle(30, 10, 50, 30), close=True, dxfattribs={"layer": "East"})
+    body = _import(client_with_inputs, "touching.dxf", _dxf_bytes(build)).json()
+    assert [(outline["name"], outline["holes"]) for outline in body["outlines"]] == [("Block", [])]
+    assert body["left_out"] == ["the holes of Block: hole 1 and hole 2 touch or cross"]

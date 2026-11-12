@@ -4,19 +4,37 @@
 // Drawing: each click on the view adds a point on the drawing level (snapped to the first point, to the vertices and edges of the
 // other sites, or with Shift to 15 degree steps); the first point or Enter closes the outline, Backspace removes the last point,
 // Escape cancels. Editing: a handle dragged moves its vertex in plan, a handle clicked selects it and shows its elevation field,
-// a double click on an edge adds a vertex, Delete removes the selected one. Every change goes to *onChangeSite*; a change that would
-// make the site refused is not sent and its reason is shown. Points are in the input files' coordinates; the scene works in local
-// ones (*origin* subtracted).
+// a double click on an edge adds a vertex, Delete removes the selected one. A site's holes (design/site-holes.md) are drawn and edited
+// as its outline is, in the same history. Every change goes to *onChangeSite*; a change that would make the site refused is not sent
+// and its reason is shown. Points are in the input files' coordinates; the scene works in local ones (*origin* subtracted).
 import { useEffect, useEffectEvent, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { formattedNumber } from "../format_numbers";
 import { messages } from "../messages";
 import type { Point3 } from "../viewer/local_origin";
 import type { ViewerScene } from "../viewer/scene";
 import { nearestOnSegment, placePoint, type PlacedPoint, type ScreenPoint } from "./site_drawing";
-import { containsPoint, elevationRange, pointAlong, siteProblems, type Heights, type Site, type SitePoint } from "./site_geometry";
+import {
+  containsPoint, elevationRange, pointAlong, ringsOf, siteAreaContains, siteProblems, withRings, type Heights, type Site, type SitePoint,
+} from "./site_geometry";
 import "./sites.css";
 
 export type SiteTool = { kind: "draw" } | { kind: "edit"; index: number };
+
+/** A vertex of the edited site: its ring (0 the outline, then the holes from 1) and its place in the ring. */
+interface VertexAt {
+  ring: number;
+  vertex: number;
+}
+
+/** The name of a vertex's handle: "Vertex 2" on the outline, "Hole 1 vertex 2" on a hole. */
+function vertexName({ ring, vertex }: VertexAt): string {
+  return ring === 0 ? messages.vertexHandle(vertex + 1) : messages.holeVertexHandle(ring, vertex + 1);
+}
+
+/** *rings* with ring *ring* replaced by *points*. */
+function replacedRing(rings: SitePoint[][], ring: number, points: SitePoint[]): SitePoint[][] {
+  return rings.map((other, index) => (index === ring ? points : other));
+}
 
 type SceneForSites = Pick<ViewerScene, "onCameraChange" | "onViewClick" | "toScreen" | "pointOnLevel" | "viewTop">;
 
@@ -86,7 +104,7 @@ export function SiteEditor(props: SiteEditorProps) {
   const [drawn, setDrawn] = useState<SitePoint[]>([]);
   const [hover, setHover] = useState<PlacedPoint | null>(null);
   const editedIndex = tool.kind === "edit" ? tool.index : null;
-  const otherOutlines = sites.filter((_, index) => index !== editedIndex).map((site) => site.points);
+  const otherOutlines = sites.filter((_, index) => index !== editedIndex).flatMap((site) => ringsOf(site));
   const placeAt = (x: number, y: number, shift: boolean): PlacedPoint | null => {
     const ground = groundAt(x, y, level);
     return ground ? placePoint(drawn, ground, [x, y], otherOutlines, toScreen, shift) : null;
@@ -118,15 +136,17 @@ export function SiteEditor(props: SiteEditorProps) {
   }, []);
 
   // ---- Editing
-  const [selected, setSelected] = useState<number | null>(null);
-  const [dragged, setDragged] = useState<{ vertex: number; points: SitePoint[] } | null>(null);
+  const [selected, setSelected] = useState<VertexAt | null>(null);
+  const [dragged, setDragged] = useState<SitePoint[][] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
-  const press = useRef<{ vertex: number; x: number; y: number; moved: boolean } | null>(null);
+  const press = useRef<VertexAt & { x: number; y: number; moved: boolean } | null>(null);
   const edited = editedIndex === null ? null : sites[editedIndex] ?? null;
-  const shownPoints = dragged?.points ?? edited?.points ?? [];
-  const changeEdited = (points: SitePoint[]) => {
+  const editedRings = edited ? ringsOf(edited) : [];
+  const shownRings = dragged ?? editedRings;
+  const shownPoints = shownRings.flat();
+  const changeEdited = (rings: SitePoint[][]) => {
     if (editedIndex === null || !edited) return false;
-    const candidate = { ...edited, points };
+    const candidate = withRings(edited, rings);
     const problems = siteProblems(candidate, props.heights);
     if (problems.length) {
       setProblem(messages.siteNotSaved(problems.join("; ")));
@@ -136,11 +156,11 @@ export function SiteEditor(props: SiteEditorProps) {
     props.onChangeSite(editedIndex, candidate);
     return true;
   };
-  const handleDown = (vertex: number) => (event: ReactPointerEvent<SVGCircleElement>) => {
+  const handleDown = (at: VertexAt) => (event: ReactPointerEvent<SVGCircleElement>) => {
     if (event.button !== 0) return;
     event.stopPropagation();
     capturePointer(event.currentTarget, event.pointerId, true);
-    press.current = { vertex, x: event.clientX, y: event.clientY, moved: false };
+    press.current = { ...at, x: event.clientX, y: event.clientY, moved: false };
   };
   const handleMove = (event: ReactPointerEvent<SVGCircleElement>) => {
     const start = press.current;
@@ -148,12 +168,13 @@ export function SiteEditor(props: SiteEditorProps) {
     if (!start.moved && Math.hypot(event.clientX - start.x, event.clientY - start.y) < DRAG_START_PIXELS) return;
     start.moved = true;
     const bounds = overlay.current.getBoundingClientRect();
-    const z = edited.points[start.vertex][2];
-    const ground = groundAt(event.clientX - bounds.left, event.clientY - bounds.top, z);
+    const ring = editedRings[start.ring];
+    if (!ring?.[start.vertex]) return;
+    const ground = groundAt(event.clientX - bounds.left, event.clientY - bounds.top, ring[start.vertex][2]);
     if (!ground) return;
-    const points = edited.points.map((point, index) => (index === start.vertex ? ground : point));
-    setDragged({ vertex: start.vertex, points });
-    const problems = siteProblems({ ...edited, points }, props.heights);
+    const rings = replacedRing(editedRings, start.ring, ring.map((point, index) => (index === start.vertex ? ground : point)));
+    setDragged(rings);
+    const problems = siteProblems(withRings(edited, rings), props.heights);
     setProblem(problems.length ? messages.siteNotSaved(problems.join("; ")) : null);
   };
   const handleUp = (event: ReactPointerEvent<SVGCircleElement>) => {
@@ -162,30 +183,33 @@ export function SiteEditor(props: SiteEditorProps) {
     capturePointer(event.currentTarget, event.pointerId, false);
     if (!start) return;
     if (start.moved && dragged) {
-      changeEdited(dragged.points);
+      changeEdited(dragged);
       setDragged(null);
     } else {
-      setSelected(start.vertex);
+      setSelected({ ring: start.ring, vertex: start.vertex });
     }
   };
-  const edgeDoubleClicked = (edge: number) => (event: React.MouseEvent<SVGLineElement>) => {
-    if (!edited || !overlay.current) return;
-    const a = edited.points[edge], b = edited.points[(edge + 1) % edited.points.length];
+  const edgeDoubleClicked = (ringIndex: number, edge: number) => (event: React.MouseEvent<SVGLineElement>) => {
+    const ring = editedRings[ringIndex];
+    if (!edited || !ring || !overlay.current) return;
+    const a = ring[edge], b = ring[(edge + 1) % ring.length];
     const aScreen = toScreen(a), bScreen = toScreen(b);
     if (!aScreen || !bScreen) return;
     const bounds = overlay.current.getBoundingClientRect();
     const { t } = nearestOnSegment(aScreen, bScreen, [event.clientX - bounds.left, event.clientY - bounds.top]);
-    const points = [...edited.points];
+    const points = [...ring];
     points.splice(edge + 1, 0, pointAlong(a, b, t));
-    if (changeEdited(points)) setSelected(edge + 1);
+    if (changeEdited(replacedRing(editedRings, ringIndex, points))) setSelected({ ring: ringIndex, vertex: edge + 1 });
   };
   const removeSelected = () => {
-    if (!edited || selected === null || edited.points.length <= 3) return;
-    if (changeEdited(edited.points.filter((_, index) => index !== selected))) setSelected(null);
+    const ring = selected === null ? undefined : editedRings[selected.ring];
+    if (!edited || selected === null || !ring || ring.length <= 3) return;
+    if (changeEdited(replacedRing(editedRings, selected.ring, ring.filter((_, index) => index !== selected.vertex)))) setSelected(null);
   };
-  const setElevation = (vertex: number, z: number) => {
-    if (!edited) return;
-    changeEdited(edited.points.map((point, index) => (index === vertex ? [point[0], point[1], z] : point)));
+  const setElevation = (at: VertexAt, z: number) => {
+    const ring = editedRings[at.ring];
+    if (!edited || !ring) return;
+    changeEdited(replacedRing(editedRings, at.ring, ring.map((point, index): SitePoint => (index === at.vertex ? [point[0], point[1], z] : point))));
   };
 
   // A new tool, or another site to edit: nothing drawn, nothing selected
@@ -242,12 +266,23 @@ export function SiteEditor(props: SiteEditorProps) {
     const text = (projected as ScreenPoint[]).map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
     return closed ? <polygon points={text} /> : <polyline points={text} />;
   };
+  // A site with its holes as one path, filled between the outline and the holes
+  const areaPath = (rings: SitePoint[][]) => {
+    const parts: string[] = [];
+    for (const ring of rings) {
+      const projected = ring.map(toScreen);
+      if (projected.some((point) => point === null)) return null;
+      parts.push(`M${(projected as ScreenPoint[]).map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" L")} Z`);
+    }
+    return <path d={parts.join(" ")} fillRule="evenodd" />;
+  };
   const lowest = shownPoints.length ? elevationRange(shownPoints)[0] : 0;
   const lastDrawn = drawn[drawn.length - 1];
   const hoverScreen = hover ? toScreen(hover.point) : null;
   const lastScreen = lastDrawn ? toScreen(lastDrawn) : null;
   const firstScreen = drawn.length ? toScreen(drawn[0]) : null;
-  const selectedScreen = selected !== null && shownPoints[selected] ? toScreen(shownPoints[selected]) : null;
+  const selectedPoint = selected === null ? undefined : shownRings[selected.ring]?.[selected.vertex];
+  const selectedScreen = selectedPoint ? toScreen(selectedPoint) : null;
   const shownProblem = problem ?? props.refusal;
 
   return (
@@ -288,29 +323,33 @@ export function SiteEditor(props: SiteEditorProps) {
         )}
         {tool.kind === "edit" && edited && (
           <g className={`site-editor-edited${problem ? " site-editor-refused" : ""}`}>
-            {screenPath(shownPoints, true)}
-            {shownPoints.map((point, index) => {
-              const a = toScreen(point), b = toScreen(shownPoints[(index + 1) % shownPoints.length]);
-              return a && b && <line key={`edge-${index}`} className="site-editor-edge" x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} onDoubleClick={edgeDoubleClicked(index)} />;
-            })}
-            {shownPoints.map((point, index) => {
+            {areaPath(shownRings)}
+            {shownRings.map((ring, ringIndex) => ring.map((point, index) => {
+              const a = toScreen(point), b = toScreen(ring[(index + 1) % ring.length]);
+              return a && b && <line key={`edge-${ringIndex}-${index}`} className="site-editor-edge" x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]}
+                                     onDoubleClick={edgeDoubleClicked(ringIndex, index)} />;
+            }))}
+            {shownRings.map((ring, ringIndex) => ring.map((point, index) => {
               const at = toScreen(point);
               if (!at) return null;
+              const isSelected = selected !== null && selected.ring === ringIndex && selected.vertex === index;
               return (
-                <g key={`vertex-${index}`}>
-                  <circle className={`site-editor-handle${selected === index ? " site-editor-selected" : ""}`} cx={at[0]} cy={at[1]} r={7}
-                          aria-label={messages.vertexHandle(index + 1)} onPointerDown={handleDown(index)} onPointerMove={handleMove} onPointerUp={handleUp} />
+                <g key={`vertex-${ringIndex}-${index}`}>
+                  <circle className={`site-editor-handle${isSelected ? " site-editor-selected" : ""}`} cx={at[0]} cy={at[1]} r={7}
+                          aria-label={vertexName({ ring: ringIndex, vertex: index })} onPointerDown={handleDown({ ring: ringIndex, vertex: index })}
+                          onPointerMove={handleMove} onPointerUp={handleUp} />
                   <text className="site-editor-label" x={at[0] + 10} y={at[1] - 10}>{`${point[2] - lowest >= 0 ? "+" : ""}${formattedNumber(point[2] - lowest)}`}</text>
                 </g>
               );
-            })}
+            }))}
           </g>
         )}
       </svg>
-      {tool.kind === "edit" && edited && selected !== null && selectedScreen && shownPoints[selected] && (
-        <ElevationField key={`${selected}-${shownPoints[selected][2]}`} at={selectedScreen} value={shownPoints[selected][2]}
-                        othersLowest={Math.min(...shownPoints.filter((_, index) => index !== selected).map((point) => point[2]))}
-                        vertexNumber={selected + 1} onCommit={(z) => setElevation(selected, z)} onCancel={() => setSelected(null)} />
+      {tool.kind === "edit" && edited && selected !== null && selectedScreen && selectedPoint && (
+        <ElevationField key={`${selected.ring}-${selected.vertex}-${selectedPoint[2]}`} at={selectedScreen} value={selectedPoint[2]}
+                        othersLowest={Math.min(...shownRings.flatMap((ring, ringIndex) => ring.filter((_, index) => ringIndex !== selected.ring || index !== selected.vertex))
+                          .map((point) => point[2]))}
+                        vertexName={vertexName(selected)} onCommit={(z) => setElevation(selected, z)} onCancel={() => setSelected(null)} />
       )}
     </div>
   );
@@ -321,13 +360,14 @@ interface ElevationFieldProps {
   value: number;
   /** The lowest elevation of the site's other vertices. */
   othersLowest: number;
-  vertexNumber: number;
+  /** "Vertex 2", or "Hole 1 vertex 2". */
+  vertexName: string;
   onCommit: (z: number) => void;
   onCancel: () => void;
 }
 
 /** The elevation of the selected vertex, in the files' coordinates, with its height above the site's lowest vertex beside it. */
-function ElevationField({ at, value, othersLowest, vertexNumber, onCommit, onCancel }: ElevationFieldProps) {
+function ElevationField({ at, value, othersLowest, vertexName: name, onCommit, onCancel }: ElevationFieldProps) {
   const [text, setText] = useState(String(Math.round(value * 1000) / 1000));
   const typed = Number(text.replace(",", "."));
   const valid = text.trim() !== "" && Number.isFinite(typed);
@@ -335,7 +375,7 @@ function ElevationField({ at, value, othersLowest, vertexNumber, onCommit, onCan
     <div className="site-editor-field" style={{ left: at[0] + 14, top: at[1] + 10 }}>
       <label>
         <span>{messages.vertexElevation}</span>
-        <input type="text" inputMode="decimal" value={text} aria-invalid={!valid} aria-label={`${messages.vertexHandle(vertexNumber)}: ${messages.vertexElevation}`}
+        <input type="text" inputMode="decimal" value={text} aria-invalid={!valid} aria-label={`${name}: ${messages.vertexElevation}`}
                title={messages.vertexElevationHelp} autoFocus onChange={(event) => setText(event.target.value)}
                onKeyDown={(event) => {
                  if (event.key === "Enter" && valid) onCommit(typed);
@@ -357,13 +397,24 @@ interface SitePickerProps {
   onPick: (index: number) => void;
 }
 
-/** While the Site card is open and no site is drawn or edited: a click on the view inside a site's outline edits that site. */
+/** While the Site card is open and no site is drawn or edited: a click on the view inside a site's area edits that site; a click in a
+ * hole with no site there edits the site the hole belongs to. */
 export function SitePicker({ scene, origin, sites, onPick }: SitePickerProps) {
   const clicked = useEffectEvent((x: number, y: number) => {
-    const index = sites.findIndex((site) => {
+    const at = (site: Site) => {
       const local = scene.pointOnLevel(x, y, elevationRange(site.points)[0] - origin[2]);
-      return local !== null && containsPoint(site.points, local[0] + origin[0], local[1] + origin[1]);
+      return local === null ? null : [local[0] + origin[0], local[1] + origin[1]] as const;
+    };
+    let index = sites.findIndex((site) => {
+      const point = at(site);
+      return point !== null && siteAreaContains(site, point[0], point[1]);
     });
+    if (index < 0) {
+      index = sites.findIndex((site) => {
+        const point = at(site);
+        return point !== null && containsPoint(site.points, point[0], point[1]);
+      });
+    }
     if (index >= 0) onPick(index);
   });
   useEffect(() => scene.onViewClick(({ x, y }) => clicked(x, y)), [scene]);

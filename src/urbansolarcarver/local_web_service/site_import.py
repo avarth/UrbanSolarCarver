@@ -8,6 +8,10 @@ Placing (section 4): the file's elevations are relative heights. Each vertex goe
 lowest vertex of all outlines in the file, so outlines keep their levels relative to each other, a flat outline lands flat on the drawing
 level, and survey elevations do not move the model. The drawing level is the one drawing uses (app/src/sites/site_drawing.ts): the
 lowest vertex of the sites already there; for the first sites the lowest level of the existing surroundings and terrain, else 0.
+
+Nesting (design/site-holes.md): an outline wholly inside another becomes a hole of the smallest outline around it; one inside a hole
+is a site again (an island), and so on: outlines inside an even number of others are sites, inside an odd number holes. Outlines
+that partly overlap stay separate sites.
 """
 from __future__ import annotations
 
@@ -21,7 +25,7 @@ from shapely.geometry import Polygon
 
 from ..errors import InputError
 from ..outlines import read_outlines
-from ..sites import Site, check_site, outline_points, site_rise
+from ..sites import Site, check_site, site_polygon, site_rise
 from .api_models import ImportedOutline, OutlinesReply, TerrainHeightsReply
 from .project_names import ProjectError
 
@@ -50,6 +54,19 @@ def placed(outline_points_list: list[np.ndarray], level: float) -> list[np.ndarr
     """The outlines with each vertex at *level* plus its height above the lowest vertex of them all."""
     lowest = min(float(points[:, 2].min()) for points in outline_points_list)
     return [np.column_stack([points[:, :2], points[:, 2] - lowest + level]) for points in outline_points_list]
+
+
+def nested(outlines: list[np.ndarray]) -> list[tuple[int, list[int]]]:
+    """The sites the outlines make: (index of the outline, indices of its holes), in the order of the outlines. An outline inside an
+    odd number of others (strictly: touching is not inside) is a hole of the smallest one around it."""
+    polygons = [Polygon(points[:, :2]) for points in outlines]
+    around = [[j for j, other in enumerate(polygons) if j != i and other.contains(polygon) and not other.exterior.intersects(polygon.exterior)]
+              for i, polygon in enumerate(polygons)]
+    holes_of: dict[int, list[int]] = {i: [] for i in range(len(outlines)) if len(around[i]) % 2 == 0}
+    for i in range(len(outlines)):
+        if len(around[i]) % 2 == 1:
+            holes_of[min(around[i], key=lambda j: polygons[j].area)].append(i)
+    return [(i, holes_of[i]) for i in sorted(holes_of)]
 
 
 def _plan_gap(outlines: list[np.ndarray], bounds_list: list[np.ndarray]) -> float | None:
@@ -107,10 +124,17 @@ def read_outline_file(store, name: str, file_name: str, data: bytes) -> Outlines
                                           for role in ("max_volume", "context", "terrain")) if bounds is not None]
     gap = _plan_gap(placed_points, other_bounds)
     outlines = []
-    for (outline_name, _), points in zip(kept, placed_points):
-        site = Site(outline_name, tuple(map(tuple, points.tolist())), 1.0)
-        outlines.append(ImportedOutline(name=outline_name, points=points.tolist(), area=float(Polygon(outline_points(site)[:, :2]).area),
-                                        rise=float(site_rise(site))))
+    for index, hole_indices in nested(placed_points):
+        outline_name, points = kept[index][0], placed_points[index]
+        holes = tuple(tuple(map(tuple, placed_points[hole].tolist())) for hole in hole_indices)
+        site = Site(outline_name, tuple(map(tuple, points.tolist())), 1.0, holes)
+        # Holes that do not fit together (touching each other) are left out, and the outline stays a site without them
+        hole_reasons = check_site(Site(site.name, site.points, site_rise(site) + 10.0, site.holes)) if holes else []
+        if hole_reasons:
+            left_out.append(f"the holes of {outline_name or f'Outline {index + 1}'}: {'; '.join(hole_reasons)}")
+            site = Site(outline_name, site.points, 1.0)
+        outlines.append(ImportedOutline(name=outline_name, points=points.tolist(), area=float(site_polygon(site).area),
+                                        rise=float(site_rise(site)), holes=[[list(point) for point in hole] for hole in site.holes]))
     return OutlinesReply(file=clean_name, unit=found.unit, outlines=outlines, left_out=left_out,
                          distance_from_inputs=gap if gap is not None and gap > FAR_FROM_INPUTS else None)
 

@@ -12,16 +12,51 @@ export interface Site {
   height: number;
   /** The site's own base height (Per site); null or absent: no lower limit. */
   base_height?: number | null;
-  /** An imported site's outline as imported, and its file (design/site-import.md); absent for a drawn site. */
-  original?: { file: string; points: SitePoint[] } | null;
+  /** Closed outlines strictly inside the outline where nothing is built (design/site-holes.md); absent or empty: none. */
+  holes?: SitePoint[][];
+  /** An imported site's outline (and holes) as imported, and its file (design/site-import.md); absent for a drawn site. */
+  original?: { file: string; points: SitePoint[]; holes?: SitePoint[][] } | null;
 }
 
-/** Whether the site's outline differs from the one it was imported with (Restore original is then offered). */
+/** The site's holes; none when it has none. */
+export function holesOf(site: Pick<Site, "holes">): SitePoint[][] {
+  return site.holes ?? [];
+}
+
+/** The site's rings: its outline first, then its holes. */
+export function ringsOf(site: Pick<Site, "points" | "holes">): SitePoint[][] {
+  return [site.points, ...holesOf(site)];
+}
+
+/** *site* with *rings* (the outline first, then the holes); without holes it carries no holes field, as a site without holes is stored. */
+export function withRings(site: Site, rings: SitePoint[][]): Site {
+  const { holes: _holes, ...rest } = site;
+  return rings.length > 1 ? { ...rest, points: rings[0], holes: rings.slice(1) } : { ...rest, points: rings[0] };
+}
+
+/** Every vertex of the site, the outline's then the holes'. */
+export function allPoints(site: Pick<Site, "points" | "holes">): SitePoint[] {
+  return ringsOf(site).flat();
+}
+
+function samePoints(a: readonly SitePoint[], b: readonly SitePoint[]): boolean {
+  return a.length === b.length && a.every((point, index) => point.every((value, axis) => Math.abs(value - b[index][axis]) <= 1e-9));
+}
+
+/** Two sites whose areas overlap in plan, by their indices; *inside*: the first lies wholly inside the second (design/site-holes.md). */
+export interface SiteOverlap {
+  first: number;
+  second: number;
+  inside: boolean;
+}
+
+/** Whether the site's outline or holes differ from those it was imported with (Restore original is then offered). */
 export function differsFromOriginal(site: Site): boolean {
   const original = site.original;
   if (!original) return false;
-  return original.points.length !== site.points.length
-    || original.points.some((point, index) => point.some((value, axis) => Math.abs(value - site.points[index][axis]) > 1e-9));
+  const originalHoles = original.holes ?? [], holes = holesOf(site);
+  return !samePoints(original.points, site.points) || originalHoles.length !== holes.length
+    || originalHoles.some((hole, index) => !samePoints(hole, holes[index]));
 }
 
 /** One of the two heights (design/base-height.md): the same for all sites (value, m), or each site's own. */
@@ -83,6 +118,11 @@ export function elevationRange(points: readonly SitePoint[]): [number, number] {
   return z.length ? [Math.min(...z), Math.max(...z)] : [0, 0];
 }
 
+/** The site's area in plan (m²): its outline's less its holes'. */
+export function siteArea(site: Pick<Site, "points" | "holes">): number {
+  return planArea(outlinePoints(site.points)) - holesOf(site).reduce((sum, hole) => sum + planArea(outlinePoints(hole)), 0);
+}
+
 /** How much higher the highest vertex is than the lowest. */
 export function siteRise(points: readonly SitePoint[]): number {
   const [low, high] = elevationRange(points);
@@ -128,14 +168,85 @@ export function siteProblems(site: Site, heights?: Heights): string[] {
     return problems;
   }
   const points = outlinePoints(site.points);
-  if (points.some((point) => point.some((value) => !Number.isFinite(value)))) return [messages.siteNoNumber];
+  const holes = holesOf(site).map((hole) => outlinePoints(hole));
+  if ([points, ...holes].some((ring) => ring.some((point) => point.some((value) => !Number.isFinite(value))))) return [messages.siteNoNumber];
   if (points.length < 3) return [messages.siteTooFewVertices];
   const problems: string[] = [];
   if (points.length > 3 && crossesItself(points)) problems.push(messages.siteCrossesItself);
-  else if (planArea(points) < MIN_SITE_AREA) problems.push(messages.siteTooSmall(planArea(points)));
+  else {
+    const holeProblems = holeProblemsOf(points, holes);
+    problems.push(...holeProblems);
+    const area = holeProblems.length ? planArea(points) : siteArea({ points, holes });
+    if (area < MIN_SITE_AREA) problems.push(messages.siteTooSmall(area));
+  }
+  const rise = siteRise([...points, ...holes.flat()]);
   if (!Number.isFinite(site.height) || site.height <= 0) problems.push(messages.siteHeightNotPositive);
-  else if (site.height <= siteRise(points)) problems.push(messages.siteTooLow(siteRise(points)));
+  else if (site.height <= rise) problems.push(messages.siteTooLow(rise));
   return problems;
+}
+
+/** Why the holes do not fit the outline, as the engine says it: each needs 3 vertices, must not cross itself, needs 1 m², must lie
+ * strictly inside the outline and must not touch or cross another hole. Holes are numbered from 1. */
+function holeProblemsOf(outline: SitePoint[], holes: SitePoint[][]): string[] {
+  const problems: string[] = [];
+  const fitting: { number: number; ring: SitePoint[] }[] = [];
+  holes.forEach((hole, index) => {
+    const number = index + 1;
+    if (hole.length < 3) problems.push(messages.holeTooFewVertices(number));
+    else if (hole.length > 3 && crossesItself(hole)) problems.push(messages.holeCrossesItself(number));
+    else if (planArea(hole) < MIN_SITE_AREA) problems.push(messages.holeTooSmall(number, planArea(hole)));
+    else if (!ringInside(hole, outline)) problems.push(messages.holeNotInside(number));
+    else fitting.push({ number, ring: hole });
+  });
+  fitting.forEach((hole, index) => {
+    for (const other of fitting.slice(index + 1)) if (ringsMeet(hole.ring, other.ring)) problems.push(messages.holesTouch(hole.number, other.number));
+  });
+  return problems;
+}
+
+/** Whether an edge of ring *a* meets (crosses or touches) an edge of ring *b*, in plan. */
+function edgesMeet(a: readonly SitePoint[], b: readonly SitePoint[]): boolean {
+  for (let i = 0; i < a.length; i++) {
+    for (let j = 0; j < b.length; j++) {
+      if (segmentsMeet(a[i], a[(i + 1) % a.length], b[j], b[(j + 1) % b.length])) return true;
+    }
+  }
+  return false;
+}
+
+/** Whether the closed ring *inner* lies strictly inside the closed ring *outer* in plan: no edges meet (touching is not inside) and
+ * its vertices are inside. */
+export function ringInside(inner: readonly SitePoint[], outer: readonly SitePoint[]): boolean {
+  if (inner.length === 0 || outer.length < 3 || edgesMeet(inner, outer)) return false;
+  return inner.every((point) => containsPoint(outer, point[0], point[1]));
+}
+
+/** Whether two closed rings share any part in plan: their edges meet, or one lies inside the other. */
+export function ringsMeet(a: readonly SitePoint[], b: readonly SitePoint[]): boolean {
+  if (edgesMeet(a, b)) return true;
+  return (a.length > 0 && containsPoint(b, a[0][0], a[0][1])) || (b.length > 0 && containsPoint(a, b[0][0], b[0][1]));
+}
+
+/**
+ * What a closed outline drawn in the view becomes (design/site-holes.md): a hole of the site whose area holds it wholly (strictly
+ * inside its outline, and clear of its holes), the smallest such site when there are several; else, drawn inside a hole, partly over a
+ * site or over no site, a new site. Returns the index of the site it is a hole of, or null for a new site.
+ */
+export function siteHoleIsDrawnIn(sites: readonly Site[], drawn: readonly SitePoint[]): number | null {
+  const ring = outlinePoints(drawn);
+  let found: { index: number; area: number } | null = null;
+  sites.forEach((site, index) => {
+    const outline = outlinePoints(site.points);
+    if (!ringInside(ring, outline) || holesOf(site).some((hole) => ringsMeet(ring, outlinePoints(hole)))) return;
+    const area = planArea(outline);
+    if (found === null || area < found.area) found = { index, area };
+  });
+  return (found as { index: number } | null)?.index ?? null;
+}
+
+/** Whether the plan point lies in the site's area: inside its outline and outside its holes. */
+export function siteAreaContains(site: Pick<Site, "points" | "holes">, x: number, y: number): boolean {
+  return containsPoint(site.points, x, y) && !holesOf(site).some((hole) => containsPoint(hole, x, y));
 }
 
 /** Whether the plan point lies inside the outline (even-odd rule). */

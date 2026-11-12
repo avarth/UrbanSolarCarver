@@ -15,7 +15,7 @@
 
 .site-list { list-style: none; margin: 0; padding: 0; display: grid; }
 .site-table { --site-table-columns: minmax(0, 1fr) 1.8em; }
-.site-table-head, .site-row {
+.site-table-head, .site-row, .site-hole-row {
   display: grid; grid-template-columns: var(--site-table-columns); align-items: center; column-gap: calc(var(--space-unit) * 1.5);
 }
 .site-table-head { align-items: end; color: var(--colour-muted); font-size: var(--text-secondary); line-height: 1.2; padding-bottom: var(--space-unit);
@@ -23,7 +23,11 @@
 .site-table-head span { display: grid; justify-items: center; text-align: center; white-space: nowrap; }
 .site-table-head small { font-size: inherit; }
 .site-row { padding: var(--space-unit) 0; border-bottom: 1px solid var(--colour-line); }
-.site-row .action-menu, .site-table-head > :last-child { justify-self: center; }
+.site-row .action-menu, .site-hole-row .action-menu, .site-table-head > :last-child { justify-self: center; }
+/* A hole's line under its site (design/site-holes.md): its name indented over the height columns, then its menu */
+.site-hole-row { padding: calc(var(--space-unit) / 2) 0; border-bottom: 1px solid var(--colour-line); }
+.site-hole-name { grid-column: 1 / -2; padding-left: calc(var(--space-unit) * 3); color: var(--colour-muted); font-size: var(--text-secondary); }
+.site-row-warning { display: inline-flex; vertical-align: middle; margin-left: var(--space-unit); color: var(--colour-error); }
 .site-row-name { cursor: default; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .site-row-name input { width: 100%; font: inherit; }
 .site-row-details { grid-column: 1 / -1; color: var(--colour-muted); font-size: var(--text-secondary); }
@@ -54,7 +58,7 @@
 .site-editor-buttons { display: flex; gap: var(--space-unit); margin-left: auto; }
 .site-editor-problem { flex-basis: 100%; color: var(--colour-error); font-size: var(--text-secondary); }
 .site-editor-drawing { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.site-editor-drawing polygon, .site-editor-drawing polyline { fill: none; stroke-linejoin: round; }
+.site-editor-drawing polygon, .site-editor-drawing polyline, .site-editor-drawing path { fill: none; stroke-linejoin: round; }
 .site-editor-others polygon { stroke: var(--colour-muted); stroke-width: 1.5; stroke-dasharray: 4 3; }
 .site-editor-drawn polyline, .site-editor-rubber { stroke: var(--colour-accent); stroke-width: 2.5; }
 .site-editor-rubber { stroke-dasharray: 6 4; }
@@ -62,8 +66,8 @@
 .site-editor-snapped { fill: var(--colour-accent); }
 .site-editor-vertex { fill: var(--colour-accent); }
 .site-editor-snap { fill: none; stroke: var(--colour-accent); stroke-width: 2; }
-.site-editor-edited polygon { fill: var(--colour-accent-soft); fill-opacity: 0.35; stroke: var(--colour-accent); stroke-width: 2.5; }
-.site-editor-refused polygon { stroke: var(--colour-error); }
+.site-editor-edited path { fill: var(--colour-accent-soft); fill-opacity: 0.35; stroke: var(--colour-accent); stroke-width: 2.5; }
+.site-editor-refused path { stroke: var(--colour-error); }
 .site-editor-edge { stroke: transparent; stroke-width: 12; pointer-events: stroke; cursor: copy; }
 .site-editor-handle { fill: var(--colour-panel); stroke: var(--colour-accent); stroke-width: 2.5; pointer-events: all; cursor: move; touch-action: none; }
 .site-editor-selected { fill: var(--colour-accent); }

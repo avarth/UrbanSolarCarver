@@ -101,3 +101,60 @@ def test_the_base_volume_is_the_outline_from_the_bottom_to_the_lowest_vertex_plu
     assert low.bounds[1][2] == 102
     with pytest.raises(ValueError, match="more than 0"):
         site_base_volume(Site("b", SLOPED, 20), 0, 90)
+
+
+# ---- Holes (design/site-holes.md) ----
+
+def _square(x0, y0, x1, y1, z=100.0):
+    return ((x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z))
+
+
+COURTYARD = _square(10, 10, 30, 20)
+
+
+def test_a_flat_site_with_a_hole_leaves_the_hole_out_from_its_level_to_the_top():
+    site = Site("block", SQUARE, 20, (COURTYARD,))
+    mesh = site_volume(site, 1.0)
+    assert mesh.is_watertight and mesh.is_volume
+    assert mesh.volume == pytest.approx((40 * 30 - 20 * 10) * 20)
+    assert mesh.contains([[20, 15, 110], [5, 5, 110]]).tolist() == [False, True]
+
+
+def test_a_sloped_site_with_a_hole_takes_the_holes_vertices_into_its_ground_and_levels():
+    hole = ((10, 10, 99), (30, 10, 99), (30, 20, 103), (10, 20, 103))      # its ground dips below the outline's lowest vertex
+    site = Site("block", SLOPED, 20, (hole,))
+    assert site_rise(site) == pytest.approx(7)
+    mesh = site_volume(site, 1.0)
+    assert mesh.is_watertight and mesh.is_volume
+    assert mesh.bounds[1][2] == pytest.approx(99 + 20)                      # the top is the lowest vertex, a hole's, plus the height
+    assert not mesh.contains([[20, 15, 110]])[0]
+    vertices, _, boundary = site_ground(site, 1.0)
+    on_hole = boundary & (np.abs(vertices[:, 0] - 10) < 1e-9) & (vertices[:, 1] > 10) & (vertices[:, 1] < 20)
+    # Along a hole edge the ground is linear between its vertices: 99 at y = 10, 103 at y = 20
+    assert np.allclose(vertices[on_hole, 2], 99 + (vertices[on_hole, 1] - 10) * 0.4)
+
+
+def test_the_base_volume_of_a_site_with_a_hole_leaves_the_hole_out():
+    mesh = site_base_volume(Site("block", SQUARE, 20, (COURTYARD,)), 5, 90)
+    assert mesh.is_watertight
+    assert mesh.volume == pytest.approx((40 * 30 - 20 * 10) * 15)
+
+
+@pytest.mark.parametrize(("holes", "reason"), [
+    ((_square(30, 10, 50, 20),), "hole 1 is not strictly inside the outline"),
+    ((_square(0, 10, 10, 20),), "hole 1 is not strictly inside the outline"),             # touching the outline is not inside
+    ((((10, 10, 100), (30, 20, 100), (30, 10, 100), (10, 20, 100)),), "hole 1 crosses itself"),
+    ((_square(10, 10, 10.5, 10.5),), "hole 1's area is 0.25 m², less than 1 m²"),
+    ((COURTYARD, _square(25, 15, 35, 25)), "hole 1 and hole 2 touch or cross"),
+    ((COURTYARD, _square(30, 10, 35, 20)), "hole 1 and hole 2 touch or cross"),           # sharing an edge is touching
+])
+def test_a_hole_that_does_not_fit_is_refused_with_its_reason(holes, reason):
+    assert reason in check_site(Site("block", SQUARE, 20, holes))
+
+
+def test_two_holes_apart_are_accepted_and_holes_round_trip_through_a_dict():
+    site = Site("block", SQUARE, 20, (_square(5, 5, 15, 15), _square(25, 5, 35, 15)))
+    assert check_site(site) == []
+    assert site_from_dict(site_to_dict(site)) == site
+    assert "holes" not in site_to_dict(Site("plain", SQUARE, 20))
+    assert site_from_dict({"name": "old", "points": [list(p) for p in SQUARE], "height": 20}).holes == ()
