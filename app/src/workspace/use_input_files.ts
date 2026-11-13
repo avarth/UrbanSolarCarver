@@ -5,8 +5,8 @@
 // folder: the last removal can be undone until the next upload or removal, and the Site step says how many are kept.
 import { useEffect, useRef, useState } from "react";
 import {
-  addInput, failureTextOf, getInputFiles, getProject, getRemovedInputs, baseVolumeUrl, getSites, joinedMaxVolumeUrl, openRemovedInputsFolder, removeInput,
-  reportServiceProblem, restoreRemovedInput, saveSites, setHeights as storeHeights, setMaxVolumeSource,
+  addInput, contextBlocksMeshUrl, failureTextOf, getContextBlocks, getInputFiles, getProject, getRemovedInputs, baseVolumeUrl, getSites, joinedMaxVolumeUrl,
+  openRemovedInputsFolder, putContextBlocks, removeInput, reportServiceProblem, restoreRemovedInput, saveSites, setHeights as storeHeights, setMaxVolumeSource,
   type InputFileInfo, type InputFilesReply, type MaxVolumeSource, type ModeInfo, type ProjectDetail, type SitesReply,
 } from "../api_client/client";
 import { NO_HEIGHTS, baseHeightOf, heightsOf, type Heights, type Site, type SiteOverlap } from "../sites/site_geometry";
@@ -75,6 +75,22 @@ export interface InputFiles {
   /** The part of the maximum volume below the base heights (none without one): the view draws it solid and the rest dotted. */
   baseVolume: InputGeometry;
   sites: SitesInput;
+  contextBlocks: ContextBlocksInput;
+  /** The drawn blocks alone (none without blocks), drawn in the Context layer with the context files. */
+  contextBlocksMesh: InputGeometry;
+}
+
+/** The drawn context blocks (design/context-blocks.md): a block is a Site without base height or original. */
+export interface ContextBlocksInput {
+  blocks: Site[];
+  /** Store the whole list; resolves to null once saved, or the service's reason it was refused (the blocks shown go back). */
+  save: (blocks: Site[]) => Promise<string | null>;
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  /** The service's reason the last change was refused, until the next change. */
+  refusal: string | null;
 }
 
 /** The sites of the project and what its maximum volume is made from (design/site-input.md). */
@@ -102,6 +118,7 @@ export interface SitesInput {
 const UNDO_DEPTH = 50;
 const MAX_VOLUME_FILE = [{ name: "max_volume.ply", triangle_count: 0 }];
 const BASE_VOLUME_FILE = [{ name: "base_volume.ply", triangle_count: 0 }];
+const CONTEXT_BLOCKS_FILE = [{ name: "context_blocks.ply", triangle_count: 0 }];
 
 export function useInputFiles(context: InputFilesContext): InputFiles {
   const { token, onServiceProblem } = useProjectSession();
@@ -166,6 +183,29 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
   const testSurfaces = useInputGeometry("test_surfaces", files.test_surfaces, origin, inputRevisions.test_surfaces, onInputsLoaded);
   const contextMesh = useInputGeometry("context", files.context, origin, inputRevisions.context, onInputsLoaded);
   const terrain = useInputGeometry("terrain", files.terrain, origin, inputRevisions.terrain, onInputsLoaded);
+
+  // The drawn context blocks: read at open, saved whole; their mesh is fetched again after each save.
+  const [blocks, setBlocks] = useState<Site[]>([]);
+  const [blocksHaveMesh, setBlocksHaveMesh] = useState(false);
+  const [blocksRevision, setBlocksRevision] = useState(0);
+  const [blocksUndo, setBlocksUndo] = useState<Site[][]>([]);
+  const [blocksRedo, setBlocksRedo] = useState<Site[][]>([]);
+  const [blocksRefusal, setBlocksRefusal] = useState<string | null>(null);
+  useEffect(() => {
+    let stale = false;
+    getContextBlocks(token, project.name).then((reply) => {
+      if (stale) return;
+      setBlocks(reply.blocks as Site[]);
+      setBlocksHaveMesh(reply.has_mesh);
+    }).catch((error) => {
+      if (!stale) reportServiceProblem(error, onServiceProblem);
+    });
+    return () => {
+      stale = true;
+    };
+  }, [token, project.name, onServiceProblem]);
+  const contextBlocksMesh = useInputGeometry("context", blocksHaveMesh ? CONTEXT_BLOCKS_FILE : [], origin, blocksRevision, onInputsLoaded,
+                                             () => contextBlocksMeshUrl(project.name));
 
   const [removal, setRemoval] = useState<{ role: InputRole; fileName: string; name: string; keptAs: string } | null>(null);
   const [removedCount, setRemovedCount] = useState(0);
@@ -350,6 +390,49 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
     setUndoStack((stack) => [...stack, current]);
     void storeSites(next, current);
   };
+  // A change of the blocks: shown at once, then stored; a refusal brings back what was shown before
+  const storeBlocks = async (next: Site[], previous: Site[]): Promise<string | null> => {
+    setBlocks(next);
+    setBlocksRefusal(null);
+    try {
+      const reply = await followedInputChange(putContextBlocks(token, project.name, next));
+      setBlocks(reply.blocks as Site[]);
+      setBlocksHaveMesh(reply.has_mesh);
+      setBlocksRevision((revision) => revision + 1);
+      afterInputsChanged("context");
+      return null;
+    } catch (error) {
+      if (reportServiceProblem(error, onServiceProblem)) return null;
+      setBlocks(previous);
+      const reason = failureTextOf(error);
+      setBlocksRefusal(reason);
+      return reason;
+    }
+  };
+  const saveBlocksUndoable = async (next: Site[]) => {
+    const previous = blocks;
+    const refused = await storeBlocks(next, previous);
+    if (refused === null) {
+      setBlocksUndo((stack) => [...stack.slice(-(UNDO_DEPTH - 1)), previous]);
+      setBlocksRedo([]);
+    }
+    return refused;
+  };
+  const undoBlocks = () => {
+    if (!blocksUndo.length) return;
+    const previous = blocksUndo[blocksUndo.length - 1];
+    setBlocksUndo((stack) => stack.slice(0, -1));
+    setBlocksRedo((stack) => [...stack, blocks]);
+    void storeBlocks(previous, blocks);
+  };
+  const redoBlocks = () => {
+    if (!blocksRedo.length) return;
+    const next = blocksRedo[blocksRedo.length - 1];
+    setBlocksRedo((stack) => stack.slice(0, -1));
+    setBlocksUndo((stack) => [...stack, blocks]);
+    void storeBlocks(next, blocks);
+  };
+
   const setSource = async (next: MaxVolumeSource) => {
     try {
       applySitesReply(await followedInputChange(setMaxVolumeSource(token, project.name, next)));
@@ -380,5 +463,8 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
                setFileChange: setWeatherFileChange },
     inputRevisions, addFiles, removeFile, lastRemoval, removedFiles: { count: removedCount, show: showRemovedFiles }, storeTestSurfaceFiles, reloadRoles, followedInputChange, inputChangesUnderWay, waitForInputChanges,
     meshes: { max_volume: maxVolume, test_surfaces: testSurfaces, context: contextMesh, terrain }, baseVolume,
+    contextBlocks: { blocks, save: saveBlocksUndoable, undo: undoBlocks, redo: redoBlocks, canUndo: blocksUndo.length > 0, canRedo: blocksRedo.length > 0,
+                     refusal: blocksRefusal },
+    contextBlocksMesh,
   };
 }

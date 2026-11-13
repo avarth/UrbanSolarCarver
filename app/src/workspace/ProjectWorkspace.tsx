@@ -48,7 +48,7 @@ import { useSunStudy } from "../simulate/use_sun_study";
 import { SunPanel } from "../simulate/SunPanel";
 import { NO_VIEWER_RESULTS, ViewerPane } from "../viewer_overlays/ViewerPane";
 import { useColdPeriod } from "../settings_form/cold_period_request";
-import { boundsOf } from "../steps/input_meshes";
+import { boundsOf, joinedOrNull } from "../steps/input_meshes";
 import { carvedByNote, InputsStep } from "../steps/InputsStep";
 import { InputBox, type InputRole } from "../common/InputBox";
 import { useResultSteps } from "./result_steps";
@@ -226,7 +226,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
   const [framingRequest, setFramingRequest] = useState(0);
   const frameAllInputs = () => setFramingRequest((count) => count + 1);
   const { files, origin, weather, meshes, baseVolume, addFiles, removeFile, lastRemoval, removedFiles, storeTestSurfaceFiles, reloadRoles, followedInputChange, waitForInputChanges,
-          sites: siteInput } = useInputFiles({
+          sites: siteInput, contextBlocks, contextBlocksMesh } = useInputFiles({
     project, modes, currentForm, sharedForm, refreshStageStatus, onInputsLoaded: frameAllInputs,
   });
   // The studies are read again when the sites, their heights or the source of the maximum volume change: a study on the base volume
@@ -310,6 +310,9 @@ function OpenProject(props: ProjectWorkspaceProps) {
   const modeNeedsWeatherFile = modeInfo?.needs_epw ?? false;
   const hasWeatherFile = files.weather.length > 0;
   const maxVolumeMesh = meshes.max_volume, testSurfacesMesh = meshes.test_surfaces, contextMesh = meshes.context, terrainMesh = meshes.terrain;
+  // The Context layer draws the context files and the drawn blocks together (design/context-blocks.md)
+  const contextGeometry = useMemo(() => joinedOrNull([contextMesh.geometry, contextBlocksMesh.geometry]), [contextMesh.geometry, contextBlocksMesh.geometry]);
+  const hasContext = files.context.length > 0 || contextBlocks.blocks.length > 0;
   const maxVolume = maxVolumeMesh.geometry, testSurfaces = testSurfacesMesh.geometry;
   // The bounds of the maximum volume and the test surfaces loaded so far: the sun path and the sky dome are drawn around them (R2 2)
   const inputsBounds = useMemo(() => boundsOf([maxVolume, testSurfaces]), [maxVolume, testSurfaces]);
@@ -487,7 +490,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
   const choosingInput = siteInput.source === "mesh" && files.max_volume.length === 0 && siteInput.sites.length === 0 && !maxVolumeChosen
     && (project.carving_chain ?? []).length === 0;
   const lastHeight = siteInput.sites.length ? siteInput.sites[siteInput.sites.length - 1].height : DEFAULT_SITE_HEIGHT;
-  const surroundings = boundsOf([contextMesh.geometry, terrainMesh.geometry]);
+  const surroundings = boundsOf([contextGeometry, terrainMesh.geometry]);
   const siteLevel = drawingLevel(siteInput.sites.map((site) => allPoints(site)), surroundings === null ? null : surroundings[0][2] + origin[2]);
   const changeSite = (index: number, site: Site) => siteInput.save(siteInput.sites.map((other, at) => (at === index ? site : other)));
   const deleteSite = (index: number) => {
@@ -785,7 +788,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
                     panel: <SunPanel sunStudy={sunStudy} /> };
   const simulateView = (theme: ViewportTheme) => (
     <SimulateView studies={studies} criteria={criteria.criteria} storedTestSurfaces={files.test_surfaces} runs={runs}
-                  hasSurroundings={files.context.length > 0} hasTerrain={files.terrain.length > 0}
+                  hasSurroundings={hasContext} hasTerrain={files.terrain.length > 0}
                   envelopeBuilt={designResults?.envelope != null} massingBuilt={designResults?.massing != null} hasBaseVolume={baseVolume.geometry !== null} carvingSpacing={carvingSpacing}
                   onStoredFilesChange={() => { void testSurfaceCalls.reloadStoredFiles(); refreshStageStatus(); }} studyView={studyView}
                   theme={theme} notice={inputChangesNotice} />
@@ -886,7 +889,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
       <section className="workspace-view">
         <ViewerPane maxVolume={maxVolume} baseVolume={baseVolume.geometry} testSurfaces={testSurfaceGroups} onTestSurfacesShownChange={setTestSurfacesShown}
                     sunStudy={sunStudy.view} sunTool={sunTool}
-                    criteria={active.map(({ id, name, colour }) => ({ id, name, colour }))} context={contextMesh.geometry} terrain={terrainMesh.geometry} sunPath={sunPath}
+                    criteria={active.map(({ id, name, colour }) => ({ id, name, colour }))} context={contextGeometry} terrain={terrainMesh.geometry} sunPath={sunPath}
                     hemisphere={sceneSphere} skyDomeChoiceRemembered={props.mode === "design"}
                     maxVolumeAppearance={!inspecting && (simulating ? studyView.geometry !== "none" : STEPS_WITH_SOLID_MAX_VOLUME.includes(viewStep)) ? "solid" : "ghost"}
                     shownByDefault={shownByDefault} northDegrees={northDegrees} framingRequest={framingRequest}

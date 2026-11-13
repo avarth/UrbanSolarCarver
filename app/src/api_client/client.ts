@@ -13,6 +13,8 @@ export type InputFilesReply = Schemas["InputFilesReply"];
 export type RemovedInputsReply = Schemas["RemovedInputsReply"];
 export type InputFileInfo = Schemas["InputFileInfo"];
 export type SiteJson = Schemas["SiteJson"];
+export type ContextBlockJson = Schemas["ContextBlockJson"];
+export type ContextBlocksReply = Schemas["ContextBlocksReply"];
 export type SitesReply = Schemas["SitesReply"];
 export type OutlinesReply = Schemas["OutlinesReply"];
 export type MaxVolumeSource = SitesReply["source"];
@@ -293,6 +295,18 @@ export const terrainHeights = (token: string, project: string, points: number[][
 /** Store the whole list of sites; a site that cannot make a volume is refused (422) with every such site named. */
 export const saveSites = (token: string, project: string, sites: SiteJson[]) =>
   requestJson<SitesReply>(token, `${projectPath(project)}/sites`, "PUT", { sites });
+
+/** The drawn context blocks (design/context-blocks.md), and whether their mesh can be read. */
+export const getContextBlocks = (token: string, project: string) => requestJson<ContextBlocksReply>(token, `${projectPath(project)}/context-blocks`);
+
+/** Store the whole list of drawn context blocks; 422 names every block that is refused (overlaps, names, outlines). */
+export const putContextBlocks = (token: string, project: string, blocks: ContextBlockJson[]) =>
+  requestJson<ContextBlocksReply>(token, `${projectPath(project)}/context-blocks`, "PUT", { blocks });
+
+/** The drawn blocks alone as one mesh, for the Context layer. */
+export function contextBlocksMeshUrl(project: string): string {
+  return `${projectPath(project)}/context-blocks/mesh`;
+}
 
 /** Store the max height and the base height of the sites (design/base-height.md); 422 names every site they refuse. */
 export const setHeights = (token: string, project: string, heights: Heights) =>

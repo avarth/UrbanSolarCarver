@@ -137,6 +137,12 @@ export class FakeService {
   readonly savedSites: SiteJson[][] = [];
   /** While set, PUT sites is refused (422) with this reason, as the service refuses a site that cannot make a volume. */
   sitesRefusal: string | null = null;
+  /** What GET context-blocks answers and PUT context-blocks stores (design/context-blocks.md). */
+  contextBlocks: SiteJson[] = [];
+  /** The bodies of every PUT context-blocks. */
+  readonly savedContextBlocks: SiteJson[][] = [];
+  /** While set, PUT context-blocks is refused (422) with this reason. */
+  contextBlocksRefusal: string | null = null;
   /** What POST outlines answers (design/site-import.md): the outlines read, or a refusal with its status and reason. */
   outlinesReply: OutlinesReply | { status: number; detail: string } = { file: "plots.dxf", unit: "metres", outlines: [], left_out: [], distance_from_inputs: null };
   /** The name of the file of every POST outlines. */
@@ -252,6 +258,15 @@ export class FakeService {
       if (this.terrainHeightsOf === null) return json<ErrorDetailReply>({ detail: "The project has no terrain." }, 404);
       return json<{ heights: (number | null)[] }>({ heights: this.terrainHeightsOf(points) });
     }
+    if (path === "/context-blocks") {
+      if (method === "PUT" && this.contextBlocksRefusal !== null) return json<ErrorDetailReply>({ detail: this.contextBlocksRefusal }, 422);
+      if (method === "PUT") {
+        this.contextBlocks = (JSON.parse(String(init!.body)) as { blocks: SiteJson[] }).blocks;
+        this.savedContextBlocks.push(this.contextBlocks);
+      }
+      return json({ blocks: this.contextBlocks, has_mesh: this.contextBlocks.length > 0 });
+    }
+    if (path === "/context-blocks/mesh") return this.contextBlocks.length ? new Response(TRIANGLE_PLY) : json<ErrorDetailReply>({ detail: "No blocks." }, 404);
     if (path === "/max-volume") return new Response(TRIANGLE_PLY);
     if (path === "/base-volume") return new Response(TRIANGLE_PLY);
     if (path === "/stage-status") {

@@ -24,6 +24,12 @@ function joinedGeometry(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
   return mergeGeometries(parts.map((part) => (part.index ? part.toNonIndexed() : part))) ?? new THREE.BufferGeometry();
 }
 
+/** Geometries that may be missing, joined into one; the one alone when the other is missing, null when none is there. */
+export function joinedOrNull(parts: readonly (THREE.BufferGeometry | null)[]): THREE.BufferGeometry | null {
+  const present = parts.filter((part): part is THREE.BufferGeometry => part !== null);
+  return present.length < 2 ? (present[0] ?? null) : joinedGeometry(present);
+}
+
 /** The meshes of the named files joined; a name without a mesh (not loaded, or unreadable) is left out, and null when none is left. */
 export function joinedGeometryOf(byFile: Record<string, THREE.BufferGeometry>, names: readonly string[]): THREE.BufferGeometry | null {
   const parts = names.filter((name) => Object.hasOwn(byFile, name)).map((name) => byFile[name]);
