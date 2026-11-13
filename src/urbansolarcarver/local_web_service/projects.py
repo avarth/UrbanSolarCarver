@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import json
 import os
 import re
 import shutil
@@ -1067,7 +1068,7 @@ class ProjectStore:
             config = self.load_project_config(name)
         except ConfigError:
             return None
-        return self._grid_plan_reply(plan_voxel_grid(bounds, config.voxel_size, config.margin_frac))
+        return self._grid_plan_reply(plan_voxel_grid(bounds, config.voxel_size, config.margin_frac), name)
 
     def _plan_and_check_grid(self, name: str, config: UserConfig) -> GridPlanReply | None:
         """The grid plan of the joined max volume, None before one exists; GridOverBudget when it is too large."""
@@ -1075,7 +1076,7 @@ class ProjectStore:
         if bounds is None:
             return None
         plan = plan_voxel_grid(bounds, config.voxel_size, config.margin_frac)
-        plan_reply = self._grid_plan_reply(plan)
+        plan_reply = self._grid_plan_reply(plan, name)
         try:
             check_voxel_grid_budget(plan)
         except ConfigError as error:
@@ -1117,10 +1118,32 @@ class ProjectStore:
             if config_text.encode("utf-8") != config_path.read_bytes():
                 self._write_bytes_atomically(config_path, config_text.encode("utf-8"))
 
-    @staticmethod
-    def _grid_plan_reply(plan: VoxelGridPlan) -> GridPlanReply:
+    def _grid_plan_reply(self, plan: VoxelGridPlan, name: str) -> GridPlanReply:
+        seconds, voxels = self._last_scoring(name)
         return GridPlanReply(resolution=plan.resolution, voxel_size=plan.voxel_size, total_voxels=plan.total_voxels,
-                             extent=plan.extent, budget_voxels=MAX_GRID_VOXELS)
+                             extent=plan.extent, budget_voxels=MAX_GRID_VOXELS, last_scoring_seconds=seconds, last_scoring_voxels=voxels)
+
+    def _last_scoring(self, name: str) -> tuple[float | None, int | None]:
+        """The scoring of the last run: the preprocessing time of the criteria that are on, summed (each criterion's diagnostics),
+        and the voxels of its grid (its manifest); (None, None) unless every criterion that is on has both."""
+        run_folder = self.open(name) / RUN_FOLDER / CRITERIA_FOLDER
+        seconds, voxels = 0.0, None
+        active = active_criteria(self.criteria(name))
+        if not active:
+            return None, None
+        for entry in active:
+            stage = run_folder / entry.id / "preprocessing"
+            try:
+                timings = json.loads((stage / "diagnostics" / "diagnostic.json").read_text(encoding="utf-8")).get("timings", {})
+                resolution = json.loads((stage / "manifest.json").read_text(encoding="utf-8")).get("grid_resolution")
+            except (OSError, ValueError):
+                return None, None
+            wall = timings.get("wall_seconds") if isinstance(timings, dict) else None
+            if not isinstance(wall, (int, float)) or not isinstance(resolution, int):
+                return None, None
+            seconds += float(wall)
+            voxels = resolution ** 3
+        return round(seconds, 1), voxels
 
     @staticmethod
     def _without_service_owned(stored_config: dict) -> dict:

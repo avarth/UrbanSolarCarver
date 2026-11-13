@@ -2,7 +2,8 @@
 // and, after a rejected save, the message under it with a warning icon and the field outlined in the error colour.
 import { useId, useState, type ReactNode } from "react";
 import { messages } from "../messages";
-import { formattedNumber, withUnit } from "../format_numbers";
+import type { GridPlanReply } from "../api_client/client";
+import { formatNumber, formattedNumber, withUnit } from "../format_numbers";
 import { plainModeName } from "../modes";
 import type { ColdPeriodState, Hemisphere } from "./analysis_period";
 import { defaultValue, shownValue, type FormState, type SchemaProperty } from "./form_state";
@@ -67,13 +68,41 @@ export function rangeOf(property: SchemaProperty | undefined): NumberRange {
 
 /**
  * The grid line of Voxel size (under the field and in its tooltip): the grid last planned. A refused save plans none, so while
- * the voxel size shown is not the one planned the line says it is the grid of the saved one. Null without a plan.
+ * the voxel size shown is not the one planned the line says it is the grid of the saved one. Null without a plan. After a run,
+ * the time its scoring took on this machine, and a rough time at this size (scoringEstimateOf).
  */
 export function gridLineOf(form: FormState): string | null {
   const plan = form.gridPlan;
   if (plan === null) return null;
-  if (shownValue(form, "voxel_size") === plan.voxel_size) return messages.gridSize(plan.resolution, plan.total_voxels);
-  return messages.gridSizeAtSavedVoxelSize(withUnit(formattedNumber(plan.voxel_size), "m"), plan.resolution, plan.total_voxels);
+  if (shownValue(form, "voxel_size") !== plan.voxel_size) {
+    return messages.gridSizeAtSavedVoxelSize(withUnit(formattedNumber(plan.voxel_size), "m"), plan.resolution, plan.total_voxels);
+  }
+  const estimate = scoringEstimateOf(plan);
+  return estimate === null ? messages.gridSize(plan.resolution, plan.total_voxels)
+    : messages.gridSizeAndScoring(messages.gridSize(plan.resolution, plan.total_voxels), estimate);
+}
+
+// Within this share of the last run's voxel count the grid counts as the same size: the line gives the last time alone.
+const SAME_GRID_SHARE = 0.05;
+
+/**
+ * "The last analysis took 4.8 s to score" with the grid of the last run; with another grid, the time scaled by the voxel count
+ * ("...; at this size, about 40 s"): rays cross more voxels and test points follow the voxel size, so the time grows about as the
+ * voxels do. A rough guide on this machine, scoring only. Null before a run has scored every criterion that is on.
+ */
+export function scoringEstimateOf(plan: Pick<GridPlanReply, "total_voxels" | "last_scoring_seconds" | "last_scoring_voxels">): string | null {
+  const seconds = plan.last_scoring_seconds, voxels = plan.last_scoring_voxels;
+  if (seconds == null || voxels == null || voxels <= 0) return null;
+  const ratio = plan.total_voxels / voxels;
+  if (Math.abs(ratio - 1) <= SAME_GRID_SHARE) return messages.lastScoring(formatNumber(seconds, messages.units.seconds, 1));
+  return messages.lastScoringAndEstimate(formatNumber(seconds, messages.units.seconds, 1), roughDuration(seconds * ratio));
+}
+
+/** "25 s", "4 min", "1.5 h": a rough time, rounded as an estimate deserves. */
+export function roughDuration(seconds: number): string {
+  if (seconds < 60) return withUnit(formattedNumber(Math.max(1, Math.round(seconds))), messages.units.seconds);
+  if (seconds < 3600) return withUnit(formattedNumber(Math.round(seconds / 60)), messages.units.minutes);
+  return withUnit(formattedNumber(Math.round(seconds / 360) / 10), messages.units.hours);
 }
 
 // The engine's automatic slope limit of the weighted modes, as the description of max_slope_deg in GET schema states it

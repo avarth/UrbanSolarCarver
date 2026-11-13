@@ -20,9 +20,10 @@ function fakeActions(overrides: Partial<ProjectActions> = {}): ProjectActions {
   };
 }
 
-function renderMenu(actions: ProjectActions, { exampleTitle = null as string | null, runActive = false } = {}) {
+function renderMenu(actions: ProjectActions, { exampleTitle = null as string | null, runActive = false,
+                                               beforeChange = undefined as ((then: () => void) => void) | undefined } = {}) {
   rendered = renderForTest(<ProjectMenu projectName="Plot 7" exampleTitle={exampleTitle} projectFolderPath={"D:\\USC projects\\Plot 7"}
-                                        runActive={runActive} actions={actions} placement="project_row" />);
+                                        runActive={runActive} actions={actions} placement="project_row" beforeChange={beforeChange} />);
 }
 
 const menuButton = () => rendered!.container.querySelector<HTMLButtonElement>(".project-menu-button")!;
@@ -215,4 +216,24 @@ test("the project-name rule of the service, and the folder of a project in the p
   expect(projectFolderPath("D:\\USC projects", "Plot 7")).toBe("D:\\USC projects\\Plot 7");
   expect(projectFolderPath("D:\\", "Plot 7")).toBe("D:\\Plot 7");
   expect(projectFolderPath("/home/ana/USC projects", "Plot 7")).toBe("/home/ana/USC projects/Plot 7");
+});
+
+test("Rename and Reset ask first about the surfaces not saved in Inspect; their dialog opens once that is answered, and not if the user stays", () => {
+  let answer: (() => void) | null = null;
+  const beforeChange = vi.fn((then: () => void) => { answer = then; });
+  renderMenu(fakeActions(), { exampleTitle: "Perimeter block", beforeChange });
+  for (const label of ["Rename", "Reset to the example"]) {
+    answer = null;
+    click(menuButton());
+    click(menuItem(label));
+    expect(dialog()).toBeNull();        // the Inspect question first; staying never calls back, so no dialog
+    act(() => answer!());
+    expect(dialog()).not.toBeNull();
+    click(dialogButton("Cancel"));
+  }
+  expect(beforeChange).toHaveBeenCalledTimes(2);
+  click(menuButton());
+  click(menuItem("Delete"));            // drops the surfaces with the project: no question
+  expect(beforeChange).toHaveBeenCalledTimes(2);
+  expect(dialog()).not.toBeNull();
 });

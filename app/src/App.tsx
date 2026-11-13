@@ -368,7 +368,8 @@ export function App() {
             <>
               <ProjectMenu projectName={openProject.name} exampleTitle={exampleTitleOf(openProject.example, examples)}
                            projectFolderPath={projectsFolder && projectFolderPath(projectsFolder.path, openProject.name)}
-                           runActive={runActiveFor(openProject.name)} actions={projectActions} placement="top_bar" />
+                           runActive={runActiveFor(openProject.name)} actions={projectActions} placement="top_bar"
+                           beforeChange={leavingInspect.leave} />
               <span ref={setSettingsButtonSlot} className="top-bar-settings-slot" />
               <WorkspaceModeSwitch mode={workspaceMode} onChange={(mode) => {
                 if (mode !== workspaceMode) leavingInspect.leave(() => setWorkspaceMode(mode));

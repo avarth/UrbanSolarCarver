@@ -381,6 +381,26 @@ def test_shared_settings_are_stored_and_returned_as_the_engine_reads_them(tmp_pa
     assert store.read_settings("p")["voxel_size"] == 2.0 and store.read_settings("p")["context_blocks_rays"] is True
 
 
+def _write_scoring(store, criterion_id, seconds, resolution):
+    stage = store.open("p") / "run" / "criteria" / criterion_id / "preprocessing"
+    (stage / "diagnostics").mkdir(parents=True)
+    (stage / "diagnostics" / "diagnostic.json").write_text(json.dumps({"timings": {"wall_seconds": seconds}}), encoding="utf-8")
+    (stage / "manifest.json").write_text(json.dumps({"grid_resolution": resolution}), encoding="utf-8")
+
+
+def test_the_grid_plan_gives_the_last_scoring_of_the_criteria_that_are_on(tmp_path):
+    """For the estimate under Voxel size: the preprocessing time of the last run, summed over the criteria that are on, and the voxels
+    it was scored at; None until every criterion that is on has scored."""
+    store = _chain_of_two_with_a_max_volume(tmp_path)
+    assert store.write_shared_settings("p", {"voxel_size": 2.0}).grid_plan.last_scoring_seconds is None
+    _write_scoring(store, "1", 3.25, 40)
+    plan = store.write_shared_settings("p", {"voxel_size": 2.0}).grid_plan
+    assert plan.last_scoring_seconds is None and plan.last_scoring_voxels is None      # criterion 2 has not scored
+    _write_scoring(store, "2", 1.5, 40)
+    plan = store.stored_grid_plan("p")
+    assert plan.last_scoring_seconds == 4.8 and plan.last_scoring_voxels == 40 ** 3
+
+
 def test_shared_settings_save_before_a_max_volume_has_no_grid_plan(tmp_path):
     store = ProjectStore(tmp_path)
     store.create("p", "daylight")

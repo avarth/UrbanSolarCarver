@@ -34,6 +34,8 @@ export class ChainService extends FakeService {
   summaryCriteria: CriterionCarvingSummary[] = [];
   /** The chain the run summary reports (RunSummary.chain); null: the summary has none. */
   summaryChain: ChainSummary | null = null;
+  /** A status the run summary answers with instead of the summary (404: the run has none); null: the summary. */
+  summaryStatus: number | null = null;
   /** The body of every PATCH criteria/{id}, with the id. */
   readonly patches: { id: string; body: Record<string, unknown> }[] = [];
   /** While set for a criterion, GET criteria/{id}/settings answers once the promise resolves. */
@@ -74,6 +76,7 @@ export class ChainService extends FakeService {
     }
     if (path === "/run/summary") {
       this.requests.push(`${method} ${fullPath}`);
+      if (this.summaryStatus !== null) return json({ detail: "No run summary." }, this.summaryStatus);
       return json<RunSummary>({ ...this.summary, criteria: this.summaryCriteria, chain: this.summaryChain });
     }
     if (path === "/run/score-points" || path === "/run/carved-by-criterion") {

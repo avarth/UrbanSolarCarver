@@ -389,6 +389,10 @@ class GridPlanReply(BaseModel):
     total_voxels: int
     extent: float               # side of the grid in meters
     budget_voxels: int          # the most voxels preprocessing can score
+    # The scoring (preprocessing) of the project's last run, on this machine: its time summed over the criteria that are on, and the
+    # voxels of its grid; None without one. The app scales the time by the voxel count for a rough estimate at another size.
+    last_scoring_seconds: float | None = None
+    last_scoring_voxels: int | None = None
 
 
 ProjectsFolderSource = Literal["command_line", "preference", "default"]

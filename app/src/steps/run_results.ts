@@ -96,9 +96,12 @@ interface RunResultsSource {
  * and the one that fetches the run summary again.
  */
 export function useRunResults({ origin, stagesWithResults, criterionId, criterionStagesWithResults, carvedByCriterionIds = null,
-                               activeCriterionIds }: RunResultsSource): [RunResults, (stages: readonly string[]) => Promise<void>, () => Promise<void>] {
+                               activeCriterionIds }: RunResultsSource): [RunResults, (stages: readonly string[]) => Promise<void>, () => Promise<void>, number] {
   const { token, project, onServiceProblem } = useProjectSession();
   const [results, setResults] = useState<RunResults>(NO_RESULTS);
+  // How many summary requests have been answered, kept or failed: a card waiting for numbers after a run waits for an answer, not
+  // for a summary that differs (a failed one, or the first run's, may leave it null as before).
+  const [summaryAnswers, setSummaryAnswers] = useState(0);
   const latestRequest = useRef<Partial<Record<ResultName, number>>>({});
   const carvedByKey = carvedByCriterionIds === null ? null : carvedByCriterionIds.join(",");
   const source = useLatest({ token, origin, criterionId, carvedByKey, onServiceProblem });
@@ -143,6 +146,7 @@ export function useRunResults({ origin, stagesWithResults, criterionId, criterio
       latestRequest.current[name] = request;
       const keep = (value: RunResults[ResultName], unreadable = false) => {
         if (latestRequest.current[name] !== request) return;
+        if (name === "summary") setSummaryAnswers((answers) => answers + 1);
         setResults((current) => {
           const others = current.unreadable.filter((other) => other !== name);
           return { ...current, [name]: value, unreadable: unreadable ? [...others, name] : others };
@@ -238,7 +242,7 @@ export function useRunResults({ origin, stagesWithResults, criterionId, criterio
   }, [originKey]);
 
   const reloadSummary = useCallback(() => fetchResults(["summary"]), [fetchResults]);
-  return [results, reload, reloadSummary];
+  return [results, reload, reloadSummary, summaryAnswers];
 }
 
 interface FollowedRun {

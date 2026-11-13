@@ -264,8 +264,14 @@ def inspection_geometry(store: ProjectStore, name: str, file_name: str) -> bytes
 
 def _refresh_and_check_version(store: ProjectStore, name: str, path: Path, version: str, changed_message: str) -> str:
     """Build the files changed in the project folder into the project, then check that the stored file *path* is *version*;
-    the version. StoredFileChanged (409) with *changed_message* when it is another; 404 when the file is not in the folder."""
-    store.refresh_changed_inputs(name)
+    the version. StoredFileChanged (409) with *changed_message* when it is another; 404 when the file is not in the folder.
+    Another stored file that cannot be read (a broken context file, one being copied) does not stop it: only this file's own
+    trouble does."""
+    try:
+        store.refresh_changed_inputs(name)
+    except stored_files.StoredFilesNotRead as error:
+        if (test_surfaces.ROLE, path.name) in error.files:
+            raise
     try:
         stored_version = test_surfaces.content_digest(path)
     except FileNotFoundError as error:

@@ -265,6 +265,15 @@ test("with a base height the base volume is a layer of its own, shown, and the m
   expect(scene.visibleLayers.has("max_volume")).toBe(false);
 });
 
+test("the Envelope and massing step shows the base volume too, so the built mass reads against the base level", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.siteSource = "sites";
+  service.sites = [FLAT_SITE];
+  service.heights = { max: { for_all_sites: true, value: 50 }, base: { for_all_sites: true, value: 10 } };
+  await openWorkspace(service, project(NOTHING_RUN), { startSteps: { open: "envelope_and_massing", view: "envelope_and_massing" } });
+  expect(FakeViewerScene.latest!.visibleLayers.has("base_volume")).toBe(true);
+});
+
 test("without a base height there is no base volume layer and the maximum volume is shown", async () => {
   const service = new FakeService(NOTHING_RUN, null);
   service.siteSource = "sites";

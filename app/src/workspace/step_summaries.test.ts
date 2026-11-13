@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import { projectSettingsSummary, settingsToFixIn, stepMark, stepNotUsableYet, stepSummary, type ProjectViewState } from "./step_summaries";
 import { STEP_NAMES, type PipelineStage, type SettingPlace, type StageState } from "../stages";
+import { distinctNames } from "./workspace_view_state";
 
 const THIN = "\u202f";
 const NBSP = "\u00a0";
@@ -153,4 +154,15 @@ test("the inputs summary counts the context files and names the terrain when the
   expect(stepSummary("inputs", stateWith({ maxVolume: 1, context: 3 }))).toBe("1 volume, 3 context files");
   expect(stepSummary("inputs", stateWith({ maxVolume: 1, context: 1, terrain: 1, weather: true }))).toBe("1 volume, 1 context file, terrain");
   expect(stepSummary("inputs", stateWith({ maxVolume: 1, terrain: 2 }))).toBe("1 volume, terrain");
+});
+
+test("criteria the user did not name read by their mode in the summary, by their whole name when two share a mode, numbered when that is shared too", () => {
+  const unnamed = (name: string, mode: string) => ({ name, named_by_user: false, settings: { mode } });
+  expect(distinctNames([unnamed("Daylight on windows", "daylight"), unnamed("Sun hours on facades", "time-based")]))
+    .toEqual(["Daylight", "Sun hours"]);
+  expect(distinctNames([unnamed("Sun hours on facades", "time-based"), unnamed("Sun hours on roofs", "time-based"),
+                        { name: "Winter sun", named_by_user: true, settings: { mode: "time-based" } }]))
+    .toEqual(["Sun hours on facades", "Sun hours on roofs", "Winter sun"]);
+  expect(distinctNames([unnamed("Sun hours on facades", "time-based"), unnamed("Sun hours on facades", "time-based")]))
+    .toEqual(["Sun hours on facades (1)", "Sun hours on facades (2)"]);
 });

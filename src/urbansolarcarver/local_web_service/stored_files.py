@@ -48,7 +48,8 @@ def refresh_changed_inputs(store, name: str) -> bool:
 
     A missing file is left to input_changes. A file that cannot be read (a broken export, or one still being copied or locked)
     keeps its old record, so it is tried again; the other roles go ahead and the first error is raised at the end as a
-    ProjectError. project.json is written only when something in it changed.
+    StoredFilesNotRead, which names every file that could not be read or built in, so a caller about one file can go on when the
+    trouble is in another. project.json is written only when something in it changed.
     """
     from .projects import WEATHER_ROLE      # projects.py builds on this module
     with store.project_lock(name):
@@ -56,6 +57,7 @@ def refresh_changed_inputs(store, name: str) -> bool:
         project_json = store.read_project_json(name)
         as_read = project_json.model_dump()
         first_error: ProjectError | None = None
+        not_read: set[tuple[str, str]] = set()      # (role, file name) of every file that could not be read or built in
         renewed: dict[tuple[str, str], StoredFileRecord] = {}
         suspects: dict[str, dict[str, tuple[StoredFileRecord | None, StoredFileRecord]]] = {}
         for role, file_names in project_json.input_files.items():
@@ -72,6 +74,7 @@ def refresh_changed_inputs(store, name: str) -> bool:
                     new_record = file_record(path)
                 except OSError as error:
                     first_error = first_error or _not_read(role, file_name, error)
+                    not_read.add((role, file_name))
                     continue
                 if old_record is not None and old_record.digest == new_record.digest:
                     renewed[(role, file_name)] = new_record
@@ -102,6 +105,7 @@ def refresh_changed_inputs(store, name: str) -> bool:
                         store.rebuild_picked_sets(project_folder, project_json)
             except (ProjectError, OSError) as error:
                 first_error = first_error or (error if isinstance(error, ProjectError) else _not_read(role, ", ".join(sorted(files)), error))
+                not_read.update((role, file_name) for file_name in files)
                 continue
             for file_name, (_, new_record) in files.items():
                 renewed[(role, file_name)] = new_record
@@ -115,8 +119,17 @@ def refresh_changed_inputs(store, name: str) -> bool:
         if changed:
             store.write_project_json(name, project_json)
         if first_error is not None:
-            raise first_error
+            raise StoredFilesNotRead(first_error, frozenset(not_read)) from first_error
         return changed
+
+
+class StoredFilesNotRead(ProjectError):
+    """refresh_changed_inputs could not read or build in some stored files: the first error's message and status, and *files*,
+    the (role, file name) of each one; everything else was built in."""
+
+    def __init__(self, first_error: ProjectError, files: frozenset[tuple[str, str]]):
+        super().__init__(str(first_error), first_error.status_code)
+        self.files = files
 
 
 def _not_read(role: str, file_names: str, error: OSError) -> ProjectError:

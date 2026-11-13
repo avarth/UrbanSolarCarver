@@ -7,6 +7,11 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Settings
+
+- **A rough time under Voxel size**: after a run, how long its scoring took on this computer, and at another voxel size an
+  estimate scaled by the number of voxels.
+
 ### Simulate
 
 - **Quicker results after a run.** A study that keeps its test points between runs now sends only the new values to the app,
@@ -14,6 +19,14 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Fixes
 
+- **Rename and Reset ask about turns not saved in Inspect** first, as leaving Inspect does: both open the project afresh, which
+  dropped them.
+- **A broken file no longer blocks Save and Restore in Inspect**: a context or terrain file that cannot be read only refuses a save
+  of that file.
+- **Two criteria named after the same mode** read apart in the Criteria summary: by their whole name, numbered if that is shared too.
+- **A criterion card no longer stays on "Running"** when the run summary cannot be read after a run (it waited for a summary that
+  differed, and the first run's stays empty).
+- **Envelope and massing shows the base volume**, so the built mass reads against the base level.
 - **The install guide gives the Python versions the installer accepts**: 3.12 or newer (it said 3.10), and 3.12 to 3.14 for the
   tested versions. A new section says how long a run takes without an NVIDIA GPU, with the bundled examples timed on both.
 - **A copy of a copy is "*name* copy 2"**, not "*name* copy copy", for criteria and studies; a second copy of the same one counts on.

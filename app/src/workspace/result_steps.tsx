@@ -210,7 +210,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const { token, project, onServiceProblem } = useProjectSession();
   const { form, dispatch, flushSave, changeAndSave, stages, runs, runBlocker, projectRunActive } = context;
   const meshFormat = String(shownValue(form, "final_mesh_format") ?? "ply");
-  const [results, reloadResults, reloadSummary] = useRunResults({
+  const [results, reloadResults, reloadSummary, summaryAnswers] = useRunResults({
     origin: context.origin, criterionId: context.criterionId, criterionStagesWithResults: context.criterionStagesWithResults,
     carvedByCriterionIds: context.carvedByCriterionIds, activeCriterionIds: context.activeCriterionIds,
     stagesWithResults: (Object.keys(stages) as PipelineStage[]).filter((stage) => stages[stage] !== "missing"),
@@ -235,20 +235,20 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     }
   }, () => void reloadSummary());
 
-  // A criterion whose thresholding the run has done shows its numbers once a run summary fetched since is in: until then its card
-  // goes on saying Running (the summary held before has its numbers from before the run).
-  const [summaryWhenCarved, setSummaryWhenCarved] = useState<{ serial: number | null; byCriterion: ReadonlyMap<string, RunSummary | null> }>(
+  // A criterion whose thresholding the run has done shows its numbers once a run summary asked for since is answered: until then its
+  // card goes on saying Running (the summary held before has its numbers from before the run). A failed answer ends the wait too.
+  const [summaryWhenCarved, setSummaryWhenCarved] = useState<{ serial: number | null; byCriterion: ReadonlyMap<string, number> }>(
     { serial: null, byCriterion: new Map() });
   if (record !== null) {
     const newRun = summaryWhenCarved.serial !== record.serial;
     const carvedNow = Object.entries(criterionProgressOf(record.state))
       .filter(([id, progress]) => progress.thresholding === "done" && (newRun || !summaryWhenCarved.byCriterion.has(id)))
-      .map(([id]): [string, RunSummary | null] => [id, results.summary]);
+      .map(([id]): [string, number] => [id, summaryAnswers]);
     if (newRun || carvedNow.length > 0) {
       setSummaryWhenCarved({ serial: record.serial, byCriterion: new Map([...(newRun ? [] : summaryWhenCarved.byCriterion), ...carvedNow]) });
     }
   }
-  const criteriaAwaitingNumbers = new Set([...summaryWhenCarved.byCriterion].filter(([, summary]) => summary === results.summary).map(([id]) => id));
+  const criteriaAwaitingNumbers = new Set([...summaryWhenCarved.byCriterion].filter(([, answers]) => answers === summaryAnswers).map(([id]) => id));
 
   // The results the service holds, fetched again with the stage status, when the page may show older ones. After the last
   // threshold value ended without a run (its save was not stored, its run did not start, or the service had nothing to run),

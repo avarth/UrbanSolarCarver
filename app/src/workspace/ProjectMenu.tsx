@@ -42,9 +42,14 @@ interface ProjectMenuProps {
   placement: "top_bar" | "project_row";
   /** The id of the line that says why the whole menu waits (the folder picker is open); the button is then disabled. */
   waitReasonId?: string | null;
+  /**
+   * Before the dialog of Rename or Reset opens: both make the open project's workspace again, so the surfaces not saved in Inspect
+   * are saved or dropped first (useLeavingInspect's leave). Delete drops them with the project; Open folder changes nothing.
+   */
+  beforeChange?: (then: () => void) => void;
 }
 
-export function ProjectMenu({ projectName, exampleTitle, projectFolderPath, runActive, actions, placement, waitReasonId = null }: ProjectMenuProps) {
+export function ProjectMenu({ projectName, exampleTitle, projectFolderPath, runActive, actions, placement, waitReasonId = null, beforeChange }: ProjectMenuProps) {
   const [dialog, setDialog] = useState<OpenDialog | null>(null);
   const button = useRef<HTMLButtonElement>(null);
   const itemNames: MenuItemName[] = ["open_folder", "rename", "delete", ...(exampleTitle !== null ? ["reset_to_example" as const] : [])];
@@ -53,6 +58,10 @@ export function ProjectMenu({ projectName, exampleTitle, projectFolderPath, runA
   }));
 
   const choose = async (item: MenuItemName) => {
+    if (item === "rename" || item === "reset_to_example") {
+      const open = () => setDialog({ kind: item });
+      return beforeChange ? beforeChange(open) : open();
+    }
     if (item !== "open_folder") return setDialog({ kind: item });
     button.current?.focus();
     const problem = await actions.openFolder(projectName);

@@ -3,6 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { ApiError } from "../api_client/client";
 import { SERVICE_CRITERION_KEYS as CRITERION_KEYS, SERVICE_SCHEMA, serviceModes } from "../api_client/service_data_for_test";
 import { formReducer, initialFormState, type FormState } from "./form_state";
+import { gridLineOf, roughDuration } from "./SettingField";
 import { click, renderForTest, type, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import type { SaveOutcome } from "./form_state";
 import {
@@ -268,4 +269,15 @@ test("an edge strip left from Night cooling is said in the other weighted modes,
   expect(rendered.container.textContent).not.toContain("The edge strip");
   rendered.rerender(<SettingsStep form={withStrip("radiative_cooling", 2)} onChange={() => {}} disabledReason={null} />);
   expect(rendered.container.textContent).not.toContain("The edge strip");    // its own field shows it
+});
+
+test("after a run the grid line gives the time its scoring took, and a rough time when the grid has another size", () => {
+  expect(gridLineOf(form())).toBe("62 voxels per side, 238 328 in total");          // no run yet: the grid alone
+  const lastRun = { last_scoring_seconds: 4.8, last_scoring_voxels: 238328 };
+  expect(gridLineOf(form({ ...PLAN_WITHIN_BUDGET, ...lastRun })))
+    .toBe("62 voxels per side, 238 328 in total. The last analysis took 4.8 s to score");
+  const halfTheVoxelSize = { resolution: 124, voxel_size: 1, total_voxels: 124 ** 3, extent: 62, budget_voxels: 500000000 };
+  expect(gridLineOf(form({ ...halfTheVoxelSize, ...lastRun })))
+    .toBe("124 voxels per side, 1 906 624 in total. The last analysis took 4.8 s to score; at this size, about 38 s");
+  expect([roughDuration(0.2), roughDuration(38.4), roughDuration(250), roughDuration(5400)]).toEqual(["1 s", "38 s", "4 min", "1.5 h"]);
 });

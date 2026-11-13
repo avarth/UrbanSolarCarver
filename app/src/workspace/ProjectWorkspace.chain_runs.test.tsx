@@ -76,6 +76,22 @@ test("a run of two criteria shows each one's stages by name; its card says Runni
   expect(cardLine("Spring sun on windows")).toBe(volumeLine(25));
 });
 
+test("a card that waits for its numbers after a run stops saying Running when the summary cannot be read, even on the project's first run", async () => {
+  await openChain([FACADES, WINDOWS], { 1: OUT_OF_DATE, 2: OUT_OF_DATE }, (service) => { service.summaryStatus = 404; });
+  chainService.runCriterionStages = { 1: ["preprocessing", "thresholding"], 2: ["preprocessing", "thresholding"] };
+  await pressRunAnalysis();
+  const run = FakeWebSocket.opened[0];
+  run.send({ type: "stage_progress", stage: "thresholding", criterion: "1", done: 0, total: 1 });
+  run.send({ type: "stage_progress", stage: "preprocessing", criterion: "2", done: 0, total: 1 });
+  await settle();
+  expect(cardLine("Winter sun on facades")).not.toBe("Running");      // the summary was asked for again and answered 404: no numbers to wait for
+  chainService.criterionStages = { 1: CURRENT, 2: CURRENT };
+  run.send({ type: "run_finished", stages: ["preprocessing", "thresholding"], files: [] });
+  await settle();
+  expect(cardLine("Winter sun on facades")).not.toBe("Running");
+  expect(cardLine("Spring sun on windows")).not.toBe("Running");
+});
+
 test("a carving update's failure is said in the pinned bar, whether the Carving rule section is open or closed", async () => {
   await openChain([FACADES], { 1: CURRENT });
   chainService.runRefusal = { status: 503, body: { detail: "The analysis service is busy." } };

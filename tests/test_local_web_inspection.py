@@ -11,7 +11,7 @@ import pytest
 from _epw import BUNDLED_EPW
 from local_web_test_support import box_bytes, build_client, create_project, upload, upload_test_surfaces, write_fake_chain_run
 from urbansolarcarver.io import load_mesh
-from urbansolarcarver.local_web_service import inspection, test_surfaces
+from urbansolarcarver.local_web_service import inspection, stored_files, test_surfaces
 from urbansolarcarver.local_web_service.projects import ProjectError, ProjectStore
 from urbansolarcarver.local_web_service.inspection import ORIGINALS_FOLDER, inspection_geometry, project_inspection
 from urbansolarcarver.local_web_service.stage_records import criterion_status, stage_status_reply
@@ -667,11 +667,13 @@ def test_a_save_or_restore_of_the_version_stored_after_a_refresh_goes_ahead(stor
 
 
 def test_a_save_refused_by_the_refresh_writes_nothing(store_after_a_run, monkeypatch):
+    """The file being saved cannot be read by the refresh (locked, being copied): Save and Restore are refused."""
     store = store_after_a_run
     before = _stored(store).read_bytes()
 
     def refresh_fails(name):
-        raise ProjectError("The context file 'town.ply' in the project folder could not be read: locked", status_code=422)
+        first = ProjectError("The test surface file 'facades.obj' in the project folder could not be read: locked", status_code=422)
+        raise stored_files.StoredFilesNotRead(first, frozenset({("test_surfaces", "facades.obj")}))
 
     monkeypatch.setattr(store, "refresh_changed_inputs", refresh_fails)
     for attempt in (lambda: save_turned_surfaces(store, "p", "facades.obj", [0]), lambda: restore_original(store, "p", "facades.obj")):
@@ -679,6 +681,20 @@ def test_a_save_refused_by_the_refresh_writes_nothing(store_after_a_run, monkeyp
             attempt()
         assert refused.value.status_code == 422 and "could not be read: locked" in str(refused.value)
     assert _stored(store).read_bytes() == before and not _kept(store).exists()
+
+
+def test_a_broken_context_file_does_not_stop_saving_or_restoring_a_test_surface_file(store_with_files):
+    """Another stored file that cannot be built in (a context file overwritten with junk) leaves Save and Restore of a test surface
+    file free; the refresh still raises it everywhere else."""
+    store = store_with_files
+    _overwrite(store, "context", "town.ply", b"this is not a mesh")
+    with pytest.raises(stored_files.StoredFilesNotRead) as refused:
+        store.refresh_changed_inputs("p")
+    assert ("context", "town.ply") in refused.value.files and ("test_surfaces", "facades.obj") not in refused.value.files
+    reply = save_turned_surfaces(store, "p", "facades.obj", [0])
+    assert reply.version == test_surfaces.content_digest(_stored(store)) and _kept(store).exists()
+    restore_original(store, "p", "facades.obj", version=reply.version)
+    assert _stored(store).read_bytes() == obj_panels([0, 20])
 
 
 def test_the_routes_answer_409_with_the_reason_when_the_file_changed(tmp_path):

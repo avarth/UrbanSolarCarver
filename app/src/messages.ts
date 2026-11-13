@@ -604,7 +604,7 @@ export const messages = {
   modelLessThan1M: "This model is less than 1\u00a0m across. Is it in metres?",
 
   // Units written after the numbers of the run steps (UX 5.5 to 5.7, 9)
-  units: { shadeHours: "m²·h", percent: "%", squareMetres: "m²", cubicMetres: "m³", seconds: "s" },
+  units: { shadeHours: "m²·h", percent: "%", squareMetres: "m²", cubicMetres: "m³", seconds: "s", minutes: "min", hours: "h" },
 
   // Runs and their progress (6.2 to 6.4, 11)
   runProgress: "Run progress",
@@ -629,6 +629,8 @@ export const messages = {
   engineWarnings: "As the engine wrote them",
   issueOfCriterion: (criterionName: string, text: string) => `${criterionName}: ${text}`,
   issueOfStudy: (studyName: string, text: string) => `${studyName}: ${text}`,
+  // Two criteria in the summary that would read alike, numbered in chain order.
+  numberedName: (name: string, number: number) => `${name} (${number})`,
   // A run's warnings by their code (common/issue_text.ts)
   issues: {
     everythingCarved: "Every voxel was carved: the threshold is probably too low.",
@@ -788,6 +790,10 @@ export const messages = {
     ["Config name: ", { code: String(configName) }, `, default ${defaultText}`],
   analysisPeriodConfigNames: "start_month ... end_hour",
   gridSize: (voxelsPerSide: number, totalVoxels: number) => `${groupedDigits(voxelsPerSide)} voxels per side, ${groupedDigits(totalVoxels)} in total`,
+  // Under Voxel size after a run: the grid, then how long the last run's scoring took on this machine and a rough time at this size.
+  gridSizeAndScoring: (gridText: string, scoringText: string) => `${gridText}. ${scoringText}`,
+  lastScoring: (secondsText: string) => `The last analysis took ${secondsText} to score`,
+  lastScoringAndEstimate: (secondsText: string, estimateText: string) => `The last analysis took ${secondsText} to score; at this size, about ${estimateText}`,
   // The grid line while the voxel size shown was refused: the grid is the one of the voxel size last saved.
   gridSizeAtSavedVoxelSize: (voxelSizeText: string, voxelsPerSide: number, totalVoxels: number) =>
     `Grid at the saved voxel size of ${voxelSizeText}: ${groupedDigits(voxelsPerSide)} voxels per side, ${groupedDigits(totalVoxels)} in total`,

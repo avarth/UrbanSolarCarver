@@ -89,11 +89,12 @@ const DEFAULT_SITE_HEIGHT = 30;     // m, the height of a project's first site
 const STEPS_WITH_SOLID_MAX_VOLUME: readonly StepName[] = ["inputs"];
 // The layers each step shows by default (UX 8.2); the later steps add their result layers. The carved voxels start hidden, as
 // they cover the kept ones; the Layers menu shows them. Criteria shows what the Mode and Carving steps showed together, the maximum
-// volume as a ghost.
+// volume as a ghost. Envelope and massing shows the base volume (only listed with a base height), so the built mass reads against
+// the level below which nothing is carved.
 export const LAYERS_SHOWN_IN_STEP: Record<StepName, readonly LayerName[]> = {
   inputs: ["max_volume", "test_surfaces", "context", "terrain"],
   criteria: ["max_volume", "test_surfaces", "context", "terrain", "sun_path", "kept_voxels", "sky_dome"],
-  envelope_and_massing: ["test_surfaces", "context", "terrain", "envelope", "building_massing"],
+  envelope_and_massing: ["base_volume", "test_surfaces", "context", "terrain", "envelope", "building_massing"],
   export: ["context", "terrain", "envelope", "building_massing"],
 };
 // The layers Simulate shows by default, for each geometry its study values are shown on.

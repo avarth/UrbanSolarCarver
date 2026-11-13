@@ -1827,6 +1827,10 @@ export interface components {
             extent: number;
             /** Budget Voxels */
             budget_voxels: number;
+            /** Last Scoring Seconds */
+            last_scoring_seconds?: number | null;
+            /** Last Scoring Voxels */
+            last_scoring_voxels?: number | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
