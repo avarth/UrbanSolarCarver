@@ -66,7 +66,7 @@ vi.mock("./workspace/ProjectWorkspace", async () => {
             workspaceInspect.discards += 1;
             workspaceInspect.reportUnsaved!(false);
           },
-          waitForUnderWay: async () => null, underWay: () => false, unsaved: () => unsaved,
+          waitForUnderWay: async () => null, underWay: () => null, unsaved: () => unsaved,
         });
         return () => {
           onSettingsSaverReady?.(null);

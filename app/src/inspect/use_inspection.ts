@@ -25,6 +25,9 @@ import type { InspectLayerFile } from "../viewer/layers";
 import { toLocal, type Point3 } from "../viewer/local_origin";
 import type { InspectView } from "../viewer_overlays/ViewerPane";
 import { useKeyedValue } from "../hooks/use_keyed_value";
+
+/** A save or a restore of Inspect under way, or neither. */
+export type InspectUnderWay = "save" | "restore" | null;
 import { decodeInspectGeometry, localCorners, localSurfaces, type InspectGeometry } from "./inspect_geometry_decoder";
 
 export const TEST_SURFACES_ROLE = "test_surfaces";
@@ -75,7 +78,8 @@ export interface InspectionHook {
   /** Resolves once no save or restore is under way: with why the first that ended meanwhile was refused, or null. */
   waitForUnderWay: () => Promise<string | null>;
   /** Whether a save or restore is under way, and whether some file has turns staged and not sent, now (for a caller that waited). */
-  underWayNow: () => boolean;
+  /** What is under way now: "save" while any file is being saved, else "restore" while one is being restored, else null. */
+  underWayNow: () => InspectUnderWay;
   unsavedNow: () => boolean;
   /** Reads the inspection again while Inspect is shown (a file changed in the project folder); nothing otherwise. */
   reload: () => void;
@@ -147,6 +151,8 @@ export function useInspection({ active, onSaved }: InspectionOptions): Inspectio
   const readsAskedFor = useRef(0);
   // The save or restore under way of each file, which a later save of the file waits for.
   const underWay = useRef(new Map<string, Promise<string | null>>());
+  // Which of the two each file's change under way is, for the dialog on leaving Inspect.
+  const underWayKind = useRef(new Map<string, "save" | "restore">());
   const shown = useLatest(active);
 
   const fileOf = (key: FileKey | null) => latest.current.reply?.files.find((file) => isKeyOf(key, file)) ?? null;
@@ -231,7 +237,7 @@ export function useInspection({ active, onSaved }: InspectionOptions): Inspectio
    * staged meanwhile now hold for, when it has the same triangles and surfaces as the file sent.
    */
   const change = (fileName: string, sent: ReadonlySet<number>, stagedNow: ReadonlySet<number>, request: () => Promise<InspectedFile>,
-                  carriesTurns: boolean) => {
+                  carriesTurns: boolean, kind: "save" | "restore") => {
     const before = testSurfaceFile(fileName);
     commit({ ...stagedTurns(fileName, stagedNow), sending: new Map(latest.current.sending).set(fileName, sent), problem: null });
     const notSending = () => ({ sending: withTurns(latest.current.sending, fileName, null) });
@@ -259,8 +265,11 @@ export function useInspection({ active, onSaved }: InspectionOptions): Inspectio
       return null;
     })();
     underWay.current.set(fileName, running);
+    underWayKind.current.set(fileName, kind);
     void running.finally(() => {
-      if (underWay.current.get(fileName) === running) underWay.current.delete(fileName);
+      if (underWay.current.get(fileName) !== running) return;
+      underWay.current.delete(fileName);
+      underWayKind.current.delete(fileName);
     });
     return running;
   };
@@ -271,7 +280,7 @@ export function useInspection({ active, onSaved }: InspectionOptions): Inspectio
     if (sent.size === 0) return null;
     const surfaces = [...sent].sort((first, second) => first - second);
     const version = latest.current.stagedOn.get(fileName) ?? testSurfaceFile(fileName)?.version ?? "";
-    return change(fileName, sent, new Set(), () => turnSurfaces(token, project, fileName, surfaces, version), true);
+    return change(fileName, sent, new Set(), () => turnSurfaces(token, project, fileName, surfaces, version), true, "save");
   };
   const waitForUnderWay = async (): Promise<string | null> => {
     const waited = new Set<Promise<string | null>>();
@@ -324,10 +333,13 @@ export function useInspection({ active, onSaved }: InspectionOptions): Inspectio
       const reason = await waitForFile(fileName);
       if (reason !== null) return reason;
       const version = testSurfaceFile(fileName)?.version ?? "";
-      return change(fileName, new Set(), new Set(), () => restoreOriginal(token, project, fileName, version), false);
+      return change(fileName, new Set(), new Set(), () => restoreOriginal(token, project, fileName, version), false, "restore");
     },
     waitForUnderWay,
-    underWayNow: () => underWay.current.size > 0,
+    underWayNow: () => {
+      const kinds = [...underWayKind.current.values()];
+      return kinds.includes("save") ? "save" : kinds.length > 0 ? "restore" : null;
+    },
     unsavedNow: () => latest.current.turned.size > 0,
     reload: () => {
       if (shown.current) void refresh();

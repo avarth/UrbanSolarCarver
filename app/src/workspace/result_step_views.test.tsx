@@ -414,6 +414,16 @@ test("folded, the warnings of a run are one line with a toggle; how the run ende
   expect(rendered.container.querySelector(".run-issues ul")).toBeNull();
 });
 
+test("a simulation's warnings name their study, as its progress does", () => {
+  let state = initialRunState(["simulate"]);
+  state = runReducer(state, { type: "issue", stage: "simulate", criterion: null, study: "1", code: "w", message: "3 panels skipped" });
+  state = runReducer(state, { type: "issue", stage: "simulate", criterion: null, study: "2", code: "w", message: "1 panel skipped" });
+  state = runReducer(state, { type: "issue", stage: "simulate", criterion: null, study: "9", code: "w", message: "no name" });
+  rendered = renderForTest(<RunProgress runs={runs({ serial: 1, project: "p", origin: "simulate", runId: "r", state: runReducer(state, { type: "run_finished", stages: ["simulate"], files: [] }), refusal: null })}
+                                        project="p" origin="simulate" mode="" onGoToSetting={vi.fn()} studyNames={{ 1: "Sun hours, 21 Dec", 2: "Daylight" }} />);
+  expect(rendered.container.querySelector(".run-issues ul")!.textContent).toBe("Sun hours, 21 Dec: 3 panels skippedDaylight: 1 panel skippedno name");
+});
+
 test("a warning is said in plain words with a link to its setting; the engine's wording is folded under the list", () => {
   const onGoToSetting = vi.fn();
   let state = initialRunState(["preprocessing"]);

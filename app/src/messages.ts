@@ -191,6 +191,7 @@ export const messages = {
   saveTurnsBeforeLeaving: "Save the turned surfaces before leaving Inspect?",
   stayInInspect: "Stay",
   inspectSaveUnderWay: "A save is under way.",
+  inspectRestoreUnderWay: "A restore is under way.",
   // A save or restore changed a test surface file that an analysis read.
   analysisOutOfDateAfterSave: (criteria: number) => (criteria === 1
     ? "The surfaces changed, so 1 criterion is out of date. Run the analysis again in Carve."
@@ -627,6 +628,7 @@ export const messages = {
   warningsTitle: "Warnings",
   engineWarnings: "As the engine wrote them",
   issueOfCriterion: (criterionName: string, text: string) => `${criterionName}: ${text}`,
+  issueOfStudy: (studyName: string, text: string) => `${studyName}: ${text}`,
   // A run's warnings by their code (common/issue_text.ts)
   issues: {
     everythingCarved: "Every voxel was carved: the threshold is probably too low.",

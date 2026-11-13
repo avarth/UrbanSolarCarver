@@ -83,6 +83,7 @@ interface EndedRunContext {
   shownCriterionId?: string;
   criterionNames?: Readonly<Record<string, string>>;
   criterionKeys?: ReadonlySet<string>;
+  studyNames?: Readonly<Record<string, string>>;
 }
 
 function RunFailure({ record, mode, onGoToSetting, shownCriterionId, criterionNames, criterionKeys }: EndedRunContext & { record: RunRecord }) {
@@ -139,7 +140,7 @@ function RunEnded({ finishedNote, ...props }: EndedRunContext & { record: RunRec
  * The warnings a run reported, in plain words (issueTextOf), each with a link to the setting that changes it, and the engine's
  * own wording in a fold: listed under a title, or folded behind a toggle that says how many.
  */
-function RunIssues({ issues, folded, mode, onGoToSetting, shownCriterionId, criterionNames, criterionKeys }:
+function RunIssues({ issues, folded, mode, onGoToSetting, shownCriterionId, criterionNames, criterionKeys, studyNames }:
                      EndedRunContext & { issues: RunState["issues"]; folded: boolean }) {
   const listId = useId();
   const [open, setOpen] = useState(false);
@@ -156,9 +157,12 @@ function RunIssues({ issues, folded, mode, onGoToSetting, shownCriterionId, crit
           const ofCriterion = setting !== null && (criterionKeys?.has(setting) ?? true);
           // A warning of a criterion other than the one shown says its name, so its setting is not taken for the shown one's.
           const otherName = criterion !== null && criterion !== shownCriterionId ? criterionNames?.[criterion] ?? null : null;
+          // A simulation's warning says its study, as the progress does: one run can simulate several studies.
+          const studyName = issue.study == null ? null : studyNames?.[issue.study] ?? null;
+          const said = otherName !== null ? messages.issueOfCriterion(otherName, text) : studyName !== null ? messages.issueOfStudy(studyName, text) : text;
           return (
             <li key={index}>
-              {otherName === null ? text : messages.issueOfCriterion(otherName, text)}
+              {said}
               {setting !== null && (
                 <>
                   {" "}
@@ -240,7 +244,7 @@ export function RunProgress({ runs, project, origin, mode, onGoToSetting, criter
                         criterionKeys={criterionKeys} finishedNote={finishedNote} />}
           {record.state.issues.length > 0 && <RunIssues key={record.serial} issues={record.state.issues} folded={foldWarnings} mode={mode}
                                                                  onGoToSetting={onGoToSetting} shownCriterionId={shownCriterionId}
-                                                                 criterionNames={criterionNames} criterionKeys={criterionKeys} />}
+                                                                 criterionNames={criterionNames} criterionKeys={criterionKeys} studyNames={studyNames} />}
         </>
       )}
     </div>

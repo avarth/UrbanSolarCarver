@@ -99,6 +99,6 @@ test("the typical building's calculation, which the run's reply does not list, g
 test("an issue raised before any stage began (stage null, as the service sends it) is kept with the run's warnings", () => {
   let s = initialRunState(["preprocessing"]);
   s = runReducer(s, { type: "issue", stage: null, criterion: null, code: "UNUSED_SETTING", message: "epw_path is not used by this mode" });
-  expect(s.issues).toEqual([{ stage: null, criterion: null, code: "UNUSED_SETTING", message: "epw_path is not used by this mode" }]);
+  expect(s.issues).toEqual([{ stage: null, criterion: null, study: null, code: "UNUSED_SETTING", message: "epw_path is not used by this mode" }]);
   expect(s.stages.preprocessing.state).toBe("running");
 });

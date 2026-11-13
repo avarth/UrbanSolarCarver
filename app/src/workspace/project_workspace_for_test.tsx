@@ -122,6 +122,8 @@ export class FakeService {
   readonly restoreRequests: { fileName: string; body: unknown }[] = [];
   /** While set, a POST inspect/test_surfaces/{file}/turn gets its reply only once this promise resolves. */
   turnsAnswerWhen: Promise<void> | null = null;
+  /** While set, a POST inspect/test_surfaces/{file}/restore gets its reply only once this promise resolves. */
+  restoresAnswerWhen: Promise<void> | null = null;
 
   /** What GET sites answers, and what PUT sites and PUT max-volume-source change. */
   siteSource: "mesh" | "sites" = "mesh";
@@ -323,6 +325,7 @@ export class FakeService {
       await holdReply(this.turnsAnswerWhen);
     } else {
       this.restoreRequests.push({ fileName, body });
+      await holdReply(this.restoresAnswerWhen);
     }
     // The file as it is now: a test may change it while the reply is held.
     if (body.version !== fileNow()!.version) {

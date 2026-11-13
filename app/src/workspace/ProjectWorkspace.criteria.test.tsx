@@ -101,6 +101,7 @@ test("build waits in the pinned bar until every criterion is carved", async () =
   expect(reasonOf(neverAnalysed)).toBe("Run the analysis before building");
   expect(pinnedBar().querySelectorAll(".run-button-reason")).toHaveLength(1);    // under the build only
   expect(neverAnalysed.closest(".run-button-area")!.querySelector(".run-button-reason")).not.toBeNull();
+  unmountWorkspace();
   // The analysis is current but the carving is not: it waits for the carving.
   const analysed: Record<PipelineStage, StageState> = { ...CARVED, thresholding: "out_of_date" };
   service = new FakeService(analysed, CARVING);
@@ -109,6 +110,7 @@ test("build waits in the pinned bar until every criterion is carved", async () =
   const build = () => buttonIn(pinnedBar(), "Build envelope and massing");
   expect(build().disabled).toBe(true);
   expect(reasonOf(build())).toBe("Update the carving before building");
+  unmountWorkspace();
   // The settings shown differ from the analysis: its existing reason.
   service = new FakeService(CARVED, CARVING);
   await openWorkspace(service, project(CARVED));

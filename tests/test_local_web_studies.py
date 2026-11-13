@@ -249,6 +249,9 @@ def test_duplicating_a_study_copies_its_metric_settings_and_files_under_a_new_nu
     assert copy.test_surface_files == ["facade.ply"] and copy.name == f"{original.name} copy" and copy.named_by_user
     assert (store.open(name) / joined_study_surfaces_path(copy.id)).is_file()
     assert [study.id for study in store.studies(name)] == ["1", "2"]
+    # A copy of the copy, and a second copy of the original, count on from the same name
+    assert store.duplicate_study(name, copy.id).name == f"{original.name} copy 2"
+    assert store.duplicate_study(name, source.id).name == f"{original.name} copy 3"
 
 
 def test_a_new_metric_that_does_not_take_the_time_basis_resets_it_to_standard(project_with_inputs):

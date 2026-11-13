@@ -36,6 +36,8 @@ export interface RunIssue {
   stage: string | null;
   /** The criterion whose stage raised it; null or absent for a stage of the whole chain. */
   criterion?: string | null;
+  /** The study whose simulation raised it; null or absent outside Simulate. */
+  study?: string | null;
   code: string;
   message: string;
 }
@@ -153,7 +155,7 @@ export function runReducer(state: RunState, event: RunEvent, now = Date.now()): 
       return event.study === undefined ? { ...state, stages } : { ...state, stages, study: event.study };
     }
     case "issue":
-      return { ...state, issues: [...state.issues, { stage: event.stage, criterion: event.criterion ?? null, code: event.code, message: event.message }] };
+      return { ...state, issues: [...state.issues, { stage: event.stage, criterion: event.criterion ?? null, study: event.study ?? null, code: event.code, message: event.message }] };
     case "run_finished":
       return { ...state, stages: withEveryStageDone(state.stages), final: "finished", endedAt: now };
     case "run_failed":

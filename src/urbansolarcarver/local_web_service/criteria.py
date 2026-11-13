@@ -18,8 +18,9 @@ from .api_models import CriterionEntry, ProjectJson
 from .project_names import ProjectError
 from .typical_building import WEIGHTS_PATH
 
-# Colours of the criteria in the 3D view, given in order to the criteria of a project and cycling after the eighth.
-CRITERION_COLOURS = ("#7F77DD", "#D85A30", "#1D9E75", "#D4537E", "#BA7517", "#378ADD", "#639922", "#888780")
+# Colours of the criteria in the 3D view, given in order to the criteria of a project and cycling after the eighth. None is grey,
+# which the context is (the eighth was #888780 until 2026-11-13; a criterion keeps the colour it was given).
+CRITERION_COLOURS = ("#7F77DD", "#D85A30", "#1D9E75", "#D4537E", "#BA7517", "#378ADD", "#639922", "#8B2F3C")
 CONFIG_COMMENT = "# Written by the UrbanSolarCarver app from project.json; change settings in the app."
 # The name and id of a criterion are the service's: the browser never sets them through settings.
 NOT_FROM_THE_BROWSER = ("name", "id")

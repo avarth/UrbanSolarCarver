@@ -9,6 +9,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { messages } from "../messages";
 import { DialogFrame, ProblemLine } from "../common/dialogs";
 import type { WorkspaceMode } from "../common/WorkspaceModeSwitch";
+import type { InspectUnderWay } from "./use_inspection";
 
 /** What the open workspace gives the app for its turns not saved and its saves under way. */
 export interface InspectTurns {
@@ -18,8 +19,8 @@ export interface InspectTurns {
   discardAll: () => void;
   /** Resolves once no save or restore is under way: with why one that ended meanwhile was refused, or null. */
   waitForUnderWay: () => Promise<string | null>;
-  /** A save or restore is under way now. */
-  underWay: () => boolean;
+  /** A save or a restore under way now, or null. */
+  underWay: () => InspectUnderWay;
   /** Some file has turns staged and not sent now. */
   unsaved: () => boolean;
 }
@@ -27,8 +28,8 @@ export interface InspectTurns {
 interface UnsavedTurnsDialogProps {
   /** Why Save cannot be pressed now (a run of the project); null when it can. */
   saveDisabledReason: string | null;
-  /** A save or restore of Inspect is under way: the dialog says so. */
-  saveUnderWay: boolean;
+  /** A save or a restore of Inspect is under way: the dialog says which. */
+  underWay: InspectUnderWay;
   /** An answer is being carried out: the buttons wait. */
   busy: boolean;
   /** Why the last save could not be made (the dialog's own, or the one under way when it opened); null otherwise. */
@@ -38,10 +39,10 @@ interface UnsavedTurnsDialogProps {
   onSave: () => void;
 }
 
-export function UnsavedTurnsDialog({ saveDisabledReason, saveUnderWay, busy, problem, onStay, onDiscard, onSave }: UnsavedTurnsDialogProps) {
+export function UnsavedTurnsDialog({ saveDisabledReason, underWay, busy, problem, onStay, onDiscard, onSave }: UnsavedTurnsDialogProps) {
   return (
     <DialogFrame title={messages.saveTurnsBeforeLeaving} busy={busy} onClose={onStay}>
-      {saveUnderWay && <p>{messages.inspectSaveUnderWay}</p>}
+      {underWay !== null && <p>{underWay === "save" ? messages.inspectSaveUnderWay : messages.inspectRestoreUnderWay}</p>}
       {saveDisabledReason !== null && <p>{saveDisabledReason}</p>}
       <ProblemLine problem={problem} />
       <div className="project-dialog-buttons">
@@ -68,8 +69,8 @@ export interface LeavingInspect {
 
 interface Waiting {
   then: () => void;
-  /** A save or restore was under way when the dialog opened, and has not ended yet. */
-  saveUnderWay: boolean;
+  /** A save or a restore was under way when the dialog opened, and has not ended yet. */
+  underWay: InspectUnderWay;
   /** The dialog is carrying out Save or Discard. */
   busy: boolean;
   problem: string | null;
@@ -106,19 +107,19 @@ export function useLeavingInspect(mode: WorkspaceMode, saveDisabledReason: strin
     const reason = await act();
     if (current.current !== busy) return;
     if (reason === null) finish();
-    else update(busy, { busy: false, saveUnderWay: false, problem: reason });
+    else update(busy, { busy: false, underWay: null, problem: reason });
   };
   /** The save under way when the dialog opened: its refusal is shown; once written with nothing left to save, the dialog leaves. */
   const watchUnderWay = async (opened: Waiting) => {
     const reason = (await turns.current?.waitForUnderWay()) ?? null;
     const now = current.current;
     if (now === null || now.then !== opened.then || now.busy) return;
-    if (reason !== null) update(now, { saveUnderWay: false, problem: reason });
-    else if (turns.current?.unsaved()) update(now, { saveUnderWay: false });
+    if (reason !== null) update(now, { underWay: null, problem: reason });
+    else if (turns.current?.unsaved()) update(now, { underWay: null });
     else finish();
   };
   const dialog = waiting === null ? null : (
-    <UnsavedTurnsDialog saveDisabledReason={saveDisabledReason} saveUnderWay={waiting.saveUnderWay} busy={waiting.busy} problem={waiting.problem}
+    <UnsavedTurnsDialog saveDisabledReason={saveDisabledReason} underWay={waiting.underWay} busy={waiting.busy} problem={waiting.problem}
                         onStay={() => setWaiting(null)}
                         onDiscard={() => void answer(async () => {
                           turns.current?.discardAll();
@@ -133,9 +134,9 @@ export function useLeavingInspect(mode: WorkspaceMode, saveDisabledReason: strin
         then();
         return;
       }
-      const opened: Waiting = { then, saveUnderWay: ready.underWay(), busy: false, problem: null };
+      const opened: Waiting = { then, underWay: ready.underWay(), busy: false, problem: null };
       setWaiting(opened);
-      if (opened.saveUnderWay) void watchUnderWay(opened);
+      if (opened.underWay !== null) void watchUnderWay(opened);
     },
     dialog,
     onUnsavedChange: setUnsaved,

@@ -512,3 +512,19 @@ def test_the_carving_switch_is_kept_in_project_json_and_set_during_a_run_too(cli
     assert client.get("/api/projects/p").json()["carving_updates_itself"] is True          # on until the user turns it off
     assert client.put("/api/projects/p/carving-updates", json={"on": False}).status_code == 204
     assert client.get("/api/projects/p").json()["carving_updates_itself"] is False
+
+
+def test_no_criterion_colour_is_grey_like_the_context():
+    """The context is drawn grey: a criterion's colour must differ in hue, so each has channels at least 0x40 apart."""
+    for colour in CRITERION_COLOURS:
+        channels = [int(colour[at:at + 2], 16) for at in (1, 3, 5)]
+        assert max(channels) - min(channels) >= 0x40, colour
+
+
+def test_a_copy_is_named_once_and_numbered_while_the_name_is_taken():
+    from urbansolarcarver.local_web_service.projects import copy_name
+    assert copy_name("Roofs", ["Roofs"]) == "Roofs copy"
+    assert copy_name("Roofs copy", ["Roofs", "Roofs copy"]) == "Roofs copy 2"
+    assert copy_name("Roofs copy 2", ["Roofs", "Roofs copy", "Roofs copy 2"]) == "Roofs copy 3"
+    assert copy_name("Roofs copy 2", ["Roofs copy 2"]) == "Roofs copy"          # the plain copy name is free again
+    assert copy_name(" copy", []) == " copy copy"                                # nothing is left to count from: kept whole

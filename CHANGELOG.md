@@ -12,6 +12,16 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - **Quicker results after a run.** A study that keeps its test points between runs now sends only the new values to the app,
   not its patches again: on Allatini (1.5 million points) 11.7 MB in place of 82.2 MB.
 
+### Fixes
+
+- **A copy of a copy is "*name* copy 2"**, not "*name* copy copy", for criteria and studies; a second copy of the same one counts on.
+- **Simulation warnings name their study**, as the progress does, since one run can simulate several studies.
+- **Leaving Inspect during a restore** says "A restore is under way.", not that a save is.
+- **The eighth criterion colour** is a dark red (`#8B2F3C`) instead of a grey close to the context's. A criterion keeps the colour
+  it was given, so only new criteria take it.
+- The workspace tests no longer print "document is not defined" after they finish: one test opened three workspaces without
+  closing the first two.
+
 ### Criteria
 
 - **The criterion that holds the run is easy to find.** When Run analysis waits for another criterion's test surfaces, **Open *name*** beside

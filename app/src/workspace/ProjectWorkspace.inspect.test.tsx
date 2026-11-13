@@ -227,6 +227,24 @@ test("leaving Inspect while a save is under way asks, says the save is under way
   expect(service.turnRequests).toEqual([{ fileName: "facades.obj", body: { surfaces: [1], version: "facades.obj@1" } }]);
 });
 
+test("leaving Inspect while a restore is under way says a restore is under way, not a save", async () => {
+  const service = await openInspect();
+  await selectFile("facades.obj");
+  await clickAndSettle(button("Flip mode"));
+  clickTriangle("facades.obj", 2);
+  await clickAndSettle(button("Save"));
+  let release = () => {};
+  service.restoresAnswerWhen = new Promise((resolve) => { release = resolve; });
+  await clickAndSettle(button("Restore original"));
+  expect(service.restoreRequests).toHaveLength(1);
+  await switchMode("design");
+  expect(dialog()!.textContent).toContain("A restore is under way.");
+  expect(dialog()!.textContent).not.toContain("A save is under way.");
+  release();
+  await settle();
+  expect(dialog()).toBeNull();
+});
+
 test("a save under way that is refused after the mode switch was pressed keeps the dialog open with the reason", async () => {
   const service = await openInspect();
   const release = holdTurnReplies(service);

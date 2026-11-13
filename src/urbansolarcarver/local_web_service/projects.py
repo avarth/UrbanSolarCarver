@@ -80,6 +80,20 @@ UNWANTED_FILE_NAME_CHARACTERS = re.compile(r"[^A-Za-z0-9_.-]")
 FILE_NAME_SEPARATORS = re.compile(r"[\\/]")
 
 
+
+COPY_SUFFIX = re.compile(r" copy(?: (\d+))?$")
+
+
+def copy_name(name: str, taken: list[str]) -> str:
+    """The name of a copy of *name*: "<name> copy", then "<name> copy 2" and so on while the name is taken. A copy of a copy counts
+    from the same name ("Roofs copy" gives "Roofs copy 2", not "Roofs copy copy")."""
+    base = COPY_SUFFIX.sub("", name) or name
+    candidate, number = f"{base} copy", 1
+    while candidate in taken:
+        number += 1
+        candidate = f"{base} copy {number}"
+    return candidate
+
 class GridOverBudget(ConfigError):
     """The voxel grid of the max volume and voxel size has more voxels than preprocessing can score.
 
@@ -575,12 +589,12 @@ class ProjectStore:
             (project_folder / joined_test_surfaces_path(removed.id)).unlink(missing_ok=True)
 
     def duplicate_criterion(self, name: str, criterion_id: str) -> CriterionEntry:
-        """Add a copy of a criterion at the end of the chain: its settings and test surfaces, named "<name> copy"."""
+        """Add a copy of a criterion at the end of the chain: its settings and test surfaces, named by copy_name."""
         with self.project_lock(name):
             project_folder = self.open(name)
             project_json = self.read_project_json(name)
             source = find_criterion(project_json, criterion_id)
-            copied = append_criterion(project_json, copy.deepcopy(source.settings), f"{source.name} copy")
+            copied = append_criterion(project_json, copy.deepcopy(source.settings), copy_name(source.name, [criterion.name for criterion in project_json.criteria]))
             copied.test_surface_files = list(source.test_surface_files)
             copied.energy_weighted = source.energy_weighted
             self._rewrite_chain(name, project_folder, project_json)
@@ -659,14 +673,14 @@ class ProjectStore:
                 discard_folder(study_folder(project_folder, removed.id))
 
     def duplicate_study(self, name: str, study_id: str) -> StudyEntry:
-        """Add a copy of a study at the end of the list: its metric, settings, test surface files and target, named "<name> copy"
+        """Add a copy of a study at the end of the list: its metric, settings, test surface files and target, named by copy_name
         (a name of the user's, so it stays when the copy's settings change), with the next number and colour; not its results."""
         with self.project_lock(name):
             project_folder = self.open(name)
             project_json = self.read_project_json(name)
             source = find_study(project_json, study_id)
             copied = append_study(project_json, source.metric, copy.deepcopy(source.settings), list(source.test_surface_files))
-            copied.name, copied.named_by_user = f"{source.name} copy", True
+            copied.name, copied.named_by_user = copy_name(source.name, [study.name for study in project_json.studies]), True
             copied.target, copied.target_max = source.target, source.target_max
             source_joined_path = project_folder / joined_study_surfaces_path(source.id)
             if source_joined_path.is_file():
