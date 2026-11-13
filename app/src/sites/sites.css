@@ -91,3 +91,14 @@
 .height-row-value input { width: 5.5em; font: inherit; text-align: right; }
 .heights-help { color: var(--colour-muted); font-size: var(--text-secondary); margin: 0; }
 .site-row-height { width: 100%; box-sizing: border-box; font: inherit; text-align: right; }
+
+/* Drawn context blocks in the Context box (design/context-blocks.md): the name, the height in m, then the actions */
+.context-blocks { margin-top: var(--space-unit); border-top: 1px solid var(--colour-line); }
+.context-block-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 4em auto auto; align-items: center; column-gap: var(--space-unit);
+  padding: var(--space-unit) 0; border-bottom: 1px solid var(--colour-line);
+}
+.context-block-name { min-width: 0; font: inherit; font-weight: 600; }
+.context-block-height { width: 100%; min-width: 0; font: inherit; text-align: right; }
+.context-block-unit { color: var(--colour-muted); font-size: var(--text-secondary); }
+.context-block-actions { grid-column: 1 / -1; display: flex; gap: calc(var(--space-unit) * 1.5); }

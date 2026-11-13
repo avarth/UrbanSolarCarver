@@ -7,6 +7,12 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Site
+
+- **Draw context blocks.** Draw block in the Context box draws an outline in the 3D view with the site editor and extrudes it
+  to a height; blocks are listed beside the context files, edited, renamed and removed there, and joined into the context without
+  changing any context file. Overlapping blocks are refused; touching ones are fine.
+
 ### Settings
 
 - **A rough time under Voxel size**: after a run, how long its scoring took on this computer, and at another voxel size an

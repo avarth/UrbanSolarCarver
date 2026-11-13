@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { formattedNumber } from "../format_numbers";
 import { messages } from "../messages";
 import type { Site } from "./site_geometry";
+import "./sites.css";
 
 export interface ContextBlocksListProps {
   blocks: Site[];
@@ -80,9 +81,11 @@ function BlockRow({ block, disabled, hasTerrain, focusHeight, onEdit, onChange, 
       <input ref={heightField} className="context-block-height" aria-label={messages.blockHeightLabel(block.name)} inputMode="decimal"
              value={height} disabled={disabled} onChange={(event) => setHeight(event.target.value)} onBlur={commitHeight} onKeyDown={onEnter(commitHeight)} />
       <span className="context-block-unit" aria-hidden="true">m</span>
-      <button type="button" className="link-button" disabled={disabled} onClick={onEdit}>{messages.editBlock}</button>
-      {hasTerrain && <button type="button" className="link-button" disabled={disabled} onClick={onPlaceOnTerrain}>{messages.placeBlockOnTerrain}</button>}
-      <button type="button" className="link-button" disabled={disabled} onClick={onRemove} aria-label={messages.removeBlock(block.name)}>{messages.removeBlockShort}</button>
+      <span className="context-block-actions">
+        <button type="button" className="link-button" disabled={disabled} onClick={onEdit}>{messages.editBlock}</button>
+        {hasTerrain && <button type="button" className="link-button" disabled={disabled} onClick={onPlaceOnTerrain}>{messages.placeBlockOnTerrain}</button>}
+        <button type="button" className="link-button" disabled={disabled} onClick={onRemove} aria-label={messages.removeBlock(block.name)}>{messages.removeBlockShort}</button>
+      </span>
     </div>
   );
 }
