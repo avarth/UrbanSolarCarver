@@ -19,7 +19,7 @@ python setup_env.py --latest          # the newest versions, not the tested ones
 ```
 
 `setup_env.py` installs the versions in `requirements-lock.txt`, which the tests last passed on, so results can be reproduced.
-They need Python 3.12 or older. With a newer Python, or if PyTorch reports that your GPU is too new for it, add `--latest` for the
+They install on Python 3.12 to 3.14. With a newer Python, or if PyTorch reports that your GPU is too new for it, add `--latest` for the
 newest versions, which have not been tested with this release.
 
 ## Manual installation
@@ -49,8 +49,25 @@ Then start it by double-clicking `start-urbansolarcarver.bat` (Windows) or runni
 
 ## Requirements
 
-- Python >= 3.10
-- NVIDIA GPU + CUDA driver (recommended; CPU mode available but significantly slower)
+- Python 3.12 or newer (3.12 to 3.14 for the tested versions; see above)
+- An NVIDIA GPU with its driver (recommended). Without one, everything runs on the CPU, more slowly: see
+  [Without an NVIDIA GPU](#without-an-nvidia-gpu).
+
+## Without an NVIDIA GPU
+
+Everything runs on the CPU too: Macs, and computers with AMD or Intel graphics, use it, as does `setup_env.py --cpu`. The
+scoring stage, where rays are traced from every test point, is the part that slows down; the other stages take about as long.
+The bundled examples, scored on one desktop (AMD Ryzen 7 3800X, 8 cores; NVIDIA RTX 3060), voxel size 1 m:
+
+| Example | Test points | GPU | CPU |
+|---|---|---|---|
+| New building among neighbours (Solar energy, a year) | 16,289 | 2.9 s | 3.3 s |
+| Perimeter block (Sun hours, 21 December, 10 to 14 h) | 145,473 | 2.0 s | 3.2 s |
+| District of many buildings (Solar energy, a year) | 527,633 | 12 s | 100 s |
+
+Each run also takes about 6 s to start. Time grows with the number of test points and voxels: halving the voxel size makes eight
+times as many voxels, and the grid step follows the voxel size unless it is set, so test points grow too. On the CPU, a large
+site at a fine voxel size can take many minutes; try a coarse voxel size first.
 
 ## Verifying the installation
 

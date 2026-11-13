@@ -18,7 +18,7 @@ Usage
 
 Requirements
 ------------
-- Python >= 3.10 (system or conda)
+- Python >= 3.12 (system or conda); 3.12 to 3.14 for the locked versions, newer with --latest
 - NVIDIA GPU + driver (optional, for CUDA acceleration)
 
 What this script does

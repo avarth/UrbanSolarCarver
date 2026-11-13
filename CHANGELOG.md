@@ -14,6 +14,8 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Fixes
 
+- **The install guide gives the Python versions the installer accepts**: 3.12 or newer (it said 3.10), and 3.12 to 3.14 for the
+  tested versions. A new section says how long a run takes without an NVIDIA GPU, with the bundled examples timed on both.
 - **A copy of a copy is "*name* copy 2"**, not "*name* copy copy", for criteria and studies; a second copy of the same one counts on.
 - **Simulation warnings name their study**, as the progress does, since one run can simulate several studies.
 - **Leaving Inspect during a restore** says "A restore is under way.", not that a save is.

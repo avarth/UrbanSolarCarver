@@ -120,3 +120,17 @@ def test_the_lockfile_pins_every_dependency_within_what_pyproject_allows():
         assert name in pins, f"{name} is not in requirements-lock.txt: run tools/write_lockfile.py"
         assert requirement.specifier.contains(pins[name], prereleases=True), (
             f"{name}=={pins[name]} is outside {requirement.specifier}: upgrade it, test, run tools/write_lockfile.py")
+
+
+def test_the_docs_give_the_python_versions_the_installer_accepts():
+    """Fails when MIN_PYTHON or MAX_LOCKED_PYTHON changes and the install guide, the UI guide or pyproject.toml still say the old
+    versions (they once said 3.10 while the installer asked for 3.12)."""
+    root = Path(__file__).resolve().parents[1]
+    low, high = (f"{major}.{minor}" for major, minor in (setup_env.MIN_PYTHON, setup_env.MAX_LOCKED_PYTHON))
+    installation = (root / "docs" / "getting-started" / "installation.md").read_text(encoding="utf-8")
+    assert f"Python {low} or newer" in installation
+    assert f"Python {low} to {high}" in installation
+    assert f"needs Python {low} or newer" in (root / "docs" / "ui.md").read_text(encoding="utf-8")
+    assert f'requires-python = ">={low}"' in (root / "pyproject.toml").read_text(encoding="utf-8")
+    for launcher in ("start-urbansolarcarver.bat", "start-urbansolarcarver.sh"):
+        assert f"Python {low} or newer" in (root / launcher).read_text(encoding="utf-8")
