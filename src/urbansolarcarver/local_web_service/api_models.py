@@ -119,6 +119,21 @@ class SiteJson(BaseModel):
         return self
 
 
+class ContextBlockJson(BaseModel):
+    """A drawn context block (design/context-blocks.md): a closed outline whose vertices carry the ground's elevation, in the input
+    files' coordinates, extruded to a flat top at its lowest vertex plus *height*; its holes are left out (a courtyard building)."""
+    name: str = Field(min_length=1, max_length=80)
+    points: list[list[float]] = Field(min_length=3, max_length=2000)    # [[x, y, z], ...], not repeated at the end
+    height: float = Field(gt=0, allow_inf_nan=False)
+    holes: list[HoleRing] = Field(default_factory=list, max_length=50)
+
+    @model_validator(mode="after")
+    def _points_are_xyz(self):
+        if any(len(point) != 3 for point in [*self.points, *(point for hole in self.holes for point in hole)]):
+            raise ValueError("every point is [x, y, z]")
+        return self
+
+
 class HeightSetting(BaseModel):
     """One of the two heights of the sites (design/base-height.md): the same for all sites (*value*, in m) or each site's own. A base
     height of 0 is no lower limit, as none is."""
@@ -189,6 +204,8 @@ class ProjectJson(BaseModel):
     # What the maximum volume is made from: the mesh files of the max_volume role, or the sites (site_input.py); one or the other
     max_volume_source: MaxVolumeSource = "mesh"
     sites: list[SiteJson] = Field(default_factory=list)     # kept while the source is "mesh", so switching back restores them
+    # Drawn context blocks (context_blocks.py), joined into the context with the context files, which they never change
+    context_blocks: list[ContextBlockJson] = Field(default_factory=list)
     heights: HeightsJson = Field(default_factory=HeightsJson)
 
 
