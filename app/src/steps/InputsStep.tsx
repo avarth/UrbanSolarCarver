@@ -51,18 +51,24 @@ interface InputsStepProps {
   maxVolumeFooter?: ReactNode;
   /** After the terrain: the project's test surfaces as surface sets (SurfaceSetsBox). */
   testSurfacesBox?: ReactNode;
+  /** In the Context box: beside Add files (Draw block), and under the files (the drawn blocks), design/context-blocks.md. */
+  contextExtraAction?: ReactNode;
+  contextFooter?: ReactNode;
   /** The removed files kept under inputs/removed/ of the project folder, and opening that folder; absent: no line about them. */
   removedFiles?: { count: number; show: () => Promise<string | null> };
 }
 
 export function InputsStep({ files, inputsBounds, onAddFiles, onRemoveFile, disabledReason, drawingProblems = {},
-                             maxVolumeNote = null, maxVolumeBox, maxVolumeFooter = null, testSurfacesBox = null, removedFiles }: InputsStepProps) {
+                             maxVolumeNote = null, maxVolumeBox, maxVolumeFooter = null, testSurfacesBox = null, removedFiles,
+                             contextExtraAction = null, contextFooter = null }: InputsStepProps) {
   const warning = inputsBounds === null ? null : sizeWarning(inputsBounds);
   const [showProblem, setShowProblem] = useState<string | null>(null);
   const roleBox = (role: InputRole) => (role === "max_volume" && maxVolumeBox !== undefined ? <div key={role}>{maxVolumeBox}</div> : (
     <InputBox key={role} role={role} files={files[role] ?? NO_FILES}
               onAddFiles={onAddFiles} onRemoveFile={onRemoveFile} disabledReason={disabledReason} drawingProblems={drawingProblems[role]}
-              note={role === "max_volume" ? maxVolumeNote : null} footer={role === "max_volume" ? maxVolumeFooter : null} />
+              note={role === "max_volume" ? maxVolumeNote : null}
+              footer={role === "max_volume" ? maxVolumeFooter : role === "context" ? contextFooter : null}
+              extraAction={role === "context" ? contextExtraAction : null} />
   ));
   // Context first, then the test surfaces picked on it, the terrain, and last the sites or the maximum volume: what is around
   // the site is added before the site is drawn (user, 2026-11-10).

@@ -416,6 +416,15 @@ export const messages = {
   siteTitle: "Sites",
   siteHint: "The plots you may build on: closed outlines in plan, drawn in the 3D view or imported, each with its base and max height.",
   drawSite: "Draw",
+  // Drawn context blocks (design/context-blocks.md)
+  drawBlock: "Draw block",
+  blockNamed: (number: number) => `Block ${number}`,
+  blockNameLabel: "Block name",
+  blockHeightLabel: (blockName: string) => `${blockName}: height`,
+  editBlock: "Edit",
+  placeBlockOnTerrain: "Place on terrain",
+  removeBlock: (blockName: string) => `Remove ${blockName}`,
+  removeBlockShort: "Remove",
   // Sites from DXF and OBJ files (design/site-import.md)
   importSites: "Import",
   // Test surfaces picked on the surroundings, and surface sets (design/test-surfaces-on-context.md)

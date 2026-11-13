@@ -61,6 +61,8 @@ export interface SiteEditorProps {
   refusal: string | null;
   /** The max and base heights the sites are checked with. */
   heights?: Heights;
+  /** Outlines snapped to besides the other entries of *sites*: the sites while blocks are drawn, the blocks while sites are. */
+  snapSites?: Site[];
 }
 
 const DRAG_START_PIXELS = 3;
@@ -108,7 +110,7 @@ export function SiteEditor(props: SiteEditorProps) {
   const [drawn, setDrawn] = useState<SitePoint[]>([]);
   const [hover, setHover] = useState<PlacedPoint | null>(null);
   const editedIndex = tool.kind === "edit" ? tool.index : null;
-  const otherOutlines = sites.filter((_, index) => index !== editedIndex).flatMap((site) => ringsOf(site));
+  const otherOutlines = [...sites.filter((_, index) => index !== editedIndex), ...(props.snapSites ?? [])].flatMap((site) => ringsOf(site));
   const placeAt = (x: number, y: number, shift: boolean): PlacedPoint | null => {
     const ground = groundAt(x, y, level);
     return ground ? placePoint(drawn, ground, [x, y], otherOutlines, toScreen, shift) : null;

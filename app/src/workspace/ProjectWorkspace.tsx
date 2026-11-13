@@ -69,6 +69,7 @@ import { browserAutoUpdateChoice, forgetBrowserAutoUpdateChoice } from "../crite
 import { Subheading } from "../settings_form/Subheading";
 import { HeightsSettings } from "../sites/HeightsSettings";
 import { SiteEditor, SitePicker, type SiteTool } from "../sites/SiteEditor";
+import { ContextBlocksList } from "../sites/ContextBlocksList";
 import { drawingLevel } from "../sites/site_drawing";
 import {
   allPoints, elevationRange, holesOf, nextSiteName, ringsOf, siteArea, siteRise, withRings, type Site, type SitePoint,
@@ -87,6 +88,17 @@ import type { WorkspaceMode } from "../common/WorkspaceModeSwitch";
 const FIRST_CRITERION_ID = "1";
 const DEFAULT_SITE_HEIGHT = 30;     // m, the height of a project's first site
 const STEPS_WITH_SOLID_MAX_VOLUME: readonly StepName[] = ["inputs"];
+// A drawn context block starts this high, in m (design/context-blocks.md).
+const NEW_BLOCK_HEIGHT = 10;
+
+/** The first "Block N" not taken by a block. */
+function nextBlockName(blocks: readonly Site[]): string {
+  const taken = new Set(blocks.map((block) => block.name.toLowerCase()));
+  let number = 1;
+  while (taken.has(messages.blockNamed(number).toLowerCase())) number += 1;
+  return messages.blockNamed(number);
+}
+
 // The layers each step shows by default (UX 8.2); the later steps add their result layers. The carved voxels start hidden, as
 // they cover the kept ones; the Layers menu shows them. Criteria shows what the Mode and Carving steps showed together, the maximum
 // volume as a ghost. Envelope and massing shows the base volume (only listed with a base height), so the built mass reads against
@@ -240,6 +252,14 @@ function OpenProject(props: ProjectWorkspaceProps) {
   }, [sitesKey]);
   // A site as the input (design/site-input.md): the tool drawing or editing a site in the view, and the tile chosen before any content
   const [siteTool, setSiteTool] = useState<SiteTool | null>(null);
+  // Drawing or editing a context block (design/context-blocks.md); one of the two tools at a time
+  const [blockTool, setBlockTool] = useState<SiteTool | null>(null);
+  const [focusBlockHeight, setFocusBlockHeight] = useState<number | null>(null);
+  const [siteToolSeen, setSiteToolSeen] = useState<SiteTool | null>(null);
+  if (siteTool !== siteToolSeen) {        // a site tool started: the block tool ends
+    setSiteToolSeen(siteTool);
+    if (siteTool !== null && blockTool !== null) setBlockTool(null);
+  }
   const [picking, setPicking] = useState<PickingState | null>(null);
   // An outline file read and shown in the import window (design/site-import.md), and what the last import or placing said
   const [importing, setImporting] = useState<{ found: OutlinesReply; busy: boolean } | null>(null);
@@ -593,6 +613,44 @@ function OpenProject(props: ProjectWorkspaceProps) {
       reportSiteProblem(error);
     }
   };
+  // Drawn context blocks: Draw block adds one 10 m high (its height field then takes the focus), Draw hole a hole of the edited one
+  const startBlockTool = (tool: SiteTool) => {
+    setSiteTool(null);
+    setBlockTool(tool);
+  };
+  const changeBlock = (index: number, block: Site) => contextBlocks.save(contextBlocks.blocks.map((other, at) => (at === index ? block : other)));
+  const removeBlock = (index: number) => {
+    setBlockTool(null);
+    void contextBlocks.save(contextBlocks.blocks.filter((_, at) => at !== index));
+  };
+  const finishBlockDrawing = (points: SitePoint[]) => {
+    if (blockTool?.kind === "draw_hole") {
+      const index = blockTool.index;
+      const block = contextBlocks.blocks[index];
+      if (!block) return;
+      const lowest = elevationRange(allPoints(block))[0];
+      const hole = points.map((point): SitePoint => [point[0], point[1], lowest]);
+      void changeBlock(index, withRings(block, [...ringsOf(block), hole])).then((refused) => { if (refused === null) setBlockTool({ kind: "edit", index }); });
+      return;
+    }
+    const added = [...contextBlocks.blocks, { name: nextBlockName(contextBlocks.blocks), points, height: NEW_BLOCK_HEIGHT }];
+    void contextBlocks.save(added).then((refused) => {
+      if (refused !== null) return;
+      setBlockTool(null);
+      setFocusBlockHeight(added.length - 1);
+    });
+  };
+  const placeBlockOnTerrain = async (index: number) => {
+    setSiteNote(null);
+    try {
+      const block = contextBlocks.blocks[index];
+      const placed = await onTerrain(ringsOf(block));
+      const refused = await changeBlock(index, withRings(block, placed.rings));
+      if (refused === null && placed.off > 0) setSiteNote({ text: messages.placedOffTerrain(placed.off), warning: false });
+    } catch (error) {
+      reportSiteProblem(error);
+    }
+  };
   const placeSiteOnTerrain = async (index: number) => {
     setSiteNote(null);
     try {
@@ -622,11 +680,23 @@ function OpenProject(props: ProjectWorkspaceProps) {
   const maxVolumeFooter = siteInput.source === "mesh" && !choosingInput ? (
     <SwitchInputLink toSite asks={files.max_volume.length > 0} disabledReason={inputsDisabledReason} onSwitch={() => { void siteInput.setSource("sites"); }} />
   ) : null;
-  // The site tools work while Inputs is open in Carve; a run in progress stops them
-  const siteToolShown = props.mode === "design" && openStep === "inputs" && usesSites && inputsDisabledReason === null ? siteTool : null;
-  const sceneTool = props.mode !== "design" || openStep !== "inputs" || !usesSites || inputsDisabledReason !== null ? null
+  // The site tools work while Inputs is open in Carve; a run in progress stops them. The block tools too, whatever the maximum
+  // volume is made from.
+  const inputsToolsOpen = props.mode === "design" && openStep === "inputs" && inputsDisabledReason === null;
+  const siteToolShown = inputsToolsOpen && usesSites ? siteTool : null;
+  const blockToolShown = inputsToolsOpen ? blockTool : null;
+  const sceneTool = blockToolShown !== null ? (scene: ViewerScene) => (
+      <SiteEditor scene={scene} origin={origin} sites={contextBlocks.blocks} snapSites={siteInput.sites} tool={blockToolShown} level={siteLevel}
+                  newSiteName={nextBlockName(contextBlocks.blocks)} onFinishDrawing={finishBlockDrawing}
+                  onChangeSite={(index, block) => { void changeBlock(index, block); }}
+                  onClose={() => setBlockTool(blockTool?.kind === "draw_hole" ? { kind: "edit", index: blockTool.index } : null)}
+                  onDrawHole={(index) => setBlockTool({ kind: "draw_hole", index })}
+                  onUndo={contextBlocks.undo} onRedo={contextBlocks.redo} canUndo={contextBlocks.canUndo} canRedo={contextBlocks.canRedo}
+                  refusal={contextBlocks.refusal} />
+    )
+    : !inputsToolsOpen || !usesSites ? null
     : siteToolShown !== null ? (scene: ViewerScene) => (
-      <SiteEditor scene={scene} origin={origin} sites={siteInput.sites} tool={siteToolShown} level={siteLevel} newSiteName={nextSiteName(siteInput.sites)}
+      <SiteEditor scene={scene} origin={origin} sites={siteInput.sites} snapSites={contextBlocks.blocks} tool={siteToolShown} level={siteLevel} newSiteName={nextSiteName(siteInput.sites)}
                   onFinishDrawing={finishDrawing} onChangeSite={(index, site) => { void changeSite(index, site); }}
                   onClose={() => setSiteTool(siteTool?.kind === "draw_hole" ? { kind: "edit", index: siteTool.index } : null)}
                   onDrawHole={(index) => setSiteTool({ kind: "draw_hole", index })}
@@ -708,6 +778,16 @@ function OpenProject(props: ProjectWorkspaceProps) {
       <InputsStep files={files} inputsBounds={inputsBounds} onAddFiles={addFiles} testSurfacesBox={testSurfacesBox}
                   onRemoveFile={removeFile} disabledReason={inputsDisabledReason} maxVolumeNote={carvedByNote(project.carving_chain ?? [])}
                   maxVolumeBox={maxVolumeBox} maxVolumeFooter={maxVolumeFooter} removedFiles={removedFiles}
+                  contextExtraAction={(
+                    <button type="button" className="input-add" disabled={inputsDisabledReason !== null}
+                            onClick={() => startBlockTool({ kind: "draw" })}>{messages.drawBlock}</button>
+                  )}
+                  contextFooter={(
+                    <ContextBlocksList blocks={contextBlocks.blocks} disabledReason={inputsDisabledReason} hasTerrain={hasTerrain}
+                                       focusHeightOf={focusBlockHeight} refusal={contextBlocks.refusal}
+                                       onEdit={(index) => startBlockTool({ kind: "edit", index })} onChange={changeBlock} onRemove={removeBlock}
+                                       onPlaceOnTerrain={(index) => { void placeBlockOnTerrain(index); }} />
+                  )}
                   drawingProblems={{ max_volume: maxVolumeMesh.drawingProblems, context: contextMesh.drawingProblems, terrain: terrainMesh.drawingProblems }} />
     ),
     criteria: (
