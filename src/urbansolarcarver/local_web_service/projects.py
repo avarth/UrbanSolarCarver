@@ -30,7 +30,7 @@ from ..io import load_mesh, save_mesh
 from ..load_config import build_config, build_config_from_mode_starting_values
 from ..mode_registry import MODES, canonical_mode_name
 from ..pydantic_schemas import UserConfig
-from . import picked_surfaces, site_input, stored_files, test_surfaces, uploads
+from . import context_blocks, picked_surfaces, site_input, stored_files, test_surfaces, uploads
 from .api_models import SurfacePick, SurfaceSetJson
 from .api_models import (
     ColdPeriodDates, ColdPeriodReply, ConfigReply, CriterionEntry, ExampleProject, GridPlanReply, HeightsJson, InputFileInfo, InputFilesReply,
@@ -1209,8 +1209,8 @@ class ProjectStore:
             joined_temporary_path = None
             try:
                 if role != WEATHER_ROLE:
-                    joined_temporary_path = self._write_joined_temporary_file(
-                        project_folder, role, list(self._load_stored_meshes(project_folder, role, remaining_names).values()))
+                    joined_temporary_path = self._write_joined_temporary_file(project_folder, role, self._role_meshes(
+                        project_json, role, list(self._load_stored_meshes(project_folder, role, remaining_names).values())))
                 kept = keep_removed_file(project_folder, role, self._stored_file_path(project_folder, role, file_name), file_name)
                 if role != WEATHER_ROLE:
                     self._replace_joined_file(project_folder, role, joined_temporary_path)
@@ -1514,7 +1514,7 @@ class ProjectStore:
             meshes_by_name = self._load_stored_meshes(project_folder, role, other_names)
             meshes_by_name[stored_name] = uploaded_mesh
             joined_temporary_path = self._write_joined_temporary_file(
-                project_folder, role, [meshes_by_name[mesh_name] for mesh_name in sorted(meshes_by_name)])
+                project_folder, role, self._role_meshes(project_json, role, [meshes_by_name[mesh_name] for mesh_name in sorted(meshes_by_name)]))
             os.replace(upload_path, role_folder / stored_name)
             self._replace_joined_file(project_folder, role, joined_temporary_path)
         finally:
@@ -1523,6 +1523,14 @@ class ProjectStore:
                 joined_temporary_path.unlink(missing_ok=True)
         recorded_names[stored_name] = len(uploaded_mesh.faces)
         stored_files.record_stored_file(project_json, role, stored_name, role_folder / stored_name)
+
+    @staticmethod
+    def _role_meshes(project_json: ProjectJson, role: str, file_meshes: list[trimesh.Trimesh]) -> list[trimesh.Trimesh]:
+        """What the joined file of a mesh role is built from: its files' meshes and, for the context, the drawn blocks' volumes
+        (context_blocks.py). Every path that builds a joined file goes through here, so none can leave the blocks out."""
+        if role != "context" or not project_json.context_blocks:
+            return file_meshes
+        return [*file_meshes, *context_blocks.block_meshes(project_json.context_blocks)]
 
     @staticmethod
     def _load_stored_meshes(project_folder: Path, role: str, file_names: list[str]) -> dict[str, trimesh.Trimesh]:

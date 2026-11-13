@@ -190,10 +190,11 @@ def _join_mesh_role_again(store, name: str, project_folder: Path, project_json: 
     records are written later; until then the next look builds the file again and finds it in place.
     """
     from .projects import JOINED_FOLDER
-    meshes = store._load_stored_meshes(project_folder, role, list(project_json.input_files[role]))
+    meshes = store._load_stored_meshes(project_folder, role, list(project_json.input_files.get(role, {})))
     for file_name in file_names:
         project_json.input_files[role][file_name] = len(meshes[file_name].faces)
-    joined_temporary_path = store._write_joined_temporary_file(project_folder, role, [meshes[file_name] for file_name in sorted(meshes)])
+    joined_temporary_path = store._write_joined_temporary_file(
+        project_folder, role, store._role_meshes(project_json, role, [meshes[file_name] for file_name in sorted(meshes)]))
     try:
         if _same_joined_content(joined_temporary_path, project_folder / JOINED_FOLDER / f"{role}.ply"):
             return []
