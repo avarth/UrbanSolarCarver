@@ -535,6 +535,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/context-blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Context Blocks List
+         * @description The drawn context blocks (design/context-blocks.md), and whether their mesh can be read.
+         */
+        get: operations["context_blocks_list"];
+        /**
+         * Save Context Blocks
+         * @description Store the whole list of drawn context blocks; the joined context is built again with the context files, which are never
+         *     written (the criteria go out of date). 422 names every block that is refused (overlaps, names, outlines), and nothing is stored.
+         */
+        put: operations["save_context_blocks"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/context-blocks/mesh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Context Blocks Mesh
+         * @description The drawn blocks alone as one mesh, for the 3D view; 404 without blocks.
+         */
+        get: operations["context_blocks_mesh"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}/outlines": {
         parameters: {
             query?: never;
@@ -1671,6 +1716,39 @@ export interface components {
             values: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * ContextBlockJson
+         * @description A drawn context block (design/context-blocks.md): a closed outline whose vertices carry the ground's elevation, in the input
+         *     files' coordinates, extruded to a flat top at its lowest vertex plus *height*; its holes are left out (a courtyard building).
+         */
+        ContextBlockJson: {
+            /** Name */
+            name: string;
+            /** Points */
+            points: number[][];
+            /** Height */
+            height: number;
+            /** Holes */
+            holes?: number[][][];
+        };
+        /**
+         * ContextBlocksReply
+         * @description The drawn context blocks, and whether their mesh can be read (GET context-blocks/mesh).
+         */
+        ContextBlocksReply: {
+            /** Blocks */
+            blocks: components["schemas"]["ContextBlockJson"][];
+            /** Has Mesh */
+            has_mesh: boolean;
+        };
+        /**
+         * ContextBlocksRequest
+         * @description The whole list of a project's drawn context blocks, as it is to be stored.
+         */
+        ContextBlocksRequest: {
+            /** Blocks */
+            blocks: components["schemas"]["ContextBlockJson"][];
         };
         /**
          * CreateCriterionRequest
@@ -3984,6 +4062,130 @@ export interface operations {
         };
     };
     base_volume: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    context_blocks_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextBlocksReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    save_context_blocks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContextBlocksRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextBlocksReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    context_blocks_mesh: {
         parameters: {
             query?: never;
             header?: never;
