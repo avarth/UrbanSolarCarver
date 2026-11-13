@@ -102,3 +102,76 @@ def test_a_context_file_changed_in_the_folder_is_joined_again_with_the_blocks(tm
     store.refresh_changed_inputs("p")
     assert joined_context_faces(store) == TOWN_FACES + BLOCK_FACES
     assert trimesh.load(store.open("p") / "inputs" / "joined" / "context.ply").bounds[1][0] > 9.0     # the new file's box
+
+
+# --- Task 3: saving blocks, and the routes
+
+import pytest  # noqa: E402
+from local_web_test_support import build_client, create_project, write_fake_chain_run  # noqa: E402
+from urbansolarcarver.local_web_service.context_blocks import save_context_blocks  # noqa: E402
+from urbansolarcarver.local_web_service.projects import ProjectError  # noqa: E402
+from urbansolarcarver.local_web_service.stage_records import stage_status_reply  # noqa: E402
+
+FACADE_OBJ = b"v 0 -20 0\nv 10 -20 0\nv 10 -20 10\nv 0 -20 10\nf 1 2 3\nf 1 3 4\n"
+
+
+def empty_store(tmp_path):
+    store = ProjectStore(tmp_path / "projects")
+    store.create("p", "daylight")
+    return store
+
+
+def test_saving_a_block_alone_writes_the_joined_context_and_the_context_path(tmp_path):
+    store = empty_store(tmp_path)
+    reply = save_context_blocks(store, "p", [block("Block 1", square(100, 100))])
+    assert [entry.name for entry in reply.blocks] == ["Block 1"] and reply.has_mesh
+    assert joined_context_faces(store) == BLOCK_FACES and context_path_in_config(store)
+    assert (store.open("p") / "inputs" / "joined" / "context_blocks.ply").is_file()
+
+
+def test_removing_the_last_block_without_files_removes_the_joined_context_and_the_path(tmp_path):
+    store = empty_store(tmp_path)
+    save_context_blocks(store, "p", [block("Block 1", square(100, 100))])
+    reply = save_context_blocks(store, "p", [])
+    assert reply.blocks == [] and not reply.has_mesh
+    assert joined_context_faces(store) == 0 and not context_path_in_config(store)
+    assert not (store.open("p") / "inputs" / "joined" / "context_blocks.ply").exists()
+
+
+def test_a_refused_list_stores_nothing_and_names_every_problem(tmp_path):
+    store = empty_store(tmp_path)
+    with pytest.raises(ProjectError) as refused:
+        save_context_blocks(store, "p", [block("Block 1", square(0, 0)), block("Block 2", square(5, 0)), block("block 2", square(50, 0))])
+    assert refused.value.status_code == 422
+    assert "Block 2 overlaps Block 1." in str(refused.value) and "Two blocks are named block 2." in str(refused.value)
+    assert store.read_project_json("p").context_blocks == [] and joined_context_faces(store) == 0
+
+
+def test_a_block_change_puts_the_criteria_out_of_date_and_leaves_the_context_files_unchanged(tmp_path):
+    store = empty_store(tmp_path)
+    store.add_input("p", "max_volume", "volume.ply", box_bytes([5, 5, 5]))
+    store.add_criterion_test_surface("p", "1", "facades.obj", FACADE_OBJ)
+    store.add_input("p", "context", "town.ply", TOWN)
+    write_fake_chain_run(store, "p", ["1"])
+    assert stage_status_reply(store, "p").stages["preprocessing"] == "current"
+    revision = store.read_project_json("p").inputs_revision
+    save_context_blocks(store, "p", [block("Block 1", square(100, 100))])
+    assert store.read_project_json("p").inputs_revision > revision
+    assert stage_status_reply(store, "p").stages["preprocessing"] == "out_of_date"
+    assert store.input_file_path("p", "context", "town.ply").read_bytes() == TOWN
+
+
+def test_the_routes_store_list_and_serve_the_blocks_mesh(tmp_path):
+    client, _ = build_client(tmp_path / "projects")
+    create_project(client)
+    body = {"blocks": [{"name": "Block 1", "points": square(100, 100), "height": 12}]}
+    assert client.put("/api/projects/p/context-blocks", json=body).status_code == 200
+    listed = client.get("/api/projects/p/context-blocks").json()
+    assert [entry["name"] for entry in listed["blocks"]] == ["Block 1"] and listed["has_mesh"] is True
+    mesh = client.get("/api/projects/p/context-blocks/mesh")
+    assert mesh.status_code == 200 and mesh.content.startswith(b"ply")
+    overlapping = {"blocks": [*body["blocks"], {"name": "Block 2", "points": square(105, 100), "height": 8}]}
+    refused = client.put("/api/projects/p/context-blocks", json=overlapping)
+    assert refused.status_code == 422 and "Block 2 overlaps Block 1." in refused.json()["detail"]
+    assert client.put("/api/projects/p/context-blocks", json={"blocks": []}).status_code == 200
+    assert client.get("/api/projects/p/context-blocks/mesh").status_code == 404

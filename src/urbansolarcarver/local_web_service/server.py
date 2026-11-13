@@ -34,13 +34,14 @@ from ..errors import ConfigError
 from ..mode_registry import MODES
 from ..pydantic_schemas import UserConfig
 from ..stage_settings import PIPELINE_STAGES
-from . import folder_picker, inspection, simulation, site_import, site_input, sun_study, typical_building, user_preferences
+from . import context_blocks, folder_picker, inspection, simulation, site_import, site_input, sun_study, typical_building, user_preferences
 from .api_models import (
     CarvingUpdatesRequest, OutlinesReply, PickedSurfacesRequest, SurfacePicksReply, SurfaceSetNameRequest, TerrainHeightsReply,
     TerrainHeightsRequest,
 )
 from .api_models import (
     NEW_PROJECT_MODE,
+    ContextBlocksReply, ContextBlocksRequest,
     CancelRunReply, ColdPeriodReply, ConfigErrorReply, ConfigReply, ConfigValuesRequest, CreateCriterionRequest, CreateProjectRequest,
     CriterionEntry, CriterionOrderRequest, CriterionSettingsReply, ErrorDetailReply, ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, InspectedFile, InspectReply, MissingInputsReply, ModeInfo, ProjectDetail, RemovedInputsReply, RestoreOriginalRequest, RestoreRemovedInputRequest,
     ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkippedSurfaces, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, StoredFileChangedReply, SunChart, SunPath, SunPositions, TurnSurfacesRequest,
@@ -601,6 +602,23 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         422 names every site that cannot make a volume, and nothing is stored."""
         with writable_project(name) as store:
             return site_input.save_sites(store, name, request.sites)
+
+    @router.get("/projects/{name}/context-blocks", responses=_ERROR_RESPONSES)
+    def context_blocks_list(name: str) -> ContextBlocksReply:
+        """The drawn context blocks (design/context-blocks.md), and whether their mesh can be read."""
+        return context_blocks.blocks_reply(folder_in_use.store, name)
+
+    @router.put("/projects/{name}/context-blocks", responses=_ERROR_RESPONSES)
+    def save_context_blocks(name: str, request: ContextBlocksRequest) -> ContextBlocksReply:
+        """Store the whole list of drawn context blocks; the joined context is built again with the context files, which are never
+        written (the criteria go out of date). 422 names every block that is refused (overlaps, names, outlines), and nothing is stored."""
+        with writable_project(name) as store:
+            return context_blocks.save_context_blocks(store, name, request.blocks)
+
+    @router.get("/projects/{name}/context-blocks/mesh", responses=_ERROR_RESPONSES)
+    def context_blocks_mesh(name: str) -> FileResponse:
+        """The drawn blocks alone as one mesh, for the 3D view; 404 without blocks."""
+        return FileResponse(context_blocks.blocks_mesh_path(folder_in_use.store, name), headers=NO_CACHE)
 
     @router.post("/projects/{name}/outlines", responses=_ERROR_RESPONSES)
     def read_outlines(name: str, file: UploadFile = File(...)) -> OutlinesReply:

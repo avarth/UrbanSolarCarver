@@ -134,6 +134,17 @@ class ContextBlockJson(BaseModel):
         return self
 
 
+class ContextBlocksRequest(BaseModel):
+    """The whole list of a project's drawn context blocks, as it is to be stored."""
+    blocks: list[ContextBlockJson] = Field(max_length=500)
+
+
+class ContextBlocksReply(BaseModel):
+    """The drawn context blocks, and whether their mesh can be read (GET context-blocks/mesh)."""
+    blocks: list[ContextBlockJson]
+    has_mesh: bool
+
+
 class HeightSetting(BaseModel):
     """One of the two heights of the sites (design/base-height.md): the same for all sites (*value*, in m) or each site's own. A base
     height of 0 is no lower limit, as none is."""
