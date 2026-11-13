@@ -312,15 +312,19 @@ def _inputs_of_summary(summary: dict) -> dict | None:
             "ground_disc": fingerprints.get("ground_disc")}
 
 
-def study_values(folder: Path) -> bytes | None:
+def study_values(folder: Path, known_points_key: str | None = None) -> bytes | None:
     """The patches and values of the result in *folder* for the 3D view, all numbers little-endian; None without a result.
+
+    The patches are left out when *known_points_key* is the result's ``points_key``: the page already holds them (a study keeps its
+    points between runs, solar_check._points_key), and they are most of the bytes (48 a point, against 4 a point per column).
 
     * ``uint32`` length n of the header in bytes;
     * the header as UTF-8 JSON (``frame``: world coordinates the corners are relative to, ``point_count``, ``columns``: the column
       names in the order of the value arrays, ``unit``, ``geometry``: the geometry the result accounts for ("none" for nothing),
       ``geometry_point_count``: how many of the points, the last ones, are on the faces of that geometry, ``sun_day_step``: a quick
-      sun hours result sampled the sun on every that many days, 1 otherwise), padded with spaces to a multiple of 4;
-    * ``float32`` the four corners of each point's patch, x y z each, relative to ``frame``;
+      sun hours result sampled the sun on every that many days, 1 otherwise, ``points_key``: what the points were made from, None
+      for a result that does not record it, ``quads``: whether the patches follow), padded with spaces to a multiple of 4;
+    * ``float32`` the four corners of each point's patch, x y z each, relative to ``frame``, unless ``quads`` is false;
     * ``float32`` one value per point for each column.
     """
     summary = read_summary(folder)
@@ -335,12 +339,15 @@ def study_values(folder: Path) -> bytes | None:
             arrays = [values[column].astype("<f4") for column in columns]
     except (OSError, ValueError, KeyError):
         return None
+    points_key = summary.get("points_key")
+    send_quads = points_key is None or known_points_key != points_key
     header = {"frame": frame, "point_count": int(len(quads)), "columns": columns, "unit": summary.get("unit"),
               "geometry": summary.get("geometry", "max_volume"), "geometry_point_count": geometry_point_count,
-              "sun_day_step": int(summary.get("sun_day_step", 1))}
+              "sun_day_step": int(summary.get("sun_day_step", 1)), "points_key": points_key, "quads": send_quads}
     header_bytes = json.dumps(header).encode("utf-8")
     header_bytes += b" " * (-len(header_bytes) % HEADER_ALIGNMENT_BYTES)
-    return b"".join([struct.pack("<I", len(header_bytes)), header_bytes, quads.tobytes(), *(array.tobytes() for array in arrays)])
+    patches = [quads.tobytes()] if send_quads else []
+    return b"".join([struct.pack("<I", len(header_bytes)), header_bytes, *patches, *(array.tobytes() for array in arrays)])
 
 
 def study_sky_patches(folder: Path) -> SkyDome | None:

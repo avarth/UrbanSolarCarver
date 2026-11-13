@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
-import { decodeStudyValues, patchCorners } from "./study_values_decoder";
-import { packedStudyValues } from "./study_values_for_test";
+import { decodeStudyValues, MissingPatchesError, patchCorners } from "./study_values_decoder";
+import { packedStudyValues, studyValuesOf } from "./study_values_for_test";
 
 const ONE_SQUARE = [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0];
 
@@ -26,4 +26,18 @@ test("a result without test points decodes to empty columns", () => {
   const decoded = decodeStudyValues(packedStudyValues({ frame: [0, 0, 0], point_count: 0, columns: ["open", "max_volume"], unit: "%" }, [], [[], []]));
   expect(decoded.quads).toHaveLength(0);
   expect(decoded.values.max_volume).toHaveLength(0);
+});
+
+
+test("a reply without patches takes the held patches of its points key, and refuses patches of other points", () => {
+  const full = decodeStudyValues(studyValuesOf({ open: [4, 4], max_volume: [1, 2] }, "h", 0, undefined, 1, "k1"));
+  expect(full.header.quads).toBe(true);
+  const held = { pointsKey: "k1", quads: full.quads };
+  const lean = studyValuesOf({ open: [4, 4], max_volume: [3, 1] }, "h", 0, undefined, 1, "k1", false);
+  const decoded = decodeStudyValues(lean, held);
+  expect(decoded.quads).toBe(full.quads);
+  expect(Array.from(decoded.values.max_volume)).toEqual([3, 1]);
+  expect(() => decodeStudyValues(lean)).toThrow(MissingPatchesError);
+  expect(() => decodeStudyValues(lean, { pointsKey: "k0", quads: full.quads })).toThrow(MissingPatchesError);
+  expect(() => decodeStudyValues(lean, { pointsKey: "k1", quads: new Float32Array(12) })).toThrow(MissingPatchesError);     // another count
 });

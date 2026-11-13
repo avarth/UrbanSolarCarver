@@ -568,6 +568,25 @@ def test_values_route_packs_the_header_quads_and_columns(service):
     assert client.get("/api/projects/p/studies/99/values").status_code == 404
 
 
+def test_values_route_leaves_the_patches_out_when_the_page_already_holds_their_points_key(service):
+    client, worker, _engine = service
+    study = add_study(worker.store, "p")
+    simulate_and_wait(worker)
+    full = client.get(f"/api/projects/p/studies/{study}/values").content
+    (header_length,) = struct.unpack_from("<I", full, 0)
+    header = json.loads(full[4:4 + header_length])
+    assert header["quads"] is True and isinstance(header["points_key"], str) and header["points_key"]
+    count, columns = header["point_count"], header["columns"]
+    lean = client.get(f"/api/projects/p/studies/{study}/values", params={"points_key": header["points_key"]}).content
+    (lean_length,) = struct.unpack_from("<I", lean, 0)
+    lean_header = json.loads(lean[4:4 + lean_length])
+    assert lean_header["quads"] is False and lean_header["points_key"] == header["points_key"]
+    assert len(lean) == 4 + lean_length + len(columns) * count * 4                  # the values only
+    assert lean[4 + lean_length:] == full[4 + header_length + count * 48:]           # the same values as the full reply
+    stale = client.get(f"/api/projects/p/studies/{study}/values", params={"points_key": "an older key"}).content
+    assert len(stale) == len(full)
+
+
 def test_sky_patches_route_gives_each_patch_its_value_null_for_a_result_without_them_and_404_without_a_result(service):
     client, worker, _engine = service
     store = worker.store

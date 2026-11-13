@@ -149,6 +149,33 @@ test("Run posts /simulate, shows progress, and refreshes the studies when it fin
   expect(simulateService.runsStarted).toEqual([]);       // no pipeline run
 });
 
+test("after a run the values are read with the points key held, so only the values come; patches of other points are read in full", async () => {
+  await openSimulate(undefined, (service) => {
+    service.studies = [study("1", "sun_hours", ["facades.obj"], "current")];
+    service.valuesOf = { 1: studyValuesOf({ open: [4, 4, 4], max_volume: [1, 2, 3] }, "h", 0, undefined, 1, "k1") };
+  });
+  await settle();
+  expect(simulateService.valuesKeysSent).toEqual([null]);                     // nothing held yet
+  expect(studyLayerSummary()).toBe("3 points");
+  const runAgain = async () => {
+    await act(async () => runButton().click());
+    await settle();
+    FakeWebSocket.opened[FakeWebSocket.opened.length - 1].send({ type: "run_finished", stages: ["simulate"], files: [] });
+    await settle();
+  };
+  // Same points: the reply has the values only, and the view keeps the patches it holds
+  simulateService.leanValuesOf = { 1: studyValuesOf({ open: [4, 4, 4], max_volume: [3, 2, 1] }, "h", 0, undefined, 1, "k1", false) };
+  await runAgain();
+  expect(simulateService.valuesKeysSent).toEqual([null, "k1"]);
+  expect(studyLayerSummary()).toBe("3 points");
+  // New points: a lean reply for other points is not used; the values are read again in full
+  simulateService.leanValuesOf = { 1: studyValuesOf({ open: [5, 5], max_volume: [1, 1] }, "h", 0, undefined, 1, "k2", false) };
+  simulateService.valuesOf = { 1: studyValuesOf({ open: [5, 5], max_volume: [1, 1] }, "h", 0, undefined, 1, "k2") };
+  await runAgain();
+  expect(simulateService.valuesKeysSent).toEqual([null, "k1", "k1", null]);
+  expect(studyLayerSummary()).toBe("2 points");
+});
+
 test("Run is unavailable during a Design run, and Design's Run analysis during a simulation", async () => {
   await openSimulate(undefined, (service) => {
     service.studies = [study("1", "sun_hours", ["facades.obj"])];

@@ -1137,7 +1137,8 @@ export interface paths {
         /**
          * Study Values
          * @description The test point patches of the study's last result and the values of each column (layout in simulation.study_values);
-         *     404 for an unknown study or one without a result.
+         *     the patches are left out when *points_key* is the result's (the page holds them already). 404 for an unknown study or one
+         *     without a result.
          */
         get: operations["study_values"];
         put?: never;
@@ -5530,7 +5531,9 @@ export interface operations {
     };
     study_values: {
         parameters: {
-            query?: never;
+            query?: {
+                points_key?: string | null;
+            };
             header?: never;
             path: {
                 name: string;

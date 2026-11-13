@@ -65,6 +65,10 @@ export class SimulateService extends ChainService {
   uploadRefusal: string | null = null;
   /** GET studies/{id}/values: the packed values of each study's last result; a study without them has none (404). */
   valuesOf: Record<string, ArrayBuffer> = {};
+  /** GET studies/{id}/values?points_key=...: the reply without patches, when a study has one; else valuesOf answers. */
+  leanValuesOf: Record<string, ArrayBuffer> = {};
+  /** The points_key each GET studies/{id}/values sent, null for none. */
+  readonly valuesKeysSent: (string | null)[] = [];
   /** GET studies/{id}/sky-patches: the sky dome of each study's last result; a result without one answers null. */
   skyDomeOf: Record<string, SkyDome> = {};
   /** The status GET studies/{id}/sky-patches fails with; null: it answers. */
@@ -111,6 +115,9 @@ export class SimulateService extends ChainService {
       return json<StudyEntry>(entry);
     };
     if (method === "GET" && part === "values") {
+      const sentKey = new URLSearchParams(address.split("?")[1] ?? "").get("points_key");
+      this.valuesKeysSent.push(sentKey);
+      if (sentKey !== null && this.leanValuesOf[id] !== undefined) return new Response(this.leanValuesOf[id]);
       const values = this.valuesOf[id];
       return values === undefined ? json<ErrorDetailReply>({ detail: `The study '${id}' has no result yet.` }, 404) : new Response(values);
     }

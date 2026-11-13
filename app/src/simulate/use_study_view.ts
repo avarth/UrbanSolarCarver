@@ -19,7 +19,10 @@ import type { RunLoop } from "../common/run_state";
 import type { StudyPalette } from "../viewer/study_palettes";
 import { columnOf, distributionOf, FACING_GROUPS, facingGroups, highestOf, keptShareOf, OPEN_COLUMN, percentile, shareAtOrAbove, valuesAt, type ColourBy,
   type FacingGroup, type StudyGeometry, type StudyStand, type StudyStatistics, type StudyView, STUDY_STANDS } from "../viewer/study_values";
-import { decodeStudyValues, type StudyValues } from "../viewer/study_values_decoder";
+import { decodeStudyValues, MissingPatchesError, type HeldPatches, type StudyValues } from "../viewer/study_values_decoder";
+
+/** How many studies keep their patches for the next read. */
+const HELD_PATCH_STUDIES = 3;
 import type { StudiesHook } from "./use_studies";
 
 const NOT_FOUND = 404;
@@ -142,11 +145,32 @@ export function useStudyView({ studies, active, runs, editDisabled, northDegrees
     setLoaded(null);
     setLoadedSky(null);
   }
+  // The patches of the studies read last, with their points key: a study keeps its points between runs, so after a run the service
+  // sends only the values (the patches are 48 bytes a point, a value 4). Let go with the values when Simulate closes.
+  const heldPatches = useRef(new Map<string, HeldPatches>());
+  useEffect(() => {
+    if (!active) heldPatches.current.clear();
+  }, [active]);
   useEffect(() => {
     if (!active || !hasResult || running || selectedId === null) return;
     let wanted = true;
-    getStudyValues(token, project, selectedId).then((buffer) => {
-      if (wanted) setLoaded({ id: selectedId, values: decodeStudyValues(buffer) });
+    const read = async (): Promise<StudyValues> => {
+      const held = heldPatches.current.get(selectedId);
+      try {
+        return decodeStudyValues(await getStudyValues(token, project, selectedId, held?.pointsKey), held);
+      } catch (error) {
+        if (!(error instanceof MissingPatchesError)) throw error;
+        return decodeStudyValues(await getStudyValues(token, project, selectedId));
+      }
+    };
+    read().then((studyValues) => {
+      if (!wanted) return;
+      const key = studyValues.header.points_key;
+      const patches = heldPatches.current;
+      patches.delete(selectedId);
+      if (typeof key === "string") patches.set(selectedId, { pointsKey: key, quads: studyValues.quads });
+      while (patches.size > HELD_PATCH_STUDIES) patches.delete(patches.keys().next().value!);       // the oldest first
+      setLoaded({ id: selectedId, values: studyValues });
     }).catch((error: unknown) => {
       if (!wanted) return;
       setLoaded(null);

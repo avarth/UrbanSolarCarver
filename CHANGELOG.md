@@ -7,6 +7,11 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Simulate
+
+- **Quicker results after a run.** A study that keeps its test points between runs now sends only the new values to the app,
+  not its patches again: on Allatini (1.5 million points) 11.7 MB in place of 82.2 MB.
+
 ### Criteria
 
 - **The criterion that holds the run is easy to find.** When Run analysis waits for another criterion's test surfaces, **Open *name*** beside

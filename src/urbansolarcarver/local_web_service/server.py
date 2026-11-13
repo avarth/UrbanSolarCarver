@@ -858,13 +858,14 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
 
     @router.get("/projects/{name}/studies/{study_id}/values", response_class=Response,
                 responses={200: {"content": {"application/octet-stream": {}}}, 404: _STUDY_RESPONSES[404]})
-    def study_values(name: str, study_id: str) -> Response:
+    def study_values(name: str, study_id: str, points_key: str | None = None) -> Response:
         """The test point patches of the study's last result and the values of each column (layout in simulation.study_values);
-        404 for an unknown study or one without a result."""
+        the patches are left out when *points_key* is the result's (the page holds them already). 404 for an unknown study or one
+        without a result."""
         store = folder_in_use.store
         with store.project_lock(name):
             find_study(store.read_project_json(name), study_id)
-            values = simulation.study_values(study_folder(store.open(name), study_id))
+            values = simulation.study_values(study_folder(store.open(name), study_id), points_key)
         if values is None:
             raise ProjectError(f"The study '{study_id}' has no result yet.", status_code=404)
         return Response(values, media_type="application/octet-stream", headers=NO_CACHE)

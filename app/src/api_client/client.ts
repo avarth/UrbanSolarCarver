@@ -463,9 +463,13 @@ export const removeStudyTestSurface = (token: string, project: string, studyId: 
 /** Runs the studies that can run, as one run of the run worker (stage "simulate"); its events are read as a run's. */
 export const startSimulation = (token: string, project: string) => requestJson<StartRunReply>(token, `${projectPath(project)}/simulate`, "POST");
 
-/** The test point patches of the study's last result and the values of each geometry, as the service packs them (binary). */
-export async function getStudyValues(token: string, project: string, studyId: string): Promise<ArrayBuffer> {
-  return (await send(token, `${studyPath(project, studyId)}/values`)).arrayBuffer();
+/**
+ * The test point patches of the study's last result and the values of each geometry, as the service packs them (binary). With the
+ * points key of patches the page holds, the service leaves the patches out while the result's points are still those.
+ */
+export async function getStudyValues(token: string, project: string, studyId: string, heldPointsKey?: string): Promise<ArrayBuffer> {
+  const query = heldPointsKey === undefined ? "" : `?points_key=${encodeURIComponent(heldPointsKey)}`;
+  return (await send(token, `${studyPath(project, studyId)}/values${query}`)).arrayBuffer();
 }
 
 /** The sky patches of a study's last result with the value each carried; null for a sun hours study or a result without them. */
