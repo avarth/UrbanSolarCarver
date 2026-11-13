@@ -447,6 +447,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#without-an-nvidia-gpu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Without an NVIDIA GPU
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#verifying-the-installation" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1366,6 +1377,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#without-an-nvidia-gpu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Without an NVIDIA GPU
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#verifying-the-installation" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1410,7 +1432,7 @@
 <a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>python<span class="w"> </span>setup_env.py<span class="w"> </span>--latest<span class="w">          </span><span class="c1"># the newest versions, not the tested ones</span>
 </code></pre></div>
 <p><code>setup_env.py</code> installs the versions in <code>requirements-lock.txt</code>, which the tests last passed on, so results can be reproduced.
-They need Python 3.12 or older. With a newer Python, or if PyTorch reports that your GPU is too new for it, add <code>--latest</code> for the
+They install on Python 3.12 to 3.14. With a newer Python, or if PyTorch reports that your GPU is too new for it, add <code>--latest</code> for the
 newest versions, which have not been tested with this release.</p>
 <h2 id="manual-installation">Manual installation<a class="headerlink" href="#manual-installation" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>python<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>.venv
@@ -1429,9 +1451,47 @@ newest versions, which have not been tested with this release.</p>
 <p>Then start it by double-clicking <code>start-urbansolarcarver.bat</code> (Windows) or running <code>./start-urbansolarcarver.sh</code> (Linux, macOS) in the repository folder; on a fresh clone the launcher runs <code>setup_env.py</code> first. From a terminal, <code>usc ui</code> does the same. Without the extra, every other <code>usc</code> command works as before, and <code>usc ui</code> prints the install command above and exits.</p>
 <h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Python &gt;= 3.10</li>
-<li>NVIDIA GPU + CUDA driver (recommended; CPU mode available but significantly slower)</li>
+<li>Python 3.12 or newer (3.12 to 3.14 for the tested versions; see above)</li>
+<li>An NVIDIA GPU with its driver (recommended). Without one, everything runs on the CPU, more slowly: see
+  <a href="#without-an-nvidia-gpu">Without an NVIDIA GPU</a>.</li>
 </ul>
+<h2 id="without-an-nvidia-gpu">Without an NVIDIA GPU<a class="headerlink" href="#without-an-nvidia-gpu" title="Permanent link">&para;</a></h2>
+<p>Everything runs on the CPU too: Macs, and computers with AMD or Intel graphics, use it, as does <code>setup_env.py --cpu</code>. The
+scoring stage, where rays are traced from every test point, is the part that slows down; the other stages take about as long.
+The bundled examples, scored on one desktop (AMD Ryzen 7 3800X, 8 cores; NVIDIA RTX 3060), voxel size 1 m:</p>
+<table>
+<thead>
+<tr>
+<th>Example</th>
+<th>Test points</th>
+<th>GPU</th>
+<th>CPU</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>New building among neighbours (Solar energy, a year)</td>
+<td>16,289</td>
+<td>2.9 s</td>
+<td>3.3 s</td>
+</tr>
+<tr>
+<td>Perimeter block (Sun hours, 21 December, 10 to 14 h)</td>
+<td>145,473</td>
+<td>2.0 s</td>
+<td>3.2 s</td>
+</tr>
+<tr>
+<td>District of many buildings (Solar energy, a year)</td>
+<td>527,633</td>
+<td>12 s</td>
+<td>100 s</td>
+</tr>
+</tbody>
+</table>
+<p>Each run also takes about 6 s to start. Time grows with the number of test points and voxels: halving the voxel size makes eight
+times as many voxels, and the grid step follows the voxel size unless it is set, so test points grow too. On the CPU, a large
+site at a fine voxel size can take many minutes; try a coarse voxel size first.</p>
 <h2 id="verifying-the-installation">Verifying the installation<a class="headerlink" href="#verifying-the-installation" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nb">print</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">())</span>  <span class="c1"># True if GPU is available</span>

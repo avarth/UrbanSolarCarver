@@ -1143,6 +1143,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.warp_kernels.points_inside_mesh_kernel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        points_inside_mesh_kernel
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1719,6 +1730,17 @@
     <span class="md-ellipsis">
       
         mesh_visible_weight_kernel
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.warp_kernels.points_inside_mesh_kernel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        points_inside_mesh_kernel
       
     </span>
   </a>
@@ -3394,7 +3416,7 @@ device (:func:<code>dda_backend_available</code>), precompiles the kernels
   against the context and terrain meshes (:func:<code>ray_tracing.mesh_blocks_rays</code>);</li>
 <li>the mesh visibility kernel of the sun and sky check (:mod:<code>solar_check</code>),
   which traces rays against a triangle mesh's BVH (<code>wp.Mesh</code>) instead of
-  the voxel grid.</li>
+  the voxel grid, and its test of which points lie inside a mesh.</li>
 </ul>
 <p>All kernels live in this one module on purpose: Warp compiles a Python
 module as one unit and caches it on disk by module, so
@@ -3585,6 +3607,27 @@ it).  The blocking meshes block wherever the ray meets them.  Inside
 and outside follow the faces' orientation (closed meshes with
 outward normals); a start inside is judged by :func:<code>_check_start</code>,
 with each mesh's own tolerance.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.warp_kernels.points_inside_mesh_kernel" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">points_inside_mesh_kernel</span><span class="p">(</span><span class="n">mesh_id</span><span class="p">,</span> <span class="n">points</span><span class="p">,</span> <span class="n">max_distance</span><span class="p">,</span> <span class="n">inside</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.warp_kernels.points_inside_mesh_kernel" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Whether each point lies inside a mesh's solid, by the generalised winding number (above one half inside).  A probe
+ray would meet the faces where two bodies touch (the floors of a massing, stacked on each other, or its bays side by
+side) at the same distance and take either; the winding number counts every face, so touching bodies each count
+once, and small gaps in a mesh that is not quite closed are bridged.</p>
 
 
     </div>

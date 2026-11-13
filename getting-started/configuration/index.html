@@ -1441,7 +1441,7 @@
 
 
 <h1 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h1>
-<p>USC uses YAML configuration files. Mode-specific templates are in <code>configs/</code>. Relative paths inside a config file (meshes, including <code>context_path</code> and <code>terrain_path</code>, EPW, <code>out_dir</code>, <code>simulated_weights_path</code>) are resolved against the folder that contains the YAML file.</p>
+<p>USC uses YAML configuration files. Mode-specific templates are in <code>configs/</code>. Relative paths inside a config file (meshes, including <code>context_path</code>, <code>terrain_path</code> and <code>kept_volume_path</code>, EPW, <code>out_dir</code>, <code>simulated_weights_path</code>) are resolved against the folder that contains the YAML file.</p>
 <p>From Python, <code>load_config(path, overrides)</code> reads a file and <code>build_config(values)</code> validates values you already hold; both raise <code>ConfigError</code>, which lists the field and message of every problem. A client with no YAML file (the Grasshopper components, through the daemon) starts from the starting values of the chosen mode and applies its overrides. The starting values are the analysis period for <code>time-based</code> (21 Dec, 10:00 to 14:00), <code>irradiance</code> (the full year) and <code>benefit</code> (15 Oct 07:00 to 15 Apr 19:00), <code>tilted_plane_angle_deg: 45</code> for <code>tilted_plane</code> and <code>carve_fraction: 0.35</code> for <code>radiative_cooling</code>; the templates in <code>configs/</code> repeat them. They do not change the schema defaults.</p>
 <h2 id="minimal-configs-by-mode">Minimal configs by mode<a class="headerlink" href="#minimal-configs-by-mode" title="Permanent link">&para;</a></h2>
 <p>Required parameters vary by mode. Every config needs <code>max_volume_path</code>, <code>test_surface_path</code>, and <code>out_dir</code>; <code>mode</code> defaults to <code>time-based</code>. The weather-dependent modes (<code>time-based</code>, <code>irradiance</code>, <code>benefit</code>) also require <code>epw_path</code> and an analysis period. <code>daylight</code>, <code>tilted_plane</code> and <code>radiative_cooling</code> need neither, and USC warns if you set settings the chosen mode does not use.</p>
@@ -1564,6 +1564,11 @@
 <td><code>terrain_path</code></td>
 <td><code>null</code></td>
 <td>Optional terrain mesh. Rays that hit it are dropped, and only the voxels below the ground are removed, so the site stays buildable above it</td>
+</tr>
+<tr>
+<td><code>kept_volume_path</code></td>
+<td><code>null</code></td>
+<td>Optional closed mesh of a volume that is never carved, for example everything below a base height. The occupied voxels whose centres lie inside it are kept by every criterion, and the threshold (and <code>carve_fraction</code>) is taken over the other voxels only. Read by thresholding, so a change re-runs thresholding and not the analysis. Each closed body counts on its own, so overlapping bodies are fine</td>
 </tr>
 <tr>
 <td><code>context_blocks_rays</code></td>
@@ -1750,7 +1755,7 @@
 <tr>
 <td><code>rays_per_patch</code></td>
 <td>weighted modes</td>
-<td>Rays per Tregenza sky patch from each test point: 1 (the patch centre), 4 (default), 9 or 16 (spread over the patch, repeatable), which close the gaps between patch centres far from the test surfaces (<a href="../../modes/#sky-patches-and-rays-per-patch-rays_per_patch">details</a>)</td>
+<td>Shared by every criterion of a chain (set it at the top level). Rays per Tregenza sky patch from each test point: 1 (the patch centre), 4 (default), 9 or 16 (spread over the patch, repeatable), which close the gaps between patch centres far from the test surfaces (<a href="../../modes/#sky-patches-and-rays-per-patch-rays_per_patch">details</a>)</td>
 </tr>
 <tr>
 <td><code>edge_taper</code></td>
