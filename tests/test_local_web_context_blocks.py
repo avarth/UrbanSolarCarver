@@ -175,3 +175,37 @@ def test_the_routes_store_list_and_serve_the_blocks_mesh(tmp_path):
     assert refused.status_code == 422 and "Block 2 overlaps Block 1." in refused.json()["detail"]
     assert client.put("/api/projects/p/context-blocks", json={"blocks": []}).status_code == 200
     assert client.get("/api/projects/p/context-blocks/mesh").status_code == 404
+
+
+# --- Final review I2: a block edit does not read every context file again
+
+def test_renaming_a_block_does_not_build_the_joined_context_again(tmp_path, monkeypatch):
+    store = empty_store(tmp_path)
+    store.add_input("p", "context", "town.ply", TOWN)
+    save_context_blocks(store, "p", [block("Block 1", square(100, 100))])
+    builds = []
+    original = store._write_joined_temporary_file
+    monkeypatch.setattr(store, "_write_joined_temporary_file", lambda *args: builds.append(1) or original(*args))
+    revision = store.read_project_json("p").inputs_revision
+    reply = save_context_blocks(store, "p", [block("Shop", square(100, 100))])
+    assert [entry.name for entry in reply.blocks] == ["Shop"] and builds == []
+    assert store.read_project_json("p").inputs_revision == revision
+
+
+def test_a_second_block_edit_does_not_read_the_context_files_again(tmp_path, monkeypatch):
+    store = empty_store(tmp_path)
+    store.add_input("p", "context", "town.ply", TOWN)
+    save_context_blocks(store, "p", [block("Block 1", square(100, 100), height=10)])
+    reads = []
+    original = store._load_stored_meshes
+    monkeypatch.setattr(store, "_load_stored_meshes", lambda *args: reads.append(args[1]) or original(*args))
+    save_context_blocks(store, "p", [block("Block 1", square(100, 100), height=14)])
+    assert reads == [] and joined_context_faces(store) == TOWN_FACES + BLOCK_FACES
+    path = store.input_file_path("p", "context", "town.ply")              # a changed file is read again
+    old_time = path.stat().st_mtime_ns
+    path.write_bytes(box_bytes([0, 0, 5], extents=(20, 20, 10)))
+    os.utime(path, ns=(old_time + 10 ** 9, old_time + 10 ** 9))
+    store.refresh_changed_inputs("p")
+    reads.clear()
+    save_context_blocks(store, "p", [block("Block 1", square(100, 100), height=16)])
+    assert reads == ["context"]

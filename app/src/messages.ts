@@ -425,6 +425,7 @@ export const messages = {
   placeBlockOnTerrain: "Place on terrain",
   removeBlock: (blockName: string) => `Remove ${blockName}`,
   removeBlockShort: "Remove",
+  undoBlockChange: "Undo",
   // Sites from DXF and OBJ files (design/site-import.md)
   importSites: "Import",
   // Test surfaces picked on the surroundings, and surface sets (design/test-surfaces-on-context.md)

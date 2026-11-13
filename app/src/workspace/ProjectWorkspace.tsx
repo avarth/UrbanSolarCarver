@@ -786,7 +786,8 @@ function OpenProject(props: ProjectWorkspaceProps) {
                     <ContextBlocksList blocks={contextBlocks.blocks} disabledReason={inputsDisabledReason} hasTerrain={hasTerrain}
                                        focusHeightOf={focusBlockHeight} refusal={contextBlocks.refusal}
                                        onEdit={(index) => startBlockTool({ kind: "edit", index })} onChange={changeBlock} onRemove={removeBlock}
-                                       onPlaceOnTerrain={(index) => { void placeBlockOnTerrain(index); }} />
+                                       onPlaceOnTerrain={(index) => { void placeBlockOnTerrain(index); }}
+                                       canUndo={contextBlocks.canUndo} onUndo={contextBlocks.undo} />
                   )}
                   drawingProblems={{ max_volume: maxVolumeMesh.drawingProblems, context: contextMesh.drawingProblems, terrain: terrainMesh.drawingProblems }} />
     ),

@@ -20,10 +20,14 @@ export interface ContextBlocksListProps {
   onChange: (index: number, block: Site) => Promise<string | null>;
   onRemove: (index: number) => void;
   onPlaceOnTerrain: (index: number) => void;
+  /** The last change of the blocks can be taken back (a removal by mistake); Undo shows under the rows while it can. */
+  canUndo: boolean;
+  onUndo: () => void;
 }
 
-export function ContextBlocksList({ blocks, disabledReason, hasTerrain, focusHeightOf, refusal, onEdit, onChange, onRemove, onPlaceOnTerrain }: ContextBlocksListProps) {
-  if (blocks.length === 0 && refusal === null) return null;
+export function ContextBlocksList({ blocks, disabledReason, hasTerrain, focusHeightOf, refusal, onEdit, onChange, onRemove, onPlaceOnTerrain,
+                                    canUndo, onUndo }: ContextBlocksListProps) {
+  if (blocks.length === 0 && refusal === null && !canUndo) return null;
   return (
     <div className="context-blocks">
       {blocks.map((block, index) => (
@@ -33,6 +37,11 @@ export function ContextBlocksList({ blocks, disabledReason, hasTerrain, focusHei
                   onPlaceOnTerrain={() => onPlaceOnTerrain(index)} />
       ))}
       {refusal !== null && <p className="input-box-problem" role="alert">{refusal}</p>}
+      {canUndo && (
+        <p className="context-blocks-undo">
+          <button type="button" className="link-button" disabled={disabledReason !== null} onClick={onUndo}>{messages.undoBlockChange}</button>
+        </p>
+      )}
     </div>
   );
 }

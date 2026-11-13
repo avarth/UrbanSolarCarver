@@ -151,3 +151,16 @@ test("drawing a block snaps to a site's vertex", async () => {
   await key("Enter");
   expect(service.savedContextBlocks.at(-1)![0].points[0]).toEqual([20, 0, 0]);
 });
+
+test("a block removed by mistake comes back with Undo under the rows, without the editor open", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.contextBlocks = [{ ...BLOCK, holes: [] }];
+  await openWorkspace(service, project(NOTHING_RUN));
+  act(() => { buttonIn(rows()[0], "Remove").click(); });
+  await settle();
+  expect(editor()).toBeNull();
+  act(() => { buttonIn(panel().querySelector(".context-blocks")!, "Undo").click(); });
+  await settle();
+  expect(service.savedContextBlocks.at(-1)).toEqual([{ ...BLOCK, holes: [] }]);
+  expect(rows()).toHaveLength(1);
+});

@@ -101,4 +101,5 @@
 .context-block-name { min-width: 0; font: inherit; font-weight: 600; }
 .context-block-height { width: 100%; min-width: 0; font: inherit; text-align: right; }
 .context-block-unit { color: var(--colour-muted); font-size: var(--text-secondary); }
+.context-blocks-undo { margin: var(--space-unit) 0 0; }
 .context-block-actions { grid-column: 1 / -1; display: flex; gap: calc(var(--space-unit) * 1.5); }

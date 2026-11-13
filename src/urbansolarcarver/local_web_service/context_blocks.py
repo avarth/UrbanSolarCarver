@@ -15,6 +15,9 @@ from .project_names import ProjectError
 from .site_input import OVERLAP_AREA, SITE_GROUND_SPACING
 
 CONTEXT_ROLE = "context"
+# The context files' meshes of each project folder as last read, with the stored records (name, digest) they were read at: a block
+# edit joins them again without reading every file (a city model can be a million faces). A changed file changes its digest.
+_file_meshes_read: dict[str, tuple[tuple, list]] = {}
 BLOCKS_MESH_PATH = "inputs/joined/context_blocks.ply"     # the blocks alone, for the 3D view
 
 
@@ -79,10 +82,13 @@ def save_context_blocks(store, name: str, entries: list[ContextBlockJson]) -> Co
         if [entry.model_dump() for entry in entries] == [entry.model_dump() for entry in project_json.context_blocks]:
             return blocks_reply(store, name)
         project_folder = store.open(name)
+        names_only = [_shape(entry) for entry in entries] == [_shape(entry) for entry in project_json.context_blocks]
         project_json.context_blocks = list(entries)
-        file_meshes = store._load_stored_meshes(project_folder, CONTEXT_ROLE, list(project_json.input_files.get(CONTEXT_ROLE, {})))
+        if names_only:      # a rename changes no volume: nothing to build
+            store.write_project_json(name, project_json)
+            return blocks_reply(store, name)
         joined_temporary_path = store._write_joined_temporary_file(
-            project_folder, CONTEXT_ROLE, store._role_meshes(project_json, CONTEXT_ROLE, list(file_meshes.values())))
+            project_folder, CONTEXT_ROLE, store._role_meshes(project_json, CONTEXT_ROLE, _context_file_meshes(store, project_folder, project_json)))
         blocks_temporary_path = _write_blocks_temporary_file(project_folder, entries)
         try:
             from .stored_files import _same_joined_content
@@ -124,3 +130,22 @@ def _replace_blocks_file(project_folder: Path, temporary_path: Path | None) -> N
         target.unlink(missing_ok=True)
     else:
         os.replace(temporary_path, target)
+
+
+def _shape(entry: ContextBlockJson) -> dict:
+    """What makes a block's volume: everything but its name."""
+    return entry.model_dump(exclude={"name"})
+
+
+def _context_file_meshes(store, project_folder: Path, project_json) -> list:
+    """The meshes of the project's context files, in name order: read again only when a stored record changed (or has none)."""
+    names = sorted(project_json.input_files.get(CONTEXT_ROLE, {}))
+    records = project_json.stored_files.get(CONTEXT_ROLE, {})
+    key = tuple((file_name, records[file_name].digest) for file_name in names) if all(file_name in records for file_name in names) else None
+    cached = _file_meshes_read.get(str(project_folder))
+    if key is not None and cached is not None and cached[0] == key:
+        return cached[1]
+    meshes = list(store._load_stored_meshes(project_folder, CONTEXT_ROLE, names).values())
+    if key is not None:
+        _file_meshes_read[str(project_folder)] = (key, meshes)
+    return meshes
