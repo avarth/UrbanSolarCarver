@@ -173,6 +173,8 @@ export class FakeService {
   readonly drawnSetRequests: DrawnSurfaceRequest[] = [];
   /** The reason POST surface-sets/drawn is refused with (422); null: the set is stored. */
   drawRefusal: string | null = null;
+  /** Replies held back (holdReply) until their promise resolves: GET surface-sets/{file}/outline by file, and POST surface-sets/drawn ("drawn"). */
+  readonly heldReplies: Record<string, Promise<void>> = {};
 
   constructor(stages: Record<PipelineStage, StageState>, carving: typeof CARVING | null) {
     this.stages = stages;
@@ -365,7 +367,7 @@ export class FakeService {
    * The surface set routes: POST picked stores a new picked set ("picked_<n>.ply", named as asked or "Picked <n>") or replaces the
    * picks of the set *replace*, two triangles a pick; GET {file}/picks gives a set's picks; PUT {file}/name shows a set by another name.
    */
-  private answerSurfaceSets(method: string, path: string, init?: RequestInit): Response {
+  private answerSurfaceSets(method: string, path: string, init?: RequestInit): Response | Promise<Response> {
     if (method === "POST" && path === "/surface-sets/picked") {
       const body = JSON.parse(String(init!.body)) as PickedSurfacesRequest;
       this.pickedSetRequests.push(body);
@@ -401,7 +403,8 @@ export class FakeService {
       const stored: InputFileInfo = { name: `ground_${number}.ply`, triangle_count: 2, shown_name: body.name ?? `Ground ${number}`, drawn: true };
       this.storedTestSurfaces = [...this.storedTestSurfaces, stored];
       this.groundOutlines[stored.name] = outline;
-      return json<InputFileInfo>(stored);
+      const held = this.heldReplies.drawn;
+      return held === undefined ? json<InputFileInfo>(stored) : holdReply(held).then(() => json<InputFileInfo>(stored));
     }
     const [, , encoded, part] = path.split("/");
     const fileName = decodeURIComponent(encoded);
@@ -410,7 +413,9 @@ export class FakeService {
     if (method === "GET" && part === "picks") return json<SurfacePicksReply>({ picks: this.surfacePicks[fileName] ?? [] });
     if (method === "GET" && part === "outline") {
       const outline = this.groundOutlines[fileName];
-      return outline === undefined ? json<ErrorDetailReply>({ detail: "Not drawn" }, 422) : json<GroundOutline>(outline);
+      const reply = () => (outline === undefined ? json<ErrorDetailReply>({ detail: "Not drawn" }, 422) : json<GroundOutline>(outline));
+      const held = this.heldReplies[fileName];
+      return held === undefined ? reply() : holdReply(held).then(reply);
     }
     if (method === "PUT" && part === "name") {
       const { name } = JSON.parse(String(init!.body)) as { name: string };

@@ -14,7 +14,7 @@ import { messages } from "../messages";
 import type { Point3 } from "../viewer/local_origin";
 import type { ViewerScene } from "../viewer/scene";
 import {
-  CLICKS_TO_FINISH, nearestOnSegment, placeShapePoint, shapeOutline, type DrawShape, type PlacedPoint, type ScreenPoint,
+  CLICKS_TO_FINISH, longEnoughSide, nearestOnSegment, placeShapePoint, shapeOutline, type DrawShape, type PlacedPoint, type ScreenPoint,
 } from "./site_drawing";
 import {
   containsPoint, elevationRange, outlinePoints, planArea, pointAlong, ringsOf, siteAreaContains, siteProblems, withRings, type Heights, type Site,
@@ -148,7 +148,7 @@ export function SiteEditor(props: SiteEditorProps) {
       const clicks = [...drawn, placed.point];
       if (clicks.length < CLICKS_TO_FINISH[shape]) {
         const [a, b] = clicks;
-        if (!b || Math.hypot(b[0] - a[0], b[1] - a[1]) > 0) setDrawn(clicks);
+        if (!b || longEnoughSide(a, b)) setDrawn(clicks);
         return;
       }
       const outline = shapeOutline(shape, clicks);

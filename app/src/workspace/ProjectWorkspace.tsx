@@ -693,7 +693,8 @@ function OpenProject(props: ProjectWorkspaceProps) {
       refreshStageStatus();
     },
   });
-  if (ground.tool !== null && (!inputsToolsOpen || siteTool !== null || blockTool !== null)) ground.end();
+  if (ground.tool !== null && (!inputsToolsOpen || siteTool !== null || blockTool !== null
+    || (ground.editedFile !== null && !files.test_surfaces.some((file) => file.name === ground.editedFile)))) ground.end();
   const startGround = (tool: GroundTool) => {
     setSiteTool(null);
     setBlockTool(null);

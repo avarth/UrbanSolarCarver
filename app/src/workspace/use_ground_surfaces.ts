@@ -36,7 +36,15 @@ export function nextGroundName(sets: readonly InputFileInfo[]): string {
 }
 
 export function useGroundSurfaces({ token, project, sets, onSaved, onServiceProblem }: GroundSurfacesOptions) {
-  const [tool, setTool] = useState<GroundTool | null>(null);
+  const [tool, setToolState] = useState<GroundTool | null>(null);
+  // The tool as last set, and the number of the last outline read asked for: a reply that comes after the user moved on is dropped
+  const toolNow = useRef<GroundTool | null>(null);
+  const outlineAsked = useRef(0);
+  const setTool = (next: GroundTool | null) => {
+    toolNow.current = next;
+    if (next === null || next.kind === "draw") outlineAsked.current += 1;
+    setToolState(next);
+  };
   const [session, setSessionState] = useState<Session | null>(null);
   // The session as last set, read by changes made before React renders again; and the saves still on their way, in order
   const sessionNow = useRef<Session | null>(null);
@@ -97,9 +105,13 @@ export function useGroundSurfaces({ token, project, sets, onSaved, onServiceProb
     }
     setSession(null);
     setTool(next);
+    const asked = ++outlineAsked.current;
     getGroundOutline(token, project, next.file)
-      .then((read) => setSession({ file: next.file, outlines: [{ points: read.points, holes: read.holes ?? [] }], at: 0 }))
+      .then((read) => {
+        if (asked === outlineAsked.current) setSession({ file: next.file, outlines: [{ points: read.points, holes: read.holes ?? [] }], at: 0 });
+      })
       .catch((error: unknown) => {
+        if (asked !== outlineAsked.current) return;
         failed(error);
         setTool(null);
       });
@@ -125,10 +137,12 @@ export function useGroundSurfaces({ token, project, sets, onSaved, onServiceProb
     const drawn: GroundOutline = { points, holes: [] };
     drawSurfaceSet(token, project, { outline: drawn })
       .then(async (stored) => {
+        // The set is listed first, then edited, unless the editor was closed or another tool started meanwhile
+        await onSaved();
+        if (toolNow.current?.kind !== "draw") return;
         setRefusal(null);
         setSession({ file: stored.name, outlines: [drawn], at: 0 });
         setTool({ kind: "edit", file: stored.name });
-        await onSaved();
       })
       .catch(failed);
   };
@@ -139,6 +153,8 @@ export function useGroundSurfaces({ token, project, sets, onSaved, onServiceProb
     : site === null ? null : tool.kind === "edit" ? { kind: "edit", index: 0 } : { kind: "draw_hole", index: 0 };
   return {
     tool, editorTool, site, refusal, newName: nextGroundName(sets), start, close, finishDrawing,
+    /** The stored file of the set being edited (or read for editing); null while drawing a new one or with no tool. */
+    editedFile: tool === null || tool.kind === "draw" ? null : tool.file,
     /** Ends the tool and the session, whatever it was doing (another tool started, the step closed). */
     end: () => {
       setTool(null);

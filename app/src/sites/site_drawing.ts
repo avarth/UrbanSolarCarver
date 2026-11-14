@@ -93,6 +93,11 @@ export const CLICKS_TO_FINISH: Record<Exclude<DrawShape, "polygon">, number> = {
 /** Corners closer than this (in metres) to a line give no rectangle. */
 const MIN_SIDE = 0.001;
 
+/** Whether the side from *a* to *b* is long enough (MIN_SIDE) to draw a rectangle on. */
+export function longEnoughSide(a: SitePoint, b: SitePoint): boolean {
+  return Math.hypot(b[0] - a[0], b[1] - a[1]) >= MIN_SIDE;
+}
+
 function toMillimetre(value: number): number {
   return Math.round(value * 1000) / 1000 + 0;
 }
@@ -113,8 +118,8 @@ export function shapeOutline(shape: DrawShape, clicks: readonly SitePoint[]): Si
     return [at(a[0], a[1]), at(b[0], a[1]), at(b[0], b[1]), at(a[0], b[1])];
   }
   const c = clicks[2];
+  if (!longEnoughSide(a, b)) return null;
   const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
-  if (length < MIN_SIDE) return null;
   const normal = [-(b[1] - a[1]) / length, (b[0] - a[0]) / length];
   const width = (c[0] - a[0]) * normal[0] + (c[1] - a[1]) * normal[1];
   if (Math.abs(width) < MIN_SIDE) return null;

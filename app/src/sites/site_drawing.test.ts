@@ -1,6 +1,6 @@
 // Rectangles drawn with the site editor: the outline from the clicks, and where each click goes with snapping.
 import { describe, expect, test } from "vitest";
-import { placeShapePoint, shapeOutline, type ToScreen } from "./site_drawing";
+import { longEnoughSide, placeShapePoint, shapeOutline, type ToScreen } from "./site_drawing";
 import type { SitePoint } from "./site_geometry";
 
 const toScreen: ToScreen = (point) => [point[0] * 10, -point[1] * 10];      // 10 pixels a metre, y up the screen
@@ -58,3 +58,11 @@ test("a polygon's clicks are placed as before, closing on the first point", () =
   expect(placeShapePoint("polygon", drawn, [0.3, 0.2, 0], [3, -2], [], toScreen, false)).toEqual({ point: [0, 0, 0], snap: "first_point" });
   expect(shapeOutline("polygon", drawn)).toBeNull();
 });
+
+test("a first side shorter than 1 mm is not long enough to draw a rectangle on", () => {
+  expect(longEnoughSide([0, 0, 0], [0.0005, 0, 0])).toBe(false);
+  expect(longEnoughSide([0, 0, 0], [0, 0, 0])).toBe(false);
+  expect(longEnoughSide([0, 0, 0], [0.001, 0, 0])).toBe(true);
+  expect(shapeOutline("tilted_rectangle", [[0, 0, 0], [0.001, 0, 0], [0, 5, 0]])).not.toBeNull();
+});
+

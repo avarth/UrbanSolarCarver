@@ -182,3 +182,58 @@ test("a refused hole keeps the hole drawing open with the reason", async () => {
   expect(editor()!.textContent).toContain("Drawing a hole in Square");
   expect(editor()!.textContent).toContain("hole 1 is not strictly inside the outline");
 });
+
+
+/** A promise and the function that resolves it. */
+function held() {
+  let release = () => {};
+  const promise = new Promise<void>((resolve) => { release = resolve; });
+  return { promise, release };
+}
+const TRIANGLE_SET: InputFileInfo = { name: "ground_2.ply", triangle_count: 1, shown_name: "Yard", drawn: true };
+const TRIANGLE = { points: [[40, 0, 0], [50, 0, 0], [50, 10, 0]], holes: [] };
+
+test("Edit outline on one set, then on another: the first set's late reply does not replace the second", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.groundOutlines["ground_1.ply"] = SQUARE;
+  service.groundOutlines["ground_2.ply"] = TRIANGLE;
+  const first = held();
+  service.heldReplies["ground_1.ply"] = first.promise;
+  await openWith(service, [GROUND_SET, TRIANGLE_SET]);
+  await chooseFromSetMenu("Square", "Edit outline");
+  await chooseFromSetMenu("Yard", "Edit outline");
+  expect(editor()!.textContent).toContain("Editing Yard");
+  await act(async () => { first.release(); });
+  await settle();
+  expect(editor()!.textContent).toContain("Editing Yard");
+  expect(container().querySelectorAll(".site-editor-handle")).toHaveLength(3);
+});
+
+test("a Draw reply that comes after Escape lists the set but does not open the editor again", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  const reply = held();
+  service.heldReplies.drawn = reply.promise;
+  await openWith(service);
+  await press(buttonIn(box(), "Draw"));
+  await press([...editor()!.querySelectorAll<HTMLButtonElement>(".site-editor-shapes button")].find((button) => button.textContent === "Rectangle")!);
+  await clickAt(0, 0);
+  await clickAt(20, 10);
+  await key("Escape");
+  expect(editor()).toBeNull();
+  await act(async () => { reply.release(); });
+  await settle();
+  expect(editor()).toBeNull();
+  expect([...box().querySelectorAll(".input-file-name")].map((name) => name.textContent)).toContain("Ground 1");
+});
+
+test("removing the set being edited closes the editor", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.groundOutlines["ground_1.ply"] = SQUARE;
+  await openWith(service, [GROUND_SET]);
+  await chooseFromSetMenu("Square", "Edit outline");
+  expect(editor()).not.toBeNull();
+  await press(byRole<HTMLButtonElement>(box(), "button", "Remove Square"));
+  expect([...box().querySelectorAll(".input-file-name")].map((name) => name.textContent)).not.toContain("Square");
+  expect(editor()).toBeNull();
+});
+
