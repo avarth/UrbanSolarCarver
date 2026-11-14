@@ -22,7 +22,7 @@ Pressing a row selects the file. The view frames it, in the part of the view the
 - **Surfaces**, for a test surface file: how many surfaces it has (below).
 - **Surfaces a run leaves out**, for a test surface file that has any: "3 of 43 surfaces are not flat: a run leaves them out.", and
   the same for surfaces with no area. The view draws them in the error colour on the selected file. The rule is the one the run's
-  sampling applies (`surface_sampling.skip_reasons`): a surface whose faces turn more than 5° from its mean normal and leave its
+  sampling applies (`surface_sampling.skip_reasons`, the same function the run calls for each surface): a surface whose faces turn more than 5° from its mean normal and leave its
   plane by more than 0.1 mm is not flat, so a sliver a few micrometres high on a flat face does not count. A surface too small for
   the grid is known only after a run, since it depends on each criterion's grid step; the **Skipped test surfaces** layer reports
   it ([ui](ui.md)). Inspect does not repair a surface: split it into flat faces in the modelling tool.

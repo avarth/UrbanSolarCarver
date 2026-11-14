@@ -375,9 +375,10 @@ def test_skip_reason_says_why_a_run_would_leave_a_surface_out():
     line = trimesh.Trimesh([[0, 0, 0], [1, 0, 0], [2, 0, 0]], [[0, 1, 2]], process=False)
     point = trimesh.Trimesh([[0, 0, 0], [0, 0, 0], [0, 0, 0]], [[0, 1, 2]], process=False)
     one = trimesh.Trimesh([[0, 0, 0], [1, 0, 0], [0, 1, 0]], [[0, 1, 2]], process=False)
-    meshes = [flat, bent, sliver, line, point, one]
+    hair = trimesh.Trimesh([[0, 0, 0], [1, 0, 0], [0, 1e-13, 0]], [[0, 1, 2]], process=False)     # area under 1e-12 m2, not zero
+    meshes = [flat, bent, sliver, line, point, one, hair]
     triangles = np.concatenate([mesh.triangles for mesh in meshes])
     numbers = np.concatenate([[surface] * len(mesh.faces) for surface, mesh in enumerate(meshes)])
     reasons = skip_reasons(triangles, numbers, len(meshes))
-    assert reasons == [None, "non-planar", None, "degenerate", "degenerate", None]
+    assert reasons == [None, "non-planar", None, "degenerate", "degenerate", None, "degenerate"]
     assert reasons == [_flatness(mesh.triangles)[0] for mesh in meshes]          # the batch agrees with the sampling's rule
