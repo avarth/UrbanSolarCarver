@@ -195,10 +195,12 @@ class SurfacePick(BaseModel):
 
 class SurfaceSetJson(BaseModel):
     """A stored test surface file as a surface set: the name it is shown by (None: the file name without its extension) and, for a
-    set picked on the surroundings, its picks and how many found no face when it was last built."""
+    set picked on the surroundings, its picks and how many found no face when it was last built; for a set drawn on the ground, its
+    outline (ground_surfaces.py). A set is picked, drawn or uploaded, not a mix."""
     name: str | None = None
     picks: list[SurfacePick] | None = None
     picks_lost: int = 0
+    outline: GroundOutline | None = None
 
 
 class ProjectJson(BaseModel):
@@ -305,6 +307,7 @@ class InputFileInfo(BaseModel):
     shown_name: str | None = None
     picked: bool | None = None
     picks_lost: int | None = None
+    drawn: bool | None = None               # drawn on the ground (ground_surfaces.py)
     used_by: list[str] | None = None        # the names of the criteria, then the studies, that use a surface set
 
 
@@ -364,6 +367,14 @@ class PickedSurfacesRequest(BaseModel):
     """Picks on the surroundings to make a surface set from: a new set (*replace* None), named *name* or "Picked n", or the picked set
     stored as *replace*, whose picks they become."""
     picks: list[SurfacePick] = Field(min_length=1, max_length=500)
+    name: str | None = Field(None, max_length=200)
+    replace: str | None = None
+
+
+class DrawnSurfaceRequest(BaseModel):
+    """An outline drawn on the ground to make a surface set from: a new set (*replace* None), named *name* or "Ground n", or the
+    drawn set stored as *replace*, whose outline it becomes."""
+    outline: GroundOutline
     name: str | None = Field(None, max_length=200)
     replace: str | None = None
 

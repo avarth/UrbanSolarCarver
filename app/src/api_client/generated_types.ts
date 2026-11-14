@@ -726,6 +726,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/surface-sets/drawn": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draw Surface Set
+         * @description Make a surface set from an outline drawn on the ground (design/test-surfaces-on-ground.md): a new stored test surface file,
+         *     or the drawn set *replace*. The reply is the set; a criterion or study then uses it with its own PUT.
+         */
+        post: operations["draw_surface_set"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/surface-sets/{file_name}/outline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Surface Set Outline
+         * @description The outline of a set drawn on the ground (Edit outline).
+         */
+        get: operations["surface_set_outline"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}/surface-sets/{file_name}/name": {
         parameters: {
             query?: never;
@@ -1847,6 +1888,18 @@ export interface components {
             };
         };
         /**
+         * DrawnSurfaceRequest
+         * @description An outline drawn on the ground to make a surface set from: a new set (*replace* None), named *name* or "Ground n", or the
+         *     drawn set stored as *replace*, whose outline it becomes.
+         */
+        DrawnSurfaceRequest: {
+            outline: components["schemas"]["GroundOutline"];
+            /** Name */
+            name?: string | null;
+            /** Replace */
+            replace?: string | null;
+        };
+        /**
          * EnvelopeSummary
          * @description What exporting left for the envelope part of the envelope and massing screen and for Export.
          */
@@ -1909,6 +1962,17 @@ export interface components {
             last_scoring_seconds?: number | null;
             /** Last Scoring Voxels */
             last_scoring_voxels?: number | null;
+        };
+        /**
+         * GroundOutline
+         * @description A test surface drawn on flat ground (design/test-surfaces-on-ground.md): a closed outline at one elevation, in the input
+         *     files' coordinates, and its holes; the surface faces up.
+         */
+        GroundOutline: {
+            /** Points */
+            points: number[][];
+            /** Holes */
+            holes?: number[][][];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1994,6 +2058,8 @@ export interface components {
             picked?: boolean | null;
             /** Picks Lost */
             picks_lost?: number | null;
+            /** Drawn */
+            drawn?: boolean | null;
             /** Used By */
             used_by?: string[] | null;
         };
@@ -4487,6 +4553,91 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InputFileInfo"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    draw_surface_set: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DrawnSurfaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InputFileInfo"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    surface_set_outline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                file_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroundOutline"];
                 };
             };
             /** @description A run of this project is active. */

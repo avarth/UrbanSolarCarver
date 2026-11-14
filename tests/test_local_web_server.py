@@ -49,7 +49,7 @@ def client_after_fake_run(client_with_inputs):
 # ---- Security ----
 
 # A file of a role other than test surfaces lists no surface set fields (picked_surfaces.py)
-NOT_A_SURFACE_SET = {"shown_name": None, "picked": None, "picks_lost": None, "used_by": None}
+NOT_A_SURFACE_SET = {"shown_name": None, "picked": None, "picks_lost": None, "drawn": None, "used_by": None}
 
 def test_token_and_host_are_checked(projects_folder):
     bare_client = build_client(projects_folder, authorized=False)[0]
