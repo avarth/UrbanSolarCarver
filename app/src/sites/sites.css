@@ -102,6 +102,6 @@
 
 /* Drawn context blocks in the Context box (design/context-blocks.md), as the Sites table: the name, the height in m, the menu */
 .context-blocks { margin-top: calc(var(--space-unit) * 2); }
-.context-blocks-table { --site-table-columns: minmax(0, 1fr) 5.4em 1.8em; }
+.context-blocks-table { --site-table-columns: minmax(0, 1fr) 6.2em 1.8em; }
 .context-blocks-table .site-table-head > :first-child { justify-items: start; }
 .context-blocks-undo { margin: var(--space-unit) 0 0; }

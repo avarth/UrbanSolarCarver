@@ -42,7 +42,7 @@ export function ContextBlocksList({ blocks, disabledReason, hasTerrain, focusHei
         <div className="site-table context-blocks-table">
           <div className="site-table-head" aria-hidden="true">
             <span>{messages.drawnBlocks}</span>
-            <span>{messages.blockHeight}<small>m</small></span>
+            <span>{messages.blockHeightHeading}</span>
             <span />
           </div>
           <ul ref={list} className="site-list">

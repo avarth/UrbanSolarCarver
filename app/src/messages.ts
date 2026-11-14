@@ -426,7 +426,7 @@ export const messages = {
   removeBlockShort: "Remove",
   blockActions: (blockName: string) => `Actions for ${blockName}`,
   drawnBlocks: "Drawn blocks",
-  blockHeight: "Height",
+  blockHeightHeading: "Height (m)",      // one line over the height column of the drawn blocks
   undoBlockChange: "Undo",
   // Sites from DXF and OBJ files (design/site-import.md)
   importSites: "Import",
