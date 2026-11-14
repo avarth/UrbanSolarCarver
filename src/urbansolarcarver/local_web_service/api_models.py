@@ -173,6 +173,19 @@ class HeightsJson(BaseModel):
 NEW_PROJECT_HEIGHTS = {"max": {"for_all_sites": True, "value": 50.0}, "base": {"for_all_sites": True, "value": 0.0}}
 
 
+class GroundOutline(BaseModel):
+    """A test surface drawn on flat ground (design/test-surfaces-on-ground.md): a closed outline at one elevation, in the input
+    files' coordinates, and its holes; the surface faces up."""
+    points: list[list[float]] = Field(min_length=3, max_length=2000)    # [[x, y, z], ...], not repeated at the end
+    holes: list[HoleRing] = Field(default_factory=list, max_length=50)
+
+    @model_validator(mode="after")
+    def _points_are_xyz(self):
+        if any(len(point) != 3 for point in [*self.points, *(point for hole in self.holes for point in hole)]):
+            raise ValueError("every point is [x, y, z]")
+        return self
+
+
 class SurfacePick(BaseModel):
     """A pick of a flat piece of the surroundings (design/test-surfaces-on-context.md): the point clicked, in the input files'
     coordinates, and the direction of the click's ray (the piece faces against it)."""
