@@ -157,6 +157,7 @@ export function FilesPanel({ inspection, origin, saveDisabledReason, notice }: F
         <div id={bodyId} className="files-panel-body">
           {notice}
           {inspection.problem !== null && <p className="files-panel-problem" role="alert">{inspection.problem}</p>}
+          {inspection.reply === null && inspection.problem === null && <p className="files-panel-reading" role="status">{messages.inspectReadingFiles}</p>}
           <label className="inspect-arrows">
             <input type="checkbox" checked={inspection.arrows} onChange={(event) => inspection.setArrows(event.target.checked)} />
             {messages.inspectArrows}

@@ -29,7 +29,7 @@ Pressing a row selects the file. The view frames it, in the part of the view the
 
 An earlier version also counted closed bodies. It was dropped: CAD exports (Rhino's OBJ, for one) keep a corner per face, with that face's normal, so faces share no edges and every face counted as an open body (Allatini's maximum volume: 0 of 24). The voxelizer does not depend on it either: it fills by ray crossings along three axes with a two-of-three vote, so a missing floor or a T-junction does not change the voxels.
 
-The summary is worked out when Inspect asks for it, not at upload, and it is kept until the file changes. The test surface and maximum volume files are read as the engine's loader reads them, with their normals made consistent, so the triangles you see are the ones the engine uses. The surroundings and terrain files are read as stored, without that step, as the engine reads them too: nothing reads their orientation, and fixing it takes seconds on a large mesh.
+The summary is worked out when Inspect asks for it, not at upload, and it is kept until the file changes. The first time, a large file takes seconds to read, and the panel says **Reading the files…** until the list is there. The test surface and maximum volume files are read as the engine's loader reads them, with their normals made consistent, so the triangles you see are the ones the engine uses. The surroundings and terrain files are read as stored, without that step, as the engine reads them too: nothing reads their orientation, and fixing it takes seconds on a large mesh.
 
 ## What the colours and face normals mean
 
