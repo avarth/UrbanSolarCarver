@@ -83,6 +83,57 @@ export function placePoint(drawn: readonly SitePoint[], ground: SitePoint, point
   return { point: ground, snap: null };
 }
 
+/** How an outline is drawn: point by point, a rectangle along the x and y axes from two opposite corners, or a rectangle at any
+ *  angle from a first side (two clicks) and its width (a third click). */
+export type DrawShape = "polygon" | "rectangle" | "tilted_rectangle";
+
+/** The clicks that finish a rectangle; a polygon is finished on its first point or with Enter. */
+export const CLICKS_TO_FINISH: Record<Exclude<DrawShape, "polygon">, number> = { rectangle: 2, tilted_rectangle: 3 };
+
+/** Corners closer than this (in metres) to a line give no rectangle. */
+const MIN_SIDE = 0.001;
+
+function toMillimetre(value: number): number {
+  return Math.round(value * 1000) / 1000 + 0;
+}
+
+/**
+ * The outline a rectangle shape makes from its clicks (in plan, at the first click's level, corners to the millimetre), in the order
+ * drawn; null for a polygon, for too few clicks, or for a rectangle with no area. Rectangle: the first corner, then along x to the
+ * second's x, the second corner, then back along x. Tilted rectangle: the first side from the first two clicks, then the side square to
+ * it as far as the third click lies from the first side's line, on the third click's side.
+ */
+export function shapeOutline(shape: DrawShape, clicks: readonly SitePoint[]): SitePoint[] | null {
+  if (shape === "polygon" || clicks.length < CLICKS_TO_FINISH[shape]) return null;
+  const [a, b] = clicks;
+  const z = a[2];
+  const at = (x: number, y: number): SitePoint => [toMillimetre(x), toMillimetre(y), z];
+  if (shape === "rectangle") {
+    if (Math.abs(b[0] - a[0]) < MIN_SIDE || Math.abs(b[1] - a[1]) < MIN_SIDE) return null;
+    return [at(a[0], a[1]), at(b[0], a[1]), at(b[0], b[1]), at(a[0], b[1])];
+  }
+  const c = clicks[2];
+  const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  if (length < MIN_SIDE) return null;
+  const normal = [-(b[1] - a[1]) / length, (b[0] - a[0]) / length];
+  const width = (c[0] - a[0]) * normal[0] + (c[1] - a[1]) * normal[1];
+  if (Math.abs(width) < MIN_SIDE) return null;
+  const dx = normal[0] * width, dy = normal[1] * width;
+  return [at(a[0], a[1]), at(b[0], b[1]), at(b[0] + dx, b[1] + dy), at(a[0] + dx, a[1] + dy)];
+}
+
+/**
+ * Where a click at *pointer* puts the next point of a *shape* with *clicks* so far. A polygon's as placePoint says; a rectangle's
+ * corners and a tilted rectangle's width point snap to the other outlines only; a tilted rectangle's second point also takes Shift's
+ * angle steps from the x axis.
+ */
+export function placeShapePoint(shape: DrawShape, clicks: readonly SitePoint[], ground: SitePoint, pointer: ScreenPoint,
+                                otherOutlines: readonly SitePoint[][], toScreen: ToScreen, shift: boolean): PlacedPoint {
+  if (shape === "polygon") return placePoint(clicks, ground, pointer, otherOutlines, toScreen, shift);
+  if (shape === "tilted_rectangle" && clicks.length === 1) return placePoint(clicks, ground, pointer, otherOutlines, toScreen, shift);
+  return placePoint([], ground, pointer, otherOutlines, toScreen, false);
+}
+
 /** The drawing level, in the files' coordinates: the lowest vertex of the sites; for a first site the lowest level of the existing
  *  surroundings and terrain when there are any, else 0. */
 export function drawingLevel(outlines: readonly SitePoint[][], surroundingsLowestZ: number | null): number {

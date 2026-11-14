@@ -521,6 +521,14 @@ export const messages = {
   drawingHole: (siteName: string) => `Drawing a hole in ${siteName}`,
   drawHole: "Draw hole",
   drawingSteps: "Click to add points · click the first point or press Enter to close · Backspace removes the last · Esc cancels",
+  rectangleSteps: "Click one corner, then the opposite corner · Backspace removes the corner · Esc cancels",
+  tiltedRectangleSteps: "Click two points for the first side, then a third for the width · Shift holds the side to 15° steps · "
+    + "Backspace removes the last point · Esc cancels",
+  drawShapes: "Shape",
+  shapePolygon: "Polygon",
+  shapeRectangle: "Rectangle",
+  shapeTiltedRectangle: "Tilted rectangle",
+  rectangleSize: (length: number, width: number) => `${formattedNumber(length)} × ${formattedNumber(width)} m`,
   editingSite: (siteName: string) => `Editing ${siteName}`,
   editingSteps: "Drag a vertex to move it · click it to type its elevation · double click an edge to add a vertex · Delete removes the "
     + "selected vertex",

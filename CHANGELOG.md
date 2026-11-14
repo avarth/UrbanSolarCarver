@@ -9,6 +9,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Site
 
+- **Rectangles in the site editor.** While a site, a hole or a context block is drawn, the bar offers **Polygon**, **Rectangle**
+  (two opposite corners, sides along x and y) and **Tilted rectangle** (a first side from two clicks, then a click for the width).
+  The pointer previews the rectangle with its size; clicks snap as in a polygon, and Shift holds the tilted side to 15° steps.
 - **The same words in every box**: Add files is now **Import**, as in the Sites box; the Context box has **Draw** and **Import**, in the Sites box's order; the
   Test surfaces box has **Pick** (it said From context) and **Import**.
 - **Draw context blocks.** Draw in the Context box draws an outline in the 3D view with the site editor and extrudes it
