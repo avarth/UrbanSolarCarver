@@ -122,6 +122,8 @@ export class FakeService {
   readonly turnRequests: { fileName: string; body: unknown }[] = [];
   /** The file and the body of every POST inspect/test_surfaces/{file}/restore. */
   readonly restoreRequests: { fileName: string; body: unknown }[] = [];
+  /** While set, GET inspect gets its reply only once this promise resolves. */
+  inspectionAnswersWhen: Promise<void> | null = null;
   /** While set, a POST inspect/test_surfaces/{file}/turn gets its reply only once this promise resolves. */
   turnsAnswerWhen: Promise<void> | null = null;
   /** While set, a POST inspect/test_surfaces/{file}/restore gets its reply only once this promise resolves. */
@@ -324,7 +326,10 @@ export class FakeService {
                     weather_latitude: this.uploadedWeather.latitude });
     }
     if (path.startsWith("/cold-period")) return json<ColdPeriodReply>(this.coldPeriodReply);
-    if (method === "GET" && path === "/inspect") return json<InspectReply>({ files: this.inspection });
+    if (method === "GET" && path === "/inspect") {
+      await holdReply(this.inspectionAnswersWhen);
+      return json<InspectReply>({ files: this.inspection });
+    }
     const inspected = /^\/inspect\/test_surfaces\/([^/]+)\/(geometry|turn|restore)$/.exec(path);
     if (inspected !== null) return this.answerInspect(method, decodeURIComponent(inspected[1]), inspected[2], init);
     if (path.startsWith("/inputs/")) return new Response(this.inputFileContents[path] ?? TRIANGLE_OBJ);

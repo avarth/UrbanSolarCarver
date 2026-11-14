@@ -179,6 +179,7 @@ export const messages = {
   inspectBounds: (xMin: string, xMax: string, yMin: string, yMax: string, zMin: string, zMax: string) =>
     `Bounds: x ${xMin} to ${xMax}, y ${yMin} to ${yMax}, z ${zMin} to ${withUnit(zMax, "m")}`,
   georeferencedCoordinates: (kilometres: number) => `Georeferenced coordinates, about ${withUnit(groupedDigits(Math.round(kilometres)), "km")} from 0.`,
+  inspectReadingFiles: "Reading the files…",       // until the first reply: a large context file takes seconds
   inspectSurfaces: (count: number) => `Surfaces: ${groupedDigits(count)}`,
   // The surfaces a run leaves out before sampling, in the words of skippedSurfaceReasons
   inspectNotFlat: (count: number, total: number) =>

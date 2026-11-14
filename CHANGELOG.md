@@ -31,6 +31,8 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - **Surfaces a run leaves out, before the run.** A test surface file's summary in Inspect says how many of its surfaces are not
   flat or have no area, as in "3 of 43 surfaces are not flat: a run leaves them out.", and draws them in the error colour. It uses
   the run's own rule; a surface too small for the grid is still reported after the run, by the Skipped test surfaces layer.
+- **Reading the files…** shows in the Geometries panel while Inspect reads the files the first time, so a large context file no
+  longer leaves the panel empty for seconds.
 
 ### Settings
 

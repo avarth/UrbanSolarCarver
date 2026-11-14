@@ -461,3 +461,20 @@ test("a test surface file's summary says how many surfaces a run leaves out as n
   await selectFile("facades.obj");
   expect(summaryLines()).toEqual(["Bounds: x 0 to 7, y 0 to 1, z 0 to 2 m", "Surfaces: 2"]);
 });
+
+
+test("while Inspect reads the files the first time, the Geometries panel says so; the line goes once the files are listed", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.inspection = FILES;
+  service.inspectGeometries = { "facades.obj": facadesGeometry(), "box.obj": boxGeometry() };
+  let release = () => {};
+  service.inspectionAnswersWhen = new Promise((resolve) => { release = resolve; });
+  await openWorkspace(service, project(NOTHING_RUN));
+  await switchMode("inspect");
+  await settle();
+  expect(filesPanel().querySelector(".files-panel-reading")?.textContent).toBe("Reading the files…");
+  release();
+  await settle();
+  expect(filesPanel().querySelector(".files-panel-reading")).toBeNull();
+  expect(fileRow("facades.obj")).not.toBeNull();
+});
