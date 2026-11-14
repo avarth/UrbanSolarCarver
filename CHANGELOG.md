@@ -9,6 +9,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Site
 
+- **Draw test surfaces on the ground.** **Draw** in the Test surfaces box draws a flat surface on the ground (a square, a courtyard,
+  a street) with the site editor, saved at once as a set; **Edit outline** edits it, with holes, and typing an elevation moves the
+  whole surface. A set is still used by nothing until a criterion or study switches it on.
 - **Rectangles in the site editor.** While a site, a hole or a context block is drawn, the bar offers **Polygon**, **Rectangle**
   (two opposite corners, sides along x and y) and **Tilted rectangle** (a first side from two clicks, then a click for the width).
   The pointer previews the rectangle with its size; clicks snap as in a polygon, and Shift holds the tilted side to 15° steps.
