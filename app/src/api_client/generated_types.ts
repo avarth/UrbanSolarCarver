@@ -2120,6 +2120,8 @@ export interface components {
              * @default false
              */
             original_kept: boolean;
+            /** Made In App */
+            made_in_app?: ("picked" | "drawn") | null;
             /** Problem */
             problem?: string | null;
             /**

@@ -38,6 +38,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Fixes
 
+- **Inspect does not flip picked or drawn sets.** A set picked on the context is built again from its picks when the context
+  changes, so a flip saved in Inspect was lost without a word. Its Flip buttons are now off, and the row says to pick the face again
+  from the other side; a set drawn on the ground says it faces up.
 - **Picked pieces that touch stay apart.** Two pieces of a picked set that shared an edge (two walls at a corner, a wall and
   its canopy) were read by the engine as one surface: the sampling skipped it as non-planar, so the criterion protected neither, and
   on single-sheet context one piece could turn to agree with the other. Each piece now keeps corners of its own with its normal.

@@ -44,7 +44,8 @@ const boxGeometry = () => packedInspectGeometry([0, 0, 0], [0, 0, 0, 1, 0, 0, 0,
 async function openInspect(beforeInspect: () => Promise<void> = async () => {}, files: InspectedFile[] = FILES, stages = NOTHING_RUN): Promise<FakeService> {
   const service = new FakeService(stages, null);
   service.inspection = files;
-  service.inspectGeometries = { "facades.obj": facadesGeometry(), "box.obj": boxGeometry(), "roofs.obj": boxGeometry() };
+  service.inspectGeometries = { "facades.obj": facadesGeometry(), "box.obj": boxGeometry(), "roofs.obj": boxGeometry(), "picked_1.ply": boxGeometry(),
+                                "ground_1.ply": boxGeometry() };
   const opened = project(stages);
   opened.inputs = { ...opened.inputs, test_surfaces: [{ name: "facades.obj", triangle_count: 3 }, { name: "box.obj", triangle_count: 12 }] };
   await openWorkspace(service, opened);
@@ -335,6 +336,17 @@ test("a file closed as a whole cannot be flipped: Flip mode and Flip all are dis
   expect(reasonOf(flipMode)).toBe("This file is closed as a whole, so its surfaces cannot be flipped.");
   expect(button("Flip all").disabled).toBe(true);
   expect(summaryLines()).toContain("Surfaces: 1");
+});
+
+test("a set picked on the context or drawn on the ground cannot be flipped: its reason says how its faces are set", async () => {
+  await openInspect(undefined, [...FILES, summary("test_surfaces", "picked_1.ply", { surface_count: 1, made_in_app: "picked" }),
+                                summary("test_surfaces", "ground_1.ply", { surface_count: 1, made_in_app: "drawn" })]);
+  await selectFile("picked_1.ply");
+  expect(button("Flip mode").disabled).toBe(true);
+  expect(button("Flip all").disabled).toBe(true);
+  expect(reasonOf(button("Flip mode"))).toBe("Picked on the context: each face looks toward where it was clicked from. To turn one, pick it again from the other side.");
+  await selectFile("ground_1.ply");
+  expect(reasonOf(button("Flip mode"))).toBe("Drawn on the ground: it faces up.");
 });
 
 test("during a run of the project the surfaces can be turned but Save is disabled with the reason, until the run ends", async () => {

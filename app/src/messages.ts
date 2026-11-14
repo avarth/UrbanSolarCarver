@@ -187,6 +187,9 @@ export const messages = {
   discardTurns: "Discard",
   restoreOriginal: "Restore original",
   closedAsWhole: "This file is closed as a whole, so its surfaces cannot be flipped.",
+  // A set made in the app is built again from its picks or outline, so a flip of its file would not last
+  pickedNotFlippable: "Picked on the context: each face looks toward where it was clicked from. To turn one, pick it again from the other side.",
+  drawnNotFlippable: "Drawn on the ground: it faces up.",
   stagedTurnsDropped: "The file changed, so its turns not saved were dropped.",
   saveTurnsBeforeLeaving: "Save the turned surfaces before leaving Inspect?",
   stayInInspect: "Stay",

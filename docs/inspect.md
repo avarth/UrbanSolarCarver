@@ -39,6 +39,8 @@ A **surface** is a set of triangles joined by shared edges, as the engine's load
 
 For the same reason a test surface file that is **closed as a whole** cannot be flipped. The loader turns every closed body outward, so its surfaces would come back the way they were. Such a file shows **This file is closed as a whole, so its surfaces cannot be flipped.** and its Flip mode and Flip all buttons are off.
 
+A set made in the app is not flipped either. A set picked on the context is built again from its picks whenever the context files change, and each face looks toward where it was clicked from, so a flip saved in Inspect would be undone at the next change. Its row says **Picked on the context: each face looks toward where it was clicked from. To turn one, pick it again from the other side.** A set drawn on the ground is built again from its outline and always faces up; its row says **Drawn on the ground: it faces up.** Inspect still draws both, so a picked face that looks the wrong way shows orange.
+
 ## Flipping
 
 Flipping applies to test surface files only. Select a test surface file, then:
@@ -98,7 +100,7 @@ The service computes all of this in `local_web_service/inspection.py`, with trim
 |---|---|
 | `GET /projects/{name}/inspect` | The summary of every mesh file of the project; allowed while a run is going |
 | `GET /projects/{name}/inspect/test_surfaces/{file}/geometry` | The triangles of a test surface file with a surface number per triangle, as one binary (layout in `inspection.inspection_geometry`) |
-| `POST /projects/{name}/inspect/test_surfaces/{file}/turn` | Turn the surfaces named in `surfaces` of the file of `version` and save the file; 409 while a run of the project is active, or with `stored_file_changed: true` when the file stored now is not that version; 422 for a file closed as a whole, one that cannot be read, a surface that does not exist, or a file changed in the folder that cannot be read; 500 when the written file does not read as turned |
+| `POST /projects/{name}/inspect/test_surfaces/{file}/turn` | Turn the surfaces named in `surfaces` of the file of `version` and save the file; 409 while a run of the project is active, or with `stored_file_changed: true` when the file stored now is not that version; 422 for a file closed as a whole, a set picked on the context or drawn on the ground (`made_in_app` in the summary), one that cannot be read, a surface that does not exist, or a file changed in the folder that cannot be read; 500 when the written file does not read as turned |
 | `POST /projects/{name}/inspect/test_surfaces/{file}/restore` | Put the kept original back in place of the file of `version`; 404 when none is kept, 409 while a run is active or (`stored_file_changed`) when the file stored now is another |
 
 Each file of the summary has a `version`, the sha256 of its bytes. A turn or a restore names it, and both first build the files changed in the project folder into the project. The service keeps the summary of each file it read, and for a test surface file its triangles and their surfaces, up to 32 files and 5 million kept triangles, the least recently used leaving first.
