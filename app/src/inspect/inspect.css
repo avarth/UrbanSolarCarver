@@ -76,6 +76,7 @@
 .inspect-file-turned { color: var(--colour-out-of-date); font-size: var(--text-secondary); }
 /* The reason a file cannot be read is read whole: its last words say what is wrong. */
 .inspect-file-problem { color: var(--colour-error); font-size: var(--text-secondary); overflow-wrap: anywhere; }
+.inspect-left-out { color: var(--colour-error); }
 
 .inspect-summary,
 .inspect-file-actions,

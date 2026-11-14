@@ -582,7 +582,7 @@ export interface InspectLayerFile {
   fileName: string;
   corners: Float32Array;               // three corners (x, y, z) per triangle
   surfaceOfTriangle: Uint32Array;      // the surface number of each triangle
-  surfaces: { centre: Point3; normal: Point3; area: number }[];
+  surfaces: { centre: Point3; normal: Point3; area: number; left_out?: string | null }[];
   turned: ReadonlySet<number>;         // the surfaces drawn turned: the winding of their triangles swapped
   selected: boolean;                   // the file the Geometries panel has selected; the others are drawn faint
 }
@@ -607,6 +607,15 @@ function inspectIndex(file: InspectLayerFile): Uint32Array {
     index[at + 2] = turned ? at + 1 : at + 2;
   }
   return index;
+}
+
+/** The triangles of the surfaces a run leaves out (left_out), whichever way they are wound; null when there are none. */
+function leftOutIndex(file: InspectLayerFile): Uint32Array | null {
+  const triangles: number[] = [];
+  file.surfaceOfTriangle.forEach((surface, triangle) => {
+    if (file.surfaces[surface]?.left_out) triangles.push(triangle * 3, triangle * 3 + 1, triangle * 3 + 2);
+  });
+  return triangles.length > 0 ? Uint32Array.from(triangles) : null;
 }
 
 /** The segments of one arrow from *centre* along *normal* (negated when *turned*), as six numbers per segment appended to *segments*. */
@@ -635,7 +644,9 @@ function addArrow(segments: number[], centre: Point3, normal: Point3, area: numb
  * surface colour and the back faces in the orange of --colour-surface-back, so which way each surface faces shows at a glance. A
  * surface in *turned* is drawn turned, its triangles wound the other way in the index. A file that is not selected is drawn at 35 %
  * strength. With *arrows*, one arrow per surface runs from its centre along its normal (against it when turned), 0.3 sqrt(area) m
- * long, from 1 m to 10 m; the arrows take no part in picking. Its fileAndSurfaceOf(intersection) names the file and the
+ * long, from 1 m to 10 m; the arrows take no part in picking. On the selected file the surfaces a run leaves out before sampling
+ * (not flat, no area) are drawn over both sides in the colour the app gives a problem, a mesh named left-out that takes no clicks,
+ * so a click still turns the surface under it. Its fileAndSurfaceOf(intersection) names the file and the
  * surface that a hit on one of the meshes landed on, or null for anything else. Like the test surfaces, the meshes are pulled
  * forward in depth, since they lie on the faces of a context model or of the maximum volume.
  */
@@ -661,6 +672,20 @@ export function inspectSurfacesLayer(files: readonly InspectLayerFile[], options
     for (const material of [front, back]) {
       const mesh = new THREE.Mesh(geometry, material);
       filesOfMeshes.set(mesh, file);
+      group.add(mesh);
+    }
+    const leftOut = file.selected ? leftOutIndex(file) : null;
+    if (leftOut !== null) {
+      const leftOutGeometry = new THREE.BufferGeometry();
+      leftOutGeometry.setAttribute("position", positions);
+      leftOutGeometry.setIndex(new THREE.BufferAttribute(leftOut, 1));
+      leftOutGeometry.boundingSphere = geometry.boundingSphere;
+      const material = solidMaterial(colourToken("error"), 1, THREE.DoubleSide, true);
+      material.polygonOffsetFactor = -3;            // further forward than the orientation meshes (-2, -8) it covers
+      material.polygonOffsetUnits = -12;
+      const mesh = new THREE.Mesh(leftOutGeometry, material);
+      mesh.name = "left-out";
+      mesh.raycast = () => {};
       group.add(mesh);
     }
     surfaceCount += file.surfaces.length;

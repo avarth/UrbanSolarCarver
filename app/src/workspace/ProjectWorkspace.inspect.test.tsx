@@ -452,3 +452,12 @@ test("a file changed in the project folder, found by the stage status when the w
   expect(turnedLine("facades.obj")).toBeNull();
   expect(plain(filesPanel().querySelector(".files-panel-problem"))).toBe("The file changed, so its turns not saved were dropped.");
 });
+
+test("a test surface file's summary says how many surfaces a run leaves out as not flat or without area, and says nothing when none", async () => {
+  await openInspect(undefined, [...FILES, summary("test_surfaces", "roofs.obj", { surface_count: 43, not_flat_count: 3, no_area_count: 1, flippable: true })]);
+  await selectFile("roofs.obj");
+  expect(summaryLines()).toContain("3 of 43 surfaces are not flat: a run leaves them out.");
+  expect(summaryLines()).toContain("1 of 43 surfaces has no area: a run leaves it out.");
+  await selectFile("facades.obj");
+  expect(summaryLines()).toEqual(["Bounds: x 0 to 7, y 0 to 1, z 0 to 2 m", "Surfaces: 2"]);
+});

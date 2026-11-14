@@ -26,6 +26,12 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - **The Sites table and the block rows scroll past five rows**, under a fixed column heading, and a row that starts being edited
   scrolls into view.
 
+### Inspect
+
+- **Surfaces a run leaves out, before the run.** A test surface file's summary in Inspect says how many of its surfaces are not
+  flat or have no area, as in "3 of 43 surfaces are not flat: a run leaves them out.", and draws them in the error colour. It uses
+  the run's own rule; a surface too small for the grid is still reported after the run, by the Skipped test surfaces layer.
+
 ### Settings
 
 - **A rough time under Voxel size**: after a run, how long its scoring took on this computer, and at another voxel size an

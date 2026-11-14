@@ -8,6 +8,8 @@ export interface InspectSurface {
   centre: Point3;             // relative to the header's frame
   normal: Point3;
   area: number;
+  /** Why a run leaves the surface out before sampling it ("non-planar", "degenerate"); absent or null when it does not. */
+  left_out?: string | null;
 }
 
 export interface InspectGeometryHeader {
@@ -54,7 +56,7 @@ export function localCorners(geometry: InspectGeometry, origin: Point3): Float32
 /** Each surface with its centre relative to the scene's local origin (the normal and area as they are). */
 export function localSurfaces(geometry: InspectGeometry, origin: Point3): InspectSurface[] {
   const shift = toLocal(geometry.header.frame, origin);
-  return geometry.header.surfaces.map(({ centre, normal, area }) => ({
-    centre: [centre[0] + shift[0], centre[1] + shift[1], centre[2] + shift[2]], normal, area,
+  return geometry.header.surfaces.map(({ centre, normal, area, left_out }) => ({
+    centre: [centre[0] + shift[0], centre[1] + shift[1], centre[2] + shift[2]], normal, area, left_out,
   }));
 }

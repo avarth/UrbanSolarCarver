@@ -55,6 +55,12 @@ function FileSummary({ file }: { file: InspectedFile }) {
       <p>{messages.inspectBounds(number(min[0]), number(max[0]), number(min[1]), number(max[1]), number(min[2]), number(max[2]))}</p>
       {distance > FAR_FROM_ZERO_METRES && <p>{messages.georeferencedCoordinates(distance / 1000)}</p>}
       {file.surface_count != null && <p>{messages.inspectSurfaces(file.surface_count)}</p>}
+      {file.surface_count != null && (file.not_flat_count ?? 0) > 0 && (
+        <p className="inspect-left-out">{messages.inspectNotFlat(file.not_flat_count!, file.surface_count)}</p>
+      )}
+      {file.surface_count != null && (file.no_area_count ?? 0) > 0 && (
+        <p className="inspect-left-out">{messages.inspectNoArea(file.no_area_count!, file.surface_count)}</p>
+      )}
     </div>
   );
 }

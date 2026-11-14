@@ -283,7 +283,7 @@ A refused run points at the criterion that caused it, in the pinned bar and in t
 
 A run that is cancelled or fails keeps what it finished: the next run starts with the first stage that did not finish, so the criteria before it are not traced again.
 
-A test surface the run leaves out (not flat, too small for the grid, or without area) protects nothing. The layer **Skipped test surfaces** draws them in the error colour, and the Layers menu says how many and why, as in "8 of 43 surfaces not protected: 8 not flat". The layer is there only when a run left a surface out, and shows the criterion selected. It reports what the run did: the app does not check the files before a run, or repair them.
+A test surface the run leaves out (not flat, too small for the grid, or without area) protects nothing. The layer **Skipped test surfaces** draws them in the error colour, and the Layers menu says how many and why, as in "8 of 43 surfaces not protected: 8 not flat". The layer is there only when a run left a surface out, and shows the criterion selected. It reports what the run did. Before a run, Inspect already shows the surfaces that are not flat or have no area ([Inspect](inspect.md)); one too small for the grid shows only here. The app does not repair them.
 
 A result file that is gone from the project folder makes its stage missing, so the next run writes it again. A voxel, sky dome, envelope or massing result that is there and cannot be read shows greyed in the Layers menu, with a note that its file may be damaged.
 

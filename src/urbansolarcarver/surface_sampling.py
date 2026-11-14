@@ -547,6 +547,57 @@ class AnalysisMesh:
 _OFF_PLANE_TOLERANCE_M = 1e-4
 
 
+def _flatness_of_surfaces(triangles: np.ndarray, surface_of_face: np.ndarray, surface_count: int,
+                          coplanarity_tol_deg: float = 5.0) -> tuple[list[str | None], np.ndarray]:
+    """Per surface, why the sampling leaves it out, "degenerate" or "non-planar", or None, and its unit area-weighted mean normal
+    ((S, 3), zero for a degenerate one). *triangles* is (T, 3, 3); *surface_of_face* gives each triangle's surface (a connected
+    component), numbered from 0, every surface having at least one triangle.
+
+    Only faces with real area count (more than 1e-12 of the surface's largest): a zero-area sliver has no normal and must not
+    disqualify the panel. A surface whose area-weighted normal sum is under 1e-12 long is degenerate. Faces more than
+    coplanarity_tol_deg from the mean normal make it non-planar only when one of their corners leaves the plane through the
+    area-weighted centre by more than _OFF_PLANE_TOLERANCE_M, so a sliver a few micrometres high on a flat face does not count.
+    Worked out for all surfaces at once: a CAD export has tens of thousands."""
+    triangles = np.asarray(triangles, dtype=float)
+    surface_of_face = np.asarray(surface_of_face, dtype=np.int64)
+    order = np.argsort(surface_of_face, kind="stable")
+    triangles, surface = triangles[order], surface_of_face[order]
+    starts = np.searchsorted(surface, np.arange(surface_count))
+    cross = np.cross(triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0])
+    doubled = np.linalg.norm(cross, axis=1)
+    largest = np.maximum.reduceat(doubled, starts)
+    real = doubled > 1e-12 * np.maximum(largest, 1e-30)[surface]
+    area = np.where(real, doubled / 2.0, 0.0)
+    normals = np.where(real[:, None], cross / np.where(real, doubled, 1.0)[:, None], 0.0)
+    summed = np.add.reduceat(normals * area[:, None], starts)
+    length = np.linalg.norm(summed, axis=1)
+    degenerate = length < 1e-12
+    mean = np.where(degenerate[:, None], 0.0, summed / np.where(degenerate, 1.0, length)[:, None])
+    cosines = np.clip(np.einsum("ij,ij->i", normals, mean[surface]), -1.0, 1.0)
+    off_normal = real & (np.degrees(np.arccos(cosines)) > coplanarity_tol_deg)
+    total_area = np.add.reduceat(area, starts)
+    centre = np.add.reduceat(triangles.mean(axis=1) * area[:, None], starts) / np.where(total_area > 0, total_area, 1.0)[:, None]
+    off_plane = np.abs(np.einsum("ijk,ik->ij", triangles - centre[surface][:, None, :], mean[surface])).max(axis=1)
+    furthest = np.maximum.reduceat(np.where(off_normal, off_plane, 0.0), starts)
+    non_planar = ~degenerate & (furthest > _OFF_PLANE_TOLERANCE_M)
+    reasons = ["degenerate" if d else "non-planar" if n else None for d, n in zip(degenerate.tolist(), non_planar.tolist())]
+    return reasons, mean
+
+
+def _flatness(triangles: np.ndarray, coplanarity_tol_deg: float = 5.0) -> tuple[str | None, np.ndarray | None]:
+    """_flatness_of_surfaces for one surface: its reason and its unit mean normal (None when degenerate)."""
+    reasons, mean = _flatness_of_surfaces(triangles, np.zeros(len(triangles), dtype=np.int64), 1, coplanarity_tol_deg)
+    return reasons[0], (None if reasons[0] == "degenerate" else mean[0])
+
+
+def skip_reasons(triangles: np.ndarray, surface_of_face: np.ndarray, surface_count: int,
+                 coplanarity_tol_deg: float = 5.0) -> list[str | None]:
+    """Per surface of a test surface file, why a run would leave it out before sampling it: "degenerate" (no area), "non-planar",
+    or None; the sampling's own rule (_flatness_of_surfaces). "no samples" depends on the grid step and is known only when
+    sampling. Inspect calls this."""
+    return _flatness_of_surfaces(triangles, surface_of_face, surface_count, coplanarity_tol_deg)[0]
+
+
 def discretize_surface_with_normals(
     mesh: trimesh.Trimesh,
     sample_step: float = 1.0,
@@ -617,26 +668,11 @@ def discretize_surface_with_normals(
     if skipped_surfaces is not None:
         skipped_surfaces.surface_count = len(submeshes)
     for component_index, submesh in enumerate(submeshes):
-        # 1) Planarity check on the faces with real area: a zero-area sliver
-        #    has a (0, 0, 0) normal and must not disqualify the panel. Nor does
-        #    a sliver whose normal is off but that stays on the panel's plane.
-        face_areas = submesh.area_faces
-        real = face_areas > 1e-12 * max(float(face_areas.max()), 1e-30)
-        face_normals = submesh.face_normals[real]
-        mean_normal = (face_normals * face_areas[real][:, None]).sum(axis=0)
-        norm_len = np.linalg.norm(mean_normal)
-        if norm_len < 1e-12:
-            skip("degenerate", component_index, submesh)
+        # 1) Planarity check (_flatness)
+        reason, mean_normal = _flatness(np.asarray(submesh.triangles), coplanarity_tol_deg)
+        if reason is not None:
+            skip(reason, component_index, submesh)
             continue
-        mean_normal /= norm_len
-        angles = np.degrees(np.arccos(np.clip(face_normals @ mean_normal, -1.0, 1.0)))
-        off_normal = angles > coplanarity_tol_deg
-        if off_normal.any():
-            plane_point = np.average(submesh.triangles_center[real], axis=0, weights=face_areas[real])
-            off_plane = np.abs((submesh.triangles[real][off_normal] - plane_point) @ mean_normal)
-            if off_plane.max() > _OFF_PLANE_TOLERANCE_M:
-                skip("non-planar", component_index, submesh)
-                continue
 
         # 2) Sample this planar sheet
         pts3d, nrm3d, qv, qf, wts = sample_planar_surface(

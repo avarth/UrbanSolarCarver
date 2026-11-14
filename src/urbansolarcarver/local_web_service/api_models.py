@@ -261,6 +261,10 @@ class InspectedFile(BaseModel):
     # A set made in the app, picked on the context or drawn on the ground: built again from its picks or outline, so a flip of its
     # file would not last and it is not flippable. None for a file that was imported, and for other roles.
     made_in_app: Literal["picked", "drawn"] | None = None
+    # A test surface file's surfaces a run leaves out before sampling (surface_sampling.skip_reason): not flat, and without area;
+    # None for other roles. "Too small for the grid" depends on a criterion's grid step and is known only after a run.
+    not_flat_count: int | None = None
+    no_area_count: int | None = None
     problem: str | None = None          # why the file cannot be read (the counts are then zero); None for a file that is read
     # The sha256 of the stored file's bytes as Inspect read it: a turn or a restore names it, and is refused when the file stored
     # now is another. Empty when the file's bytes could not be read.

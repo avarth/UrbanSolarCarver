@@ -363,3 +363,22 @@ def test_the_skipped_surfaces_are_told_with_their_reason_and_triangles():
         discretize_surface_with_normals(trimesh.util.concatenate([flat, bent]), 1.0, skipped_surfaces=skipped)
     assert skipped.surface_count == 2 and [surface["reason"] for surface in skipped.surfaces] == ["non-planar"]
     assert skipped.surfaces[0]["triangles"].shape == (2, 3, 3) and skipped.surfaces[0]["triangles"][:, :, 0].min() == 10
+
+def test_skip_reason_says_why_a_run_would_leave_a_surface_out():
+    """The sampler's flatness rule on its own, as Inspect calls it: flat (with a sliver a few micrometres off its plane), bent, no area."""
+    import trimesh
+    from urbansolarcarver.surface_sampling import _flatness, skip_reasons
+    square = [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]]
+    flat = trimesh.Trimesh(square, [[0, 1, 2], [0, 2, 3]], process=False)
+    bent = trimesh.Trimesh([*square[:3], [0, 1, 0.5]], [[0, 1, 2], [0, 2, 3]], process=False)
+    sliver = trimesh.Trimesh([*square, [0.5, 0.5, 2e-6]], [[0, 1, 2], [0, 2, 3], [0, 4, 2]], process=False)
+    line = trimesh.Trimesh([[0, 0, 0], [1, 0, 0], [2, 0, 0]], [[0, 1, 2]], process=False)
+    point = trimesh.Trimesh([[0, 0, 0], [0, 0, 0], [0, 0, 0]], [[0, 1, 2]], process=False)
+    one = trimesh.Trimesh([[0, 0, 0], [1, 0, 0], [0, 1, 0]], [[0, 1, 2]], process=False)
+    hair = trimesh.Trimesh([[0, 0, 0], [1, 0, 0], [0, 1e-13, 0]], [[0, 1, 2]], process=False)     # area under 1e-12 m2, not zero
+    meshes = [flat, bent, sliver, line, point, one, hair]
+    triangles = np.concatenate([mesh.triangles for mesh in meshes])
+    numbers = np.concatenate([[surface] * len(mesh.faces) for surface, mesh in enumerate(meshes)])
+    reasons = skip_reasons(triangles, numbers, len(meshes))
+    assert reasons == [None, "non-planar", None, "degenerate", "degenerate", None, "degenerate"]
+    assert reasons == [_flatness(mesh.triangles)[0] for mesh in meshes]          # the batch agrees with the sampling's rule
