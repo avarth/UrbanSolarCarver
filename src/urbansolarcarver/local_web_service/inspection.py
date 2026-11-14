@@ -36,7 +36,7 @@ import trimesh
 from ..errors import InputError
 from ..io import float32_resolution, load_mesh, save_mesh
 from . import stored_files, test_surfaces
-from .api_models import InspectedFile, InspectReply
+from .api_models import InspectedFile, InspectReply, ProjectJson
 from .project_names import ProjectError
 from .projects import MESH_ROLES, OPTIONAL_MESH_ROLES, ProjectStore
 
@@ -128,7 +128,8 @@ def project_inspection(store: ProjectStore, name: str) -> InspectReply:
     read is listed with its ``problem`` and zero counts, the others as usual. ProjectError 404 for an unknown project."""
     project_folder = store.open(name)
     with store.project_lock(name):
-        file_names = {role: sorted(store.read_project_json(name).input_files.get(role, {})) for role in MESH_ROLES}
+        project_json = store.read_project_json(name)
+        file_names = {role: sorted(project_json.input_files.get(role, {})) for role in MESH_ROLES}
     files = []
     for role in MESH_ROLES:
         for file_name in file_names[role]:
@@ -141,7 +142,7 @@ def project_inspection(store: ProjectStore, name: str) -> InspectReply:
                 files.append(_unreadable_summary(role, path, error))
                 continue
             if role == test_surfaces.ROLE:
-                summary = _with_original_kept(summary, project_folder)
+                summary = _as_in_project(summary, project_folder, project_json)
             files.append(summary)
     return InspectReply(files=files)
 
@@ -168,6 +169,9 @@ def save_turned_surfaces(store: ProjectStore, name: str, file_name: str, surface
         project_folder = store.open(name)
         path = store.input_file_path(name, test_surfaces.ROLE, file_name)
         inspected = _inspect_version_or_refuse(store, name, path, version, CHANGED_SINCE_TURNED)
+        made_in_app = _made_in_app(store.read_project_json(name), file_name)
+        if made_in_app is not None:
+            raise ProjectError(NOT_FLIPPED_MADE_IN_APP[made_in_app], status_code=422)
         if not inspected.summary.flippable:
             raise ProjectError("This file is closed as a whole, and the loader always turns its bodies outward, so its surfaces cannot be flipped.",
                                status_code=422)
@@ -293,13 +297,34 @@ def _inspect_version_or_refuse(store: ProjectStore, name: str, path: Path, versi
     return inspected
 
 
-def _with_original_kept(summary: InspectedFile, project_folder: Path) -> InspectedFile:
-    return summary.model_copy(update={"original_kept": test_surfaces.original_path(project_folder, summary.file_name).is_file()})
+NOT_FLIPPED_MADE_IN_APP = {
+    "picked": "This set was picked on the context and is built again from its picks, so a flip of its file would not last: pick it "
+              "again from the other side.",
+    "drawn": "This set was drawn on the ground and is built again from its outline, so a flip of its file would not last.",
+}
+
+
+def _made_in_app(project_json: ProjectJson, file_name: str) -> str | None:
+    """"picked" or "drawn" for a set made in the app (its file is built again from its picks or outline), else None."""
+    surface_set = project_json.surface_sets.get(file_name)
+    if surface_set is not None and surface_set.picks is not None:
+        return "picked"
+    if surface_set is not None and surface_set.outline is not None:
+        return "drawn"
+    return None
+
+
+def _as_in_project(summary: InspectedFile, project_folder: Path, project_json: ProjectJson) -> InspectedFile:
+    """A test surface file's summary with what the project adds: whether an original is kept, and whether the app made the set
+    (not flippable then)."""
+    made_in_app = _made_in_app(project_json, summary.file_name)
+    return summary.model_copy(update={"original_kept": test_surfaces.original_path(project_folder, summary.file_name).is_file(),
+                                      "made_in_app": made_in_app, "flippable": summary.flippable and made_in_app is None})
 
 
 def _summary_of_stored_file(store: ProjectStore, name: str, project_folder: Path, file_name: str) -> InspectedFile:
     path = store.input_file_path(name, test_surfaces.ROLE, file_name)
-    return _with_original_kept(_inspect_or_refuse(path, test_surfaces.ROLE).summary, project_folder)
+    return _as_in_project(_inspect_or_refuse(path, test_surfaces.ROLE).summary, project_folder, store.read_project_json(name))
 
 
 def _temporary_path_beside(path: Path) -> Path:

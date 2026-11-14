@@ -99,7 +99,11 @@ function FileRow({ file, inspection, saveDisabledReason }: { file: InspectedFile
           </button>
         </div>
       )}
-      {isSelected && isTestSurface && !file.flippable && <p id={flipReasonId} className="run-button-reason">{messages.closedAsWhole}</p>}
+      {isSelected && isTestSurface && !file.flippable && (
+        <p id={flipReasonId} className="run-button-reason">
+          {file.made_in_app === "picked" ? messages.pickedNotFlippable : file.made_in_app === "drawn" ? messages.drawnNotFlippable : messages.closedAsWhole}
+        </p>
+      )}
       {(turnedCount > 0 || offersRestore) && (
         <div className="inspect-file-actions">
           {turnedCount > 0 && (

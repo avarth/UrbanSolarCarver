@@ -751,3 +751,30 @@ def test_the_kept_inspections_are_bounded_by_their_triangles(tmp_path, monkeypat
     monkeypatch.setattr(inspection, "KEPT_TRIANGLE_COUNT", 3)
     assert inspect(0) == ["f0.obj"]                         # larger than the bound alone, so the others leave ...
     assert inspect(0) == [] and inspect(2) == ["f2.obj"]    # ... and it stays, as the newest
+
+
+
+# --- Sets made in the app are built again from their picks or outline, so Inspect does not flip them
+
+from urbansolarcarver.local_web_service.api_models import GroundOutline, SurfacePick  # noqa: E402
+
+
+def _summary(store, file_name):
+    return next(file for file in project_inspection(store, "p").files if file.file_name == file_name)
+
+
+def test_a_picked_or_drawn_set_is_shown_but_not_flippable_and_a_turn_is_refused(store):
+    store.add_input("p", "context", "block.ply", box_bytes([20, 0, 5]))
+    store.pick_surface_set("p", [SurfacePick(point=[25, 0, 5], ray=[-1, 0, 0])], None, None)
+    store.draw_surface_set("p", GroundOutline(points=[[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]]), None, None)
+    store.add_criterion_test_surface("p", "1", "panels.obj", obj_panels([0.0]))
+    for file_name, made_in_app in [("picked_1.ply", "picked"), ("ground_1.ply", "drawn")]:
+        summary = _summary(store, file_name)
+        assert summary.made_in_app == made_in_app and not summary.flippable and summary.surface_count == 1
+        before = _stored(store, file_name).read_bytes()
+        with pytest.raises(ProjectError) as refused:
+            save_turned_surfaces(store, "p", file_name, [0])
+        assert refused.value.status_code == 422 and "would not last" in str(refused.value)
+        assert _stored(store, file_name).read_bytes() == before
+    imported = _summary(store, "panels.obj")
+    assert imported.made_in_app is None and imported.flippable

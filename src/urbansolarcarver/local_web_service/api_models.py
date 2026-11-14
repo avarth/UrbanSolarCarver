@@ -258,6 +258,9 @@ class InspectedFile(BaseModel):
     surface_count: int | None = None    # the same groups for a test surface file; None for other roles
     flippable: bool = False             # a test surface file that is open somewhere; False when closed as a whole and for other roles
     original_kept: bool = False         # a test surface file whose original from before a flip is kept
+    # A set made in the app, picked on the context or drawn on the ground: built again from its picks or outline, so a flip of its
+    # file would not last and it is not flippable. None for a file that was imported, and for other roles.
+    made_in_app: Literal["picked", "drawn"] | None = None
     problem: str | None = None          # why the file cannot be read (the counts are then zero); None for a file that is read
     # The sha256 of the stored file's bytes as Inspect read it: a turn or a restore names it, and is refused when the file stored
     # now is another. Empty when the file's bytes could not be read.
