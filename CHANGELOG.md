@@ -10,8 +10,13 @@ versioning follows [Semantic Versioning](https://semver.org/).
 ### Site
 
 - **Draw context blocks.** Draw block in the Context box draws an outline in the 3D view with the site editor and extrudes it
-  to a height; blocks are listed beside the context files, edited, renamed and removed there, and joined into the context without
-  changing any context file. Overlapping blocks are refused; touching ones are fine.
+  to a height; blocks are listed beside the context files and joined into the context without changing any context file.
+  Overlapping blocks are refused; touching ones are fine. The block rows follow the Sites table: a double click on the name renames,
+  the height is a column, and a ⋯ menu holds Edit, Draw hole, Place on terrain and Remove. A click on a block in the 3D view edits
+  it, also in projects whose maximum volume comes from files; where a site and a block are both under the click, the smaller one is
+  edited.
+- **The Sites table and the block rows scroll past five rows**, under a fixed column heading, and a row that starts being edited
+  scrolls into view.
 
 ### Settings
 

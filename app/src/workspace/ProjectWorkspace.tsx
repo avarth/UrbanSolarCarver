@@ -685,6 +685,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
   const inputsToolsOpen = props.mode === "design" && openStep === "inputs" && inputsDisabledReason === null;
   const siteToolShown = inputsToolsOpen && usesSites ? siteTool : null;
   const blockToolShown = inputsToolsOpen ? blockTool : null;
+  const pickedSites = usesSites ? siteInput.sites : [];
   const sceneTool = blockToolShown !== null ? (scene: ViewerScene) => (
       <SiteEditor scene={scene} origin={origin} sites={contextBlocks.blocks} snapSites={siteInput.sites} tool={blockToolShown} level={siteLevel}
                   newSiteName={nextBlockName(contextBlocks.blocks)} onFinishDrawing={finishBlockDrawing}
@@ -694,7 +695,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
                   onUndo={contextBlocks.undo} onRedo={contextBlocks.redo} canUndo={contextBlocks.canUndo} canRedo={contextBlocks.canRedo}
                   refusal={contextBlocks.refusal} />
     )
-    : !inputsToolsOpen || !usesSites ? null
+    : !inputsToolsOpen ? null
     : siteToolShown !== null ? (scene: ViewerScene) => (
       <SiteEditor scene={scene} origin={origin} sites={siteInput.sites} snapSites={contextBlocks.blocks} tool={siteToolShown} level={siteLevel} newSiteName={nextSiteName(siteInput.sites)}
                   onFinishDrawing={finishDrawing} onChangeSite={(index, site) => { void changeSite(index, site); }}
@@ -702,8 +703,11 @@ function OpenProject(props: ProjectWorkspaceProps) {
                   onDrawHole={(index) => setSiteTool({ kind: "draw_hole", index })}
                   onUndo={siteInput.undo} onRedo={siteInput.redo} canUndo={siteInput.canUndo} canRedo={siteInput.canRedo} refusal={siteInput.refusal}
                   heights={siteInput.heights} />
-    ) : (scene: ViewerScene) => (
-      <SitePicker scene={scene} origin={origin} sites={siteInput.sites} onPick={(index) => setSiteTool({ kind: "edit", index })} />
+    ) : pickedSites.length === 0 && contextBlocks.blocks.length === 0 ? null
+    : (scene: ViewerScene) => (
+      // A click in a site or a block edits it (the smaller outline where both are under the click), whatever the maximum volume is made of
+      <SitePicker scene={scene} origin={origin} sites={pickedSites} onPick={(index) => setSiteTool({ kind: "edit", index })}
+                  blocks={contextBlocks.blocks} onPickBlock={(index) => startBlockTool({ kind: "edit", index })} />
     );
   // Test surfaces picked on the surroundings (design/test-surfaces-on-context.md): picking starts in the Site step's Test surfaces box
   // and ends when the step is not shown any more. Use makes a surface set (or adds to one, or saves an edit), which no criterion uses
@@ -785,7 +789,9 @@ function OpenProject(props: ProjectWorkspaceProps) {
                   contextFooter={(
                     <ContextBlocksList blocks={contextBlocks.blocks} disabledReason={inputsDisabledReason} hasTerrain={hasTerrain}
                                        focusHeightOf={focusBlockHeight} refusal={contextBlocks.refusal}
+                                       editing={blockToolShown !== null && blockToolShown.kind !== "draw" ? blockToolShown.index : null}
                                        onEdit={(index) => startBlockTool({ kind: "edit", index })} onChange={changeBlock} onRemove={removeBlock}
+                                       onDrawHole={(index) => startBlockTool({ kind: "draw_hole", index })}
                                        onPlaceOnTerrain={(index) => { void placeBlockOnTerrain(index); }}
                                        canUndo={contextBlocks.canUndo} onUndo={contextBlocks.undo} />
                   )}

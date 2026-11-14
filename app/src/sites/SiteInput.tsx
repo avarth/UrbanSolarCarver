@@ -2,7 +2,7 @@
 // tiles before either has content, the Site card (a row per site with its name, height, area and elevations, Draw site), and the
 // link that switches the input, which asks first when the input has content. The sites themselves are drawn and edited in the view
 // (SiteEditor.tsx).
-import { Fragment, useId, useRef, useState, type CSSProperties, type DragEvent, type FormEvent } from "react";
+import { Fragment, useEffect, useId, useRef, useState, type CSSProperties, type DragEvent, type FormEvent } from "react";
 import { ActionMenu } from "../common/ActionMenu";
 import { DialogButtons, DialogFrame } from "../common/dialogs";
 import { messages } from "../messages";
@@ -13,6 +13,7 @@ import {
   allPoints, differsFromOriginal, holesOf, outlinePoints, planArea, siteArea, siteProblems, siteRise, type Heights, type Site, type SiteOverlap, type SitePoint,
 } from "./site_geometry";
 import type { SiteTool } from "./SiteEditor";
+import { useFiveRows } from "./five_rows";
 import "./sites.css";
 
 interface InputChoiceProps {
@@ -130,6 +131,7 @@ export function SiteBox({ sites, heights, tool, onDraw, onEdit, onChangeSite, on
     if (file && disabledReason === null) onImport(file);
   };
   const [renaming, setRenaming] = useState<number | null>(null);
+  const siteList = useFiveRows();
   const perSite = { base: !heights.base.for_all_sites, max: !heights.max.for_all_sites };
   const columns = Number(perSite.base) + Number(perSite.max);
   return (
@@ -156,7 +158,7 @@ export function SiteBox({ sites, heights, tool, onDraw, onEdit, onChangeSite, on
               <span />
             </div>
           )}
-          <ul className="site-list">
+          <ul ref={siteList} className="site-list">
             {sites.map((site, index) => (
               <Fragment key={`${index}-${site.name}`}>
               <SiteRow site={site} heights={heights} perSite={perSite} overlaps={overlapping.has(index)}
@@ -242,8 +244,13 @@ function SiteRow({ site, heights, perSite, editing, renaming, disabledReason, on
   const problems = siteProblems(site, heights);
   const disabled = disabledReason !== null;
   const details = `${messages.siteAreaAndHoles(siteArea(site), holesOf(site).length)} · ${messages.siteElevations(siteRise(allPoints(site)))}`;
+  // A row that starts being edited (from its menu or a click in the view) scrolls into view in the table's scrolling rows
+  const row = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (editing) row.current?.scrollIntoView?.({ block: "nearest" });
+  }, [editing]);
   return (
-    <li className={`site-row${editing ? " site-row-editing" : ""}`}>
+    <li ref={row} className={`site-row${editing ? " site-row-editing" : ""}`}>
       <span className="site-row-name" title={`${site.name}: ${details}. ${messages.doubleClickToRename}`}
             onDoubleClick={() => { if (!renaming && !disabled) onChoose("rename"); }}>
         {renaming ? (

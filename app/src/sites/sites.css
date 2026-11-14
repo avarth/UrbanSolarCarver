@@ -13,7 +13,15 @@
 .input-choice-tile strong { font-size: var(--text-body); }
 .input-choice-tile span { color: var(--colour-muted); font-size: var(--text-secondary); }
 
-.site-list { list-style: none; margin: 0; padding: 0; display: grid; }
+/* The rows of the Sites table and of the drawn blocks: at most five show, more scroll inside the list under the column heading, so
+   the box does not grow. Laid out, the list is held to where its sixth row starts (five_rows.ts); this max-height, five rows with
+   a height field (1.6em of text and its 4px of padding and border, plus the row's padding and line), is the fallback. The menu of
+   a row is placed in the window, so the scrolling list does not clip it. */
+.site-list {
+  --site-row-height: calc(1.6em + 2 * var(--space-unit) + 4.2px);
+  list-style: none; margin: 0; padding: 0; display: grid; align-content: start;
+  max-height: calc(5 * var(--site-row-height) + 1px); overflow-y: auto; overscroll-behavior: contain;
+}
 .site-table { --site-table-columns: minmax(0, 1fr) 1.8em; }
 .site-table-head, .site-row, .site-hole-row {
   display: grid; grid-template-columns: var(--site-table-columns); align-items: center; column-gap: calc(var(--space-unit) * 1.5);
@@ -92,14 +100,8 @@
 .heights-help { color: var(--colour-muted); font-size: var(--text-secondary); margin: 0; }
 .site-row-height { width: 100%; box-sizing: border-box; font: inherit; text-align: right; }
 
-/* Drawn context blocks in the Context box (design/context-blocks.md): the name, the height in m, then the actions */
-.context-blocks { margin-top: var(--space-unit); border-top: 1px solid var(--colour-line); }
-.context-block-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) 4em auto auto; align-items: center; column-gap: var(--space-unit);
-  padding: var(--space-unit) 0; border-bottom: 1px solid var(--colour-line);
-}
-.context-block-name { min-width: 0; font: inherit; font-weight: 600; }
-.context-block-height { width: 100%; min-width: 0; font: inherit; text-align: right; }
-.context-block-unit { color: var(--colour-muted); font-size: var(--text-secondary); }
+/* Drawn context blocks in the Context box (design/context-blocks.md), as the Sites table: the name, the height in m, the menu */
+.context-blocks { margin-top: calc(var(--space-unit) * 2); }
+.context-blocks-table { --site-table-columns: minmax(0, 1fr) 5.4em 1.8em; }
+.context-blocks-table .site-table-head > :first-child { justify-items: start; }
 .context-blocks-undo { margin: var(--space-unit) 0 0; }
-.context-block-actions { grid-column: 1 / -1; display: flex; gap: calc(var(--space-unit) * 1.5); }

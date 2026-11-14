@@ -14,7 +14,8 @@ import type { Point3 } from "../viewer/local_origin";
 import type { ViewerScene } from "../viewer/scene";
 import { nearestOnSegment, placePoint, type PlacedPoint, type ScreenPoint } from "./site_drawing";
 import {
-  containsPoint, elevationRange, pointAlong, ringsOf, siteAreaContains, siteProblems, withRings, type Heights, type Site, type SitePoint,
+  containsPoint, elevationRange, outlinePoints, planArea, pointAlong, ringsOf, siteAreaContains, siteProblems, withRings, type Heights, type Site,
+  type SitePoint,
 } from "./site_geometry";
 import "./sites.css";
 
@@ -407,27 +408,31 @@ interface SitePickerProps {
   origin: Point3;
   sites: Site[];
   onPick: (index: number) => void;
+  /** The drawn context blocks, picked the same way (design/context-blocks.md). */
+  blocks?: Site[];
+  onPickBlock?: (index: number) => void;
 }
 
-/** While the Site card is open and no site is drawn or edited: a click on the view inside a site's area edits that site; a click in a
- * hole with no site there edits the site the hole belongs to. */
-export function SitePicker({ scene, origin, sites, onPick }: SitePickerProps) {
+/** While the Site step is open and no site or block is drawn or edited: a click on the view inside a site's or a block's area edits
+ * it; a click in a hole with nothing there edits the outline the hole belongs to. A click inside several outlines (a block on a large
+ * site) edits the smallest, so an outline inside another can still be picked. */
+export function SitePicker({ scene, origin, sites, onPick, blocks = [], onPickBlock = () => {} }: SitePickerProps) {
   const clicked = useEffectEvent((x: number, y: number) => {
     const at = (site: Site) => {
       const local = scene.pointOnLevel(x, y, elevationRange(site.points)[0] - origin[2]);
       return local === null ? null : [local[0] + origin[0], local[1] + origin[1]] as const;
     };
-    let index = sites.findIndex((site) => {
-      const point = at(site);
-      return point !== null && siteAreaContains(site, point[0], point[1]);
-    });
-    if (index < 0) {
-      index = sites.findIndex((site) => {
+    const outlines = [...sites.map((site, index) => ({ site, pick: () => onPick(index) })),
+      ...blocks.map((site, index) => ({ site, pick: () => onPickBlock(index) }))];
+    const smallestWhere = (inside: (site: Site, x: number, y: number) => boolean) => {
+      const hits = outlines.filter(({ site }) => {
         const point = at(site);
-        return point !== null && containsPoint(site.points, point[0], point[1]);
+        return point !== null && inside(site, point[0], point[1]);
       });
-    }
-    if (index >= 0) onPick(index);
+      return hits.reduce<(typeof hits)[number] | null>((best, hit) => (
+        best === null || planArea(outlinePoints(hit.site.points)) < planArea(outlinePoints(best.site.points)) ? hit : best), null);
+    };
+    (smallestWhere(siteAreaContains) ?? smallestWhere((site, px, py) => containsPoint(site.points, px, py)))?.pick();
   });
   useEffect(() => scene.onViewClick(({ x, y }) => clicked(x, y)), [scene]);
   return null;

@@ -48,6 +48,24 @@ test("blocks and context files are drawn together in the Context layer", async (
 const panel = () => container().querySelector(".workspace-panel")!;
 const editor = () => container().querySelector(".site-editor");
 const rows = () => [...panel().querySelectorAll<HTMLElement>(".context-block-row")];
+const heightOf = (row: Element) => row.querySelector<HTMLInputElement>(".site-row-height")!;
+const nameOf = (row: Element) => row.querySelector<HTMLElement>(".site-row-name")!.textContent;
+/** The items of a row's menu, opened first when it is closed. */
+function menuOf(row: Element) {
+  const button = row.querySelector<HTMLButtonElement>(".action-menu-button")!;
+  if (button.getAttribute("aria-expanded") !== "true") act(() => { button.click(); });
+  return [...row.querySelectorAll<HTMLButtonElement>("[role='menuitem']")];
+}
+async function choose(row: Element, label: string) {
+  const item = menuOf(row).find((candidate) => candidate.textContent === label)!;
+  await act(async () => { item.click(); });
+  await settle();
+}
+/** Renames a row's block: a double click on its name, the name typed and Enter. */
+async function rename(row: Element, name: string) {
+  act(() => { row.querySelector(".site-row-name")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); });
+  await typeAndEnter(row.querySelector<HTMLInputElement>(".site-row-name input")!, name);
+}
 const key = async (name: string, options: KeyboardEventInit = {}) => {
   act(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, ...options })); });
   await settle();
@@ -84,8 +102,8 @@ test("Draw block in the Context box draws a block in a project whose maximum vol
   await openWorkspace(service, project(NOTHING_RUN));
   const saved = await drawSquare(service);
   expect(saved).toEqual([{ name: "Block 1", points: [[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]], height: 10 }]);
-  expect(rows().map((row) => row.querySelector<HTMLInputElement>(".context-block-name")!.value)).toEqual(["Block 1"]);
-  expect(document.activeElement).toBe(rows()[0].querySelector(".context-block-height"));
+  expect(rows().map(nameOf)).toEqual(["Block 1"]);
+  expect(document.activeElement).toBe(heightOf(rows()[0]));
   expect(service.count("GET /context-blocks/mesh")).toBeGreaterThan(0);
 });
 
@@ -100,11 +118,11 @@ test("a block's height typed in its row is saved; Edit reopens its outline and a
   const service = new FakeService(NOTHING_RUN, null);
   service.contextBlocks = [{ ...BLOCK, holes: [] }];
   await openWorkspace(service, project(NOTHING_RUN));
-  await typeAndEnter(rows()[0].querySelector<HTMLInputElement>(".context-block-height")!, "18");
+  await typeAndEnter(heightOf(rows()[0]), "18");
   expect(service.savedContextBlocks.at(-1)![0].height).toBe(18);
-  act(() => { buttonIn(rows()[0], "Edit").click(); });
-  await settle();
+  await choose(rows()[0], "Edit");
   expect(editor()!.textContent).toContain("Editing Block 1");
+  expect(rows()[0].classList).toContain("site-row-editing");
   const handle = container().querySelector('[aria-label="Vertex 2"]')!;
   act(() => {
     handle.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, clientX: 0, clientY: 0 }));
@@ -120,12 +138,11 @@ test("Remove takes a block out; a refused change shows its reason and keeps the 
   service.contextBlocks = [{ ...BLOCK, holes: [] }];
   await openWorkspace(service, project(NOTHING_RUN));
   service.contextBlocksRefusal = "Block 1: the outline crosses itself.";
-  await typeAndEnter(rows()[0].querySelector<HTMLInputElement>(".context-block-height")!, "20");
+  await typeAndEnter(heightOf(rows()[0]), "20");
   expect(panel().textContent).toContain("Block 1: the outline crosses itself.");
-  expect(rows()[0].querySelector<HTMLInputElement>(".context-block-height")!.value).toBe("12");
+  expect(heightOf(rows()[0]).value).toBe("12");
   service.contextBlocksRefusal = null;
-  act(() => { buttonIn(rows()[0], "Remove").click(); });
-  await settle();
+  await choose(rows()[0], "Remove");
   expect(service.savedContextBlocks.at(-1)).toEqual([]);
   expect(rows()).toHaveLength(0);
 });
@@ -135,9 +152,9 @@ test("renaming a block to another block's name shows the service's refusal and k
   service.contextBlocks = [{ ...BLOCK, holes: [] }, { ...BLOCK, name: "Block 2", points: BLOCK.points.map(([x, y, z]) => [x + 50, y, z]), holes: [] }];
   await openWorkspace(service, project(NOTHING_RUN));
   service.contextBlocksRefusal = "Two blocks are named block 1.";
-  await typeAndEnter(rows()[1].querySelector<HTMLInputElement>(".context-block-name")!, "block 1");
+  await rename(rows()[1], "block 1");
   expect(panel().textContent).toContain("Two blocks are named block 1.");
-  expect(rows()[1].querySelector<HTMLInputElement>(".context-block-name")!.value).toBe("Block 2");
+  expect(nameOf(rows()[1])).toBe("Block 2");
 });
 
 test("drawing a block snaps to a site's vertex", async () => {
@@ -156,11 +173,88 @@ test("a block removed by mistake comes back with Undo under the rows, without th
   const service = new FakeService(NOTHING_RUN, null);
   service.contextBlocks = [{ ...BLOCK, holes: [] }];
   await openWorkspace(service, project(NOTHING_RUN));
-  act(() => { buttonIn(rows()[0], "Remove").click(); });
-  await settle();
+  await choose(rows()[0], "Remove");
   expect(editor()).toBeNull();
   act(() => { buttonIn(panel().querySelector(".context-blocks")!, "Undo").click(); });
   await settle();
   expect(service.savedContextBlocks.at(-1)).toEqual([{ ...BLOCK, holes: [] }]);
   expect(rows()).toHaveLength(1);
+});
+
+// --- The rows' menu, picking a block in the view, and the lists scrolling to the row edited
+
+test("a block's row has a name renamed by a double click, a height column and a menu of Edit, Draw hole and Remove; Place on terrain only with a terrain", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.contextBlocks = [{ ...BLOCK, holes: [] }];
+  await openWorkspace(service, project(NOTHING_RUN));
+  expect(rows()[0].classList).toContain("site-row");
+  expect(rows()[0].querySelector(".action-menu-button")!.getAttribute("aria-label")).toBe("Actions for Block 1");
+  expect(menuOf(rows()[0]).map((item) => item.textContent)).toEqual(["Edit", "Draw hole", "Remove"]);
+  expect(rows()[0].querySelector(".link-button")).toBeNull();     // no loose links any more
+  await rename(rows()[0], "Kiosk");
+  expect(service.savedContextBlocks.at(-1)![0].name).toBe("Kiosk");
+  expect(nameOf(rows()[0])).toBe("Kiosk");
+});
+
+test("with a terrain file a block's menu offers Place on terrain", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.contextBlocks = [{ ...BLOCK, holes: [] }];
+  const opened = project(NOTHING_RUN);
+  await openWorkspace(service, { ...opened, inputs: { ...opened.inputs, terrain: [{ name: "ground.obj", triangle_count: 1 }] } });
+  expect(menuOf(rows()[0]).map((item) => item.textContent)).toEqual(["Edit", "Draw hole", "Place on terrain", "Remove"]);
+});
+
+test("Draw hole in a block's menu draws a hole of that block", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.contextBlocks = [{ ...BLOCK, holes: [] }];
+  await openWorkspace(service, project(NOTHING_RUN));
+  await choose(rows()[0], "Draw hole");
+  expect(rows()[0].classList).toContain("site-row-editing");
+  for (const [x, y] of [[102, 102], [108, 102], [108, 108]]) await clickAt(x, y);
+  await clickAt(102, 102);
+  expect(service.savedContextBlocks.at(-1)![0].holes).toEqual([[[102, 102, 0], [108, 102, 0], [108, 108, 0]]]);
+});
+
+test("a click inside a block in the view edits it, in a project whose maximum volume comes from files; its row scrolls into view", async () => {
+  const scrolled: Element[] = [];
+  const scrollIntoView = vi.fn(function (this: Element) { scrolled.push(this); });
+  Element.prototype.scrollIntoView = scrollIntoView;
+  try {
+    const service = new FakeService(NOTHING_RUN, null);
+    service.contextBlocks = [{ ...BLOCK, holes: [] }, { ...BLOCK, name: "Block 2", points: BLOCK.points.map(([x, y, z]) => [x + 50, y, z]), holes: [] }];
+    await openWorkspace(service, project(NOTHING_RUN));
+    expect(editor()).toBeNull();
+    await clickAt(155, 105);
+    expect(editor()!.textContent).toContain("Editing Block 2");
+    expect(rows()[1].classList).toContain("site-row-editing");
+    expect(scrolled).toContain(rows()[1]);
+    await key("Escape");
+    expect(editor()).toBeNull();
+    await clickAt(50, 50);                        // in no block: nothing opens
+    expect(editor()).toBeNull();
+  } finally {
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  }
+});
+
+test("a click inside both a site and a block edits the smaller of the two", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.siteSource = "sites";
+  service.sites = [
+    { name: "Large plot", points: [[0, 0, 0], [200, 0, 0], [200, 200, 0], [0, 200, 0]], height: 30 },
+    { name: "Small plot", points: [[300, 0, 0], [304, 0, 0], [304, 4, 0], [300, 4, 0]], height: 30 },
+  ];
+  service.contextBlocks = [{ ...BLOCK, holes: [] }, { ...BLOCK, name: "Large block", points: [[290, -10, 0], [320, -10, 0], [320, 20, 0], [290, 20, 0]], holes: [] }];
+  await openWorkspace(service, newProject());
+  await clickAt(105, 105);                        // the block inside the large site
+  expect(editor()!.textContent).toContain("Editing Block 1");
+  await key("Escape");
+  await clickAt(50, 50);                          // the large site only
+  expect(editor()!.textContent).toContain("Editing Large plot");
+  await key("Escape");
+  await clickAt(302, 2);                          // the small site inside the large block
+  expect(editor()!.textContent).toContain("Editing Small plot");
+  await key("Escape");
+  await clickAt(315, 15);                         // the large block only
+  expect(editor()!.textContent).toContain("Editing Large block");
 });

@@ -423,8 +423,10 @@ export const messages = {
   blockHeightLabel: (blockName: string) => `${blockName}: height`,
   editBlock: "Edit",
   placeBlockOnTerrain: "Place on terrain",
-  removeBlock: (blockName: string) => `Remove ${blockName}`,
   removeBlockShort: "Remove",
+  blockActions: (blockName: string) => `Actions for ${blockName}`,
+  drawnBlocks: "Drawn blocks",
+  blockHeight: "Height",
   undoBlockChange: "Undo",
   // Sites from DXF and OBJ files (design/site-import.md)
   importSites: "Import",
