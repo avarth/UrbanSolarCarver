@@ -483,6 +483,9 @@ test("the surfaces a run leaves out are drawn in the error colour over the selec
   const drawn = leftOutOf(inspectFile({ surfaces }))!;
   expect(indexOf(drawn)).toEqual([6, 7, 8]);
   expect(colourOf(drawn)).toBe(new THREE.Color(colourToken("error")).getHexString());
+  const { front } = meshesOf(inspectSurfacesLayer([inspectFile({ surfaces })], { arrows: false }));
+  const pull = (mesh: THREE.Mesh) => (mesh.material as THREE.Material).polygonOffsetUnits;
+  expect(pull(drawn)).toBeLessThan(pull(front));          // pulled further forward than the orientation it is drawn over
   expect(leftOutOf(inspectFile({ surfaces, turned: new Set([1]) }))).toBeDefined();
   expect(leftOutOf(inspectFile({ surfaces, selected: false }))).toBeUndefined();
   expect(leftOutOf(inspectFile())).toBeUndefined();

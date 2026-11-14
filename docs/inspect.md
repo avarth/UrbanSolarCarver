@@ -20,6 +20,12 @@ Pressing a row selects the file. The view frames it, in the part of the view the
 
 - **Bounds**: the minimum and maximum corner in the file's own coordinates. When a corner is more than 10 km from zero, a note says the coordinates look georeferenced and how far they are. The info "i" beside the panel's title says which point the view is drawn around, since the view uses a local origin: "The view is drawn around x -141, y -91.72, z 0 of the files' coordinates."
 - **Surfaces**, for a test surface file: how many surfaces it has (below).
+- **Surfaces a run leaves out**, for a test surface file that has any: "3 of 43 surfaces are not flat: a run leaves them out.", and
+  the same for surfaces with no area. The view draws them in the error colour on the selected file. The rule is the one the run's
+  sampling applies (`surface_sampling.skip_reasons`): a surface whose faces turn more than 5° from its mean normal and leave its
+  plane by more than 0.1 mm is not flat, so a sliver a few micrometres high on a flat face does not count. A surface too small for
+  the grid is known only after a run, since it depends on each criterion's grid step; the **Skipped test surfaces** layer reports
+  it ([ui](ui.md)). Inspect does not repair a surface: split it into flat faces in the modelling tool.
 
 An earlier version also counted closed bodies. It was dropped: CAD exports (Rhino's OBJ, for one) keep a corner per face, with that face's normal, so faces share no edges and every face counted as an open body (Allatini's maximum volume: 0 of 24). The voxelizer does not depend on it either: it fills by ray crossings along three axes with a two-of-three vote, so a missing floor or a T-junction does not change the voxels.
 

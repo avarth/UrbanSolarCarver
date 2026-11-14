@@ -681,9 +681,8 @@ export function inspectSurfacesLayer(files: readonly InspectLayerFile[], options
       leftOutGeometry.setIndex(new THREE.BufferAttribute(leftOut, 1));
       leftOutGeometry.boundingSphere = geometry.boundingSphere;
       const material = solidMaterial(colourToken("error"), 1, THREE.DoubleSide, true);
-      material.polygonOffset = true;
-      material.polygonOffsetFactor = -2;
-      material.polygonOffsetUnits = -2;
+      material.polygonOffsetFactor = -3;            // further forward than the orientation meshes (-2, -8) it covers
+      material.polygonOffsetUnits = -12;
       const mesh = new THREE.Mesh(leftOutGeometry, material);
       mesh.name = "left-out";
       mesh.raycast = () => {};
