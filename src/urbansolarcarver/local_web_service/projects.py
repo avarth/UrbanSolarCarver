@@ -30,8 +30,8 @@ from ..io import load_mesh, save_mesh
 from ..load_config import build_config, build_config_from_mode_starting_values
 from ..mode_registry import MODES, canonical_mode_name
 from ..pydantic_schemas import UserConfig
-from . import context_blocks, picked_surfaces, site_input, stored_files, test_surfaces, uploads
-from .api_models import SurfacePick, SurfaceSetJson
+from . import context_blocks, ground_surfaces, picked_surfaces, site_input, stored_files, test_surfaces, uploads
+from .api_models import GroundOutline, SurfacePick, SurfaceSetJson
 from .api_models import (
     ColdPeriodDates, ColdPeriodReply, ConfigReply, CriterionEntry, ExampleProject, GridPlanReply, HeightsJson, InputFileInfo, InputFilesReply,
     NEW_PROJECT_HEIGHTS, ProjectJson, ProjectSummary, StudyEntry,
@@ -1366,9 +1366,10 @@ class ProjectStore:
             return InputFileInfo(name=file_name, triangle_count=count)
         surface_set = project_json.surface_sets.get(file_name)
         picked = surface_set is not None and surface_set.picks is not None
+        drawn = surface_set is not None and surface_set.outline is not None
         return InputFileInfo(name=file_name, triangle_count=count, shown_name=picked_surfaces.shown_name(file_name, surface_set),
                              picked=True if picked else None, picks_lost=surface_set.picks_lost if picked and surface_set.picks_lost else None,
-                             used_by=ProjectStore._surface_set_users(project_json, file_name))
+                             drawn=True if drawn else None, used_by=ProjectStore._surface_set_users(project_json, file_name))
 
     # ---- Surface sets: names, and sets picked on the surroundings (picked_surfaces.py) ------------------------------------------
 
@@ -1412,6 +1413,53 @@ class ProjectStore:
                 stored_files.join_test_surfaces_again(project_folder, project_json, [file_name])
             self.write_project_json(name, project_json)
             return self._file_info(project_json, test_surfaces.ROLE, file_name)
+
+    def draw_surface_set(self, name: str, outline: GroundOutline, set_name: str | None, replace: str | None) -> InputFileInfo:
+        """Make a surface set from *outline* drawn on the ground (design/test-surfaces-on-ground.md): a new stored test surface file
+        (ground_<n>.ply, named *set_name* or "Ground n"), or the drawn set *replace*, whose outline it becomes; the criteria and
+        studies that use it are joined again.
+
+        ProjectError 404 for an unknown set, 422 for an outline the site editor would refuse, a set that was not drawn, or a name
+        another set has.
+        """
+        with self.project_lock(name):
+            project_folder = self.open(name)
+            project_json = self.read_project_json(name)
+            recorded = project_json.input_files.setdefault(test_surfaces.ROLE, {})
+            if replace is not None:
+                surface_set = project_json.surface_sets.get(replace)
+                if replace not in recorded:
+                    raise ProjectError(f"There is no surface set stored as '{replace}'.", status_code=404)
+                if surface_set is None or surface_set.outline is None:
+                    raise ProjectError("Only a set drawn on the ground takes an outline.", status_code=422)
+                file_name = replace
+                if set_name is not None:
+                    surface_set.name = picked_surfaces.checked_set_name(set_name, project_json, replace)
+            else:
+                file_name = ground_surfaces.next_ground_file_name(recorded)
+                surface_set = SurfaceSetJson(name=picked_surfaces.checked_set_name(
+                    set_name if set_name is not None else ground_surfaces.next_ground_name(project_json), project_json, None))
+            mesh = ground_surfaces.ground_mesh(outline)
+            surface_set.outline = outline
+            path = test_surfaces.stored_path(project_folder, file_name)
+            picked_surfaces.write_set_file(path, mesh)
+            recorded[file_name] = len(mesh.faces)
+            stored_files.record_stored_file(project_json, test_surfaces.ROLE, file_name, path)
+            project_json.surface_sets[file_name] = surface_set
+            if replace is not None:
+                stored_files.join_test_surfaces_again(project_folder, project_json, [file_name])
+            self.write_project_json(name, project_json)
+            return self._file_info(project_json, test_surfaces.ROLE, file_name)
+
+    def surface_set_outline(self, name: str, file_name: str) -> GroundOutline:
+        """The outline of a set drawn on the ground, for Edit outline; 404 for an unknown file, 422 for a set that was not drawn."""
+        project_json = self.read_project_json(name)
+        if file_name not in project_json.input_files.get(test_surfaces.ROLE, {}):
+            raise ProjectError(f"There is no surface set stored as '{file_name}'.", status_code=404)
+        surface_set = project_json.surface_sets.get(file_name)
+        if surface_set is None or surface_set.outline is None:
+            raise ProjectError("This surface set was not drawn on the ground.", status_code=422)
+        return surface_set.outline
 
     def rename_surface_set(self, name: str, file_name: str, set_name: str) -> InputFileInfo:
         """Show the stored test surface file *file_name* by *set_name*; the file keeps its stored name. 404 for an unknown file, 422

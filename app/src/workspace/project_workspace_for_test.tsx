@@ -28,6 +28,8 @@ type ErrorDetailReply = components["schemas"]["ErrorDetailReply"];
 type StoredFileChangedReply = components["schemas"]["StoredFileChangedReply"];
 type SurfacePick = components["schemas"]["SurfacePick"];
 type PickedSurfacesRequest = components["schemas"]["PickedSurfacesRequest"];
+type DrawnSurfaceRequest = components["schemas"]["DrawnSurfaceRequest"];
+type GroundOutline = components["schemas"]["GroundOutline"];
 type SurfacePicksReply = components["schemas"]["SurfacePicksReply"];
 
 // The service's schema, modes and criterion settings as GET schema, modes and criterion-keys give them (service_data_for_test.json,
@@ -164,6 +166,15 @@ export class FakeService {
   pickRefusal: string | null = null;
   /** The file and the name of every PUT surface-sets/{file}/name. */
   readonly setRenames: { fileName: string; name: string }[] = [];
+  // Surface sets drawn on the ground (design/test-surfaces-on-ground.md)
+  /** The outline of each drawn set by its stored file, as GET surface-sets/{file}/outline gives it and POST surface-sets/drawn stores it. */
+  groundOutlines: Record<string, GroundOutline> = {};
+  /** The body of every POST surface-sets/drawn. */
+  readonly drawnSetRequests: DrawnSurfaceRequest[] = [];
+  /** The reason POST surface-sets/drawn is refused with (422); null: the set is stored. */
+  drawRefusal: string | null = null;
+  /** Replies held back (holdReply) until their promise resolves: GET surface-sets/{file}/outline by file, and POST surface-sets/drawn ("drawn"). */
+  readonly heldReplies: Record<string, Promise<void>> = {};
 
   constructor(stages: Record<PipelineStage, StageState>, carving: typeof CARVING | null) {
     this.stages = stages;
@@ -356,7 +367,7 @@ export class FakeService {
    * The surface set routes: POST picked stores a new picked set ("picked_<n>.ply", named as asked or "Picked <n>") or replaces the
    * picks of the set *replace*, two triangles a pick; GET {file}/picks gives a set's picks; PUT {file}/name shows a set by another name.
    */
-  private answerSurfaceSets(method: string, path: string, init?: RequestInit): Response {
+  private answerSurfaceSets(method: string, path: string, init?: RequestInit): Response | Promise<Response> {
     if (method === "POST" && path === "/surface-sets/picked") {
       const body = JSON.parse(String(init!.body)) as PickedSurfacesRequest;
       this.pickedSetRequests.push(body);
@@ -376,11 +387,36 @@ export class FakeService {
       this.surfacePicks[stored.name] = body.picks;
       return json<InputFileInfo>(stored);
     }
+    if (method === "POST" && path === "/surface-sets/drawn") {
+      const body = JSON.parse(String(init!.body)) as DrawnSurfaceRequest;
+      this.drawnSetRequests.push(body);
+      if (this.drawRefusal !== null) return json<ErrorDetailReply>({ detail: this.drawRefusal }, 422);
+      const outline = { points: body.outline.points, holes: body.outline.holes ?? [] };
+      if (typeof body.replace === "string") {
+        const kept = this.storedTestSurfaces.find((file) => file.name === body.replace);
+        if (kept === undefined) return json<ErrorDetailReply>({ detail: "Not found" }, 404);
+        this.groundOutlines[kept.name] = outline;
+        return json<InputFileInfo>(kept);
+      }
+      let number = 1;
+      while (this.storedTestSurfaces.some((file) => file.name === `ground_${number}.ply`)) number += 1;
+      const stored: InputFileInfo = { name: `ground_${number}.ply`, triangle_count: 2, shown_name: body.name ?? `Ground ${number}`, drawn: true };
+      this.storedTestSurfaces = [...this.storedTestSurfaces, stored];
+      this.groundOutlines[stored.name] = outline;
+      const held = this.heldReplies.drawn;
+      return held === undefined ? json<InputFileInfo>(stored) : holdReply(held).then(() => json<InputFileInfo>(stored));
+    }
     const [, , encoded, part] = path.split("/");
     const fileName = decodeURIComponent(encoded);
     const file = this.storedTestSurfaces.find((candidate) => candidate.name === fileName);
     if (file === undefined) return json<ErrorDetailReply>({ detail: "Not found" }, 404);
     if (method === "GET" && part === "picks") return json<SurfacePicksReply>({ picks: this.surfacePicks[fileName] ?? [] });
+    if (method === "GET" && part === "outline") {
+      const outline = this.groundOutlines[fileName];
+      const reply = () => (outline === undefined ? json<ErrorDetailReply>({ detail: "Not drawn" }, 422) : json<GroundOutline>(outline));
+      const held = this.heldReplies[fileName];
+      return held === undefined ? reply() : holdReply(held).then(reply);
+    }
     if (method === "PUT" && part === "name") {
       const { name } = JSON.parse(String(init!.body)) as { name: string };
       this.setRenames.push({ fileName, name });

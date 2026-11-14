@@ -30,29 +30,39 @@ interface SurfaceSetsBoxProps {
   onRenameSet: (fileName: string, name: string) => Promise<string | null>;
   /** Opens picking on a picked set's picks (Edit picks). */
   onEditPicks: (fileName: string) => void;
+  /** Draws a new set on the ground (design/test-surfaces-on-ground.md); absent: no Draw. */
+  onDraw?: () => void;
+  /** Opens a drawn set's outline in the site editor (Edit outline). */
+  onEditOutline?: (fileName: string) => void;
 }
 
 export function SurfaceSetsBox({ files, onAddFiles, onRemoveFile, disabledReason, drawingProblems, onPickFromSurroundings, onRenameSet,
-                                 onEditPicks }: SurfaceSetsBoxProps) {
+                                 onEditPicks, onDraw, onEditOutline }: SurfaceSetsBoxProps) {
   const [renaming, setRenaming] = useState<InputFileInfo | null>(null);
+  const drawButton = onDraw === undefined ? null : (
+    <button type="button" className="input-add" disabled={disabledReason !== null} onClick={onDraw}>{messages.drawGroundSurface}</button>
+  );
   const pickButton = onPickFromSurroundings === undefined ? null : (
     <button type="button" className="input-add" disabled={disabledReason !== null} onClick={onPickFromSurroundings}>{messages.pickFromSurroundings}</button>
   );
+  const extraAction = drawButton === null && pickButton === null ? null : <>{drawButton}{pickButton}</>;
   const fileMenu = (file: InputFileInfo) => (
     <ActionMenu label={messages.surfaceSetActions(file.shown_name ?? file.name)} symbol={<span aria-hidden="true">⋯</span>}
                 onChoose={(key) => {
                   if (key === "rename") setRenaming(file);
                   else if (key === "edit_picks") onEditPicks(file.name);
+                  else if (key === "edit_outline") onEditOutline?.(file.name);
                 }}
                 items={[
                   { key: "rename", label: messages.renameSurfaceSet, disabledReason },
                   ...(file.picked === true && onPickFromSurroundings !== undefined ? [{ key: "edit_picks", label: messages.editPicks, disabledReason }] : []),
+                  ...(file.drawn === true && onEditOutline !== undefined ? [{ key: "edit_outline", label: messages.editGroundOutline, disabledReason }] : []),
                 ]} />
   );
   return (
     <>
       <InputBox role="test_surfaces" files={files} hint={messages.surfaceSetsHint} onAddFiles={onAddFiles} onRemoveFile={onRemoveFile}
-                disabledReason={disabledReason} drawingProblems={drawingProblems} extraAction={pickButton} fileMenu={fileMenu}
+                disabledReason={disabledReason} drawingProblems={drawingProblems} extraAction={extraAction} fileMenu={fileMenu}
                 removeRefusal={(file) => ((file.used_by ?? []).length > 0 ? messages.surfaceSetInUse(listed(file.used_by ?? [])) : null)} />
       {renaming !== null && (
         <RenameSetDialog file={renaming} onRename={(name) => onRenameSet(renaming.name, name)} onClose={() => setRenaming(null)} />

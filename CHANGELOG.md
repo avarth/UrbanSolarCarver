@@ -9,6 +9,12 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Site
 
+- **Draw test surfaces on the ground.** **Draw** in the Test surfaces box draws a flat surface on the ground (a square, a courtyard,
+  a street) with the site editor, saved at once as a set; **Edit outline** edits it, with holes, and typing an elevation moves the
+  whole surface. A set is still used by nothing until a criterion or study switches it on.
+- **Rectangles in the site editor.** While a site, a hole or a context block is drawn, the bar offers **Polygon**, **Rectangle**
+  (two opposite corners, sides along x and y) and **Tilted rectangle** (a first side from two clicks, then a click for the width).
+  The pointer previews the rectangle with its size; clicks snap as in a polygon, and Shift holds the tilted side to 15° steps.
 - **The same words in every box**: Add files is now **Import**, as in the Sites box; the Context box has **Draw** and **Import**, in the Sites box's order; the
   Test surfaces box has **Pick** (it said From context) and **Import**.
 - **Draw context blocks.** Draw in the Context box draws an outline in the 3D view with the site editor and extrudes it

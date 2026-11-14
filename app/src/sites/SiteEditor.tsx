@@ -3,7 +3,8 @@
 // field are HTML. The overlay takes the pointer only on the bar, the handles and the edges, so the view still orbits.
 // Drawing: each click on the view adds a point on the drawing level (snapped to the first point, to the vertices and edges of the
 // other sites, or with Shift to 15 degree steps); the first point or Enter closes the outline, Backspace removes the last point,
-// Escape cancels. Editing: a handle dragged moves its vertex in plan, a handle clicked selects it and shows its elevation field,
+// Escape cancels. The bar's shapes draw a rectangle instead: two opposite corners (Rectangle), or a first side and its width (Tilted
+// rectangle); the last click finishes it. Editing: a handle dragged moves its vertex in plan, a handle clicked selects it and shows its elevation field,
 // a double click on an edge adds a vertex, Delete removes the selected one. A site's holes (design/site-holes.md) are drawn and edited
 // as its outline is, in the same history. Every change goes to *onChangeSite*; a change that would make the site refused is not sent
 // and its reason is shown. Points are in the input files' coordinates; the scene works in local ones (*origin* subtracted).
@@ -12,7 +13,9 @@ import { formattedNumber } from "../format_numbers";
 import { messages } from "../messages";
 import type { Point3 } from "../viewer/local_origin";
 import type { ViewerScene } from "../viewer/scene";
-import { nearestOnSegment, placePoint, type PlacedPoint, type ScreenPoint } from "./site_drawing";
+import {
+  CLICKS_TO_FINISH, longEnoughSide, nearestOnSegment, placeShapePoint, shapeOutline, type DrawShape, type PlacedPoint, type ScreenPoint,
+} from "./site_drawing";
 import {
   containsPoint, elevationRange, outlinePoints, planArea, pointAlong, ringsOf, siteAreaContains, siteProblems, withRings, type Heights, type Site,
   type SitePoint,
@@ -64,9 +67,18 @@ export interface SiteEditorProps {
   heights?: Heights;
   /** Outlines snapped to besides the other entries of *sites*: the sites while blocks are drawn, the blocks while sites are. */
   snapSites?: Site[];
+  /** A vertex's elevation sets every vertex's, so the outline stays on one level (a test surface drawn on the ground). */
+  flatElevation?: boolean;
 }
 
 const DRAG_START_PIXELS = 3;
+
+const SHAPES: [DrawShape, string][] = [
+  ["polygon", messages.shapePolygon], ["rectangle", messages.shapeRectangle], ["tilted_rectangle", messages.shapeTiltedRectangle],
+];
+const SHAPE_STEPS: Record<DrawShape, string> = {
+  polygon: messages.drawingSteps, rectangle: messages.rectangleSteps, tilted_rectangle: messages.tiltedRectangleSteps,
+};
 
 /** Keeps the pointer's moves on the handle while it is dragged; a pointer the browser no longer tracks is left alone. */
 function capturePointer(element: Element, pointerId: number, capture: boolean): void {
@@ -110,11 +122,17 @@ export function SiteEditor(props: SiteEditorProps) {
   // ---- Drawing
   const [drawn, setDrawn] = useState<SitePoint[]>([]);
   const [hover, setHover] = useState<PlacedPoint | null>(null);
+  const [shape, setShape] = useState<DrawShape>("polygon");
+  const chooseShape = (chosen: DrawShape) => {
+    setShape(chosen);
+    setDrawn([]);
+    setHover(null);
+  };
   const editedIndex = tool.kind === "edit" ? tool.index : null;
   const otherOutlines = [...sites.filter((_, index) => index !== editedIndex), ...(props.snapSites ?? [])].flatMap((site) => ringsOf(site));
   const placeAt = (x: number, y: number, shift: boolean): PlacedPoint | null => {
     const ground = groundAt(x, y, level);
-    return ground ? placePoint(drawn, ground, [x, y], otherOutlines, toScreen, shift) : null;
+    return ground ? placeShapePoint(shape, drawn, ground, [x, y], otherOutlines, toScreen, shift) : null;
   };
   const finishDrawing = () => {
     if (drawn.length < 3) return;
@@ -126,7 +144,19 @@ export function SiteEditor(props: SiteEditorProps) {
     if (!drawing) return;
     const placed = placeAt(x, y, shift);
     if (!placed) return;
-    if (placed.snap === "first_point") finishDrawing();
+    if (shape !== "polygon") {
+      const clicks = [...drawn, placed.point];
+      if (clicks.length < CLICKS_TO_FINISH[shape]) {
+        const [a, b] = clicks;
+        if (!b || longEnoughSide(a, b)) setDrawn(clicks);
+        return;
+      }
+      const outline = shapeOutline(shape, clicks);
+      if (!outline) return;
+      props.onFinishDrawing(outline);
+      setDrawn([]);
+      setHover(null);
+    } else if (placed.snap === "first_point") finishDrawing();
     else setDrawn((points) => [...points, placed.point]);
   });
   useEffect(() => scene.onViewClick(({ x, y, shift }) => viewClicked(x, y, shift)), [scene]);
@@ -216,7 +246,8 @@ export function SiteEditor(props: SiteEditorProps) {
   const setElevation = (at: VertexAt, z: number) => {
     const ring = editedRings[at.ring];
     if (!edited || !ring) return;
-    changeEdited(replacedRing(editedRings, at.ring, ring.map((point, index): SitePoint => (index === at.vertex ? [point[0], point[1], z] : point))));
+    if (props.flatElevation) changeEdited(editedRings.map((points) => points.map((point): SitePoint => [point[0], point[1], z])));
+    else changeEdited(replacedRing(editedRings, at.ring, ring.map((point, index): SitePoint => (index === at.vertex ? [point[0], point[1], z] : point))));
   };
 
   // A new tool, or another site to edit: nothing drawn, nothing selected
@@ -288,6 +319,11 @@ export function SiteEditor(props: SiteEditorProps) {
   const hoverScreen = hover ? toScreen(hover.point) : null;
   const lastScreen = lastDrawn ? toScreen(lastDrawn) : null;
   const firstScreen = drawn.length ? toScreen(drawn[0]) : null;
+  // A rectangle shape's outline with the pointer as its last click, while one is drawn
+  const preview = drawing && hover ? shapeOutline(shape, [...drawn, hover.point]) : null;
+  const previewScreen = preview?.map(toScreen);
+  const previewPath = previewScreen && previewScreen.every((point) => point !== null)
+    ? (previewScreen as ScreenPoint[]).map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ") : null;
   const selectedPoint = selected === null ? undefined : shownRings[selected.ring]?.[selected.vertex];
   const selectedScreen = selectedPoint ? toScreen(selectedPoint) : null;
   const shownProblem = problem ?? props.refusal;
@@ -299,7 +335,16 @@ export function SiteEditor(props: SiteEditorProps) {
     <div ref={overlay} className="site-editor">
       <div className="site-editor-bar" role="toolbar" aria-label={barTitle}>
         <strong>{barTitle}</strong>
-        <span className="site-editor-steps">{drawing ? messages.drawingSteps : messages.editingSteps}</span>
+        {drawing && (
+          <span className="segmented-switch site-editor-shapes" role="group" aria-label={messages.drawShapes}>
+            {SHAPES.map(([value, label]) => (
+              <button key={value} type="button" aria-pressed={shape === value} onClick={() => chooseShape(value)}>
+                {label}
+              </button>
+            ))}
+          </span>
+        )}
+        <span className="site-editor-steps">{drawing ? SHAPE_STEPS[shape] : messages.editingSteps}</span>
         <span className="site-editor-buttons">
           {tool.kind === "edit" && edited && props.onDrawHole && (
             <button type="button" className="secondary-button" onClick={() => props.onDrawHole?.(tool.index)}>{messages.drawHole}</button>
@@ -317,7 +362,29 @@ export function SiteEditor(props: SiteEditorProps) {
         <g className="site-editor-others">
           {otherOutlines.map((points, index) => <g key={index}>{screenPath(points, true)}</g>)}
         </g>
-        {drawing && (
+        {drawing && shape !== "polygon" && (
+          <g className="site-editor-drawn">
+            {preview && previewPath && <polygon className="site-editor-preview" points={previewPath} />}
+            {!preview && lastScreen && hoverScreen && <line className="site-editor-rubber" x1={lastScreen[0]} y1={lastScreen[1]} x2={hoverScreen[0]} y2={hoverScreen[1]} />}
+            {[...drawn, ...(hover ? [hover.point] : [])].map((point, index) => {
+              const at = toScreen(point);
+              return at && <circle key={index} className="site-editor-vertex" cx={at[0]} cy={at[1]} r={3.5} />;
+            })}
+            {hoverScreen && hover?.snap && <circle className="site-editor-snap" cx={hoverScreen[0]} cy={hoverScreen[1]} r={7} />}
+            {preview && hoverScreen && (
+              <text className="site-editor-label" x={hoverScreen[0] + 10} y={hoverScreen[1] - 10}>
+                {messages.rectangleSize(Math.hypot(preview[1][0] - preview[0][0], preview[1][1] - preview[0][1]),
+                  Math.hypot(preview[2][0] - preview[1][0], preview[2][1] - preview[1][1]))}
+              </text>
+            )}
+            {!preview && lastScreen && hoverScreen && lastDrawn && hover && (
+              <text className="site-editor-label" x={(lastScreen[0] + hoverScreen[0]) / 2 + 8} y={(lastScreen[1] + hoverScreen[1]) / 2 - 8}>
+                {messages.segmentLength(Math.hypot(hover.point[0] - lastDrawn[0], hover.point[1] - lastDrawn[1]))}
+              </text>
+            )}
+          </g>
+        )}
+        {drawing && shape === "polygon" && (
           <g className="site-editor-drawn">
             {screenPath(drawn, false)}
             {lastScreen && hoverScreen && <line className="site-editor-rubber" x1={lastScreen[0]} y1={lastScreen[1]} x2={hoverScreen[0]} y2={hoverScreen[1]} />}

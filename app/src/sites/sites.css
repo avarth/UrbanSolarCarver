@@ -73,6 +73,7 @@
 .site-editor-first { fill: var(--colour-panel); stroke: var(--colour-accent); stroke-width: 2.5; }
 .site-editor-snapped { fill: var(--colour-accent); }
 .site-editor-vertex { fill: var(--colour-accent); }
+.site-editor-drawing .site-editor-preview { stroke: var(--colour-accent); stroke-width: 2.5; stroke-dasharray: 6 4; fill: var(--colour-accent-soft); fill-opacity: 0.5; }
 .site-editor-snap { fill: none; stroke: var(--colour-accent); stroke-width: 2; }
 .site-editor-edited path { fill: var(--colour-accent-soft); fill-opacity: 0.35; stroke: var(--colour-accent); stroke-width: 2.5; }
 .site-editor-refused path { stroke: var(--colour-error); }

@@ -36,7 +36,7 @@ from ..pydantic_schemas import UserConfig
 from ..stage_settings import PIPELINE_STAGES
 from . import context_blocks, folder_picker, inspection, simulation, site_import, site_input, sun_study, typical_building, user_preferences
 from .api_models import (
-    CarvingUpdatesRequest, OutlinesReply, PickedSurfacesRequest, SurfacePicksReply, SurfaceSetNameRequest, TerrainHeightsReply,
+    CarvingUpdatesRequest, DrawnSurfaceRequest, GroundOutline, OutlinesReply, PickedSurfacesRequest, SurfacePicksReply, SurfaceSetNameRequest, TerrainHeightsReply,
     TerrainHeightsRequest,
 )
 from .api_models import (
@@ -666,6 +666,18 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         the picked set *replace*. The reply is the set; a criterion or study then uses it with its own PUT."""
         with writable_project(name) as store:
             return store.pick_surface_set(name, request.picks, request.name, request.replace)
+
+    @router.post("/projects/{name}/surface-sets/drawn", responses=_ERROR_RESPONSES)
+    def draw_surface_set(name: str, request: DrawnSurfaceRequest) -> InputFileInfo:
+        """Make a surface set from an outline drawn on the ground (design/test-surfaces-on-ground.md): a new stored test surface file,
+        or the drawn set *replace*. The reply is the set; a criterion or study then uses it with its own PUT."""
+        with writable_project(name) as store:
+            return store.draw_surface_set(name, request.outline, request.name, request.replace)
+
+    @router.get("/projects/{name}/surface-sets/{file_name}/outline", responses=_ERROR_RESPONSES)
+    def surface_set_outline(name: str, file_name: str) -> GroundOutline:
+        """The outline of a set drawn on the ground (Edit outline)."""
+        return folder_in_use.store.surface_set_outline(name, file_name)
 
     @router.put("/projects/{name}/surface-sets/{file_name}/name", responses=_ERROR_RESPONSES)
     def rename_surface_set(name: str, file_name: str, request: SurfaceSetNameRequest) -> InputFileInfo:

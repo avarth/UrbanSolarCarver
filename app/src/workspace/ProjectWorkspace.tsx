@@ -19,6 +19,7 @@ import {
 import { ProjectSessionContext } from "../api_client/project_session";
 import { activeCriteria } from "../criteria/criteria_state";
 import { SurfaceSetsBox } from "../common/SurfaceSetsBox";
+import { useGroundSurfaces, type GroundTool } from "./use_ground_surfaces";
 import { LastRemovalContext } from "../common/last_removal";
 import { CriteriaStep, type CriteriaShows } from "../criteria/CriteriaStep";
 import { firstCriteriaShows } from "../criteria/criteria_shows";
@@ -683,6 +684,23 @@ function OpenProject(props: ProjectWorkspaceProps) {
   // The site tools work while Inputs is open in Carve; a run in progress stops them. The block tools too, whatever the maximum
   // volume is made from.
   const inputsToolsOpen = props.mode === "design" && openStep === "inputs" && inputsDisabledReason === null;
+  // Test surfaces drawn on the ground (design/test-surfaces-on-ground.md), with the site editor; one tool open at a time
+  const ground = useGroundSurfaces({
+    token, project: project.name, sets: files.test_surfaces, onServiceProblem,
+    onSaved: async () => {
+      await testSurfaceCalls.reloadStoredFiles();
+      reloadRoles(["test_surfaces"]);
+      refreshStageStatus();
+    },
+  });
+  if (ground.tool !== null && (!inputsToolsOpen || siteTool !== null || blockTool !== null
+    || (ground.editedFile !== null && !files.test_surfaces.some((file) => file.name === ground.editedFile)))) ground.end();
+  const startGround = (tool: GroundTool) => {
+    setSiteTool(null);
+    setBlockTool(null);
+    setPicking(null);
+    ground.start(tool);
+  };
   const siteToolShown = inputsToolsOpen && usesSites ? siteTool : null;
   const blockToolShown = inputsToolsOpen ? blockTool : null;
   const pickedSites = usesSites ? siteInput.sites : [];
@@ -696,6 +714,12 @@ function OpenProject(props: ProjectWorkspaceProps) {
                   refusal={contextBlocks.refusal} />
     )
     : !inputsToolsOpen ? null
+    : ground.editorTool !== null ? (scene: ViewerScene) => (
+      <SiteEditor scene={scene} origin={origin} sites={ground.site ? [ground.site] : []} snapSites={[...siteInput.sites, ...contextBlocks.blocks]}
+                  tool={ground.editorTool!} level={ground.site ? ground.site.points[0][2] : siteLevel} newSiteName={ground.newName} onFinishDrawing={ground.finishDrawing}
+                  onChangeSite={(_, site) => ground.change(site)} onClose={ground.close} onDrawHole={ground.startHole}
+                  onUndo={ground.undo} onRedo={ground.redo} canUndo={ground.canUndo} canRedo={ground.canRedo} refusal={ground.refusal} flatElevation />
+    )
     : siteToolShown !== null ? (scene: ViewerScene) => (
       <SiteEditor scene={scene} origin={origin} sites={siteInput.sites} snapSites={contextBlocks.blocks} tool={siteToolShown} level={siteLevel} newSiteName={nextSiteName(siteInput.sites)}
                   onFinishDrawing={finishDrawing} onChangeSite={(index, site) => { void changeSite(index, site); }}
@@ -723,7 +747,10 @@ function OpenProject(props: ProjectWorkspaceProps) {
   };
   const pickingApplies = picking !== null && props.mode === "design" && openStep === "inputs";
   if (picking !== null && !pickingApplies) setPicking(null);
-  const startPicking = () => setPicking({ busy: false, problem: null });
+  const startPicking = () => {
+    ground.end();
+    setPicking({ busy: false, problem: null });
+  };
   const reportPickProblem = (error: unknown) => {
     if (!reportServiceProblem(error, onServiceProblem)) setPicking((now) => now && { ...now, busy: false, problem: failureTextOf(error) });
   };
@@ -775,7 +802,9 @@ function OpenProject(props: ProjectWorkspaceProps) {
   const testSurfacesBox = (
     <SurfaceSetsBox files={files.test_surfaces} onAddFiles={addFiles} onRemoveFile={removeFile} disabledReason={inputsDisabledReason}
                     drawingProblems={testSurfacesMesh.drawingProblems} onPickFromSurroundings={hasSurroundingsFiles && props.mode === "design" ? startPicking : undefined}
-                    onRenameSet={renameSet} onEditPicks={(fileName) => { void editPicks(fileName); }} />
+                    onRenameSet={renameSet} onEditPicks={(fileName) => { void editPicks(fileName); }}
+                    onDraw={props.mode === "design" ? () => startGround({ kind: "draw" }) : undefined}
+                    onEditOutline={props.mode === "design" ? (fileName) => startGround({ kind: "edit", file: fileName }) : undefined} />
   );
   const stepContent: Record<StepName, ReactNode> = {
     inputs: (
