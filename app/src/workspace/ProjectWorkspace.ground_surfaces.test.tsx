@@ -48,8 +48,8 @@ async function openWith(service: FakeService, sets: InputFileInfo[] = []) {
   const opened = project(NOTHING_RUN);
   await openWorkspace(service, { ...opened, inputs: { ...opened.inputs, test_surfaces: service.storedTestSurfaces } });
 }
-/** Drags a vertex handle of the editor to the plan point (x, y). */
-async function dragHandle(label: string, x: number, y: number) {
+/** Drags a vertex handle of the editor to the plan point (x, y), without waiting for the service. */
+function dragHandleNow(label: string, x: number, y: number) {
   const handle = container().querySelector(`[aria-label="${label}"]`)!;
   vi.spyOn(editor()!, "getBoundingClientRect").mockReturnValue(
     { left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600, x: 0, y: 0, toJSON: () => ({}) });
@@ -57,6 +57,9 @@ async function dragHandle(label: string, x: number, y: number) {
   act(() => { handle.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, clientX: 600, clientY: 300 })); });
   act(() => { handle.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, ...at })); });
   act(() => { handle.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, ...at })); });
+}
+async function dragHandle(label: string, x: number, y: number) {
+  dragHandleNow(label, x, y);
   await settle();
 }
 
@@ -129,4 +132,53 @@ test("while a run is in progress Draw and Edit outline are disabled with the rea
   expect(buttonIn(box(), "Draw").disabled).toBe(true);
   const editOutline = menuItems("Square").find((item) => item.textContent === "Edit outline")!;
   expect(editOutline.getAttribute("aria-disabled") === "true" || editOutline.disabled).toBe(true);
+});
+
+
+test("a vertex moved stays where it was put while it is saved, and two quick moves are both kept", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.groundOutlines["ground_1.ply"] = SQUARE;
+  await openWith(service, [GROUND_SET]);
+  await chooseFromSetMenu("Square", "Edit outline");
+  dragHandleNow("Vertex 2", 30, 0);
+  expect(container().querySelector('[aria-label="Vertex 2"]')!.getAttribute("cx")).toBe("700");
+  dragHandleNow("Vertex 3", 30, 15);
+  await settle();
+  expect(service.drawnSetRequests.at(-1)!.outline.points).toEqual([[0, 0, 0], [30, 0, 0], [30, 15, 0], [0, 10, 0]]);
+  await key("z", { ctrlKey: true });
+  expect(service.drawnSetRequests.at(-1)!.outline.points).toEqual([[0, 0, 0], [30, 0, 0], [20, 10, 0], [0, 10, 0]]);
+});
+
+test("a refused move puts the vertex back", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.groundOutlines["ground_1.ply"] = SQUARE;
+  await openWith(service, [GROUND_SET]);
+  await chooseFromSetMenu("Square", "Edit outline");
+  service.drawRefusal = "Not saved: the outline crosses itself.";
+  await dragHandle("Vertex 2", 30, 0);
+  expect(container().querySelector('[aria-label="Vertex 2"]')!.getAttribute("cx")).toBe("600");
+});
+
+test("a hole in a raised surface is drawn on the surface's level", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.groundOutlines["ground_1.ply"] = { points: SQUARE.points.map(([x, y]) => [x, y, 10]), holes: [] };
+  await openWith(service, [GROUND_SET]);
+  await chooseFromSetMenu("Square", "Edit outline");
+  await press(buttonIn(editor()!, "Draw hole"));
+  const levels = vi.spyOn(FakeViewerScene.latest!, "pointOnLevel");
+  await clickAt(5, 2);
+  expect(levels.mock.calls.at(-1)![2]).toBe(10);
+});
+
+test("a refused hole keeps the hole drawing open with the reason", async () => {
+  const service = new FakeService(NOTHING_RUN, null);
+  service.groundOutlines["ground_1.ply"] = SQUARE;
+  await openWith(service, [GROUND_SET]);
+  await chooseFromSetMenu("Square", "Edit outline");
+  await press(buttonIn(editor()!, "Draw hole"));
+  service.drawRefusal = "Not saved: hole 1 is not strictly inside the outline.";
+  for (const [x, y] of [[5, 2], [10, 2], [10, 6]]) await clickAt(x, y);
+  await clickAt(5, 2);
+  expect(editor()!.textContent).toContain("Drawing a hole in Square");
+  expect(editor()!.textContent).toContain("hole 1 is not strictly inside the outline");
 });

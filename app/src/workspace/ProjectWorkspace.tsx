@@ -715,7 +715,7 @@ function OpenProject(props: ProjectWorkspaceProps) {
     : !inputsToolsOpen ? null
     : ground.editorTool !== null ? (scene: ViewerScene) => (
       <SiteEditor scene={scene} origin={origin} sites={ground.site ? [ground.site] : []} snapSites={[...siteInput.sites, ...contextBlocks.blocks]}
-                  tool={ground.editorTool!} level={siteLevel} newSiteName={ground.newName} onFinishDrawing={ground.finishDrawing}
+                  tool={ground.editorTool!} level={ground.site ? ground.site.points[0][2] : siteLevel} newSiteName={ground.newName} onFinishDrawing={ground.finishDrawing}
                   onChangeSite={(_, site) => ground.change(site)} onClose={ground.close} onDrawHole={ground.startHole}
                   onUndo={ground.undo} onRedo={ground.redo} canUndo={ground.canUndo} canRedo={ground.canRedo} refusal={ground.refusal} flatElevation />
     )

@@ -1,8 +1,9 @@
 // Test surfaces drawn on the ground (design/test-surfaces-on-ground.md): the tool of the site editor that draws them, and the drawn set
 // it edits. Draw saves the closed outline at once as a new set ("Ground n") and turns to editing it; Edit outline reads a set's outline
-// and edits it; every change (a vertex moved, a hole drawn) is saved over the set. Undo and Redo step through this editing session's
-// outlines, each saved again; closing the editor ends the session. A refused change keeps the set as it was and shows the reason.
-import { useState } from "react";
+// and edits it; every change (a vertex moved, a hole drawn) is shown at once and saved over the set, the saves sent one after another so
+// quick changes build on each other. Undo and Redo step through this editing session's outlines, each saved again; closing the editor
+// ends the session. A refused change puts the outline back as it was and shows the reason.
+import { useRef, useState } from "react";
 import { drawSurfaceSet, failureTextOf, getGroundOutline, reportServiceProblem, type GroundOutline, type InputFileInfo } from "../api_client/client";
 import type { SiteTool } from "../sites/SiteEditor";
 import type { Site, SitePoint } from "../sites/site_geometry";
@@ -36,7 +37,14 @@ export function nextGroundName(sets: readonly InputFileInfo[]): string {
 
 export function useGroundSurfaces({ token, project, sets, onSaved, onServiceProblem }: GroundSurfacesOptions) {
   const [tool, setTool] = useState<GroundTool | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSessionState] = useState<Session | null>(null);
+  // The session as last set, read by changes made before React renders again; and the saves still on their way, in order
+  const sessionNow = useRef<Session | null>(null);
+  const saves = useRef<Promise<unknown>>(Promise.resolve());
+  const setSession = (next: Session | null) => {
+    sessionNow.current = next;
+    setSessionState(next);
+  };
   const [refusal, setRefusal] = useState<string | null>(null);
   const outline = session ? session.outlines[session.at] : null;
   const shownName = session ? sets.find((set) => set.name === session.file)?.shown_name ?? session.file : "";
@@ -56,15 +64,24 @@ export function useGroundSurfaces({ token, project, sets, onSaved, onServiceProb
       return false;
     }
   };
-  const save = async (next: GroundOutline) => {
-    if (!session) return;
-    if (await store(session.file, next)) {
-      setSession((now) => now && { ...now, outlines: [...now.outlines.slice(0, now.at + 1), next], at: now.at + 1 });
-    }
+  /** Shows *after* at once and saves its outline after the saves still on their way; puts *before* back when it is refused. */
+  const showAndStore = async (before: Session, after: Session): Promise<boolean> => {
+    setSession(after);
+    const stored = saves.current.then(() => store(after.file, after.outlines[after.at]));
+    saves.current = stored;
+    const ok = await stored;
+    if (!ok && sessionNow.current === after) setSession(before);
+    return ok;
   };
-  const stepTo = async (at: number) => {
-    if (!session || at < 0 || at >= session.outlines.length) return;
-    if (await store(session.file, session.outlines[at])) setSession((now) => now && { ...now, at });
+  const save = (next: GroundOutline): Promise<boolean> => {
+    const now = sessionNow.current;
+    if (!now) return Promise.resolve(false);
+    return showAndStore(now, { ...now, outlines: [...now.outlines.slice(0, now.at + 1), next], at: now.at + 1 });
+  };
+  const stepBy = (step: number) => {
+    const now = sessionNow.current;
+    if (!now || now.at + step < 0 || now.at + step >= now.outlines.length) return;
+    void showAndStore(now, { ...now, at: now.at + step });
   };
 
   const start = (next: GroundTool) => {
@@ -101,7 +118,7 @@ export function useGroundSurfaces({ token, project, sets, onSaved, onServiceProb
       const z = outline.points[0][2];
       const file = tool.file;
       void save({ ...outline, holes: [...(outline.holes ?? []), points.map((point): number[] => [point[0], point[1], z])] })
-        .then(() => setTool({ kind: "edit", file }));
+        .then((stored) => { if (stored) setTool({ kind: "edit", file }); });
       return;
     }
     if (tool?.kind !== "draw") return;
@@ -130,8 +147,8 @@ export function useGroundSurfaces({ token, project, sets, onSaved, onServiceProb
     },
     change: (changed: Site) => { void save({ points: changed.points, holes: changed.holes ?? [] }); },
     startHole: () => { if (session) start({ kind: "draw_hole", file: session.file }); },
-    undo: () => { if (session) void stepTo(session.at - 1); },
-    redo: () => { if (session) void stepTo(session.at + 1); },
+    undo: () => stepBy(-1),
+    redo: () => stepBy(1),
     canUndo: session !== null && session.at > 0,
     canRedo: session !== null && session.at < session.outlines.length - 1,
   };
