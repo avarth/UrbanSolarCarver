@@ -1,5 +1,5 @@
 // One box of input files (UX 5.2): dashed with its hint while empty, one row per file with a remove button once it has files,
-// "Add files" by the picker or by dropping files onto the box. The Site step draws one per role of the site and one for the
+// "Import" by the picker or by dropping files onto the box. The Site step draws one per role of the site and one for the
 // project's test surfaces (SurfaceSetsBox). While a run is active the service refuses uploads and removals, so both are disabled
 // with the reason. A removed file is kept in the project folder: the box says so with an Undo (last_removal.ts).
 import { useContext, useId, useRef, useState, type DragEvent, type ReactNode } from "react";
@@ -58,7 +58,7 @@ interface InputBoxProps {
   showsDisabledReason?: boolean;
   /** At the end of the box: the maximum volume's link to a site instead (sites/SiteInput.tsx). */
   footer?: ReactNode;
-  /** A second action beside the add button (From surroundings, for test surfaces). */
+  /** An action before the add button, as the Sites box has Draw before Import: Pick for the test surfaces, Draw for the context. */
   extraAction?: ReactNode;
   /** A menu at the end of a file's row, before its remove button (Rename, Edit picks of a surface set); null for none. */
   fileMenu?: (file: InputFileInfo) => ReactNode;
@@ -169,7 +169,7 @@ export function InputBox({ role, files, weatherLocation = null, weatherHint = ""
       )}
       <div className="input-box-title-row">
         {!titleHidden && <Subheading id={titleId} className="input-box-title">{shownTitle}</Subheading>}
-        {extraAction === null ? addButton : <span className="site-box-actions">{addButton}{extraAction}</span>}
+        {extraAction === null ? addButton : <span className="site-box-actions">{extraAction}{addButton}</span>}
       </div>
       {subtitle !== null && <p className="input-box-subtitle">{subtitle}</p>}
       {hint !== "" && <p className="input-box-hint">{hint}</p>}

@@ -417,7 +417,7 @@ export const messages = {
   siteHint: "The plots you may build on: closed outlines in plan, drawn in the 3D view or imported, each with its base and max height.",
   drawSite: "Draw",
   // Drawn context blocks (design/context-blocks.md)
-  drawBlock: "Draw block",
+  drawBlock: "Draw",
   blockNamed: (number: number) => `Block ${number}`,
   blockNameLabel: "Block name",
   blockHeightLabel: (blockName: string) => `${blockName}: height`,
@@ -431,7 +431,7 @@ export const messages = {
   // Sites from DXF and OBJ files (design/site-import.md)
   importSites: "Import",
   // Test surfaces picked on the surroundings, and surface sets (design/test-surfaces-on-context.md)
-  pickFromSurroundings: "From context",
+  pickFromSurroundings: "Pick",
   pickingSurfaces: "Picking test surfaces on the context",
   pickingSteps: "Click the facades and roofs of the context to protect. Click a picked face again to drop it.",
   pickedSetTarget: "Where the picked faces go",
@@ -449,7 +449,7 @@ export const messages = {
   surfaceSetsHint: "Windows, facades or roofs whose sun or sky the carving protects, as files or as faces picked on the context. Each criterion and study chooses which of them to use.",
   usedBy: (names: string) => `Used by ${names}`,
   surfaceSetInUse: (names: string) => `Used by ${names}: switch it off there to remove it`,
-  noSurfaceSets: "The project has no test surfaces yet. Add files or pick them on the context in the Site step.",
+  noSurfaceSets: "The project has no test surfaces yet. Import files or pick them on the context in the Site step.",
   openSiteStep: "Open the Site step",
   unusedSurfaceSets: "Test surfaces no criterion uses",
   useSurfaceSet: (name: string) => `Use ${name}`,
@@ -585,7 +585,7 @@ export const messages = {
 
   // Empty, error and warning states (11)
   noInputsYet: "Add a maximum volume to start",
-  addFiles: "Add files",
+  addFiles: "Import",
   orTryAnExample: "or try an example",
   weatherFileNeeded: "Add a weather file in Settings to run this mode",
   // A criterion that is on has a mode that needs a weather file (with several criteria the shown one is named too)

@@ -51,7 +51,7 @@ test("a project without sets says so, with a link that opens the Site step", () 
                                                disabledReason={null} />);
   expect(switches()).toEqual([]);
   expect(root().querySelector(".surface-set-note")!.textContent).toBe(
-    "The project has no test surfaces yet. Add files or pick them on the context in the Site step. Open the Site step");
+    "The project has no test surfaces yet. Import files or pick them on the context in the Site step. Open the Site step");
   click(byRole(root(), "button", "Open the Site step"));
   expect(onOpenSite).toHaveBeenCalledOnce();
 });

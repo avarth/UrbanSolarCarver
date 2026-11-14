@@ -1,6 +1,6 @@
 // The Site step (UX 5.2, spec 7.1; named Inputs until design/new-project-setup.md): one box per input, in this order: the context
 // (optional), the project's test surfaces as surface sets (SurfaceSetsBox), which the criteria and studies choose among, the terrain
-// (optional), and the sites or the maximum volume. Each has "Add files" (picker, or drop the files onto the box) and a remove button
+// (optional), and the sites or the maximum volume. Each has "Import" (picker, or drop the files onto the box) and a remove button
 // per file; under the boxes the size of all inputs together and the warning when it does not look like metres. The boxes are
 // common/InputBox.tsx; the weather file is in the project settings (ProjectSettingsDialog).
 // While a run of the project is active the service refuses uploads and removals, so both are disabled with the reason. Under the boxes,
@@ -51,7 +51,7 @@ interface InputsStepProps {
   maxVolumeFooter?: ReactNode;
   /** After the terrain: the project's test surfaces as surface sets (SurfaceSetsBox). */
   testSurfacesBox?: ReactNode;
-  /** In the Context box: beside Add files (Draw block), and under the files (the drawn blocks), design/context-blocks.md. */
+  /** In the Context box: beside Import (Draw), and under the files (the drawn blocks), design/context-blocks.md. */
   contextExtraAction?: ReactNode;
   contextFooter?: ReactNode;
   /** The removed files kept under inputs/removed/ of the project folder, and opening that folder; absent: no line about them. */

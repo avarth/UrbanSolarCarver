@@ -9,7 +9,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Site
 
-- **Draw context blocks.** Draw block in the Context box draws an outline in the 3D view with the site editor and extrudes it
+- **The same words in every box**: Add files is now **Import**, as in the Sites box; the Context box has **Draw** and **Import**, in the Sites box's order; the
+  Test surfaces box has **Pick** (it said From context) and **Import**.
+- **Draw context blocks.** Draw in the Context box draws an outline in the 3D view with the site editor and extrudes it
   to a height; blocks are listed beside the context files and joined into the context without changing any context file.
   Overlapping blocks are refused; touching ones are fine. The block rows follow the Sites table: a double click on the name renames,
   the height is a column, and a ⋯ menu holds Edit, Draw hole, Place on terrain and Remove. A click on a block in the 3D view edits

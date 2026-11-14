@@ -22,6 +22,8 @@ function newProject() {
 
 const panel = () => container().querySelector(".workspace-panel")!;
 const editor = () => container().querySelector(".site-editor");
+/** The Sites box (its Draw, not the Context box's). */
+const sitesBox = () => [...panel().querySelectorAll<HTMLElement>(".input-box")].find((box) => box.querySelector(".input-box-title-row h3")?.textContent === "Sites")!;
 const key = async (name: string, options: KeyboardEventInit = {}) => {
   act(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, ...options })); });
   await settle();
@@ -62,7 +64,7 @@ test("a site is drawn with clicks, closed on its first point, saved with the def
   const service = new FakeService(NOTHING_RUN, null);
   service.siteSource = "sites";
   await openWorkspace(service, newProject());
-  act(() => { buttonIn(panel(), "Draw").click(); });
+  act(() => { buttonIn(sitesBox(), "Draw").click(); });
   await settle();
   expect(editor()!.textContent).toContain("Drawing Site 1");
   expect(FakeViewerScene.latest!.viewsFromTheTop).toBeGreaterThan(0);

@@ -845,11 +845,11 @@ function OpenProject(props: ProjectWorkspaceProps) {
   const saveFailureText = saveFailureTextOf(form.saveFailure);
   const saveFailureNotice = saveFailureText === null ? null : <SaveFailureNotice text={saveFailureText} onSaveAgain={() => void flushSave()} />;
 
-  // The empty view's "Add files" leads to the Inputs step, where each role has its own box: the focus goes to the first one's button.
+  // The empty view's "Import" leads to the Inputs step, where each role has its own box: the focus goes to the first one's button.
   useEffect(() => {
     if (addFilesRequest > 0) panel.current?.querySelector<HTMLButtonElement>(".inputs-step .input-add")?.focus();
   }, [addFilesRequest]);
-  // Shown in Design only: its "Add files" leads to the Inputs step, which Simulate hides.
+  // Shown in Design only: its "Import" leads to the Inputs step, which Simulate hides.
   const hasNoMeshInputs = files.max_volume.length === 0 && files.test_surfaces.length === 0 && siteInput.sites.length === 0 && siteInput.source !== "sites";
   const emptyViewContent = hasNoMeshInputs && (
     <div className="viewer-empty-state">

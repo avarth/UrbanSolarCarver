@@ -31,7 +31,7 @@ function renderBox({ files = [], onAddFiles = async () => [], onRemoveFile = asy
                                            onPickFromSurroundings={onPickFromSurroundings} onRenameSet={onRenameSet} onEditPicks={onEditPicks} />);
 }
 
-test("an empty box says what test surfaces are, with Add files and, given context, From context", () => {
+test("an empty box says what test surfaces are, with Import and, given context, Pick", () => {
   const onPick = vi.fn();
   renderBox({ onPickFromSurroundings: onPick });
   expect(box().getAttribute("aria-labelledby")).not.toBeNull();
@@ -41,20 +41,20 @@ test("an empty box says what test surfaces are, with Add files and, given contex
     "Windows, facades or roofs whose sun or sky the carving protects, as files or as faces picked on the context. Each criterion and study chooses which of them to use.");
   expect(box().querySelector(".input-box-drop-hint")!.textContent).toBe("You can also drag files onto this box.");
   const actions = box().querySelector(".input-box-title-row .site-box-actions")!;
-  expect([...actions.querySelectorAll("button")].map((button) => button.textContent)).toEqual(["Add files", "From context"]);
-  click(byRole(actions, "button", "From context"));
+  expect([...actions.querySelectorAll("button")].map((button) => button.textContent)).toEqual(["Pick", "Import"]);
+  click(byRole(actions, "button", "Pick"));
   expect(onPick).toHaveBeenCalledOnce();
 });
 
-test("without context there is no From context; during a run neither button can be used", () => {
+test("without context there is no Pick; during a run neither button can be used", () => {
   renderBox();
   expect(box().querySelector(".site-box-actions")).toBeNull();
-  expect(box().textContent).not.toContain("From context");
-  expect(box().querySelector(".input-add")!.textContent).toBe("Add files");
+  expect(box().textContent).not.toContain("Pick");
+  expect(box().querySelector(".input-add")!.textContent).toBe("Import");
   rendered!.unmount();
   renderBox({ disabledReason: "A run is in progress", onPickFromSurroundings: () => {} });
-  expect(byRole<HTMLButtonElement>(box(), "button", "From context").disabled).toBe(true);
-  expect(byRole<HTMLButtonElement>(box(), "button", "Add files").disabled).toBe(true);
+  expect(byRole<HTMLButtonElement>(box(), "button", "Pick").disabled).toBe(true);
+  expect(byRole<HTMLButtonElement>(box(), "button", "Import").disabled).toBe(true);
 });
 
 test("dropped files are added as test surfaces; a set no one uses is removed by its button", async () => {

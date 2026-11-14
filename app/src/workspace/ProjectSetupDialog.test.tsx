@@ -47,7 +47,7 @@ test("page 1 has the weather file's box and north; Next and Back go between the 
   await openWithSetup(new FakeService(NOTHING_RUN, null));
   const weather = setup()!.querySelector<HTMLElement>(".input-box")!;
   expect(weather.querySelector("h3")!.textContent).toBe("Weather file");
-  expect(weather.querySelector(".input-box-title-row button")!.textContent).toBe("Add files");
+  expect(weather.querySelector(".input-box-title-row button")!.textContent).toBe("Import");
   expect(setup()!.querySelector('[data-setting="north_deg"]')).not.toBeNull();
   expect(setup()!.querySelector('[data-setting="voxel_size"]')).toBeNull();      // only the Location group's north
   expect(buttonIn(setup()!, "Back")).toBeUndefined();

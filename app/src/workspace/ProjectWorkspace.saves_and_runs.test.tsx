@@ -311,7 +311,7 @@ test("a stored grid over the budget marks the Settings button, and Run analysis 
   expect(projectSettings()!.querySelector('[data-setting="voxel_size"] .setting-error')).not.toBeNull();
 });
 
-test("without a weather file Run analysis names Settings, with a button that opens it on the weather file's Add files", async () => {
+test("without a weather file Run analysis names Settings, with a button that opens it on the weather file's Import", async () => {
   service = new FakeService(NOTHING_RUN, null);
   const opened = project(NOTHING_RUN);
   await openWorkspace(service, { ...opened, inputs: { ...opened.inputs, weather: [] }, weather_location: null, weather_latitude: null });
@@ -323,7 +323,7 @@ test("without a weather file Run analysis names Settings, with a button that ope
   act(() => buttonIn(pinnedBar(), "Open settings").click());
   expect(projectSettings()).not.toBeNull();
   const addFiles = settingsWeatherBox()!.querySelector<HTMLButtonElement>(".input-box-title-row button")!;
-  expect(addFiles.textContent).toBe("Add files");
+  expect(addFiles.textContent).toBe("Import");
   expect(document.activeElement).toBe(addFiles);
   closeProjectSettings();
   await addWeatherFileInSettings();

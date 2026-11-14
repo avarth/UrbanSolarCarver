@@ -47,6 +47,8 @@ test("blocks and context files are drawn together in the Context layer", async (
 
 const panel = () => container().querySelector(".workspace-panel")!;
 const editor = () => container().querySelector(".site-editor");
+/** The Context box of the Site step (its Draw, not the Sites box's). */
+const contextBox = () => [...panel().querySelectorAll<HTMLElement>(".input-box")].find((box) => box.querySelector(".input-box-title-row h3")?.textContent === "Context")!;
 const rows = () => [...panel().querySelectorAll<HTMLElement>(".context-block-row")];
 const heightOf = (row: Element) => row.querySelector<HTMLInputElement>(".site-row-height")!;
 const nameOf = (row: Element) => row.querySelector<HTMLElement>(".site-row-name")!.textContent;
@@ -84,7 +86,7 @@ const typeAndEnter = async (field: HTMLInputElement, value: string) => {
   await settle();
 };
 async function drawSquare(service: FakeService) {
-  act(() => { buttonIn(panel(), "Draw block").click(); });
+  act(() => { buttonIn(contextBox(), "Draw").click(); });
   await settle();
   expect(editor()!.textContent).toContain("Drawing Block 1");
   for (const [x, y] of [[0, 0], [10, 0], [10, 10], [0, 10]]) await clickAt(x, y);
@@ -97,9 +99,10 @@ function newProject() {
   return { ...detail, inputs: { ...detail.inputs, max_volume: [] }, joined_bounds: null };
 }
 
-test("Draw block in the Context box draws a block in a project whose maximum volume comes from files; it is saved 10 m high and its height field takes the focus", async () => {
+test("Draw in the Context box draws a block in a project whose maximum volume comes from files; it is saved 10 m high and its height field takes the focus", async () => {
   const service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, project(NOTHING_RUN));
+  expect([...contextBox().querySelectorAll(".input-box-title-row button")].map((button) => button.textContent)).toEqual(["Draw", "Import"]);
   const saved = await drawSquare(service);
   expect(saved).toEqual([{ name: "Block 1", points: [[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]], height: 10 }]);
   expect(rows().map(nameOf)).toEqual(["Block 1"]);
@@ -162,7 +165,7 @@ test("drawing a block snaps to a site's vertex", async () => {
   service.siteSource = "sites";
   service.sites = [{ name: "Site 1", points: [[0, 0, 0], [20, 0, 0], [20, 10, 0], [0, 10, 0]], height: 30 }];
   await openWorkspace(service, newProject());
-  act(() => { buttonIn(panel(), "Draw block").click(); });
+  act(() => { buttonIn(contextBox(), "Draw").click(); });
   await settle();
   for (const [x, y] of [[20.3, 0.2], [30, 0], [30, 10]]) await clickAt(x, y);
   await key("Enter");

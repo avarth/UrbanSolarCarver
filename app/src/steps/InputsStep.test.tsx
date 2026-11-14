@@ -40,13 +40,13 @@ function weatherBox(files: typeof WEATHER_FILES, weatherNeeded = false) {
   );
 }
 
-test("empty boxes: dashed, Add files in the title row and no badge, the hint, then the drop line", () => {
+test("empty boxes: dashed, Import in the title row and no badge, the hint, then the drop line", () => {
   rendered = renderForTest(inputsStep(NO_FILES));
   const maxVolume = boxTitled("Maximum volume");
   expect(maxVolume.classList.contains("input-box-empty")).toBe(true);
   expect(maxVolume.querySelector(".input-box-required")).toBeNull();
   expect(maxVolume.querySelector(".input-box-subtitle")).toBeNull();
-  expect(maxVolume.querySelector(".input-box-title-row button")!.textContent).toBe("Add files");
+  expect(maxVolume.querySelector(".input-box-title-row button")!.textContent).toBe("Import");
   expect(maxVolume.textContent).toContain("The largest building you would allow, as one or more closed meshes.");
   expect(maxVolume.querySelector(".input-box-actions")).toBeNull();
   expect(maxVolume.querySelector("p.input-box-drop-hint")!.textContent).toBe("You can also drag files onto this box.");
@@ -55,7 +55,7 @@ test("empty boxes: dashed, Add files in the title row and no badge, the hint, th
   rendered = renderForTest(weatherBox([]));
   const weather = boxTitled("Weather file");
   expect(weather.querySelector(".input-box-required")).toBeNull();
-  expect(weather.querySelector(".input-box-title-row button")!.textContent).toBe("Add files");
+  expect(weather.querySelector(".input-box-title-row button")!.textContent).toBe("Import");
   expect(weather.textContent).toContain(WEATHER_HINT);
   expect(weather.querySelector("p.input-box-drop-hint")!.textContent).toBe("You can also drag the .epw file onto this box.");
 });
@@ -64,7 +64,7 @@ test("filled boxes: the hint, a row per file with a named remove button whose ti
   rendered = renderForTest(inputsStep(SOME_FILES));
   const context = boxTitled(CONTEXT_TITLE);
   expect(context.classList.contains("input-box-filled")).toBe(true);
-  expect(context.querySelector(".input-box-title-row button")!.textContent).toBe("Add files");
+  expect(context.querySelector(".input-box-title-row button")!.textContent).toBe("Import");
   expect(context.querySelector(".input-box-drop-hint")).toBeNull();
   expect([...context.querySelectorAll(".input-file-name")].map((name) => name.textContent)).toEqual(["neighbour_blocks.ply", "neighbour_trees.ply"]);
   expect(context.querySelector(".input-box-hint")!.textContent).toBe(
@@ -148,7 +148,7 @@ test("the optional boxes for the context and the terrain follow the maximum volu
   expect(terrain.querySelector(".input-box-required")).toBeNull();
   expect(terrain.querySelector("p.input-box-subtitle")!.textContent).toBe("Optional");
   expect(terrain.textContent).toContain("The ground. It blocks sun and sky; the site stays buildable above it.");
-  expect(terrain.querySelector(".input-box-title-row button")!.textContent).toBe("Add files");
+  expect(terrain.querySelector(".input-box-title-row button")!.textContent).toBe("Import");
   expect(terrain.querySelector("p.input-box-drop-hint")!.textContent).toBe("You can also drag files onto this box.");
 });
 

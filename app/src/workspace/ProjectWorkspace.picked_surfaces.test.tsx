@@ -53,7 +53,7 @@ async function openCarve(entries: CriterionEntry[], { sets = [], withSurrounding
 }
 
 const box = () => surfaceSetsBox()!;
-const pickButton = () => [...box().querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "From context") ?? null;
+const pickButton = () => [...box().querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Pick") ?? null;
 const bar = () => container().querySelector<HTMLFormElement>("form.context-picker-bar");
 const useButton = () => bar()!.querySelector<HTMLButtonElement>('button[type="submit"]')!;
 const surfaceSetRequests = () => service.requests.filter((request) => request.includes("/surface-sets/") || request.includes("/test-surfaces/"));
@@ -83,9 +83,9 @@ async function chooseFromSetMenu(setName: string, item: string) {
   await press([...box().querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((candidate) => candidate.textContent === item)!);
 }
 
-test("From context is in the Site step's Test surfaces box only while the project has context files", async () => {
+test("Pick is in the Site step's Test surfaces box only while the project has context files", async () => {
   await openCarve([FACADES], { withSurroundings: false });
-  expect(box().querySelector(".input-box-title-row button")!.textContent).toBe("Add files");
+  expect(box().querySelector(".input-box-title-row button")!.textContent).toBe("Import");
   expect(pickButton()).toBeNull();
   endWorkspaceTest();
   startWorkspaceTest();
@@ -95,7 +95,7 @@ test("From context is in the Site step's Test surfaces box only while the projec
   // The criterion's panel offers no picking: only its switches
   openStep("Criteria");
   openPanelSection("Test surfaces");
-  expect(container().querySelector(".criterion-panel")!.textContent).not.toContain("From context");
+  expect(container().querySelector(".criterion-panel")!.textContent).not.toContain("Pick");
 });
 
 test("Carve: pick a face, Use makes a new set from the pick, which no criterion uses; the box lists it by its name", async () => {
@@ -234,7 +234,7 @@ test("Simulate: a study picks nothing itself; a set picked in the Site step is o
   });
   await openStudySettings("Sky view factor");
   expect(studyPopover()!.querySelector(".study-pick-surfaces")).toBeNull();
-  expect(studyPopover()!.textContent).not.toContain("From context");
+  expect(studyPopover()!.textContent).not.toContain("Pick");
   await switchMode("design");
   await settle();
   openStep("Site");
