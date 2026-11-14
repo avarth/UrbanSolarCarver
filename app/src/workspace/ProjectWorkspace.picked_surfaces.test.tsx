@@ -85,12 +85,12 @@ async function chooseFromSetMenu(setName: string, item: string) {
 
 test("Pick is in the Site step's Test surfaces box only while the project has context files", async () => {
   await openCarve([FACADES], { withSurroundings: false });
-  expect(box().querySelector(".input-box-title-row button")!.textContent).toBe("Import");
+  expect([...box().querySelectorAll(".input-box-title-row button")].map((button) => button.textContent)).toEqual(["Draw", "Import"]);
   expect(pickButton()).toBeNull();
   endWorkspaceTest();
   startWorkspaceTest();
   await openCarve([FACADES]);
-  expect(pickButton()).not.toBeNull();
+  expect([...box().querySelectorAll(".input-box-title-row button")].map((button) => button.textContent)).toEqual(["Draw", "Pick", "Import"]);
   expect(bar()).toBeNull();
   // The criterion's panel offers no picking: only its switches
   openStep("Criteria");

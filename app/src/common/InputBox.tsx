@@ -181,7 +181,7 @@ export function InputBox({ role, files, weatherLocation = null, weatherHint = ""
             const shownName = file.shown_name ?? file.name;
             // What the file is, in the remove button's tooltip, under what the button does (user, 2026-11-10)
             const details = [
-              ...(isWeather ? [] : [messages.triangleCount(file.triangle_count) + (file.picked === true ? `, ${messages.pickedOnSurroundings}` : "")]),
+              ...(isWeather ? [] : [messages.triangleCount(file.triangle_count) + (file.picked === true ? `, ${messages.pickedOnSurroundings}` : file.drawn === true ? `, ${messages.drawnOnGround}` : "")]),
               // a refused removal already names the users
               ...(refusal === null && (file.used_by ?? []).length > 0 ? [messages.usedBy(listedWithAnd(file.used_by ?? []))] : []),
             ];

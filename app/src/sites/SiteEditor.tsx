@@ -67,6 +67,8 @@ export interface SiteEditorProps {
   heights?: Heights;
   /** Outlines snapped to besides the other entries of *sites*: the sites while blocks are drawn, the blocks while sites are. */
   snapSites?: Site[];
+  /** A vertex's elevation sets every vertex's, so the outline stays on one level (a test surface drawn on the ground). */
+  flatElevation?: boolean;
 }
 
 const DRAG_START_PIXELS = 3;
@@ -244,7 +246,8 @@ export function SiteEditor(props: SiteEditorProps) {
   const setElevation = (at: VertexAt, z: number) => {
     const ring = editedRings[at.ring];
     if (!edited || !ring) return;
-    changeEdited(replacedRing(editedRings, at.ring, ring.map((point, index): SitePoint => (index === at.vertex ? [point[0], point[1], z] : point))));
+    if (props.flatElevation) changeEdited(editedRings.map((points) => points.map((point): SitePoint => [point[0], point[1], z])));
+    else changeEdited(replacedRing(editedRings, at.ring, ring.map((point, index): SitePoint => (index === at.vertex ? [point[0], point[1], z] : point))));
   };
 
   // A new tool, or another site to edit: nothing drawn, nothing selected

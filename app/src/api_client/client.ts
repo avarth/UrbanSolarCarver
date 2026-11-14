@@ -235,6 +235,17 @@ export const renameSurfaceSet = (token: string, project: string, fileName: strin
 export const getSurfacePicks = (token: string, project: string, fileName: string) =>
   requestJson<Schemas["SurfacePicksReply"]>(token, `${projectPath(project)}/surface-sets/${encodeURIComponent(fileName)}/picks`);
 
+/** An outline drawn on the ground (design/test-surfaces-on-ground.md): its vertices at one elevation, and its holes. */
+export type GroundOutline = Schemas["GroundOutline"];
+
+/** A surface set made from an outline drawn on the ground: a new one (named *name*, or "Ground n"), or the drawn set *replace*. */
+export const drawSurfaceSet = (token: string, project: string, request: { outline: GroundOutline; name?: string; replace?: string }) =>
+  requestJson<InputFileInfo>(token, `${projectPath(project)}/surface-sets/drawn`, "POST", request);
+
+/** The outline of a set drawn on the ground (Edit outline). */
+export const getGroundOutline = (token: string, project: string, fileName: string) =>
+  requestJson<GroundOutline>(token, `${projectPath(project)}/surface-sets/${encodeURIComponent(fileName)}/outline`);
+
 /** Whether the app reruns the carving as its settings change (Settings > Carving); stored in the project, during a run too. */
 export async function setCarvingUpdates(token: string, project: string, on: boolean): Promise<void> {
   await send(token, `${projectPath(project)}/carving-updates`, "PUT", JSON.stringify({ on }), "application/json");
