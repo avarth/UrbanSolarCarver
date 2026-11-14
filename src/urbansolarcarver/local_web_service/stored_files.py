@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-from . import test_surfaces
+from . import picked_surfaces, test_surfaces
 from .api_models import ChangedFileNotice, InputFileChange, ProjectJson, StoredFileRecord
 from .project_names import ProjectError
 
@@ -112,7 +112,12 @@ def refresh_changed_inputs(store, name: str) -> bool:
             noticed.extend((role, file_name) for file_name in changed_names)
         for (role, file_name), new_record in renewed.items():
             project_json.stored_files.setdefault(role, {})[file_name] = new_record
-        noticed_on = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        if _picked_sets_written_before(store, project_folder, project_json):      # once: their touching pieces were one surface
+            try:
+                store.rebuild_picked_sets(project_folder, project_json)
+            except ProjectError as error:
+                first_error = first_error or error
+        noticed_on =datetime.now(timezone.utc).isoformat(timespec="seconds")
         project_json.changed_files = [notice for notice in project_json.changed_files if (notice.role, notice.file_name) not in noticed]
         project_json.changed_files.extend(ChangedFileNotice(role=role, file_name=file_name, noticed=noticed_on) for role, file_name in noticed)
         changed = project_json.model_dump() != as_read
@@ -130,6 +135,17 @@ class StoredFilesNotRead(ProjectError):
     def __init__(self, first_error: ProjectError, files: frozenset[tuple[str, str]]):
         super().__init__(str(first_error), first_error.status_code)
         self.files = files
+
+
+def _picked_sets_written_before(store, project_folder: Path, project_json: ProjectJson) -> bool:
+    """Whether a picked set's file was written before each piece kept its own corners (picked_surfaces.written_with_pieces_apart)."""
+    for file_name, surface_set in project_json.surface_sets.items():
+        path = test_surfaces.stored_path(project_folder, file_name)
+        if surface_set.picks and file_name in project_json.input_files.get(test_surfaces.ROLE, {}) and path.is_file():
+            with contextlib.suppress(OSError):
+                if not picked_surfaces.written_with_pieces_apart(path):
+                    return True
+    return False
 
 
 def _not_read(role: str, file_names: str, error: OSError) -> ProjectError:

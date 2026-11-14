@@ -38,6 +38,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Fixes
 
+- **Picked pieces that touch stay apart.** Two pieces of a picked set that shared an edge (two walls at a corner, a wall and
+  its canopy) were read by the engine as one surface: the sampling skipped it as non-planar, so the criterion protected neither, and
+  on single-sheet context one piece could turn to agree with the other. Each piece now keeps corners of its own with its normal.
+  Picked sets stored before are built again once when the project is opened, which puts the criteria that use them out of date.
 - **Rename and Reset ask about turns not saved in Inspect** first, as leaving Inspect does: both open the project afresh, which
   dropped them.
 - **A broken file no longer blocks Save and Restore in Inspect**: a context or terrain file that cannot be read only refuses a save
