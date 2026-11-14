@@ -547,6 +547,34 @@ class AnalysisMesh:
 _OFF_PLANE_TOLERANCE_M = 1e-4
 
 
+def _flatness(surface: trimesh.Trimesh, coplanarity_tol_deg: float = 5.0) -> tuple[str | None, np.ndarray | None]:
+    """Why the sampling leaves *surface* (one connected component) out, "degenerate" or "non-planar", or None, with its unit
+    area-weighted mean normal when it has one. Only faces with real area count: a zero-area sliver has a (0, 0, 0) normal and must
+    not disqualify the panel. Nor does a sliver whose normal is off but that stays within _OFF_PLANE_TOLERANCE_M of the plane."""
+    face_areas = surface.area_faces
+    real = face_areas > 1e-12 * max(float(face_areas.max()), 1e-30)
+    face_normals = surface.face_normals[real]
+    mean_normal = (face_normals * face_areas[real][:, None]).sum(axis=0)
+    norm_len = np.linalg.norm(mean_normal)
+    if norm_len < 1e-12:
+        return "degenerate", None
+    mean_normal /= norm_len
+    angles = np.degrees(np.arccos(np.clip(face_normals @ mean_normal, -1.0, 1.0)))
+    off_normal = angles > coplanarity_tol_deg
+    if off_normal.any():
+        plane_point = np.average(surface.triangles_center[real], axis=0, weights=face_areas[real])
+        off_plane = np.abs((surface.triangles[real][off_normal] - plane_point) @ mean_normal)
+        if off_plane.max() > _OFF_PLANE_TOLERANCE_M:
+            return "non-planar", mean_normal
+    return None, mean_normal
+
+
+def skip_reason(surface: trimesh.Trimesh, coplanarity_tol_deg: float = 5.0) -> str | None:
+    """Why a run would leave *surface* (one connected component of a test surface file) out before sampling it: "degenerate" (no
+    area), "non-planar", or None. "no samples" depends on the grid step and is known only when sampling. Inspect calls this."""
+    return _flatness(surface, coplanarity_tol_deg)[0]
+
+
 def discretize_surface_with_normals(
     mesh: trimesh.Trimesh,
     sample_step: float = 1.0,
@@ -617,26 +645,11 @@ def discretize_surface_with_normals(
     if skipped_surfaces is not None:
         skipped_surfaces.surface_count = len(submeshes)
     for component_index, submesh in enumerate(submeshes):
-        # 1) Planarity check on the faces with real area: a zero-area sliver
-        #    has a (0, 0, 0) normal and must not disqualify the panel. Nor does
-        #    a sliver whose normal is off but that stays on the panel's plane.
-        face_areas = submesh.area_faces
-        real = face_areas > 1e-12 * max(float(face_areas.max()), 1e-30)
-        face_normals = submesh.face_normals[real]
-        mean_normal = (face_normals * face_areas[real][:, None]).sum(axis=0)
-        norm_len = np.linalg.norm(mean_normal)
-        if norm_len < 1e-12:
-            skip("degenerate", component_index, submesh)
+        # 1) Planarity check (_flatness)
+        reason, mean_normal = _flatness(submesh, coplanarity_tol_deg)
+        if reason is not None:
+            skip(reason, component_index, submesh)
             continue
-        mean_normal /= norm_len
-        angles = np.degrees(np.arccos(np.clip(face_normals @ mean_normal, -1.0, 1.0)))
-        off_normal = angles > coplanarity_tol_deg
-        if off_normal.any():
-            plane_point = np.average(submesh.triangles_center[real], axis=0, weights=face_areas[real])
-            off_plane = np.abs((submesh.triangles[real][off_normal] - plane_point) @ mean_normal)
-            if off_plane.max() > _OFF_PLANE_TOLERANCE_M:
-                skip("non-planar", component_index, submesh)
-                continue
 
         # 2) Sample this planar sheet
         pts3d, nrm3d, qv, qf, wts = sample_planar_surface(
