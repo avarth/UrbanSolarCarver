@@ -138,3 +138,49 @@ def test_sets_are_added_and_deleted_as_inputs_of_the_project_and_a_set_in_use_is
     client.delete("/api/projects/p/criteria/1/test-surfaces/roof.ply")
     assert client.delete("/api/projects/p/inputs/test_surfaces/roof.ply").status_code == 200
     assert "roof.ply" not in {file["name"] for file in client.get("/api/projects/p").json()["inputs"]["test_surfaces"]}
+
+
+# --- Touching pieces stay apart for the engine: its loader merges corners only where their normals agree (write_joined_ply)
+
+from urbansolarcarver.io import load_mesh, save_mesh  # noqa: E402
+from urbansolarcarver.local_web_service.projects import ProjectStore  # noqa: E402
+from urbansolarcarver.local_web_service.stored_files import record_stored_file, refresh_changed_inputs  # noqa: E402
+
+# A single-sheet wall x = 0 (z 0 to 5) with a canopy z = 5 over its east side (x 0 to 5): not a closed body
+SHEET_L = trimesh.Trimesh([[0, 0, 0], [0, 10, 0], [0, 10, 5], [0, 0, 5], [5, 0, 5], [5, 10, 5]], [[0, 1, 2], [0, 2, 3], [3, 2, 5], [3, 5, 4]])
+WALL_FROM_EAST = {"point": [0, 5, 2], "ray": [-1, 0, 0]}
+CANOPY_FROM_ABOVE = {"point": [2.5, 5, 5], "ray": [0, 0, -1]}
+
+
+def _surfaces_as_the_engine_reads(projects_folder, file_name):
+    """The normal of each connected surface of a stored set as load_mesh reads it, sorted."""
+    mesh = load_mesh(str(projects_folder / "p" / "inputs" / "test_surfaces" / file_name))
+    return sorted(np.round(part.face_normals.mean(axis=0), 6).tolist() for part in mesh.split(only_watertight=False))
+
+
+def test_two_walls_picked_at_a_corner_stay_two_surfaces_for_the_engine(with_building, projects_folder):
+    _pick(with_building, [EAST, NORTH])
+    assert _surfaces_as_the_engine_reads(projects_folder, "picked_1.ply") == [[0, 1, 0], [1, 0, 0]]
+
+
+def test_pieces_seen_from_opposite_sides_of_one_sheet_each_keep_the_side_they_were_clicked_from(client_with_inputs, projects_folder):
+    upload(client_with_inputs, "p", "context", ("sheet.ply", SHEET_L.export(file_type="ply")))
+    _pick(client_with_inputs, [WALL_FROM_EAST, CANOPY_FROM_ABOVE])
+    assert _surfaces_as_the_engine_reads(projects_folder, "picked_1.ply") == [[0, 0, 1], [1, 0, 0]]
+
+
+def test_a_picked_set_written_with_its_pieces_joined_is_built_again_once(with_building, projects_folder):
+    _pick(with_building, [EAST, NORTH])
+    store = ProjectStore(projects_folder)
+    path = projects_folder / "p" / "inputs" / "test_surfaces" / "picked_1.ply"
+    stored = _stored_mesh(projects_folder, "picked_1.ply")
+    save_mesh(trimesh.Trimesh(stored.vertices, stored.faces, process=True), str(path))     # as sets were written before: corners merged
+    project_json = store.read_project_json("p")
+    record_stored_file(project_json, "test_surfaces", "picked_1.ply", path)
+    store.write_project_json("p", project_json)
+    assert len(_surfaces_as_the_engine_reads(projects_folder, "picked_1.ply")) == 1
+    refresh_changed_inputs(store, "p")
+    assert _surfaces_as_the_engine_reads(projects_folder, "picked_1.ply") == [[0, 1, 0], [1, 0, 0]]
+    modified = path.stat().st_mtime_ns
+    refresh_changed_inputs(store, "p")
+    assert path.stat().st_mtime_ns == modified                       # once: a set written with its pieces apart is left alone

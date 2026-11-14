@@ -20,7 +20,6 @@ from pathlib import Path
 import numpy as np
 import trimesh
 
-from ..io import save_mesh
 from .api_models import ProjectJson, SurfacePick, SurfaceSetJson
 from .project_names import ProjectError
 
@@ -104,19 +103,29 @@ def picked_mesh(context: trimesh.Trimesh, picks: list[SurfacePick]) -> tuple[tri
         faces_by_piece[int(triangle)] = (piece, flip)
     if not faces_by_piece:
         return None, lost
-    seed_normals = {seed: context.face_normals[seed] * (-1.0 if flip else 1.0) for seed, (_piece, flip) in faces_by_piece.items()}
-    vertices, faces = [], []
-    for seed, (piece, _flip) in faces_by_piece.items():
-        wanted = seed_normals[seed]
-        for face in piece:
-            corners = context.vertices[context.faces[face]]
-            if float(np.dot(context.face_normals[face], wanted)) < 0.0:      # wound against its piece: turned with it
-                corners = corners[::-1]
-            start = len(vertices)
-            vertices.extend(corners.tolist())
-            faces.append([start, start + 1, start + 2])
-    mesh = trimesh.Trimesh(vertices=np.asarray(vertices), faces=np.asarray(faces), process=True)
+    # Each piece has corners of its own, carrying its normal: the engine's loader merges corners only where their normals agree too,
+    # so pieces that touch stay apart. Merged, they would be one surface, which the sampling skips as non-planar and whose winding
+    # the loader makes agree across the shared edge (a canopy seen from above turned down to agree with its wall seen from the east).
+    vertices, faces, normals = [], [], []
+    start = 0
+    for seed, (piece, flip) in faces_by_piece.items():
+        wanted = context.face_normals[seed] * (-1.0 if flip else 1.0)
+        corners = context.triangles[piece]
+        against = context.face_normals[piece] @ wanted < 0.0          # wound against its piece: turned with it
+        corners[against] = corners[against][:, ::-1]
+        part = trimesh.Trimesh(vertices=corners.reshape(-1, 3), faces=np.arange(3 * len(corners)).reshape(-1, 3), process=True)
+        vertices.append(part.vertices)
+        faces.append(part.faces + start)
+        normals.append(np.tile(wanted, (len(part.vertices), 1)))
+        start += len(part.vertices)
+    mesh = trimesh.Trimesh(vertices=np.vstack(vertices), faces=np.vstack(faces), vertex_normals=np.vstack(normals), process=False)
     return mesh, lost
+
+
+def written_with_pieces_apart(path: Path) -> bool:
+    """Whether a picked set's file carries a normal per corner (write_set_file); one written before keeps touching pieces merged."""
+    with open(path, "rb") as ply_file:
+        return b"property float nx" in ply_file.read(1024).split(b"end_header")[0]
 
 
 def next_picked_file_name(recorded_names) -> str:
@@ -129,12 +138,14 @@ def next_picked_file_name(recorded_names) -> str:
 
 
 def write_set_file(path: Path, mesh: trimesh.Trimesh) -> None:
-    """Write a set's mesh through a temporary file in its folder, so a reader never sees a partial file."""
+    """Write a set's mesh, with float64 positions and a normal per corner (write_joined_ply), through a temporary file in its folder,
+    so a reader never sees a partial file."""
+    from .test_surfaces import write_joined_ply      # test_surfaces builds on this module
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(dir=path.parent, prefix="picked-", suffix=".tmp.ply")
     os.close(descriptor)
     try:
-        save_mesh(mesh, temporary_name)
+        write_joined_ply([mesh], Path(temporary_name))
         os.replace(temporary_name, path)
     finally:
         Path(temporary_name).unlink(missing_ok=True)
