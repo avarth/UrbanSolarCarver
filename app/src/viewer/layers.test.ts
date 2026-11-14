@@ -474,3 +474,16 @@ test("the maximum volume layer is always dotted edges, and the base volume layer
   const solid = baseVolumeLayer(base, "solid");
   expect(solid.children.find((child): child is THREE.Mesh => child instanceof THREE.Mesh)!.geometry).toBe(base);
 });
+
+test("the surfaces a run leaves out are drawn in the error colour over the selected file, turned or not, and not over a file that is not selected", () => {
+  setInspectColourTokens();
+  const surfaces = [{ centre: [0.5, 0.5, 0] as Point3, normal: [0, 0, 1] as Point3, area: 1 },
+                    { centre: [5.5, 0, 0.5] as Point3, normal: [0, -1, 0] as Point3, area: 4, left_out: "non-planar" }];
+  const leftOutOf = (file: InspectLayerFile) => inspectSurfacesLayer([file], { arrows: false }).getObjectByName("left-out") as THREE.Mesh | undefined;
+  const drawn = leftOutOf(inspectFile({ surfaces }))!;
+  expect(indexOf(drawn)).toEqual([6, 7, 8]);
+  expect(colourOf(drawn)).toBe(new THREE.Color(colourToken("error")).getHexString());
+  expect(leftOutOf(inspectFile({ surfaces, turned: new Set([1]) }))).toBeDefined();
+  expect(leftOutOf(inspectFile({ surfaces, selected: false }))).toBeUndefined();
+  expect(leftOutOf(inspectFile())).toBeUndefined();
+});

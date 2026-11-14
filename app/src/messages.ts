@@ -180,6 +180,11 @@ export const messages = {
     `Bounds: x ${xMin} to ${xMax}, y ${yMin} to ${yMax}, z ${zMin} to ${withUnit(zMax, "m")}`,
   georeferencedCoordinates: (kilometres: number) => `Georeferenced coordinates, about ${withUnit(groupedDigits(Math.round(kilometres)), "km")} from 0.`,
   inspectSurfaces: (count: number) => `Surfaces: ${groupedDigits(count)}`,
+  // The surfaces a run leaves out before sampling, in the words of skippedSurfaceReasons
+  inspectNotFlat: (count: number, total: number) =>
+    `${groupedDigits(count)} of ${groupedDigits(total)} surfaces ${count === 1 ? "is not flat: a run leaves it out." : "are not flat: a run leaves them out."}`,
+  inspectNoArea: (count: number, total: number) =>
+    `${groupedDigits(count)} of ${groupedDigits(total)} surfaces ${count === 1 ? "has no area: a run leaves it out." : "have no area: a run leaves them out."}`,
   inspectViewOrigin: (x: string, y: string, z: string) => `The view is drawn around x ${x}, y ${y}, z ${z} of the files' coordinates.`,
   flipMode: "Flip mode",
   flipAll: "Flip all",
