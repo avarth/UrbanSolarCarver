@@ -2122,6 +2122,10 @@ export interface components {
             original_kept: boolean;
             /** Made In App */
             made_in_app?: ("picked" | "drawn") | null;
+            /** Not Flat Count */
+            not_flat_count?: number | null;
+            /** No Area Count */
+            no_area_count?: number | null;
             /** Problem */
             problem?: string | null;
             /**

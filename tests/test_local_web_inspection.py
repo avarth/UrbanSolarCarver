@@ -778,3 +778,37 @@ def test_a_picked_or_drawn_set_is_shown_but_not_flippable_and_a_turn_is_refused(
         assert _stored(store, file_name).read_bytes() == before
     imported = _summary(store, "panels.obj")
     assert imported.made_in_app is None and imported.flippable
+
+# --- Surfaces a run leaves out as not flat or without area (design/inspect-not-flat.md)
+
+FLAT_BENT_AND_NO_AREA_OBJ = b"""v 0 0 0
+v 6 0 0
+v 6 6 0
+v 0 6 0
+v 10 0 0
+v 16 0 0
+v 16 6 0
+v 10 6 3
+v 20 0 0
+v 21 0 0
+v 22 0 0
+f 1 2 3
+f 1 3 4
+f 5 6 7
+f 5 7 8
+f 9 10 11
+"""
+
+
+def test_a_test_surface_file_says_which_surfaces_a_run_leaves_out(store):
+    store.add_input("p", "context", "block.ply", box_bytes([40, 0, 5]))
+    store.pick_surface_set("p", [SurfacePick(point=[45, 0, 5], ray=[-1, 0, 0])], None, None)
+    store.add_criterion_test_surface("p", "1", "mixed.obj", FLAT_BENT_AND_NO_AREA_OBJ)
+    summary = _summary(store, "mixed.obj")
+    assert summary.surface_count == 3 and summary.not_flat_count == 1 and summary.no_area_count == 1
+    header, _, _ = decoded_geometry(inspection_geometry(store, "p", "mixed.obj"))
+    assert sorted(str(surface["left_out"]) for surface in header["surfaces"]) == ["None", "degenerate", "non-planar"]
+    picked = _summary(store, "picked_1.ply")
+    assert picked.not_flat_count == 0 and picked.no_area_count == 0
+    context = _summary(store, "block.ply")
+    assert context.not_flat_count is None and context.no_area_count is None

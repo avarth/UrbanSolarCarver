@@ -35,6 +35,7 @@ import trimesh
 
 from ..errors import InputError
 from ..io import float32_resolution, load_mesh, save_mesh
+from ..surface_sampling import skip_reasons
 from . import stored_files, test_surfaces
 from .api_models import InspectedFile, InspectReply, ProjectJson
 from .project_names import ProjectError
@@ -70,6 +71,7 @@ class FileInspection:
     vertices: np.ndarray | None = None
     faces: np.ndarray | None = None
     surface_of_face: np.ndarray | None = None       # int32 per face: its surface
+    left_out: tuple[str | None, ...] = ()           # per surface: why a run leaves it out before sampling (skip_reason), or None
 
     @property
     def kept_triangle_count(self) -> int:
@@ -235,7 +237,8 @@ def inspection_geometry(store: ProjectStore, name: str, file_name: str) -> bytes
 
     * ``uint32`` length n of the header in bytes;
     * the header as UTF-8 JSON, padded with spaces to a multiple of 4: ``frame`` (world coordinates the corners and centres are
-      relative to), ``triangle_count``, ``surface_count`` and ``surfaces`` (per surface its ``centre``, unit ``normal`` and ``area``);
+      relative to), ``triangle_count``, ``surface_count`` and ``surfaces`` (per surface its ``centre``, unit ``normal``, ``area`` and
+      ``left_out``, why a run leaves it out before sampling: "non-planar", "degenerate" or null);
     * ``float32`` the three corners of each triangle, x y z each, relative to ``frame``;
     * ``uint32`` the surface number of each triangle.
 
@@ -259,7 +262,8 @@ def inspection_geometry(store: ProjectStore, name: str, file_name: str) -> bytes
     length = np.linalg.norm(normal, axis=1)
     normal = np.where(length[:, None] > 0, normal / np.maximum(length, np.finfo(float).tiny)[:, None], [0.0, 0.0, 1.0])
     header = {"frame": frame.tolist(), "triangle_count": int(len(mesh.faces)), "surface_count": surface_count,
-              "surfaces": [{"centre": (centre[number] - frame).tolist(), "normal": normal[number].tolist(), "area": float(area[number])}
+              "surfaces": [{"centre": (centre[number] - frame).tolist(), "normal": normal[number].tolist(), "area": float(area[number]),
+                            "left_out": inspected.left_out[number]}
                            for number in range(surface_count)]}
     header_bytes = json.dumps(header).encode("utf-8")
     header_bytes += b" " * (-len(header_bytes) % HEADER_ALIGNMENT_BYTES)
@@ -480,16 +484,19 @@ def _inspect_mesh(mesh: trimesh.Trimesh, file_name: str, role: str, version: str
     body_count = int(numbers.max()) + 1
     closed_body_count = body_count - len(_open_bodies(mesh, numbers))
     is_test_surface = role == test_surfaces.ROLE
+    left_out = tuple(skip_reasons(mesh.triangles, numbers, body_count)) if is_test_surface else ()
     summary = InspectedFile(
         role=role, file_name=file_name, triangle_count=int(face_count), area_m2=float(mesh.area), bounds=mesh.bounds.tolist(),
         body_count=body_count, closed_body_count=closed_body_count, surface_count=body_count if is_test_surface else None,
-        flippable=is_test_surface and not mesh.is_watertight, original_kept=False, version=version)
+        flippable=is_test_surface and not mesh.is_watertight, original_kept=False, version=version,
+        not_flat_count=left_out.count("non-planar") if is_test_surface else None,
+        no_area_count=left_out.count("degenerate") if is_test_surface else None)
     if not is_test_surface:
         return FileInspection(summary=summary)
     vertices, faces = np.asarray(mesh.vertices).view(np.ndarray), np.asarray(mesh.faces).view(np.ndarray)
     for array in (vertices, faces, numbers):
         array.flags.writeable = False
-    return FileInspection(summary=summary, vertices=vertices, faces=faces, surface_of_face=numbers)
+    return FileInspection(summary=summary, vertices=vertices, faces=faces, surface_of_face=numbers, left_out=left_out)
 
 
 def _open_bodies(mesh: trimesh.Trimesh, body_of_face: np.ndarray) -> np.ndarray:
