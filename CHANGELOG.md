@@ -46,6 +46,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Fixes
 
+- **The 3D view froze once a set was drawn on the ground or picked on the context.** Their files keep double-precision corners
+  (since the fix that keeps touching picked pieces apart), and the view handed those to WebGL as they were, so every frame failed:
+  the scene stopped while only the editor outlines moved. The view now shifts them to its local origin and draws them as float32.
 - **Inspect does not flip picked or drawn sets.** A set picked on the context is built again from its picks when the context
   changes, so a flip saved in Inspect was lost without a word. Its Flip buttons are now off, and the row says to pick the face again
   from the other side; a set drawn on the ground says it faces up.

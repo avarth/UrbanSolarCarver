@@ -101,3 +101,28 @@ test("an OBJ has OBJ lines, or none: a text file is not one, while a file of not
   expect(isObjText("")).toBe(true);
   expect(isObjText("This is not a mesh.\nv 0 0 0")).toBe(false);
 });
+
+
+test("a binary PLY of double coordinates (a set picked or drawn in the app) is shifted while double, then drawn as float32", async () => {
+  const header = ["ply", "format binary_little_endian 1.0", "element vertex 3", "property double x", "property double y", "property double z",
+                  "property float nx", "property float ny", "property float nz", "element face 1", "property list uchar int vertex_indices",
+                  "end_header", ""].join("\n");
+  const headerBytes = new TextEncoder().encode(header);
+  const vertexBytes = 3 * (3 * 8 + 3 * 4);
+  const buffer = new ArrayBuffer(headerBytes.length + vertexBytes + 1 + 3 * 4);
+  new Uint8Array(buffer).set(headerBytes);
+  const view = new DataView(buffer);
+  let at = headerBytes.length;
+  for (const [x, y, z] of [[500012.345, 4200007.891, 12.5], [500013.345, 4200007.891, 12.5], [500012.345, 4200008.891, 12.5]]) {
+    for (const value of [x, y, z]) { view.setFloat64(at, value, true); at += 8; }
+    for (const value of [0, 0, 1]) { view.setFloat32(at, value, true); at += 4; }
+  }
+  view.setUint8(at, 3); at += 1;
+  [0, 1, 2].forEach((corner) => { view.setInt32(at, corner, true); at += 4; });
+  answerWith(buffer);
+  const geometry = await loadMesh("/ground_1.ply", "t", "ply", ORIGIN);
+  const positions = geometry.getAttribute("position").array;
+  expect(positions).toBeInstanceOf(Float32Array);                  // WebGL draws no Float64Array: every frame would throw
+  const [x, y, z] = firstVertex(positions);
+  expect(x).toBeCloseTo(12.095, 3); expect(y).toBeCloseTo(7.391, 3); expect(z).toBeCloseTo(2.5, 3);
+});
