@@ -90,6 +90,19 @@ function shiftPositions(geometry: THREE.BufferGeometry, origin: Point3): void {
   positions.needsUpdate = true;
 }
 
+/**
+ * *geometry* with its positions as float32. PLYLoader keeps a binary PLY's double coordinates (the sets picked or drawn in the app are
+ * written so) as a Float64Array, which WebGL cannot draw: every frame would throw and the view would freeze. Called after the shift
+ * to the local origin, so georeferenced coordinates lose nothing.
+ */
+function withFloat32Positions(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
+  const positions = geometry.getAttribute("position");
+  if (positions && !(positions.array instanceof Float32Array)) {
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(Float32Array.from(positions.array as ArrayLike<number>), positions.itemSize));
+  }
+  return geometry;
+}
+
 /** A mesh file without triangles (the building massing writes an empty file when no storey fits). */
 function emptyGeometry(): THREE.BufferGeometry {
   return new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute([], 3));
@@ -171,7 +184,7 @@ async function parsedMesh(buffer: ArrayBuffer, extension: MeshExtension | string
       const shiftedText = isAsciiPly(buffer) ? shiftAsciiPly(text(), localOriginPoint) : null;
       const geometry = positionsOnly(new PLYLoader().parse(shiftedText ?? buffer));
       if (shiftedText === null) shiftPositions(geometry, localOriginPoint);
-      return geometry;
+      return withFloat32Positions(geometry);
     }
     case "glb": {
       const gltf = await new GLTFLoader().parseAsync(buffer, "");
