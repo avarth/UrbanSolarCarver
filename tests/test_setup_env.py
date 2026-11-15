@@ -253,3 +253,33 @@ def test_a_venv_on_another_python_is_made_again(tmp_path):
 
 def test_a_missing_venv_is_made(tmp_path):
     assert setup_env.venv_needs_making(tmp_path / "python.exe", tmp_path, base_prefix_of=_Probe(str(tmp_path)))
+
+
+def test_a_failed_torch_import_on_windows_names_the_visual_cpp_runtime(monkeypatch, capsys, tmp_path):
+    class Failed:
+        returncode, stdout, stderr = 1, "", "ImportError: DLL load failed while importing _C"
+
+    monkeypatch.setattr(setup_env, "run", lambda *args, **kwargs: Failed())
+    monkeypatch.setattr(setup_env.platform, "system", lambda: "Windows")
+    with pytest.raises(SystemExit):
+        setup_env.verify_and_warm_up(tmp_path / "python.exe")
+    output = capsys.readouterr().out
+    assert "Microsoft Visual C++ Redistributable (x64)" in output
+    assert "https://aka.ms/vs/17/release/vc_redist.x64.exe" in output and "administrator" in output
+
+
+def test_a_self_contained_install_drops_the_users_own_pip_settings():
+    """A user-set PIP_TARGET or PIP_PREFIX would install outside the folder."""
+    environment = {"PIP_TARGET": "C:/elsewhere", "PIP_EXTRA_INDEX_URL": "https://mirror", "PATH": "C:/Windows",
+                   "PIP_CACHE_DIR": "C:/old cache"}
+    cleaned = setup_env.without_users_pip_settings(environment)
+    assert cleaned == {"PATH": "C:/Windows"}
+
+
+def test_a_too_long_path_suggests_the_per_user_programs_folder(monkeypatch):
+    monkeypatch.setattr(setup_env.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(setup_env, "_windows_long_paths_enabled", lambda: False)
+    monkeypatch.setenv("LOCALAPPDATA", r"C:\Users\A B\AppData\Local")
+    with pytest.raises(SystemExit) as stopped:
+        setup_env.self_contained_venv(Path("C:/") / ("d" * 117))
+    assert r"C:\Users\A B\AppData\Local\Programs\UrbanSolarCarver" in str(stopped.value)

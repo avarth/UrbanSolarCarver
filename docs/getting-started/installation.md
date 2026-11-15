@@ -4,10 +4,12 @@
 
 No Python, git or administrator rights needed beforehand.
 
-1. On the repository's GitHub page, choose **Code > Download ZIP** (or the zip of a release), and unzip it to a folder with a
-   short path, for example `C:\UrbanSolarCarver`.
-2. Double-click `setup-urbansolarcarver.bat` in that folder. It says what it will download and waits for a key press.
-3. From then on, double-click `start-urbansolarcarver.bat`. The interface opens in your browser.
+1. On the repository's GitHub page, choose **Code > Download ZIP** (or the zip of a release). Unzip the whole zip (right-click,
+   **Extract All**) into your own programs folder, `%LOCALAPPDATA%\Programs\UrbanSolarCarver`: type that path in Explorer's
+   address bar to open it. Running the setup from inside the zip does not work; it asks you to unzip first.
+2. Double-click `setup-urbansolarcarver.bat` in that folder. It says what it will download and waits for a key press. At the
+   end it offers a shortcut on the desktop, since that folder is hidden by default.
+3. From then on, double-click `start-urbansolarcarver.bat`, or the shortcut. The interface opens in your browser.
 
 Windows may warn that the `.bat` files come from the internet: choose **More info > Run anyway**, or first right-click each file,
 choose **Properties** and tick **Unblock**. Both files are plain text; open them in Notepad to read what they do.
@@ -17,18 +19,32 @@ What the setup downloads, each file checked against a SHA-256 hash that is alrea
 | What | From | Size | Checked against |
 |---|---|---|---|
 | uv, a pinned version | github.com/astral-sh/uv | about 16 MB | the hash in `setup-urbansolarcarver.bat` |
-| Python 3.14, uv's own build | github.com/astral-sh/python-build-standalone | about 30 MB | the checksums built into uv |
+| Python 3.14, uv's own build | github.com/astral-sh/python-build-standalone | about 22 MB | the checksums built into uv |
 | PyTorch: with CUDA for an NVIDIA graphics card, else the CPU build | download.pytorch.org | about 2.6 GB, or about 130 MB | `requirements-lock-hashed.txt` |
 | The other packages | pypi.org | about 300 MB | `requirements-lock-hashed.txt` |
 
-The setup picks the CUDA build of PyTorch when the NVIDIA driver can run it, and the CPU build otherwise, and says which;
-`setup-urbansolarcarver.bat --cpu` forces the CPU build. Everything it makes stays in the folder: uv, Python and the download
-caches in `.runtime`, the packages in `.venv`. Nothing is added to PATH or the registry, and a Python installed on the computer
-is not used or changed. Running the setup again repairs or updates the installation, reusing what it already downloaded after
-checking it again. To remove UrbanSolarCarver, delete the folder.
+It needs about 7 GB of free disk space with CUDA (the packages and their download cache), or about 1.5 GB with the CPU build;
+the setup checks before downloading and says how much is free.
 
-If the folder's path is too long for PyTorch's files, the setup stops before downloading and asks you to move the folder to a
-shorter path. pip reads no settings from your profile during this setup, so a company package mirror set in `pip.ini` is not used.
+The setup picks the CUDA build of PyTorch when the NVIDIA driver can run it, and the CPU build otherwise, and says which;
+`setup-urbansolarcarver.bat --cpu` forces the CPU build. Everything it makes stays in the folder: uv, Python, the download
+caches and its temporary files in `.runtime`, the packages in `.venv`. Nothing is added to PATH or the registry, and a Python
+installed on the computer is not used or changed. The one file it can write outside the folder is the desktop shortcut, and only
+if you answer Y. Running the setup again repairs or updates the installation, reusing what it already downloaded after checking
+it again. To remove UrbanSolarCarver, delete the folder; a desktop shortcut stays behind, so delete it by hand.
+
+The setup stops before downloading, and says why, when:
+
+- the folder is in OneDrive: a synced folder would upload gigabytes of packages, and files OneDrive locks or keeps online-only
+  break the install. Move the folder out of OneDrive, for example to `%LOCALAPPDATA%\Programs\UrbanSolarCarver`;
+- the folder's path is too long for PyTorch's files: move it to a shorter path, such as the one above;
+- the drive has too little free space.
+
+pip and uv read no settings from your profile during this setup (no `pip.ini`, no `PIP_` or `UV_` variables), so a company
+package mirror set there is not used. uv trusts the certificates Windows trusts, as pip does.
+
+If the setup says that PyTorch cannot be imported, the Microsoft Visual C++ Redistributable (x64) may be missing. Install it from
+Microsoft (<https://aka.ms/vs/17/release/vc_redist.x64.exe>; this needs administrator rights), then run the setup again.
 
 Your projects are kept apart from the app, in `UrbanSolarCarver\projects` in your user folder, so replacing or deleting the app
 folder keeps them. To keep them elsewhere, for example in a `projects` folder inside the app folder, use **Change folder** at the

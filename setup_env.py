@@ -300,9 +300,16 @@ def self_contained_venv(root: Path) -> Path:
         return venv_dir
     if len(str(venv_dir)) + TORCH_PATH_HEADROOM <= WINDOWS_MAX_PATH or _windows_long_paths_enabled():
         return venv_dir
+    suggestion = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))) / "Programs" / "UrbanSolarCarver"
     sys.exit(f"[X] This folder's path is too long for PyTorch's files ({len(str(root))} characters):\n"
              f"    {root}\n"
-             f"    Move this folder to a shorter path, for example C:\\UrbanSolarCarver, and run setup again.")
+             f"    Move this folder to a shorter path, for example {suggestion}, and run setup again.")
+
+
+def without_users_pip_settings(environment: dict[str, str]) -> dict[str, str]:
+    """*environment* without any PIP_* variable: a user-set PIP_TARGET or PIP_PREFIX would install outside the folder,
+    PIP_EXTRA_INDEX_URL would add an index. The self-contained install then sets its own."""
+    return {key: value for key, value in environment.items() if not key.upper().startswith("PIP_")}
 
 
 def torch_hashed_requirement(hashed_text: str, build: str) -> str:
@@ -382,6 +389,8 @@ def self_contained_install(args, cuda_version: str | None) -> None:
         for number, command in enumerate(commands, start=2):
             print(f"  {number}. {' '.join(command[1:])}")
         return
+    for key in set(os.environ) - set(without_users_pip_settings(dict(os.environ))):
+        del os.environ[key]
     os.environ.update(environment)
     torch_file = root / ".runtime" / TORCH_REQUIREMENT_FILE
     torch_file.parent.mkdir(parents=True, exist_ok=True)
@@ -434,6 +443,10 @@ def verify_and_warm_up(vpy: Path) -> None:
     else:
         log("PyTorch import failed.", "error")
         print(r.stderr)
+        if platform.system() == "Windows":
+            log("PyTorch needs the Microsoft Visual C++ Redistributable (x64), which may be missing on this computer.", "error")
+            log("Get it from Microsoft: https://aka.ms/vs/17/release/vc_redist.x64.exe (installing it needs administrator "
+                "rights), then run setup again.", "error")
         sys.exit(1)
 
     # Check warp
