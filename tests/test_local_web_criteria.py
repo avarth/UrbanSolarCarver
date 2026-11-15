@@ -534,6 +534,14 @@ def test_the_carving_switch_is_kept_in_project_json_and_set_during_a_run_too(cli
     assert client.get("/api/projects/p").json()["carving_updates_itself"] is False
 
 
+def test_the_inspect_prompt_is_answered_once_per_project_and_kept_in_project_json(client_with_inputs):
+    client = client_with_inputs
+    assert client.get("/api/projects/p").json()["inspect_prompt_answered"] is False     # asked after the first test surface file
+    assert client.post("/api/projects/p/inspect-prompt-answered").status_code == 204
+    assert client.get("/api/projects/p").json()["inspect_prompt_answered"] is True
+    assert client.post("/api/projects/p/inspect-prompt-answered").status_code == 204     # answering again changes nothing
+
+
 def test_no_criterion_colour_is_grey_like_the_context():
     """The context is drawn grey: a criterion's colour must differ in hue, so each has channels at least 0x40 apart."""
     for colour in CRITERION_COLOURS:

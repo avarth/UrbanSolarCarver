@@ -130,26 +130,21 @@ export function cardResultLine(summary: CriterionCarvingSummary): string | null 
   const removed = carving.obstruction_fraction_carved !== null
     ? messages.criterionScoreCarved(formatPercent(carving.obstruction_fraction_carved * 100))
     : messages.criterionVolumeCarved(formatPercent(100 - Math.round(carving.retention_pct)));
-  const kept = carving.kept_volume;
-  if (!kept) return removed;
-  // With a base height (design/base-height.md) the result reads as what was built above the base
-  const studied = kept.decided_volume_m3;
-  const lines = [messages.builtAboveBase(groupedDigits(Math.round(kept.volume_m3)), groupedDigits(Math.round(kept.decided_volume_kept_m3)),
-    groupedDigits(Math.round(studied)), formatPercent(studied > 0 ? Math.round((100 * kept.decided_volume_kept_m3) / studied) : 0))];
-  if (kept.score_mass_share >= BASE_OBSTRUCTION_NOTED) lines.push(messages.baseHoldsObstruction(formatPercent(Math.round(kept.score_mass_share * 100))));
-  return `${removed}. ${lines.join(". ")}.`;
+  return removed;
 }
 
-/** The share of the obstruction a base holds from which the card says that carving above it cannot remove it. */
-export const BASE_OBSTRUCTION_NOTED = 0.25;
-
 /**
- * "After all criteria: kept 61 % of the maximum volume"; null without a chain, with fewer than two criteria on (the card says it)
- * or when the share is unknown.
+ * "Combined result: kept 61 % of the maximum volume" with two or more criteria on. With a base height (the kept volume of the
+ * last criterion, *lastCarving*) it adds "12 400 m³ of it above the base height", and then shows with one criterion too, as
+ * "Result: ...". Null without a chain, with one criterion and no base height, or when the share is unknown.
  */
-export function chainSummaryLine(chain: ChainSummary | null | undefined, criteriaOn: number): string | null {
-  if (chain === null || chain === undefined || criteriaOn < 2 || chain.share_of_max_volume_kept === null) return null;
-  return messages.chainKept(formatPercent(chain.share_of_max_volume_kept * 100));
+export function chainSummaryLine(chain: ChainSummary | null | undefined, lastCarving: CriterionCarvingSummary["carving"] | undefined,
+                                 criteriaOn: number): string | null {
+  if (chain === null || chain === undefined || criteriaOn < 1 || chain.share_of_max_volume_kept === null) return null;
+  const kept = lastCarving?.kept_volume ?? null;
+  if (criteriaOn < 2 && kept === null) return null;
+  return messages.chainKept(formatPercent(chain.share_of_max_volume_kept * 100),
+    kept === null ? null : groupedDigits(Math.round(kept.decided_volume_kept_m3)), criteriaOn);
 }
 
 /**

@@ -336,6 +336,11 @@ export const getStageStatus = (token: string, project: string) =>
 
 /** Forgets the notices of input files changed in the project folder; a missing file stays listed. */
 /** The user chose the mode of a new project: it is not asked again. */
+/** The prompt to check face directions in Inspect was answered: it is not shown again in this project. */
+export async function markInspectPromptAnswered(token: string, project: string): Promise<void> {
+  await send(token, `${projectPath(project)}/inspect-prompt-answered`, "POST");
+}
+
 export async function markModeChosen(token: string, project: string): Promise<void> {
   await send(token, `${projectPath(project)}/mode-chosen`, "POST");
 }

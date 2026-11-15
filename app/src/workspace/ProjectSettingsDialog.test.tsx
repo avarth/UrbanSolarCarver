@@ -33,7 +33,7 @@ test("the window shows only the shared settings, with the grid line under Voxel 
   for (const ofAStep of ["floor_height", "final_mesh_format"]) expect(field(ofAStep), ofAStep).toBeNull();
   expect([...field("voxel_size")!.querySelectorAll(".setting-note")].map((note) => note.textContent))
     .toContain("62 voxels per side, 238 328 in total");
-  expect(dialog()!.textContent).toContain("These settings apply to every criterion. A change puts every criterion out of date.");
+  expect(dialog()!.textContent).not.toContain("These settings apply to every criterion");
 });
 
 test("the context switch is greyed out with the reason until the project has context or terrain", () => {

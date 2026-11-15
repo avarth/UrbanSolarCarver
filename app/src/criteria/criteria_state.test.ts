@@ -5,7 +5,7 @@ import {
   activeCriteria, cardLineOf, cardResultLine, cardStatusText, carvingUpdatedText, chainSummaryLine, criterionStatus, orderAfterDropping, orderAfterMoving,
   runActionOf, selectionAfterRemoving, criteriaProtectingNothing, stagesByCriterionOf, stagesDuringRun,
 } from "./criteria_state";
-import { formatPercent, groupedDigits } from "../format_numbers";
+import { groupedDigits } from "../format_numbers";
 
 function entry(id: string, overrides: Partial<CriterionEntry> = {}): CriterionEntry {
   return { id, name: `Criterion ${id}`, named_by_user: false, colour: "#336699", bypassed: false, energy_weighted: false, test_surface_files: ["roofs.obj"], settings: {}, ...overrides };
@@ -134,12 +134,15 @@ test("the result line of an unweighted mode gives the share it removes of what r
   expect(cardResultLine(summary({ ...CARVING, retention_pct: 60.5 }, null))).toBe("Removes 39 % of what reached it");     // 100 minus the kept 61 %
 });
 
-test("under two or more criteria the chain line gives the share of the maximum volume kept, with no volume; none when the share is unknown", () => {
+test("the combined result gives the share of the maximum volume kept with two or more criteria, and the volume above a base height", () => {
   const chain = { volume_after_each_m3: [4800, 2900], share_of_max_volume_kept: 0.612 };
-  expect(chainSummaryLine(chain, 2)).toBe("After all criteria: kept 61 % of the maximum volume");
-  expect(chainSummaryLine(chain, 1)).toBeNull();
-  expect(chainSummaryLine({ ...chain, share_of_max_volume_kept: null }, 2)).toBeNull();
-  expect(chainSummaryLine(null, 2)).toBeNull();
+  const based = { ...CARVING, kept_volume: { volume_m3: 54000, score_mass_share: 0.1, decided_volume_m3: 31000, decided_volume_kept_m3: 12400.4 } };
+  expect(chainSummaryLine(chain, CARVING, 2)).toBe("Combined result: kept 61 % of the maximum volume");
+  expect(chainSummaryLine(chain, based, 2)).toBe(`Combined result: kept 61 % of the maximum volume, ${groupedDigits(12400)} m³ of it above the base height`);
+  expect(chainSummaryLine(chain, based, 1)).toBe(`Result: kept 61 % of the maximum volume, ${groupedDigits(12400)} m³ of it above the base height`);
+  expect(chainSummaryLine(chain, CARVING, 1)).toBeNull();     // one criterion without a base height: its card says it
+  expect(chainSummaryLine({ ...chain, share_of_max_volume_kept: null }, CARVING, 2)).toBeNull();
+  expect(chainSummaryLine(null, CARVING, 2)).toBeNull();
 });
 
 test("a criterion without numbers has no result line", () => {
@@ -197,11 +200,7 @@ test("the run a project needs: the analysis when it is not current, else the car
   expect(runActionOf({ preprocessing: "current", thresholding: "current" })).toBeNull();
 });
 
-test("with a base height the result line adds what the base kept and what was built above it, and a base that holds much obstruction", () => {
-  const kept = { volume_m3: 54000, score_mass_share: 0.1, decided_volume_m3: 31000, decided_volume_kept_m3: 12400 };
-  expect(cardResultLine(summary({ ...CARVING, obstruction_fraction_carved: 0.7, kept_volume: kept }, null)))
-    .toBe(`Removes ${formatPercent(70)} of the obstruction. Base kept: ${groupedDigits(54000)} m³. Built above it: ${groupedDigits(12400)} m³ of `
-      + `${groupedDigits(31000)} m³ (${formatPercent(40)}).`);
-  expect(cardResultLine(summary({ ...CARVING, obstruction_fraction_carved: 0.7, kept_volume: { ...kept, score_mass_share: 0.35 } }, null)))
-    .toContain(`The base alone holds ${formatPercent(35)} of the obstruction of the test surfaces; carving above it cannot remove that.`);
+test("with a base height the card gives only the share of the obstruction it removes", () => {
+  const kept = { volume_m3: 54000, score_mass_share: 0.35, decided_volume_m3: 31000, decided_volume_kept_m3: 12400 };
+  expect(cardResultLine(summary({ ...CARVING, obstruction_fraction_carved: 0.7, kept_volume: kept }, null))).toBe("Removes 70 % of the obstruction");
 });

@@ -30,7 +30,7 @@ interface CriteriaStepProps {
   load?: SelectionLoad;
   /** What keeps a run from starting that is the selected criterion's to fix (it protects nothing), said over its panel; absent: none. */
   panelProblem?: string | null;
-  /** What the chain kept (chainSummaryLine), under the cards, of two or more criteria; absent or null: no line. */
+  /** What the criteria kept together (chainSummaryLine), under the cards; absent or null: no line. */
   chainLine?: string | null;
   /** What a new project shows in place of its criterion until a mode is chosen; absent or null: nothing, the mode is chosen. */
   firstMode?: ReactNode;

@@ -71,7 +71,6 @@ export function ProjectSettingsDialog({ form, stepErrors, criterionKeys, onChang
   return createPortal(
     <DialogFrame title={messages.projectSettingsTitle} busy={false} onClose={onClose} closeLabel={messages.closeProjectSettings} titleTakesFocus>
       <div ref={contentRef} className="project-settings">
-        <p className="project-settings-intro">{messages.projectSettingsIntro}</p>
         <SettingsStep form={form} stepErrors={stepErrors} onChange={onChange} disabledReason={disabledReason} inputRoles={inputRoles}
                       withoutInputs="disabled" settingShown={(name) => !criterionKeys.has(name)} groupLeads={weather === undefined ? undefined : { Location: weather }} />
         {carving}

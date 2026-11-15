@@ -276,7 +276,7 @@ export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): Workspace
         disabledReason,
         ...selection.requests,
       },
-      chainLine: chainCurrent ? chainSummaryLine(resultSteps.results.summary?.chain, active.length) : null,
+      chainLine: chainCurrent ? chainSummaryLine(resultSteps.results.summary?.chain, resultSteps.results.summary?.carving, active.length) : null,
     };
   };
 

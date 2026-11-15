@@ -291,6 +291,7 @@ export class FakeService {
       return new Response(null, { status: 204 });
     }
     if (method === "POST" && path === "/mode-chosen") return new Response(null, { status: 204 });
+    if (method === "POST" && path === "/inspect-prompt-answered") return new Response(null, { status: 204 });
     if (method === "PUT" && path === "/carving-updates") {
       const choice = JSON.parse(String(init!.body)) as { on: boolean };
       this.carvingUpdateChoices.push(choice);
@@ -484,6 +485,7 @@ export function project(stages: Record<PipelineStage, StageState>, settings: Rec
               weather: [{ name: "weather.epw", triangle_count: 0 }] },
     joined_bounds: [[0, 0, 0], [1, 1, 0]], weather_location: "Golden, CO, USA", weather_latitude: 39.74, stage_status: { stages }, grid_plan: null,
     criteria: [criterionEntry(criterionSettings)], criterion_status: { 1: stages }, mode_to_choose: false, carving_updates_itself: true,
+    inspect_prompt_answered: true,   // the prompt after the first test surface file: ProjectWorkspace.inspect_prompt.test.tsx
   };
 }
 
@@ -544,7 +546,8 @@ export async function openWorkspace(
         <span ref={setSettingsSlot} className="top-bar-settings-slot" />
         <ProjectWorkspace token="token" project={opened} schema={schema} modes={modes} criterionKeys={CRITERION_KEYS} warmUpState="ready" runs={runs}
                           mode={mode} onServiceProblem={(error) => reportedServiceProblems.push(error)} onShowProjects={() => {}} onInspectUnsavedChange={leaving.onUnsavedChange}
-                          onInspectTurnsReady={leaving.onTurnsReady} onGoToCarve={() => leaving.leave(() => setMode("design"))} settingsButtonSlot={settingsSlot} {...steps} />
+                          onInspectTurnsReady={leaving.onTurnsReady} onGoToCarve={() => leaving.leave(() => setMode("design"))} onGoToInspect={() => setMode("inspect")}
+                          settingsButtonSlot={settingsSlot} {...steps} />
         {leaving.dialog}
       </>
     );

@@ -89,7 +89,8 @@ function RemoveIcon() {
   );
 }
 
-/** One input box: dashed and with its hint while empty, solid with one row per file once it has files. */
+/** One input box: dashed and with its hint while empty, solid with one row per file once it has files (the hint says what is
+ * expected, so it goes once the box lists files: user 2026-11-15). */
 const NO_PROBLEMS: string[] = [];
 
 export function InputBox({ role, files, weatherLocation = null, weatherHint = "", onAddFiles, onRemoveFile, disabledReason, weatherNeeded = false,
@@ -172,7 +173,7 @@ export function InputBox({ role, files, weatherLocation = null, weatherHint = ""
         {extraAction === null ? addButton : <span className="site-box-actions">{extraAction}{addButton}</span>}
       </div>
       {subtitle !== null && <p className="input-box-subtitle">{subtitle}</p>}
-      {hint !== "" && <p className="input-box-hint">{hint}</p>}
+      {hint !== "" && !filled && <p className="input-box-hint">{hint}</p>}
       {!filled && adds && <p className="input-box-drop-hint">{isWeather ? messages.orDropWeatherFileHere : messages.orDropFilesHere}</p>}
       {filled && (
         <ul className="input-file-list">

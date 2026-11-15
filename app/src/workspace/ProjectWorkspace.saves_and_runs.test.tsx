@@ -613,7 +613,10 @@ test("Settings has a Carving group whose switch is on by default; switched off, 
   expect(carvingUpdatesSwitch().checked).toBe(true);
   expect(group().querySelector(".setting-group-title")!.textContent).toBe("Carving");
   expect(group().querySelector(".switch-row")!.textContent).toBe("Update the carving as I change its settings");
-  expect(group().querySelector(".setting-note")!.textContent).toContain("Update carving does");
+  expect(group().querySelector(".setting-note")).toBeNull();                    // what the switch does is in its tooltip
+  act(() => group().querySelector<HTMLButtonElement>(".setting-info")!.click());
+  expect(group().querySelector(".setting-tooltip")!.textContent).toContain("Update carving does");
+  act(() => group().querySelector<HTMLButtonElement>(".setting-info")!.click());
 
   await act(async () => carvingUpdatesSwitch().click());
   await settle();

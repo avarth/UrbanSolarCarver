@@ -67,8 +67,7 @@ test("filled boxes: the hint, a row per file with a named remove button whose ti
   expect(context.querySelector(".input-box-title-row button")!.textContent).toBe("Import");
   expect(context.querySelector(".input-box-drop-hint")).toBeNull();
   expect([...context.querySelectorAll(".input-file-name")].map((name) => name.textContent)).toEqual(["neighbour_blocks.ply", "neighbour_trees.ply"]);
-  expect(context.querySelector(".input-box-hint")!.textContent).toBe(
-    "Buildings and large trees that stay. They block sun and sky, and nothing is built in their place.");
+  expect(context.querySelector(".input-box-hint")).toBeNull();                 // the hint says what is expected: gone once files are listed
   expect(context.querySelector(".input-file-detail")).toBeNull();
   expect(context.querySelector<HTMLButtonElement>('[aria-label="Remove neighbour_blocks.ply"]')!.title).toBe(
     "Remove neighbour_blocks.ply from the project. The file is kept in the project folder, under inputs/removed\n2 040 triangles");
@@ -143,7 +142,7 @@ test("the optional boxes for the context and the terrain follow the maximum volu
   const context = boxTitled(CONTEXT_TITLE);
   expect(context.querySelector(".input-box-required")).toBeNull();
   expect(context.querySelector("p.input-box-subtitle")!.textContent).toBe("Optional");
-  expect(context.textContent).toContain("Buildings and large trees that stay. They block sun and sky, and nothing is built in their place.");
+  expect(context.textContent).toContain("Existing urban context, such as current buildings and trees that stay in place.");
   const terrain = boxTitled("Terrain");
   expect(terrain.querySelector(".input-box-required")).toBeNull();
   expect(terrain.querySelector("p.input-box-subtitle")!.textContent).toBe("Optional");
@@ -160,9 +159,7 @@ test("a project carved further with an earlier version keeps its note on the max
   rendered = renderForTest(
     <InputsStep files={SOME_FILES} inputsBounds={null} onAddFiles={async () => []}
                 onRemoveFile={async () => null} disabledReason={null} maxVolumeNote={carvedByNote(chain)} />);
-  expect([...boxTitled("Maximum volume").querySelectorAll(".input-box-hint")].map((hint) => hint.textContent)).toEqual([
-    "The largest building you would allow, as one or more closed meshes.", note,
-  ]);
+  expect([...boxTitled("Maximum volume").querySelectorAll(".input-box-hint")].map((hint) => hint.textContent)).toEqual([note]);   // the hint goes with files listed
   expect(boxTitled(CONTEXT_TITLE).textContent).not.toContain("Carved by");
 });
 

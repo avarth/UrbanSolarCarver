@@ -135,6 +135,19 @@ def test_score_points_default_to_the_last_active_criterion(chain_of_two):
     assert (kept == (indices % 2 == 0)).all()
 
 
+def test_a_later_criterion_has_only_the_voxels_the_one_before_it_kept(chain_of_two):
+    # The voxels criterion 1 removed are not decided by criterion 2: they are not its points, and they are not in its counts or
+    # its score range (with score smoothing their scores are 0, which drew them as one carved bar at the low end of the histogram).
+    store, name = chain_of_two
+    header, indices, scores, kept, compared = decode_score_points(build_score_points(store, name, "2"))
+    assert list(indices) == [0, 2, 4, 6, 8, 10, 12, 14, 16]
+    assert header["occupied_count"] == header["point_count"] == 9
+    assert (header["score_min"], header["score_max"]) == (0.0, 16.0)
+    assert len(scores) == len(kept) == len(compared) == 9 and (kept == (indices % 4 == 0)).all()
+    first = decode_score_points(build_score_points(store, name, "1"))
+    assert first[0]["occupied_count"] == 18
+
+
 def test_score_points_of_a_chosen_criterion(chain_of_two):
     store, name = chain_of_two
     _, indices, _, kept, _ = decode_score_points(build_score_points(store, name, "1"))
