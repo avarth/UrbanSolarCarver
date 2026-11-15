@@ -146,3 +146,17 @@ def test_the_unix_launcher_explains_a_missing_given_environment(tmp_path):
                             env=launcher_environment(USC_VENV=missing.as_posix()))
     assert result.returncode == 1
     assert "No Python environment was found at USC_VENV" in result.stdout
+
+
+def test_the_setup_script_finds_its_python_without_reading_a_file_in_the_console_code_page():
+    """set /p reads a file in the console code page, so a UTF-8 path with Greek letters came back garbled and setup stopped."""
+    text = WINDOWS_SETUP.read_text(encoding="utf-8")
+    assert "set /p" not in text.lower()
+    assert r'USC_PYTHON=%USC_RUNTIME%\python\cpython-%USC_PYTHON_VERSION%-windows-x86_64-none\python.exe' in text
+
+
+def test_the_setup_script_runs_uv_only_after_a_hash_check_that_returned_exactly_zero():
+    """if errorlevel N means at least N: a crashed PowerShell (a negative exit code) passed both checks."""
+    lines = WINDOWS_SETUP.read_text(encoding="utf-8").splitlines()
+    check = next(index for index, line in enumerate(lines) if "Get-FileHash" in line)
+    assert lines[check + 1:check + 4].count('if not "%errorlevel%"=="0" goto unzip_failed') == 1

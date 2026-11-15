@@ -68,7 +68,8 @@ if errorlevel 1 goto download_failed
 :check_uv
 "%USC_POWERSHELL%" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "if ((Get-FileHash -Algorithm SHA256 -LiteralPath $env:USC_DOWNLOAD).Hash -ne $env:USC_UV_SHA256) { Remove-Item -LiteralPath $env:USC_DOWNLOAD -Force; exit 2 }; exit 0"
 if errorlevel 2 goto hash_mismatch
-if errorlevel 1 goto unzip_failed
+rem Exactly 0 only: "if errorlevel 1" misses a crashed PowerShell's negative exit code.
+if not "%errorlevel%"=="0" goto unzip_failed
 echo uv %USC_UV_VERSION%: SHA-256 checked.
 if exist "%USC_RUNTIME%\uv" rmdir /s /q "%USC_RUNTIME%\uv"
 "%USC_POWERSHELL%" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath $env:USC_DOWNLOAD -DestinationPath (Join-Path $env:USC_RUNTIME 'uv') -Force"
@@ -88,11 +89,10 @@ set "PYTHONPATH="
 set "PYTHONNOUSERSITE=1"
 "%USC_UV%" python install %USC_PYTHON_VERSION% --no-bin --no-registry
 if errorlevel 1 goto python_failed
-"%USC_UV%" python find --system %USC_PYTHON_VERSION% > "%USC_RUNTIME%\python-path.txt"
-if errorlevel 1 goto python_failed
-set "USC_PYTHON="
-set /p USC_PYTHON=<"%USC_RUNTIME%\python-path.txt"
-if not defined USC_PYTHON goto python_failed
+rem The folder uv installs it in, built here rather than read back from uv's output:
+rem cmd reads a file in the console code page, which and garbles a path with,
+rem for example, Greek letters.
+set "USC_PYTHON=%USC_RUNTIME%\python\cpython-%USC_PYTHON_VERSION%-windows-x86_64-none\python.exe"
 if not exist "%USC_PYTHON%" goto python_failed
 
 rem 5. The environment (.venv) and the packages, every download checked.

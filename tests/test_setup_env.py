@@ -189,7 +189,7 @@ def test_a_self_contained_install_keeps_its_venv_and_caches_in_the_folder(tmp_pa
 
 
 def test_the_torch_requirement_of_a_self_contained_install_carries_both_builds_hashes():
-    text = setup_env.torch_hashed_requirement(HASHED_LOCKFILE.read_text(encoding="utf-8"))
+    text = setup_env.torch_hashed_requirement(HASHED_LOCKFILE.read_text(encoding="utf-8"), "cu126")
     assert text.startswith("torch==")
     assert text.count("--hash=sha256:") >= 2 and "numpy" not in text
 
@@ -216,3 +216,40 @@ def test_a_self_contained_install_takes_the_locked_torch_rule(driver, build):
     requirement, url, _ = setup_env.locked_torch(setup_env.LOCKFILE.read_text(encoding="utf-8"), driver, force_cpu=False)
     assert url.endswith("/" + build)
     assert "# torch-hashes: cu126 cpu" in HASHED_LOCKFILE.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("build", ["cu126", "cpu"])
+def test_the_torch_requirement_pins_the_chosen_build_so_a_second_setup_switches_builds(build):
+    """An installed 2.14.1+cpu satisfies torch==2.14.1; pinning +cu126 makes pip replace it after a driver is installed."""
+    text = setup_env.torch_hashed_requirement(HASHED_LOCKFILE.read_text(encoding="utf-8"), build)
+    assert text.splitlines()[0].startswith("torch==") and text.splitlines()[0].split()[0].endswith("+" + build)
+    assert text.count("--hash=sha256:") >= 2
+
+
+class _Probe:
+    def __init__(self, answer):
+        self.answer = answer
+
+    def __call__(self, vpy):
+        return self.answer
+
+
+def test_a_venv_whose_python_does_not_start_is_made_again(tmp_path):
+    """After the folder is moved, .venv/pyvenv.cfg still names the old Python: the venv's python fails."""
+    vpy = tmp_path / ".venv" / "Scripts" / "python.exe"
+    vpy.parent.mkdir(parents=True)
+    vpy.write_bytes(b"")
+    assert setup_env.venv_needs_making(vpy, Path("C:/x/.runtime/python/cpython"), base_prefix_of=_Probe(None))
+
+
+def test_a_venv_on_another_python_is_made_again(tmp_path):
+    vpy = tmp_path / ".venv" / "Scripts" / "python.exe"
+    vpy.parent.mkdir(parents=True)
+    vpy.write_bytes(b"")
+    base = tmp_path / ".runtime" / "python" / "cpython-3.14.6"
+    assert setup_env.venv_needs_making(vpy, base, base_prefix_of=_Probe(str(tmp_path / "system python")))
+    assert not setup_env.venv_needs_making(vpy, base, base_prefix_of=_Probe(str(base)))
+
+
+def test_a_missing_venv_is_made(tmp_path):
+    assert setup_env.venv_needs_making(tmp_path / "python.exe", tmp_path, base_prefix_of=_Probe(str(tmp_path)))

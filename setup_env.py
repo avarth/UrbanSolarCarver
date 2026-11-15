@@ -305,12 +305,37 @@ def self_contained_venv(root: Path) -> Path:
              f"    Move this folder to a shorter path, for example C:\\UrbanSolarCarver, and run setup again.")
 
 
-def torch_hashed_requirement(hashed_text: str) -> str:
-    """The torch block of the hashed lockfile: its pin and every hash of both builds."""
-    block = re.search(r"^torch==\S+(?: \\\n    --hash=sha256:[0-9a-f]{64})+", hashed_text, re.MULTILINE)
+def torch_hashed_requirement(hashed_text: str, build: str) -> str:
+    """The torch block of the hashed lockfile, pinned to *build* (``torch==2.14.1+cu126``), with every hash of both builds.
+
+    The +build pin makes a second setup replace an installed build of the same
+    version: an installed 2.14.1+cpu satisfies ``torch==2.14.1``, so after an
+    NVIDIA driver is installed pip would otherwise keep the CPU build.
+    """
+    block = re.search(r"^torch==(\S+)((?: \\\n    --hash=sha256:[0-9a-f]{64})+)", hashed_text, re.MULTILINE)
     if not block:
         sys.exit(f"[X] {HASHED_LOCKFILE.name} does not give torch with its hashes")
-    return block.group(0) + "\n"
+    return f"torch=={block.group(1)}+{build}{block.group(2)}\n"
+
+
+def _base_prefix_of(vpy: Path) -> str | None:
+    """sys.base_prefix of the venv's Python, or None when that Python does not start."""
+    try:
+        r = subprocess.run([str(vpy), "-c", "import sys; print(sys.base_prefix)"], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def venv_needs_making(vpy: Path, base_prefix: Path, base_prefix_of=_base_prefix_of) -> bool:
+    """True when *vpy* is missing, does not start (the folder was moved: pyvenv.cfg names the old Python),
+    or runs on a Python other than *base_prefix* (made by a system Python, or before a Python update)."""
+    if not vpy.is_file():
+        return True
+    found = base_prefix_of(vpy)
+    if found is None:
+        return True
+    return os.path.normcase(os.path.realpath(found)) != os.path.normcase(os.path.realpath(base_prefix))
 
 
 def self_contained_plan(root: Path, vpy: Path, torch_requirement: str,
@@ -360,11 +385,16 @@ def self_contained_install(args, cuda_version: str | None) -> None:
     os.environ.update(environment)
     torch_file = root / ".runtime" / TORCH_REQUIREMENT_FILE
     torch_file.parent.mkdir(parents=True, exist_ok=True)
-    torch_file.write_text(torch_hashed_requirement(HASHED_LOCKFILE.read_text(encoding="utf-8")), encoding="utf-8")
+    build = index_url.rstrip("/").rsplit("/", 1)[-1]
+    torch_file.write_text(torch_hashed_requirement(HASHED_LOCKFILE.read_text(encoding="utf-8"), build), encoding="utf-8")
 
     if not vpy.is_file():
         log(f"Creating virtual environment in {venv_dir}")
         run([sys.executable, "-m", "venv", str(venv_dir)])
+    elif venv_needs_making(vpy, Path(sys.base_prefix)):
+        log(f"The virtual environment at {venv_dir} does not run on this folder's Python "
+            "(the folder was moved, or it was made by another Python); making it again", "warn")
+        run([sys.executable, "-m", "venv", "--clear", str(venv_dir)])
     else:
         log(f"Virtual environment already exists at {venv_dir}")
     if not vpy.is_file():
