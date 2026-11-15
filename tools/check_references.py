@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 UNCHECKED_DOCS = "superpowers"
 NOT_IN_A_FRESH_CHECKOUT = {"app/openapi.json"}  # generated and ignored by git, named by the docs
 
-CODE_FOLDERS = ("src", "app/src", "app/scripts", "grasshopper", "configs", "tools", "tests", "setup_env.py", "pyproject.toml", "mkdocs.yml")
+CODE_FOLDERS = ("src", "app/src", "app/scripts", "grasshopper", "configs", "tools", "tests", "install", "pyproject.toml", "mkdocs.yml")
 # Built or generated files, and this check with its test, which quote removed names: each would keep a name alive after the code lost it.
 NOT_THE_CODE = ("ui_static/", "example_projects/", "generated_types.ts", "check_references.py", "test_docs_references.py")
 CODE_TEXT = (".py", ".ts", ".tsx", ".mjs", ".yaml", ".yml", ".toml", ".json")

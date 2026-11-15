@@ -65,7 +65,7 @@ def __getattr__(name):
         # Install instructions instead of an ImportError from deep inside api_core.
         raise ImportError(
             "UrbanSolarCarver requires PyTorch, which is not installed. Run "
-            "`python setup_env.py` from the repository: it installs the PyTorch "
+            "`python install/setup_env.py` from the repository: it installs the PyTorch "
             "build for your GPU driver (or the CPU build). See "
             "https://pytorch.org/get-started/locally/ to install it by hand."
         ) from exc

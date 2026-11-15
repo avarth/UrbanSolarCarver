@@ -19,9 +19,8 @@ UrbanSolarCarver/
 ├── tools/                  Developer scripts (the maps below, repository state, reference check, lockfile, app test data, Grasshopper smoke test)
 ├── benchmarks/             Timing scripts
 ├── pyproject.toml          Package metadata, dependencies and the Python import rules
-├── setup_env.py            Automated environment setup (GPU detection)
-├── requirements-lock.txt   The exact versions the tests last passed on, which setup_env.py installs
-├── requirements-lock-hashed.txt  The same pins with every file's SHA-256, for setup_env.py --self-contained
+├── install/                setup_env.py (environment setup, GPU detection), requirements-lock.txt (the versions the tests
+│                           last passed on) and requirements-lock-hashed.txt (the same pins with every file's SHA-256)
 ├── setup-urbansolarcarver.bat    Windows setup from the repository zip: uv, Python and packages in the folder
 ├── start-urbansolarcarver.bat    Windows launcher of the browser app (.sh for Linux and macOS)
 ├── mkdocs.yml              Documentation site configuration

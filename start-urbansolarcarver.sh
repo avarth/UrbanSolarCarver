@@ -2,7 +2,7 @@
 # Starts the UrbanSolarCarver browser app on Linux and macOS. Run it from a
 # terminal, with usc ui options if you like, for example:
 #   ./start-urbansolarcarver.sh --port 8780
-# The first run installs UrbanSolarCarver with setup_env.py. To use an
+# The first run installs UrbanSolarCarver with install/setup_env.py. To use an
 # environment made elsewhere (setup_env.py --venv-dir), set USC_VENV to it.
 set -u
 repository="$(cd "$(dirname "$0")" && pwd)"
@@ -26,13 +26,13 @@ if [ -n "${USC_VENV:-}" ]; then
     exit 1
   fi
 elif ! find_environment; then
-  echo "UrbanSolarCarver is not installed yet. Installing it now with setup_env.py; this takes several minutes."
+  echo "UrbanSolarCarver is not installed yet. Installing it now with install/setup_env.py; this takes several minutes."
   system_python="$(command -v python3 || command -v python || true)"
   if [ -z "$system_python" ]; then
     echo "Python 3.12 or newer was not found. Install it, then run this script again."
     exit 1
   fi
-  if ! (cd "$repository" && "$system_python" setup_env.py) || ! find_environment; then
+  if ! (cd "$repository" && "$system_python" install/setup_env.py) || ! find_environment; then
     echo "The installation did not finish. Read the messages above, then run this script again."
     exit 1
   fi

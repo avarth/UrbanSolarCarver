@@ -9,12 +9,12 @@ all dependencies, at the versions the tests last passed on.
 
 Usage
 -----
-    python setup_env.py                   # auto-detect GPU, install everything
-    python setup_env.py --cpu             # force CPU-only (no CUDA)
-    python setup_env.py --dry-run         # show what would be installed
-    python setup_env.py --no-ui           # leave out the browser UI (the ui extra)
-    python setup_env.py --venv-dir PATH   # put the virtual environment at PATH
-    python setup_env.py --latest          # the newest versions pyproject.toml allows, not tested
+    python install/setup_env.py                   # auto-detect GPU, install everything
+    python install/setup_env.py --cpu             # force CPU-only (no CUDA)
+    python install/setup_env.py --dry-run         # show what would be installed
+    python install/setup_env.py --no-ui           # leave out the browser UI (the ui extra)
+    python install/setup_env.py --venv-dir PATH   # put the virtual environment at PATH
+    python install/setup_env.py --latest          # the newest versions pyproject.toml allows, not tested
 
 Requirements
 ------------
@@ -54,6 +54,7 @@ from pathlib import Path
 # ── Constants ──────────────────────────────────────────────────────────
 
 VENV_DIR = ".venv"
+REPOSITORY = Path(__file__).resolve().parents[1]  # this file is in install/; the venv and the package are the repository's
 LOCKFILE = Path(__file__).resolve().parent / "requirements-lock.txt"
 HASHED_LOCKFILE = LOCKFILE.with_name("requirements-lock-hashed.txt")  # tools/write_lockfile.py --hashes
 TORCH_REQUIREMENT_FILE = "torch-requirement.txt"  # the torch block of HASHED_LOCKFILE, in .runtime
@@ -369,7 +370,7 @@ def self_contained_plan(root: Path, vpy: Path, torch_requirement: str,
     torch_file = root / ".runtime" / TORCH_REQUIREMENT_FILE
     commands = [
         [*pip, "--no-deps", "--index-url", index_url, "-r", str(torch_file)],
-        [*pip, "--index-url", "https://pypi.org/simple", "-r", str(root / HASHED_LOCKFILE.name)],
+        [*pip, "--index-url", "https://pypi.org/simple", "-r", str(root / "install" / HASHED_LOCKFILE.name)],
     ]
     log(f"Locked torch: {torch_requirement}, from {index_url}")
     return environment, commands
@@ -377,7 +378,7 @@ def self_contained_plan(root: Path, vpy: Path, torch_requirement: str,
 
 def self_contained_install(args, cuda_version: str | None) -> None:
     """``setup_env.py --self-contained``: the venv, the caches and hash-checked packages in this folder."""
-    root = Path(__file__).resolve().parent
+    root = REPOSITORY
     venv_dir = self_contained_venv(root)
     requirement, index_url, desc = locked_torch(LOCKFILE.read_text(encoding="utf-8"), cuda_version, args.cpu)
     log(f"PyTorch target: {desc}")
@@ -519,6 +520,10 @@ def main():
              f"every package checked against {HASHED_LOCKFILE.name}; the project runs from src"
     )
     args = parser.parse_args()
+    # Paths given on the command line are taken from where it was typed; the rest of the setup works in the repository
+    if args.venv_dir:
+        args.venv_dir = str(Path(args.venv_dir).resolve())
+    os.chdir(REPOSITORY)
 
     # ── 0. Check Python version ──
     if sys.version_info < MIN_PYTHON:

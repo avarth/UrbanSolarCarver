@@ -7,7 +7,7 @@ from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
 _spec = importlib.util.spec_from_file_location(
-    "setup_env", Path(__file__).resolve().parents[1] / "setup_env.py")
+    "setup_env", Path(__file__).resolve().parents[1] / "install" / "setup_env.py")
 setup_env = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(setup_env)
 
@@ -185,7 +185,7 @@ def test_a_self_contained_install_keeps_its_venv_and_caches_in_the_folder(tmp_pa
         assert "--upgrade" not in command and "pip" not in command[4:]   # no pip self-upgrade, which would be unchecked
     assert "--no-deps" in torch_command
     assert torch_command[torch_command.index("--index-url") + 1] == setup_env.CPU_WHEEL_INDEX
-    assert rest_command[rest_command.index("-r") + 1] == str(tmp_path / "requirements-lock-hashed.txt")
+    assert rest_command[rest_command.index("-r") + 1] == str(tmp_path / "install" / "requirements-lock-hashed.txt")
 
 
 def test_the_torch_requirement_of_a_self_contained_install_carries_both_builds_hashes():

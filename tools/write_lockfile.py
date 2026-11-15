@@ -1,15 +1,15 @@
-"""Write requirements-lock.txt: the exact versions of this environment that the project needs.
+"""Write install/requirements-lock.txt: the exact versions of this environment that the project needs.
 
     .venv/Scripts/python.exe tools/write_lockfile.py
 
 Run it after upgrading a package here and passing the tests. It starts from pyproject.toml (the dependencies and the dev and ui
 extras) and follows what each installed package requires, so packages this environment holds for other reasons stay out. Those
 requirements are read for this platform: the file is a pip constraints file (``-c``), so a package another platform needs and
-this one does not is simply not pinned. ``setup_env.py`` installs from it unless given ``--latest``.
+this one does not is simply not pinned. ``install/setup_env.py`` installs from it unless given ``--latest``.
 
     .venv/Scripts/python.exe tools/write_lockfile.py --hashes
 
-also writes requirements-lock-hashed.txt: the same pins as a pip requirements file (``-r``) with the SHA-256 of every file of
+also writes install/requirements-lock-hashed.txt: the same pins as a pip requirements file (``-r``) with the SHA-256 of every file of
 each release on PyPI, and for torch those of its Windows files on both wheel indexes the installer can choose (the one in
 ``# torch-wheels:`` and cpu). ``setup_env.py --self-contained`` installs from it with ``--require-hashes``.
 """
@@ -29,8 +29,8 @@ from packaging.utils import canonicalize_name
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
-LOCKFILE = ROOT / "requirements-lock.txt"
-HASHED_LOCKFILE = ROOT / "requirements-lock-hashed.txt"
+LOCKFILE = ROOT / "install" / "requirements-lock.txt"
+HASHED_LOCKFILE = ROOT / "install" / "requirements-lock-hashed.txt"
 TORCH_WHEEL_PAGE = "https://download.pytorch.org/whl/{build}/torch/"
 EXTRAS = ("dev", "ui")
 

@@ -167,7 +167,7 @@ def run_as_explorer_does(script: Path, **variables: str) -> subprocess.Completed
                           timeout=60, env=launcher_environment(**variables))
 
 
-SETUP_NEIGHBOURS = ("setup_env.py", "requirements-lock.txt", "requirements-lock-hashed.txt")
+SETUP_NEIGHBOURS = ("install/setup_env.py", "install/requirements-lock.txt", "install/requirements-lock-hashed.txt")
 PATH_VARIABLES = re.compile(r"%USC_(FOLDER|RUNTIME|POWERSHELL|VENV|DOWNLOAD|PYTHON|REPOSITORY|UV|TMP)%")
 
 
@@ -176,7 +176,8 @@ def unzipped_copy(folder: Path) -> Path:
     folder.mkdir(parents=True)
     shutil.copy(WINDOWS_SETUP, folder)
     for name in SETUP_NEIGHBOURS:
-        shutil.copy(REPOSITORY / name, folder)
+        (folder / name).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(REPOSITORY / name, folder / name)
     return folder / WINDOWS_SETUP.name
 
 
@@ -227,7 +228,7 @@ def test_the_setup_checks_free_disk_space_before_downloading():
 
 
 def test_the_setup_suggests_the_per_user_programs_folder_and_never_the_root_of_c():
-    for path in (WINDOWS_SETUP, REPOSITORY / "setup_env.py", REPOSITORY / "README.md",
+    for path in (WINDOWS_SETUP, REPOSITORY / "install" / "setup_env.py", REPOSITORY / "README.md",
                  REPOSITORY / "docs" / "getting-started" / "installation.md"):
         text = path.read_text(encoding="utf-8")
         assert "C:\\UrbanSolarCarver" not in text, path

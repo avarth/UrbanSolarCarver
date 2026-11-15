@@ -78,7 +78,7 @@ Nothing is added to PATH or the registry; deleting the folder removes it (a desk
 ```bash
 git clone https://github.com/avarth/UrbanSolarCarver.git
 cd UrbanSolarCarver
-python setup_env.py
+python install/setup_env.py
 ```
 
 Auto-detects your GPU and installs the correct PyTorch + CUDA wheels. Use `--cpu` for CPU-only mode. The browser UI is installed with it; `--no-ui` leaves it out.
