@@ -62,6 +62,17 @@ https://github.com/user-attachments/assets/7fb20820-bd24-4ccd-86f5-4f4f868b372a
 
 ## Installation
 
+### Windows, from the repository zip
+
+1. **Code > Download ZIP** on this page, and unzip the whole zip into `%LOCALAPPDATA%\Programs\UrbanSolarCarver` (not a
+   OneDrive folder).
+2. Double-click `setup-urbansolarcarver.bat`: it downloads uv, Python and the packages into the folder, checking each file
+   against a hash already in the folder, and offers a desktop shortcut. No Python, git or administrator rights needed; about
+   7 GB of free disk space with CUDA.
+3. Double-click `start-urbansolarcarver.bat`, or the shortcut, from then on.
+
+Nothing is added to PATH or the registry; deleting the folder removes it (a desktop shortcut stays, to delete by hand). [Installation](https://avarth.github.io/UrbanSolarCarver/getting-started/installation/) lists what is downloaded and from where.
+
 ### Python (API, CLI, Jupyter)
 
 ```bash
@@ -86,7 +97,7 @@ Tests: `python -m pytest -m "not slow" -n 8` runs the everyday set in under a mi
 
 ### Browser UI
 
-Double-click `start-urbansolarcarver.bat` (Windows) or run `./start-urbansolarcarver.sh` (Linux, macOS) in the repository folder. On a fresh clone it installs everything with `setup_env.py` first, then opens the interface in your browser, on this computer only. From a terminal with the environment active, `usc ui` does the same. See [Browser UI](https://avarth.github.io/UrbanSolarCarver/ui/) for the steps, where projects are kept and how it behaves without a CUDA-enabled GPU.
+Double-click `start-urbansolarcarver.bat` (Windows, after `setup-urbansolarcarver.bat` once) or run `./start-urbansolarcarver.sh` (Linux, macOS; on a fresh clone it installs everything with `setup_env.py` first) in the repository folder. It opens the interface in your browser, on this computer only. From a terminal with the environment active, `usc ui` does the same. See [Browser UI](https://avarth.github.io/UrbanSolarCarver/ui/) for the steps, where projects are kept and how it behaves without a CUDA-enabled GPU.
 
 ### Python and CLI
 

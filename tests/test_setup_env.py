@@ -132,5 +132,154 @@ def test_the_docs_give_the_python_versions_the_installer_accepts():
     assert f"Python {low} to {high}" in installation
     assert f"needs Python {low} or newer" in (root / "docs" / "ui.md").read_text(encoding="utf-8")
     assert f'requires-python = ">={low}"' in (root / "pyproject.toml").read_text(encoding="utf-8")
-    for launcher in ("start-urbansolarcarver.bat", "start-urbansolarcarver.sh"):
-        assert f"Python {low} or newer" in (root / launcher).read_text(encoding="utf-8")
+    # The Windows launcher names no system Python: setup-urbansolarcarver.bat brings its own.
+    assert f"Python {low} or newer" in (root / "start-urbansolarcarver.sh").read_text(encoding="utf-8")
+
+
+HASHED_LOCKFILE = setup_env.LOCKFILE.with_name("requirements-lock-hashed.txt")
+
+
+def test_the_hashed_lockfile_text_gives_every_pin_its_hashes_and_torch_both_builds():
+    def hashes_of(name, version):
+        return {"numpy": ["a" * 64, "b" * 64]}[name]
+
+    def torch_hashes_of(version, build):
+        assert version == "2.14.1"
+        return {"cu126": ["c" * 64], "cpu": ["d" * 64]}[build]
+
+    text = write_lockfile.hashed_lockfile_text({"numpy": "2.5.0", "torch": "2.14.1"}, "cu126", hashes_of, torch_hashes_of)
+    header = [line for line in text.splitlines() if line.startswith("#")]
+    assert "# torch-hashes: cu126 cpu" in header
+    numpy_block = text.split("numpy==2.5.0", 1)[1].split("torch==", 1)[0]
+    assert f"--hash=sha256:{'a' * 64}" in numpy_block and f"--hash=sha256:{'b' * 64}" in numpy_block
+    torch_block = text.split("torch==2.14.1", 1)[1]
+    assert f"--hash=sha256:{'c' * 64}" in torch_block and f"--hash=sha256:{'d' * 64}" in torch_block
+
+
+def test_the_committed_hashed_lockfile_matches_the_lockfile():
+    """Fails when requirements-lock.txt changed and tools/write_lockfile.py --hashes was not run after it."""
+    import re
+    lock = setup_env.LOCKFILE.read_text(encoding="utf-8")
+    hashed = HASHED_LOCKFILE.read_text(encoding="utf-8")
+    wheels = re.search(r"^# torch-wheels: (\S+)$", lock, re.MULTILINE).group(1)
+    assert f"# torch-hashes: {wheels} cpu" in hashed
+    blocks = dict(re.findall(r"^(\S+==\S+) \\\n((?:    --hash=sha256:\S+(?: \\)?\n)+)", hashed, re.MULTILINE))
+    pins = [line for line in lock.splitlines() if line and not line.startswith("#")]
+    assert sorted(blocks) == sorted(pins)
+    for pin in pins:
+        assert re.search(r"--hash=sha256:[0-9a-f]{64}", blocks[pin]), pin
+
+
+def test_a_self_contained_install_keeps_its_venv_and_caches_in_the_folder(tmp_path):
+    vpy = tmp_path / ".venv" / "Scripts" / "python.exe"
+    environment, commands = setup_env.self_contained_plan(tmp_path, vpy, "torch==2.14.1", setup_env.CPU_WHEEL_INDEX)
+    cache = tmp_path / ".runtime" / "cache"
+    assert Path(environment["PIP_CACHE_DIR"]) == cache / "pip"
+    assert Path(environment["WARP_CACHE_PATH"]) == cache / "warp"
+    assert len(commands) == 2
+    torch_command, rest_command = commands
+    for command in commands:
+        assert command[:4] == [str(vpy), "-m", "pip", "install"]
+        assert "--require-hashes" in command
+        assert "-e" not in command and "--editable" not in command
+        assert "--upgrade" not in command and "pip" not in command[4:]   # no pip self-upgrade, which would be unchecked
+    assert "--no-deps" in torch_command
+    assert torch_command[torch_command.index("--index-url") + 1] == setup_env.CPU_WHEEL_INDEX
+    assert rest_command[rest_command.index("-r") + 1] == str(tmp_path / "requirements-lock-hashed.txt")
+
+
+def test_the_torch_requirement_of_a_self_contained_install_carries_both_builds_hashes():
+    text = setup_env.torch_hashed_requirement(HASHED_LOCKFILE.read_text(encoding="utf-8"), "cu126")
+    assert text.startswith("torch==")
+    assert text.count("--hash=sha256:") >= 2 and "numpy" not in text
+
+
+def test_a_self_contained_install_on_a_too_long_path_stops_and_says_to_move_the_folder(monkeypatch):
+    monkeypatch.setattr(setup_env.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(setup_env, "_windows_long_paths_enabled", lambda: False)
+    root = Path("C:/") / ("d" * 117)
+    assert len(str(root)) >= 120
+    with pytest.raises(SystemExit) as stopped:
+        setup_env.self_contained_venv(root)
+    message = str(stopped.value)
+    assert "shorter path" in message and ".usc-venv" not in message
+
+
+def test_a_self_contained_install_on_a_short_path_keeps_its_venv_in_the_folder(monkeypatch):
+    monkeypatch.setattr(setup_env.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(setup_env, "_windows_long_paths_enabled", lambda: False)
+    assert setup_env.self_contained_venv(Path("C:/UrbanSolarCarver")) == Path("C:/UrbanSolarCarver") / ".venv"
+
+
+@pytest.mark.parametrize("driver, build", [("13.0", "cu126"), (None, "cpu")])
+def test_a_self_contained_install_takes_the_locked_torch_rule(driver, build):
+    requirement, url, _ = setup_env.locked_torch(setup_env.LOCKFILE.read_text(encoding="utf-8"), driver, force_cpu=False)
+    assert url.endswith("/" + build)
+    assert "# torch-hashes: cu126 cpu" in HASHED_LOCKFILE.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("build", ["cu126", "cpu"])
+def test_the_torch_requirement_pins_the_chosen_build_so_a_second_setup_switches_builds(build):
+    """An installed 2.14.1+cpu satisfies torch==2.14.1; pinning +cu126 makes pip replace it after a driver is installed."""
+    text = setup_env.torch_hashed_requirement(HASHED_LOCKFILE.read_text(encoding="utf-8"), build)
+    assert text.splitlines()[0].startswith("torch==") and text.splitlines()[0].split()[0].endswith("+" + build)
+    assert text.count("--hash=sha256:") >= 2
+
+
+class _Probe:
+    def __init__(self, answer):
+        self.answer = answer
+
+    def __call__(self, vpy):
+        return self.answer
+
+
+def test_a_venv_whose_python_does_not_start_is_made_again(tmp_path):
+    """After the folder is moved, .venv/pyvenv.cfg still names the old Python: the venv's python fails."""
+    vpy = tmp_path / ".venv" / "Scripts" / "python.exe"
+    vpy.parent.mkdir(parents=True)
+    vpy.write_bytes(b"")
+    assert setup_env.venv_needs_making(vpy, Path("C:/x/.runtime/python/cpython"), base_prefix_of=_Probe(None))
+
+
+def test_a_venv_on_another_python_is_made_again(tmp_path):
+    vpy = tmp_path / ".venv" / "Scripts" / "python.exe"
+    vpy.parent.mkdir(parents=True)
+    vpy.write_bytes(b"")
+    base = tmp_path / ".runtime" / "python" / "cpython-3.14.6"
+    assert setup_env.venv_needs_making(vpy, base, base_prefix_of=_Probe(str(tmp_path / "system python")))
+    assert not setup_env.venv_needs_making(vpy, base, base_prefix_of=_Probe(str(base)))
+
+
+def test_a_missing_venv_is_made(tmp_path):
+    assert setup_env.venv_needs_making(tmp_path / "python.exe", tmp_path, base_prefix_of=_Probe(str(tmp_path)))
+
+
+def test_a_failed_torch_import_on_windows_names_the_visual_cpp_runtime(monkeypatch, capsys, tmp_path):
+    class Failed:
+        returncode, stdout, stderr = 1, "", "ImportError: DLL load failed while importing _C"
+
+    monkeypatch.setattr(setup_env, "run", lambda *args, **kwargs: Failed())
+    monkeypatch.setattr(setup_env.platform, "system", lambda: "Windows")
+    with pytest.raises(SystemExit):
+        setup_env.verify_and_warm_up(tmp_path / "python.exe")
+    output = capsys.readouterr().out
+    assert "Microsoft Visual C++ Redistributable (x64)" in output
+    assert "https://aka.ms/vs/17/release/vc_redist.x64.exe" in output and "administrator" in output
+
+
+def test_a_self_contained_install_drops_the_users_own_pip_settings():
+    """A user-set PIP_TARGET or PIP_PREFIX would install outside the folder."""
+    environment = {"PIP_TARGET": "C:/elsewhere", "PIP_EXTRA_INDEX_URL": "https://mirror", "PATH": "C:/Windows",
+                   "PIP_CACHE_DIR": "C:/old cache"}
+    cleaned = setup_env.without_users_pip_settings(environment)
+    assert cleaned == {"PATH": "C:/Windows"}
+
+
+def test_a_too_long_path_suggests_the_per_user_programs_folder(monkeypatch):
+    monkeypatch.setattr(setup_env.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(setup_env, "_windows_long_paths_enabled", lambda: False)
+    monkeypatch.setenv("LOCALAPPDATA", r"C:\Users\A B\AppData\Local")
+    with pytest.raises(SystemExit) as stopped:
+        setup_env.self_contained_venv(Path("C:/") / ("d" * 117))
+    assert r"C:\Users\A B\AppData\Local\Programs\UrbanSolarCarver" in str(stopped.value)

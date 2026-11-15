@@ -43,6 +43,7 @@ or to try an upgrade (see CONTRIBUTING.md).
 from __future__ import annotations
 
 import argparse
+import os
 import platform
 import re
 import shutil
@@ -54,6 +55,8 @@ from pathlib import Path
 
 VENV_DIR = ".venv"
 LOCKFILE = Path(__file__).resolve().parent / "requirements-lock.txt"
+HASHED_LOCKFILE = LOCKFILE.with_name("requirements-lock-hashed.txt")  # tools/write_lockfile.py --hashes
+TORCH_REQUIREMENT_FILE = "torch-requirement.txt"  # the torch block of HASHED_LOCKFILE, in .runtime
 MIN_PYTHON = (3, 12)  # numpy 2.5 and scipy 1.18 need it
 MAX_LOCKED_PYTHON = (3, 14)  # the newest Python the locked versions were installed and tested on
 
@@ -283,6 +286,205 @@ def resolve_venv_dir(requested: str | None) -> Path:
     return fallback
 
 
+# ── Self-contained install (setup-urbansolarcarver.bat) ───────────────
+
+def self_contained_venv(root: Path) -> Path:
+    """The venv of a self-contained install: always ``root/.venv``.
+
+    There is no fallback outside the folder: when the path is too long for
+    torch's deepest file and Windows long paths are off, stop before
+    anything is downloaded and say to move the folder.
+    """
+    venv_dir = root / VENV_DIR
+    if platform.system() != "Windows":
+        return venv_dir
+    if len(str(venv_dir)) + TORCH_PATH_HEADROOM <= WINDOWS_MAX_PATH or _windows_long_paths_enabled():
+        return venv_dir
+    suggestion = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))) / "Programs" / "UrbanSolarCarver"
+    sys.exit(f"[X] This folder's path is too long for PyTorch's files ({len(str(root))} characters):\n"
+             f"    {root}\n"
+             f"    Move this folder to a shorter path, for example {suggestion}, and run setup again.")
+
+
+def without_users_pip_settings(environment: dict[str, str]) -> dict[str, str]:
+    """*environment* without any PIP_* variable: a user-set PIP_TARGET or PIP_PREFIX would install outside the folder,
+    PIP_EXTRA_INDEX_URL would add an index. The self-contained install then sets its own."""
+    return {key: value for key, value in environment.items() if not key.upper().startswith("PIP_")}
+
+
+def torch_hashed_requirement(hashed_text: str, build: str) -> str:
+    """The torch block of the hashed lockfile, pinned to *build* (``torch==2.14.1+cu126``), with every hash of both builds.
+
+    The +build pin makes a second setup replace an installed build of the same
+    version: an installed 2.14.1+cpu satisfies ``torch==2.14.1``, so after an
+    NVIDIA driver is installed pip would otherwise keep the CPU build.
+    """
+    block = re.search(r"^torch==(\S+)((?: \\\n    --hash=sha256:[0-9a-f]{64})+)", hashed_text, re.MULTILINE)
+    if not block:
+        sys.exit(f"[X] {HASHED_LOCKFILE.name} does not give torch with its hashes")
+    return f"torch=={block.group(1)}+{build}{block.group(2)}\n"
+
+
+def _base_prefix_of(vpy: Path) -> str | None:
+    """sys.base_prefix of the venv's Python, or None when that Python does not start."""
+    try:
+        r = subprocess.run([str(vpy), "-c", "import sys; print(sys.base_prefix)"], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def venv_needs_making(vpy: Path, base_prefix: Path, base_prefix_of=_base_prefix_of) -> bool:
+    """True when *vpy* is missing, does not start (the folder was moved: pyvenv.cfg names the old Python),
+    or runs on a Python other than *base_prefix* (made by a system Python, or before a Python update)."""
+    if not vpy.is_file():
+        return True
+    found = base_prefix_of(vpy)
+    if found is None:
+        return True
+    return os.path.normcase(os.path.realpath(found)) != os.path.normcase(os.path.realpath(base_prefix))
+
+
+def self_contained_plan(root: Path, vpy: Path, torch_requirement: str,
+                        index_url: str) -> tuple[dict[str, str], list[list[str]]]:
+    """Return (environment additions, pip commands) of a self-contained install in *root*.
+
+    The caches stay in ``root/.runtime/cache``; pip reads no configuration
+    from the profile; every package is checked against the hashed lockfile
+    (``--require-hashes``) and comes as a wheel, so nothing is built from
+    unchecked sources. The project itself is not pip-installed: the launcher
+    runs it from ``src``. *torch_requirement* is the pin ``locked_torch``
+    chose; the torch command reads it with its hashes from
+    ``root/.runtime/torch-requirement.txt``, which the caller writes.
+    """
+    cache = root / ".runtime" / "cache"
+    environment = {
+        "PIP_CACHE_DIR": str(cache / "pip"),
+        "WARP_CACHE_PATH": str(cache / "warp"),
+        "PIP_CONFIG_FILE": os.devnull,
+        "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+        "PIP_NO_INPUT": "1",
+    }
+    pip = [str(vpy), "-m", "pip", "install", "--require-hashes", "--only-binary", ":all:"]
+    torch_file = root / ".runtime" / TORCH_REQUIREMENT_FILE
+    commands = [
+        [*pip, "--no-deps", "--index-url", index_url, "-r", str(torch_file)],
+        [*pip, "--index-url", "https://pypi.org/simple", "-r", str(root / HASHED_LOCKFILE.name)],
+    ]
+    log(f"Locked torch: {torch_requirement}, from {index_url}")
+    return environment, commands
+
+
+def self_contained_install(args, cuda_version: str | None) -> None:
+    """``setup_env.py --self-contained``: the venv, the caches and hash-checked packages in this folder."""
+    root = Path(__file__).resolve().parent
+    venv_dir = self_contained_venv(root)
+    requirement, index_url, desc = locked_torch(LOCKFILE.read_text(encoding="utf-8"), cuda_version, args.cpu)
+    log(f"PyTorch target: {desc}")
+    vpy = venv_python(venv_dir)
+    environment, commands = self_contained_plan(root, vpy, requirement, index_url)
+    if args.dry_run:
+        log("Dry run, would execute:", "info")
+        print(f"  1. python -m venv {venv_dir}")
+        for number, command in enumerate(commands, start=2):
+            print(f"  {number}. {' '.join(command[1:])}")
+        return
+    for key in set(os.environ) - set(without_users_pip_settings(dict(os.environ))):
+        del os.environ[key]
+    os.environ.update(environment)
+    torch_file = root / ".runtime" / TORCH_REQUIREMENT_FILE
+    torch_file.parent.mkdir(parents=True, exist_ok=True)
+    build = index_url.rstrip("/").rsplit("/", 1)[-1]
+    torch_file.write_text(torch_hashed_requirement(HASHED_LOCKFILE.read_text(encoding="utf-8"), build), encoding="utf-8")
+
+    if not vpy.is_file():
+        log(f"Creating virtual environment in {venv_dir}")
+        run([sys.executable, "-m", "venv", str(venv_dir)])
+    elif venv_needs_making(vpy, Path(sys.base_prefix)):
+        log(f"The virtual environment at {venv_dir} does not run on this folder's Python "
+            "(the folder was moved, or it was made by another Python); making it again", "warn")
+        run([sys.executable, "-m", "venv", "--clear", str(venv_dir)])
+    else:
+        log(f"Virtual environment already exists at {venv_dir}")
+    if not vpy.is_file():
+        log(f"venv creation failed: {vpy} not found", "error")
+        sys.exit(1)
+
+    log(f"Installing PyTorch ({desc}), checking every download against {HASHED_LOCKFILE.name}...")
+    run(commands[0])
+    log("Installing the other packages, checking every download...")
+    run(commands[1])
+    # The project runs from src (the launcher sets PYTHONPATH the same way); nothing of it is pip-installed.
+    os.environ["PYTHONPATH"] = str(root / "src")
+    verify_and_warm_up(vpy)
+    print()
+    log("Setup complete.", "ok")
+    print()
+    print("  Start:     start-urbansolarcarver.bat")
+    print("  Remove:    delete this folder; setup kept everything it made inside it.")
+    print()
+
+
+def verify_and_warm_up(vpy: Path) -> None:
+    """Steps 6 and 7: check that torch, warp and urbansolarcarver import, then precompile the Warp kernels."""
+    # ── 6. Verify ──
+    log("Verifying installation...")
+
+    # Check torch
+    r = run([str(vpy), "-c",
+             "import torch; "
+             "print(f'PyTorch {torch.__version__}'); "
+             "print(f'CUDA available: {torch.cuda.is_available()}'); "
+             "print(f'Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"CPU\"}')"
+             ], capture=True, check=False)
+    if r.returncode == 0:
+        for line in r.stdout.strip().split("\n"):
+            log(line, "ok")
+    else:
+        log("PyTorch import failed.", "error")
+        print(r.stderr)
+        if platform.system() == "Windows":
+            log("PyTorch needs the Microsoft Visual C++ Redistributable (x64), which may be missing on this computer.", "error")
+            log("Get it from Microsoft: https://aka.ms/vs/17/release/vc_redist.x64.exe (installing it needs administrator "
+                "rights), then run setup again.", "error")
+        sys.exit(1)
+
+    # Check warp
+    r = run([str(vpy), "-c", "import warp; print(f'Warp {warp.__version__}')"],
+            capture=True, check=False)
+    if r.returncode == 0:
+        log(r.stdout.strip(), "ok")
+    else:
+        log("Warp import failed; GPU kernels won't work", "warn")
+
+    # Check urbansolarcarver
+    r = run([str(vpy), "-c",
+             "from urbansolarcarver import load_config, run_pipeline; "
+             "print('UrbanSolarCarver OK')"],
+            capture=True, check=False)
+    if r.returncode == 0:
+        log(r.stdout.strip(), "ok")
+    else:
+        log("UrbanSolarCarver import failed.", "error")
+        print(r.stderr)
+        sys.exit(1)
+
+    # ── 7. Precompile Warp kernels ──
+    # Warp JIT-compiles kernels on first use (~3-10 s, once per machine,
+    # cached on disk). Doing it now, while the user already expects the
+    # installer to take time, means the first carving run reflects real
+    # compute time instead of compilation.
+    log("Precompiling Warp compute kernels (one-time, cached)...")
+    r = run([str(vpy), "-c",
+             "from urbansolarcarver.warp_kernels import warmup_kernels; "
+             "print('warm' if warmup_kernels() else 'skipped')"],
+            capture=True, check=False)
+    if r.returncode == 0 and "warm" in r.stdout:
+        log("Warp kernels compiled and cached", "ok")
+    else:
+        log("Kernel precompilation skipped; kernels will compile on first run", "warn")
+
+
 # ── Main ───────────────────────────────────────────────────────────────
 
 def main():
@@ -311,6 +513,11 @@ def main():
         "--latest", action="store_true",
         help=f"Install the newest versions pyproject.toml allows instead of those in {LOCKFILE.name}, which the tests last passed on"
     )
+    parser.add_argument(
+        "--self-contained", action="store_true",
+        help=f"What setup-urbansolarcarver.bat runs: .venv and every cache in this folder, never ~/.usc-venv; "
+             f"every package checked against {HASHED_LOCKFILE.name}; the project runs from src"
+    )
     args = parser.parse_args()
 
     # ── 0. Check Python version ──
@@ -332,6 +539,13 @@ def main():
         log("CPU-only mode (--cpu flag)")
     else:
         log("No NVIDIA GPU detected; installing CPU-only PyTorch", "warn")
+
+    if args.self_contained:
+        if args.latest or args.venv_dir:
+            log("--self-contained takes the locked versions and .venv in this folder: leave out --latest and --venv-dir", "error")
+            sys.exit(1)
+        self_contained_install(args, cuda_version)
+        return
 
     torch_requirement, torch_options, constraints, index_url, desc = install_choice(args.latest, cuda_version, args.cpu)
     log(f"PyTorch target: {desc}")
@@ -372,58 +586,7 @@ def main():
     log("Installing UrbanSolarCarver and dependencies...")
     run([str(vpy), "-m", "pip", "install", *constraints, "-e", install_target, "--quiet"])
 
-    # ── 6. Verify ──
-    log("Verifying installation...")
-
-    # Check torch
-    r = run([str(vpy), "-c",
-             "import torch; "
-             "print(f'PyTorch {torch.__version__}'); "
-             "print(f'CUDA available: {torch.cuda.is_available()}'); "
-             "print(f'Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"CPU\"}')"
-             ], capture=True, check=False)
-    if r.returncode == 0:
-        for line in r.stdout.strip().split("\n"):
-            log(line, "ok")
-    else:
-        log("PyTorch import failed.", "error")
-        print(r.stderr)
-        sys.exit(1)
-
-    # Check warp
-    r = run([str(vpy), "-c", "import warp; print(f'Warp {warp.__version__}')"],
-            capture=True, check=False)
-    if r.returncode == 0:
-        log(r.stdout.strip(), "ok")
-    else:
-        log("Warp import failed; GPU kernels won't work", "warn")
-
-    # Check urbansolarcarver
-    r = run([str(vpy), "-c",
-             "from urbansolarcarver import load_config, run_pipeline; "
-             "print('UrbanSolarCarver OK')"],
-            capture=True, check=False)
-    if r.returncode == 0:
-        log(r.stdout.strip(), "ok")
-    else:
-        log("UrbanSolarCarver import failed.", "error")
-        print(r.stderr)
-        sys.exit(1)
-
-    # ── 7. Precompile Warp kernels ──
-    # Warp JIT-compiles kernels on first use (~3-10 s, once per machine,
-    # cached on disk). Doing it now, while the user already expects the
-    # installer to take time, means the first carving run reflects real
-    # compute time instead of compilation.
-    log("Precompiling Warp compute kernels (one-time, cached)...")
-    r = run([str(vpy), "-c",
-             "from urbansolarcarver.warp_kernels import warmup_kernels; "
-             "print('warm' if warmup_kernels() else 'skipped')"],
-            capture=True, check=False)
-    if r.returncode == 0 and "warm" in r.stdout:
-        log("Warp kernels compiled and cached", "ok")
-    else:
-        log("Kernel precompilation skipped; kernels will compile on first run", "warn")
+    verify_and_warm_up(vpy)
 
     # ── Done ──
     print()

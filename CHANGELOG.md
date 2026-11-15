@@ -7,6 +7,20 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Install
+
+- **Install on Windows from the repository zip.** Unzip, double-click `setup-urbansolarcarver.bat`, then
+  `start-urbansolarcarver.bat`: no Python, git or administrator rights needed. The setup downloads a pinned uv (its SHA-256 is in
+  the script), uv's own Python 3.14, and the packages, each checked against `requirements-lock-hashed.txt` (new, written by
+  `tools/write_lockfile.py --hashes`). Everything stays in the folder (`.runtime`, `.venv`); nothing on PATH or in the registry.
+  The suggested folder is `%LOCALAPPDATA%\Programs\UrbanSolarCarver`, and the setup offers a desktop shortcut (default N).
+  Before downloading it stops, saying why, when it was run from inside the zip, in a OneDrive folder, on a path too long for
+  PyTorch, or with too little free disk space (about 7 GB with CUDA, 1.5 GB for the CPU build).
+- **The Windows launcher runs only on the folder's environment.** Without `.venv` it says to run the setup; it no longer installs
+  with a system Python or falls back to `~/.usc-venv`. Warp's compiled kernels go to `.runtime\cache\warp`.
+- `setup_env.py --self-contained` (what the setup runs) keeps the venv and every cache in the folder, checks every package
+  against its hash, and stops with a request to move the folder when its path is too long; the other routes are unchanged.
+
 ### Site
 
 - **Draw test surfaces on the ground.** **Draw** in the Test surfaces box draws a flat surface on the ground (a square, a courtyard,

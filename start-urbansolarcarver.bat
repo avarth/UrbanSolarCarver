@@ -2,54 +2,47 @@
 rem Starts the UrbanSolarCarver browser app. Double-click this file, or run it
 rem from a terminal with usc ui options, for example:
 rem   start-urbansolarcarver.bat --port 8780
-rem The first run installs UrbanSolarCarver with setup_env.py. To use an
-rem environment made elsewhere (setup_env.py --venv-dir), set USC_VENV to it.
+rem It runs on the environment setup-urbansolarcarver.bat made in this folder
+rem (.venv), never on a system Python. To use an environment made elsewhere,
+rem set USC_VENV to it.
 setlocal
 title UrbanSolarCarver
 set "USC_REPOSITORY=%~dp0"
 set "USC_REPOSITORY=%USC_REPOSITORY:~0,-1%"
 
 rem Labels and goto rather than if (...) blocks: a ")" in a path, as in
-rem "Program Files (x86)", would end such a block early.
+rem "UrbanSolarCarver-main (1)", would end such a block early.
 if defined USC_VENV goto use_given_environment
-call :find_environment
-if defined USC_PYTHON goto start
-goto install
+set "USC_PYTHON=%USC_REPOSITORY%\.venv\Scripts\python.exe"
+if not exist "%USC_PYTHON%" goto not_set_up
+rem After the folder is moved, .venv's python.exe still names the old folder's Python.
+"%USC_PYTHON%" -c "pass" >nul 2>nul
+if not "%errorlevel%"=="0" goto does_not_start
+goto start
+
+:not_set_up
+echo UrbanSolarCarver is not set up in this folder yet.
+echo Run setup-urbansolarcarver.bat first.
+goto fail
+
+:does_not_start
+echo The Python environment in this folder does not start (was the folder moved or renamed?):
+echo   "%USC_PYTHON%"
+echo To repair it, run setup-urbansolarcarver.bat again.
+goto fail
 
 :use_given_environment
 set "USC_PYTHON=%USC_VENV%\Scripts\python.exe"
 if exist "%USC_PYTHON%" goto start
 echo No Python environment was found at USC_VENV:
-echo %USC_VENV%
-echo Unset USC_VENV to use the one in this folder, or point it at an environment made by setup_env.py.
-goto fail
-
-:install
-echo UrbanSolarCarver is not installed yet. Installing it now with setup_env.py; this takes several minutes.
-set "USC_SYSTEM_PYTHON="
-where py >nul 2>nul && set "USC_SYSTEM_PYTHON=py -3"
-if not defined USC_SYSTEM_PYTHON where python >nul 2>nul && set "USC_SYSTEM_PYTHON=python"
-if not defined USC_SYSTEM_PYTHON goto no_system_python
-pushd "%USC_REPOSITORY%"
-%USC_SYSTEM_PYTHON% setup_env.py
-set "USC_INSTALL_RESULT=%errorlevel%"
-popd
-if not "%USC_INSTALL_RESULT%"=="0" goto install_failed
-call :find_environment
-if defined USC_PYTHON goto start
-goto install_failed
-
-:no_system_python
-echo Python 3.12 or newer was not found. Install it from https://www.python.org/downloads/
-echo (tick "Add python.exe to PATH"), then run this file again.
-goto fail
-
-:install_failed
-echo The installation did not finish. Read the messages above, then run this file again.
+echo "%USC_VENV%"
+echo Unset USC_VENV to use the one in this folder, or point it at another UrbanSolarCarver environment.
 goto fail
 
 :start
 set "PYTHONPATH=%USC_REPOSITORY%\src"
+rem Warp's compiled kernels stay in this folder, like everything the setup made.
+if not defined WARP_CACHE_PATH set "WARP_CACHE_PATH=%USC_REPOSITORY%\.runtime\cache\warp"
 echo Starting UrbanSolarCarver. Your browser opens when it is ready.
 echo Keep this window open while you work; close it to stop UrbanSolarCarver.
 "%USC_PYTHON%" -m urbansolarcarver.carver_cli ui %*
@@ -59,11 +52,3 @@ exit /b 0
 :fail
 pause
 exit /b 1
-
-rem The environments setup_env.py makes: .venv in this folder, or ~/.usc-venv
-rem when this folder's path is too long for Windows.
-:find_environment
-set "USC_PYTHON="
-if exist "%USC_REPOSITORY%\.venv\Scripts\python.exe" set "USC_PYTHON=%USC_REPOSITORY%\.venv\Scripts\python.exe" & exit /b 0
-if exist "%USERPROFILE%\.usc-venv\Scripts\python.exe" set "USC_PYTHON=%USERPROFILE%\.usc-venv\Scripts\python.exe"
-exit /b 0
