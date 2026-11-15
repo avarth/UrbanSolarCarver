@@ -18,7 +18,8 @@
   border-bottom: 1px solid var(--colour-line);
 }
 
-.top-bar-product { font-size: var(--text-step-title); font-weight: 700; }
+.top-bar-product { display: inline-flex; align-items: center; gap: calc(var(--space-unit) * 1.5); font-size: var(--text-step-title); font-weight: 700; white-space: nowrap; }
+.top-bar-symbol { width: 22px; height: 22px; flex: none; }
 
 /* With a project open, the product name is a button back to the start screen. */
 .top-bar-home {

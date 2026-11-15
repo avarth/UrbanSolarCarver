@@ -3,7 +3,8 @@
 The browser draws the occupied voxels of the grid as points coloured by their score. This
 module reads them from the preprocessing and thresholding outputs of one criterion of a run
 (run/criteria/<id>/, by default the last criterion that is on) and packs them,
-thinned to a point budget, in the layout below (all numbers little-endian):
+thinned to a point budget, in the layout below (all numbers little-endian). A criterion decided after another has only the voxels
+that one kept: "occupied" below means those.
 
 * ``uint32`` length n of the header in bytes;
 * the header as UTF-8 JSON, padded with spaces to a multiple of 4 so the arrays after it start
@@ -110,7 +111,11 @@ def build_score_points(store: ProjectStore, name: str, criterion_id: str | None 
     voxel_grid = _load_array(resolve_stored_path(preprocessing_folder, preprocessing_manifest.voxel_grid_path))
     all_scores = _load_array(resolve_stored_path(preprocessing_folder, preprocessing_manifest.scores_path)).ravel()
 
-    occupied_indices = np.flatnonzero(voxel_grid.ravel())
+    occupied = voxel_grid.ravel().astype(bool)
+    kept_before = _kept_by_the_criterion_before(run_folder, criterion_id, preprocessing_manifest.run_id)
+    if kept_before is not None:
+        occupied &= kept_before      # the voxels the criteria before removed are not decided here
+    occupied_indices = np.flatnonzero(occupied)
     occupied_count = len(occupied_indices)
     thinning_step = max(1, math.ceil(occupied_count / cap))
     point_indices = occupied_indices[::thinning_step]
@@ -164,6 +169,25 @@ def _thresholding_arrays(run_folder: Path, criterion_id: str,
     compared_path = thresholding_manifest.scores_compared_with_cutoff_path
     compared_scores = _load_array(resolve_stored_path(thresholding_folder, compared_path)).ravel()
     return kept_mask, compared_scores
+
+
+def _kept_by_the_criterion_before(run_folder: Path, criterion_id: str, preprocessing_run_id: str) -> np.ndarray | None:
+    """The flat kept mask of the criterion this one's thresholding was decided after; None for the first criterion, or without a
+    thresholding run of this one built on this preprocessing run."""
+    thresholding = read_stage_manifest(run_folder, "thresholding", ThresholdingManifest, criterion_id)
+    if thresholding is None:
+        return None
+    manifest, folder = thresholding
+    if manifest.upstream_run_id != preprocessing_run_id or manifest.after_manifest is None:
+        return None
+    previous_path = resolve_stored_path(folder, manifest.after_manifest)
+    try:
+        previous = ThresholdingManifest.model_validate_json(previous_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise ProjectError(UNREADABLE_RESULTS_MESSAGE, status_code=404) from None
+    except (OSError, ValueError):
+        raise ProjectError(UNREADABLE_RESULTS_MESSAGE, status_code=500) from None
+    return _load_array(resolve_stored_path(previous_path.parent, previous.mask_path)).ravel().astype(bool)
 
 
 def build_carved_by_criterion(store: ProjectStore, name: str) -> bytes:

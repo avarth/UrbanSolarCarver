@@ -185,6 +185,7 @@ function projectDetail(name: string, modified = "2026-10-17T09:00:00", example: 
     inputs: { max_volume: [], test_surfaces: [], weather: [] }, joined_bounds: null, weather_location: null, weather_latitude: null,
     stage_status: { stages: { preprocessing: "missing", thresholding: "missing", exporting: "missing", massing: "missing" } }, grid_plan: null,
     carving_updates_itself: true,
+    inspect_prompt_answered: true,
   };
 }
 
@@ -325,7 +326,7 @@ test("Try an example creates the project the first time; the examples are read a
   await settle();
   expect(service.requests).toContain("POST /api/projects/Perimeter%20block/examples/perimeter_block");
   const examplesAsked = service.count("GET /api/examples");
-  click(buttonNamed("UrbanSolarCarver"));
+  click(buttonNamed("Urban Solar Carver"));
   await settle();
   expect(service.count("GET /api/examples")).toBe(examplesAsked + 1);
 });
@@ -462,7 +463,7 @@ test("on the way back to the start screen, the examples wait to be read again be
   let answerExamples: () => void = () => {};
   service.examplesAnswerWhen = new Promise((resolve) => { answerExamples = resolve; });
   service.examples = [{ ...service.examples[0], project: "Plot 7" }];
-  click(buttonNamed("UrbanSolarCarver"));
+  click(buttonNamed("Urban Solar Carver"));
   await settle();
   expect(startChoice("Perimeter block")).toBeUndefined();
   await act(async () => answerExamples());
@@ -532,7 +533,7 @@ test("a changed projects folder forgets the last run's record: a project of the 
   await act(async () => { await workspaceSteps.runs!.start("Plot 7", ["thresholding"], "carving_run_analysis"); });
   await settle();
   expect(page().querySelector(".fake-workspace")!.getAttribute("data-run-refusal")).toBe("The maximum volume is missing.");
-  click(buttonNamed("UrbanSolarCarver"));
+  click(buttonNamed("Urban Solar Carver"));
   await settle();
   await act(async () => click(buttonNamed("Change folder")));
   await settle();
@@ -555,7 +556,7 @@ test("renaming the open project keeps the open step; opening a project and reset
   await settle();
   expect(workspaceMounts).toEqual(["Plot 7", "Plot 7", "Plot 8"]);
   expect(workspaceSteps.startedWith).toEqual([undefined, undefined, { open: "criteria", view: "criteria" }]);
-  click(buttonNamed("UrbanSolarCarver"));
+  click(buttonNamed("Urban Solar Carver"));
   await settle();
   await openPlot7();
   expect(workspaceSteps.startedWith).toHaveLength(4);
@@ -617,7 +618,7 @@ test("the product name in the top bar goes back to the start screen once a proje
   expect(page().querySelector(".top-bar")!.textContent).not.toContain("Projects");
   await openPlot7();
   expect(product().tagName).toBe("BUTTON");
-  expect(product().textContent).toBe("UrbanSolarCarver");
+  expect(product().textContent).toBe("Urban Solar Carver");
   expect(product().getAttribute("title")).toBe("Back to the projects");
   click(product());
   await settle();
@@ -703,7 +704,7 @@ test("the top bar shows the last run's time beside the device status once a run 
   now.mockRestore();
   expect(lastRun()!.textContent).toBe("Last run 7.0 s");
   expect(lastRun()!.previousElementSibling!.textContent).toBe("GPU ready");
-  click(buttonNamed("UrbanSolarCarver"));                           // the start screen has no open project to time
+  click(buttonNamed("Urban Solar Carver"));                           // the start screen has no open project to time
   await settle();
   expect(lastRun()).toBeNull();
   await openPlot7();
@@ -730,7 +731,7 @@ test("the Carve | Simulate | Inspect switch shows only with an open project and 
   click(modeButton("Inspect"));
   expect(workspaceMode()).toBe("inspect");
   expect(modePressed()).toEqual([["Carve", "false"], ["Simulate", "false"], ["Inspect", "true"]]);
-  click(buttonNamed("UrbanSolarCarver"));
+  click(buttonNamed("Urban Solar Carver"));
   await settle();
   expect(modeSwitch()).toBeNull();
 });
@@ -740,7 +741,7 @@ test("another project opens in Carve, whatever mode the last one was left in", a
   await renderApp(service);
   await openPlot7();
   click(modeButton("Simulate"));
-  click(buttonNamed("UrbanSolarCarver"));
+  click(buttonNamed("Urban Solar Carver"));
   await settle();
   await openPlot7();
   expect(workspaceMode()).toBe("design");
@@ -775,7 +776,7 @@ test("a reset of the open project to its example opens it in Carve, as it opens 
 });
 
 // Back to the projects from Inspect: App wraps the product-name button in the same leave as the mode switch (UnsavedTurnsDialog).
-const backToProjects = () => buttonNamed("UrbanSolarCarver");
+const backToProjects = () => buttonNamed("Urban Solar Carver");
 const unsavedTurnsDialog = () => [...page().querySelectorAll<HTMLElement>('[role="dialog"]')]
   .find((shown) => shown.querySelector("h2")?.textContent === "Save the turned surfaces before leaving Inspect?") ?? null;
 const onStartScreen = () => page().querySelector(".fake-workspace") === null && startChoice("Plot 7") !== undefined;

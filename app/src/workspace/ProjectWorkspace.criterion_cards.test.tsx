@@ -376,7 +376,7 @@ const chainLine = () => (showCriterionCards(), container().querySelector(".chain
 
 test("the chain summary line under the cards: the share of the maximum volume kept, with no volume", async () => {
   await openChain([FACADES, WINDOWS], undefined, (chain) => { chain.summaryChain = { volume_after_each_m3: [610, 480], share_of_max_volume_kept: 0.4813 }; });
-  expect(chainLine()).toBe("After all criteria: kept 48 % of the maximum volume");
+  expect(chainLine()).toBe("Combined result: kept 48 % of the maximum volume");
   const list = container().querySelector(".criterion-list")!;
   expect(list.compareDocumentPosition(container().querySelector(".chain-summary")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(container().querySelector(".criterion-panel")).toBeNull();                       // the list shows no panel

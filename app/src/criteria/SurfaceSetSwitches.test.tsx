@@ -21,7 +21,7 @@ const switches = () => [...root().querySelectorAll<HTMLInputElement>('[role="swi
 test("one switch per set of the project, under the mode's hint, on for the sets the criterion uses", () => {
   rendered = renderForTest(<SurfaceSetSwitches sets={SETS} chosen={["roofs.ply"]} mode="daylight" onToggle={async () => null} onOpenSite={() => {}}
                                                disabledReason={null} />);
-  expect(root().querySelector(".input-box-hint")!.textContent).toBe("Windows or facades that need daylight. Flat panels; a curved or folded one is skipped.");
+  expect(root().querySelector(".input-box-hint")!.textContent).toBe("Windows or facades that need daylight. Flat surfaces only.");
   expect(switches().map((input) => [input.getAttribute("aria-label"), input.checked])).toEqual([["Use South facades", false], ["Use roofs.ply", true]]);
   expect([...root().querySelectorAll(".input-file-detail")].map((detail) => detail.textContent)).toEqual(["6 triangles", "1 triangle"]);
   expect(root().textContent).not.toContain("Open the Site step");

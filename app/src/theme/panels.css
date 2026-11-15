@@ -339,6 +339,8 @@
   background: var(--colour-accent-soft);
 }
 .weather-change-notice p { margin: 0; }
+/* The prompt to check face directions in Inspect, under the test surfaces box: the step's gap spaces it on both sides. */
+.inspect-prompt { margin-bottom: 0; }
 /* Input files changed in the project folder or missing from it: over Design's steps, and at the top of Simulate's studies panel. */
 .input-changes-notice {
   display: flex;
@@ -382,7 +384,6 @@
 
 /* The project settings window (ProjectSettingsDialog): its line on what the settings apply to, then the settings. */
 .project-settings { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); }
-.project-settings-intro { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
 /* The setup of a new project: the page count above, Skip setup at the left of Back and Next */
 .project-setup-count { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
 .project-setup-buttons { align-items: center; }

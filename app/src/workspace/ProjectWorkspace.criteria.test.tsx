@@ -195,7 +195,7 @@ test("a criterion of a project without test surfaces says where to add them, and
   await openWorkspace(service, { ...project(NOTHING_RUN, { mode: "daylight" }), inputs: { ...project(NOTHING_RUN).inputs, test_surfaces: [] },
                                  criteria: [criterionEntry({ mode: "daylight" }, [])] });
   openStep("Criteria");
-  expect(setSwitches().querySelector(".input-box-hint")!.textContent).toBe("Windows or facades that need daylight. Flat panels; a curved or folded one is skipped.");
+  expect(setSwitches().querySelector(".input-box-hint")!.textContent).toBe("Windows or facades that need daylight. Flat surfaces only.");
   expect(setSwitches().querySelector(".surface-set-note")!.textContent).toContain("The project has no test surfaces yet.");
   const runButton = buttonIn(pinnedBar(), "Run analysis");
   expect(runButton.disabled).toBe(true);

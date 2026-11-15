@@ -225,6 +225,9 @@ class ProjectJson(BaseModel):
     mode_to_choose: bool = False    # a new project: its one criterion stands in NEW_PROJECT_MODE until the user chooses a mode
     # The app reruns the carving as its settings change (Settings > Carving, user 2026-11-09); off: the user starts it (Update carving)
     carving_updates_itself: bool = True
+    # The prompt to check face directions in Inspect, shown after the first test surface file is imported, was answered (Open
+    # Inspect or Not now): it is not shown again in this project (user 2026-11-15)
+    inspect_prompt_answered: bool = False
     # The names and picks of the stored test surface files (picked_surfaces.py); a file not listed is an upload shown by its file name
     surface_sets: dict[str, SurfaceSetJson] = Field(default_factory=dict)
     # What the maximum volume is made from: the mesh files of the max_volume role, or the sites (site_input.py); one or the other
@@ -821,6 +824,7 @@ class ProjectDetail(BaseModel):
     criterion_status: dict[str, dict[str, StageState]] = Field(default_factory=dict)    # as stage_status.criteria
     mode_to_choose: bool = False    # as in ProjectJson
     carving_updates_itself: bool = True     # as in ProjectJson
+    inspect_prompt_answered: bool = False   # as in ProjectJson
 
 
 class CancelRunReply(BaseModel):

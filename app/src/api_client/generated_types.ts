@@ -828,6 +828,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/inspect-prompt-answered": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Inspect Prompt Answered
+         * @description The user answered the prompt to check face directions in Inspect: it is not shown again in this project. A choice of the
+         *     page's, not of a result: it is stored during a run too.
+         */
+        post: operations["inspect_prompt_answered"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}/mode-chosen": {
         parameters: {
             query?: never;
@@ -2321,6 +2342,11 @@ export interface components {
              * @default true
              */
             carving_updates_itself: boolean;
+            /**
+             * Inspect Prompt Answered
+             * @default false
+             */
+            inspect_prompt_answered: boolean;
         };
         /**
          * ProjectSummary
@@ -4766,6 +4792,44 @@ export interface operations {
                 "application/json": components["schemas"]["CarvingUpdatesRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    inspect_prompt_answered: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             204: {

@@ -147,8 +147,7 @@ export function SiteBox({ sites, heights, tool, onDraw, onEdit, onChangeSite, on
           <button type="button" className="input-add" disabled={disabledReason !== null} onClick={() => picker.current?.click()}>{messages.importSites}</button>
         </span>
       </div>
-      <p className="input-box-hint">{messages.siteHint}</p>
-      {sites.length === 0 ? <><p className="input-box-hint">{messages.siteEmptyHint}</p><p className="input-box-drop-hint">{messages.siteDropHint}</p></> : (
+      {sites.length === 0 ? <><p className="input-box-hint">{messages.siteHint}</p><p className="input-box-hint">{messages.siteEmptyHint}</p><p className="input-box-drop-hint">{messages.siteDropHint}</p></> : (
         <div className="site-table" style={{ "--site-table-columns": tableColumns(columns) } as CSSProperties}>
           {columns > 0 && (
             <div className="site-table-head" aria-hidden="true">

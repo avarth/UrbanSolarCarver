@@ -340,7 +340,8 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
                 stage_status=status, grid_plan=store.stored_grid_plan(name),
                 carving_chain=project_json.carving_chain, criteria=project_json.criteria,
                 criterion_status=status.criteria, mode_to_choose=project_json.mode_to_choose,
-                carving_updates_itself=project_json.carving_updates_itself)
+                carving_updates_itself=project_json.carving_updates_itself,
+                inspect_prompt_answered=project_json.inspect_prompt_answered)
 
     def run_folder_of(name: str) -> Path:
         return folder_in_use.store.open(name) / RUN_FOLDER
@@ -698,6 +699,17 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         with store.project_lock(name):
             project_json = store.read_project_json(name)
             project_json.carving_updates_itself = request.on
+            store.write_project_json(name, project_json)
+        return Response(status_code=204)
+
+    @router.post("/projects/{name}/inspect-prompt-answered", status_code=204, response_class=Response, responses=_ERROR_RESPONSES)
+    def inspect_prompt_answered(name: str) -> Response:
+        """The user answered the prompt to check face directions in Inspect: it is not shown again in this project. A choice of the
+        page's, not of a result: it is stored during a run too."""
+        store = folder_in_use.store
+        with store.project_lock(name):
+            project_json = store.read_project_json(name)
+            project_json.inspect_prompt_answered = True
             store.write_project_json(name, project_json)
         return Response(status_code=204)
 

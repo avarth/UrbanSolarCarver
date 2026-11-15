@@ -32,6 +32,8 @@ export interface InputFilesContext {
   refreshStageStatus: () => void;
   /** Told whenever a role's meshes are loaded: the view frames the inputs. */
   onInputsLoaded: () => void;
+  /** Told of each file an import adds under a new name (not of a file it replaces), with its stored name. */
+  onFileAdded?: (role: InputRole, fileName: string) => void;
 }
 
 export interface InputFiles {
@@ -122,7 +124,7 @@ const CONTEXT_BLOCKS_FILE = [{ name: "context_blocks.ply", triangle_count: 0 }];
 
 export function useInputFiles(context: InputFilesContext): InputFiles {
   const { token, onServiceProblem } = useProjectSession();
-  const { project, modes, currentForm, sharedForm, refreshStageStatus, onInputsLoaded } = context;
+  const { project, modes, currentForm, sharedForm, refreshStageStatus, onInputsLoaded, onFileAdded } = context;
   // The uploads and removals of input files under way, each until its reply (and the save it may start) is in.
   const inputChangesUnderWay = useRef(new Set<Promise<unknown>>());
   const waitForInputChanges = async () => {
@@ -255,10 +257,16 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
   const addFilesOneByOne: AddInputFiles = async (role, chosenFiles) => {
     setRemoval(null);
     const problems: string[] = [];
+    const namesBefore = new Set(files[role].map((stored) => stored.name));
     for (const file of chosenFiles) {
       try {
         const reply = await addInput(token, project.name, role, file);
         applyFilesReply(reply);
+        for (const stored of reply.files) {
+          if (namesBefore.has(stored.name)) continue;
+          namesBefore.add(stored.name);
+          onFileAdded?.(role, stored.name);
+        }
         if (role === "weather") noteNewWeatherFile(reply);
       } catch (error) {
         if (reportServiceProblem(error, onServiceProblem)) {

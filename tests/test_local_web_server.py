@@ -1466,11 +1466,12 @@ def test_results_of_a_criterion_and_of_the_chain_are_served(client_with_two_crit
     kept_by_first = (flat < 18) & (flat % 2 == 0)
     write_fake_run(projects_folder / "p", mask=kept_by_first)
     write_fake_run(projects_folder / "p", criterion_id="2", mask=kept_by_first & (flat % 4 == 0), after_criterion_id="1")
-    for query, kept_every in (({}, 4), ({"criterion": "1"}, 2), ({"criterion": "2"}, 4)):     # without a criterion: the last
+    # Criterion 2 decides only among the 9 voxels criterion 1 kept.
+    for query, kept_every, occupied in (({}, 4, 9), ({"criterion": "1"}, 2, 18), ({"criterion": "2"}, 4, 9)):     # no criterion: the last
         reply = client.get("/api/projects/p/run/score-points", params=query)
         assert reply.status_code == 200 and reply.headers["content-type"] == "application/octet-stream", query
         header, indices, _scores, kept, _compared = decode_score_points(reply.content)
-        assert header["occupied_count"] == 18 and (kept == (indices % kept_every == 0)).all(), query
+        assert header["occupied_count"] == occupied and (kept == (indices % kept_every == 0)).all(), query
     no_patches = client.get("/api/projects/p/run/sky-patches", params={"criterion": "1"})
     assert no_patches.status_code == 200 and no_patches.json() is None                                     # a time-based run has none
     carved = client.get("/api/projects/p/run/carved-by-criterion")

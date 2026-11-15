@@ -28,7 +28,11 @@ import { secondsText } from "./common/RunProgress";
 import { WorkspaceModeSwitch, type WorkspaceMode } from "./common/WorkspaceModeSwitch";
 import { cpuChosenAtLaunch, exampleTitleOf, isWarmingUp, Spinner, StartScreen, type ProjectsFolderChange } from "./workspace/StartScreen";
 import { AppThemeProvider, rememberedTheme, showTheme, ThemeButton, type AppTheme } from "./theme/app_theme";
+import productSymbol from "./theme/favicon.svg";
 import "./App.css";
+
+// The product name in the top bar, after its symbol (the favicon); the symbol is decoration, the name is the text read out.
+const productMark = <><img className="top-bar-symbol" src={productSymbol} alt="" />{messages.productName}</>;
 
 const accessToken = readTokenFromLaunchUrl();
 const HEALTH_POLL_MILLISECONDS = 1000;
@@ -361,9 +365,9 @@ export function App() {
           {openProject
             ? (
               <button type="button" className="top-bar-product top-bar-home" title={messages.backToProjects}
-                      onClick={() => leavingInspect.leave(() => setOpenProject(null))}>{messages.productName}</button>
+                      onClick={() => leavingInspect.leave(() => setOpenProject(null))}>{productMark}</button>
             )
-            : <span className="top-bar-product">{messages.productName}</span>}
+            : <span className="top-bar-product">{productMark}</span>}
           {openProject && (
             <>
               <ProjectMenu projectName={openProject.name} exampleTitle={exampleTitleOf(openProject.example, examples)}
@@ -398,7 +402,8 @@ export function App() {
                             onShowProjects={() => setOpenProject(null)} onSettingsSaverReady={(saver) => { openProjectSettings.current = saver; }}
                             startSteps={workspaceStartSteps} onStepsChange={(steps) => { openWorkspaceSteps.current = steps; }}
                             onInspectUnsavedChange={leavingInspect.onUnsavedChange} onInspectTurnsReady={leavingInspect.onTurnsReady}
-                            onGoToCarve={() => leavingInspect.leave(() => setWorkspaceMode("design"))} settingsButtonSlot={settingsButtonSlot}
+                            onGoToCarve={() => leavingInspect.leave(() => setWorkspaceMode("design"))} onGoToInspect={() => setWorkspaceMode("inspect")}
+                            settingsButtonSlot={settingsButtonSlot}
                             startsWithSetup={newProjectSetup} onSetupClosed={() => setNewProjectSetup(false)} />
         )}
         {leavingInspect.dialog}

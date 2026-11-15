@@ -79,7 +79,7 @@ function ordinalOf(value: number): string {
 
 export const messages = {
   // Top bar and start screen (4, 5.1)
-  productName: "UrbanSolarCarver",
+  productName: "Urban Solar Carver",
   versionLine: (version: string) => `Version ${version}`,
   backToProjects: "Back to the projects",
   startScreenHeading: "Projects",
@@ -179,6 +179,11 @@ export const messages = {
   inspectBounds: (xMin: string, xMax: string, yMin: string, yMax: string, zMin: string, zMax: string) =>
     `Bounds: x ${xMin} to ${xMax}, y ${yMin} to ${yMax}, z ${zMin} to ${withUnit(zMax, "m")}`,
   georeferencedCoordinates: (kilometres: number) => `Georeferenced coordinates, about ${withUnit(groupedDigits(Math.round(kilometres)), "km")} from 0.`,
+  // The prompt under the test surfaces box after the project's first test surface file is imported (InspectPrompt)
+  inspectPromptText: (fileName: string) =>
+    `Check which way the surfaces of ${fileName} face before a run. A surface that faces the wrong way is not protected.`,
+  inspectPromptOpen: "Open Inspect",
+  inspectPromptNotNow: "Not now",
   inspectReadingFiles: "Reading the files…",       // until the first reply: a large context file takes seconds
   inspectSurfaces: (count: number) => `Surfaces: ${groupedDigits(count)}`,
   // The surfaces a run leaves out before sampling, in the words of skippedSurfaceReasons
@@ -276,7 +281,6 @@ export const messages = {
   projectSettingsTitle: "Project settings",
   projectSettingsHint: (summaryText: string) => `${summaryText}. Opens the settings every criterion shares.`,
   projectSettingsButtonWithFixes: (count: number) => `Settings, ${count} ${count === 1 ? "setting" : "settings"} to fix`,
-  projectSettingsIntro: "These settings apply to every criterion. A change puts every criterion out of date.",
   closeProjectSettings: "Close",
   // The setup of a new project (design/new-project-setup.md): the project settings a page at a time
   setupTitle: "Set up the project",
@@ -319,13 +323,11 @@ export const messages = {
   // A weighted mode reports the share of the obstruction it removed; the others the share of the volume that reached the criterion.
   criterionScoreCarved: (percentText: string) => `Removes ${percentText} of the obstruction`,
   criterionVolumeCarved: (percentText: string) => `Removes ${percentText} of what reached it`,
-  // With a base height (design/base-height.md): what the base kept and what was built above it.
-  builtAboveBase: (keptText: string, builtText: string, studiedText: string, percentText: string) =>
-    `Base kept: ${keptText} m³. Built above it: ${builtText} m³ of ${studiedText} m³ (${percentText})`,
-  baseHoldsObstruction: (percentText: string) =>
-    `The base alone holds ${percentText} of the obstruction of the test surfaces; carving above it cannot remove that`,
-  // Under the cards of two or more criteria (7.2): the share of the maximum volume the chain kept.
-  chainKept: (percentText: string) => `After all criteria: kept ${percentText} of the maximum volume`,
+  // Under the cards (7.2): the share of the maximum volume the criteria kept together and, with a base height
+  // (design/base-height.md), the volume of it above the base height. "Result" with one criterion, "Combined result" with more.
+  chainKept: (percentText: string, aboveBaseText: string | null, criteriaOn: number) =>
+    `${criteriaOn > 1 ? "Combined result" : "Result"}: kept ${percentText} of the maximum volume`
+    + (aboveBaseText === null ? "" : `, ${aboveBaseText} m³ of it above the base height`),
   criterionOutOfDate: "Out of date",
   criterionUpdatesFrom: (criterionName: string) => `Updates from ${criterionName}`,
   criterionRunning: "Running",
@@ -393,7 +395,7 @@ export const messages = {
   weatherAlsoInSettings: "Also in Settings",
   maxVolumeHint: "The largest building you would allow, as one or more closed meshes.",
   testSurfacesHint: "The surfaces whose sun or sky the carving protects, such as neighbouring facades.",
-  contextHint: "Buildings and large trees that stay. They block sun and sky, and nothing is built in their place.",
+  contextHint: "Existing urban context, such as current buildings and trees that stay in place.",
   terrainHint: "The ground. It blocks sun and sky; the site stays buildable above it.",
   weatherNeededFor: (modeNames: string) => `Needed for ${modeNames}.`,
   orDropFilesHere: "You can also drag files onto this box.",
@@ -423,7 +425,7 @@ export const messages = {
     + "you can switch back.",
   switchInput: "Switch",
   siteTitle: "Sites",
-  siteHint: "The plots you may build on: closed outlines in plan, drawn in the 3D view or imported, each with its base and max height.",
+  siteHint: "Plots to generate maximum developable volumes.",
   drawSite: "Draw",
   // Drawn context blocks (design/context-blocks.md)
   drawBlock: "Draw",
@@ -458,7 +460,7 @@ export const messages = {
   drawnOnGround: "drawn on the ground",
   drawGroundSurface: "Draw",
   editGroundOutline: "Edit outline",
-  surfaceSetsHint: "Windows, facades or roofs whose sun or sky the carving protects, as files or as faces picked on the context. Each criterion and study chooses which of them to use.",
+  surfaceSetsHint: "Windows, facades or roofs whose sun or sky the carving protects, as files or as faces picked on the context.",
   usedBy: (names: string) => `Used by ${names}`,
   surfaceSetInUse: (names: string) => `Used by ${names}: switch it off there to remove it`,
   noSurfaceSets: "The project has no test surfaces yet. Import files or pick them on the context in the Site step.",
@@ -992,7 +994,7 @@ export const messages = {
   groundAidSwitchTo: { grid: "Show the ground grid", compass_ring: "Show the compass ring", off: "Hide the compass ring" },
   keptVoxelsPlain: "Kept voxels",
   keptVoxelsCastNoShade: "Kept voxels cast no shade in the period.",
-  flatPanelsHint: "Flat panels; a curved or folded one is skipped.",
+  flatPanelsHint: "Flat surfaces only.",
   exampleDetail: (modeName: string, description: string) => `${modeName}. ${description}`,
   keptVoxelsNote: (cutoff: string) => `Kept voxels. Carved voxels score above ${cutoff}.`,
   keptVoxelsSingleValue: (valueWithUnit: string) => `All kept voxels: ${valueWithUnit}`,

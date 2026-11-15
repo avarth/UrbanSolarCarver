@@ -43,6 +43,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Inspect
 
+- **A prompt to check face directions after the first test surface file.** Under the Site step's Test surfaces box: **Open Inspect**
+  opens Inspect with the file selected, **Not now** closes it. It is shown once per project (`project.json`
+  `inspect_prompt_answered`, set by `POST /projects/{name}/inspect-prompt-answered`).
 - **Surfaces a run leaves out, before the run.** A test surface file's summary in Inspect says how many of its surfaces are not
   flat or have no area, as in "3 of 43 surfaces are not flat: a run leaves them out.", and draws them in the error colour. It uses
   the run's own rule; a surface too small for the grid is still reported after the run, by the Skipped test surfaces layer.
@@ -61,6 +64,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Fixes
 
+- **The histogram of a later criterion drew a carved part in its first bar.** In a chain, its score layer took every voxel of the
+  maximum volume, so the voxels earlier criteria had removed counted as carved, with a score of 0 after score smoothing. They are
+  now left out: a criterion's histogram, score points and "keeps about" preview cover only the voxels the criterion before it kept.
 - **The 3D view froze once a set was drawn on the ground or picked on the context.** Their files keep double-precision corners
   (since the fix that keeps touching picked pieces apart), and the view handed those to WebGL as they were, so every frame failed:
   the scene stopped while only the editor outlines moved. The view now shifts them to its local origin and draws them as float32.
@@ -91,6 +97,15 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Criteria
 
+- **Combined result.** The line under the criteria cards reads "Combined result: kept 26 % of the maximum volume" and, with a base
+  height, adds the volume of it above the base height (then also with one criterion, as "Result: ..."). A criterion's card gives
+  only the share of the obstruction it removes; the base volumes and the note about a base holding much obstruction are gone.
+- The top bar shows the app symbol before "Urban Solar Carver", now written as three words. The test surfaces hint ends with
+  "Flat surfaces only." The Settings window no longer opens with "These settings apply to every criterion…", and what the
+  carving switch does moved into its info "i".
+- **The Site step's boxes describe what they expect only while empty.** Once a box lists files (or sites), its description goes.
+  Shorter texts for Context ("Existing urban context, such as current buildings and trees that stay in place."), Test surfaces
+  and Sites ("Plots to generate maximum developable volumes.").
 - **The criterion that holds the run is easy to find.** When Run analysis waits for another criterion's test surfaces, **Open *name*** beside
   the reason shows that criterion with its Test surfaces open, and its card's status line carries a warning sign.
 

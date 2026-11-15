@@ -14,7 +14,7 @@
 import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
-  failureTextOf, getSurfacePicks, markModeChosen, pickSurfaceSet, readOutlines, renameSurfaceSet, reportServiceProblem, setCarvingUpdates, terrainHeights, type HealthReply, type OutlinesReply, type ModeInfo, type ProjectDetail,
+  failureTextOf, getSurfacePicks, markInspectPromptAnswered, markModeChosen, pickSurfaceSet, readOutlines, renameSurfaceSet, reportServiceProblem, setCarvingUpdates, terrainHeights, type HealthReply, type OutlinesReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
 import { ProjectSessionContext } from "../api_client/project_session";
 import { activeCriteria } from "../criteria/criteria_state";
@@ -33,6 +33,7 @@ import { useTypicalBuilding } from "../criteria/use_typical_building";
 import { useWorkspaceCriteria } from "../criteria/use_workspace_criteria";
 import { useChangedDuringRender } from "../hooks/use_changed_during_render";
 import { AnalysisOutOfDateNotice, InspectView } from "../inspect/InspectView";
+import { InspectPrompt } from "../inspect/InspectPrompt";
 import type { InspectTurns } from "../inspect/UnsavedTurnsDialog";
 import { useInspectView } from "../inspect/use_inspection";
 import { listedWithAnd, messages } from "../messages";
@@ -68,6 +69,7 @@ import { ImportSitesDialog } from "../sites/ImportSitesDialog";
 import { ContextPicker, type PickTarget, type SurfacePick } from "../viewer_overlays/ContextPicker";
 import { browserAutoUpdateChoice, forgetBrowserAutoUpdateChoice } from "../criteria/CarvingStep";
 import { Subheading } from "../settings_form/Subheading";
+import { SettingTooltip } from "../settings_form/SettingTooltip";
 import { HeightsSettings } from "../sites/HeightsSettings";
 import { SiteEditor, SitePicker, type SiteTool } from "../sites/SiteEditor";
 import { ContextBlocksList } from "../sites/ContextBlocksList";
@@ -158,6 +160,8 @@ interface ProjectWorkspaceProps {
   onInspectTurnsReady?: (turns: InspectTurns | null) => void;
   /** Goes from Inspect to Carve, as the switch in the header does. */
   onGoToCarve?: () => void;
+  /** Goes to Inspect, as the switch in the header does (the prompt after the first test surface file); absent: no prompt. */
+  onGoToInspect?: () => void;
   /** The place in the top bar where the Settings button is drawn; null or absent: no button (the window still opens from a run's reason). */
   settingsButtonSlot?: HTMLElement | null;
 }
@@ -236,11 +240,17 @@ function OpenProject(props: ProjectWorkspaceProps) {
       void studies.refresh();
     },
   });
+  // The prompt to check face directions in Inspect (InspectPrompt): the first test surface file imported while it is not answered,
+  // and the file Open Inspect selects there.
+  const [inspectPromptAnswered, setInspectPromptAnswered] = useState(props.project.inspect_prompt_answered ?? false);
+  const [inspectPromptFile, setInspectPromptFile] = useState<string | null>(null);
+  const fileToSelectInInspect = useRef<string | null>(null);
   const [framingRequest, setFramingRequest] = useState(0);
   const frameAllInputs = () => setFramingRequest((count) => count + 1);
   const { files, origin, weather, meshes, baseVolume, addFiles, removeFile, lastRemoval, removedFiles, storeTestSurfaceFiles, reloadRoles, followedInputChange, waitForInputChanges,
           sites: siteInput, contextBlocks, contextBlocksMesh } = useInputFiles({
     project, modes, currentForm, sharedForm, refreshStageStatus, onInputsLoaded: frameAllInputs,
+    onFileAdded: (role, fileName) => { if (role === "test_surfaces") setInspectPromptFile((shown) => shown ?? fileName); },
   });
   // The studies are read again when the sites, their heights or the source of the maximum volume change: a study on the base volume
   // waits once there is no base height, and the others go out of date (also when the change is made in Settings while in Simulate)
@@ -379,6 +389,14 @@ function OpenProject(props: ProjectWorkspaceProps) {
     onUnsavedChange: props.onInspectUnsavedChange, onTurnsReady: props.onInspectTurnsReady,
   });
   const inspectView = useInspectView(inspection, origin, inspecting);
+  // Open Inspect on the prompt selects the file once Inspect has read the files (it reads them only when it opens).
+  useEffect(() => {
+    const wanted = fileToSelectInInspect.current;
+    if (!inspecting || wanted === null || inspection.reply === null) return;
+    fileToSelectInInspect.current = null;
+    const file = inspection.reply.files.find((candidate) => candidate.role === "test_surfaces" && candidate.file_name === wanted);
+    if (file !== undefined && inspection.selected !== file) inspection.select(file);
+  }, [inspecting, inspection]);
   // Set once the render is committed: the hooks above call these with a reply.
   useLayoutEffect(() => {
     reloadInspection.current = inspection.reload;
@@ -799,12 +817,29 @@ function OpenProject(props: ProjectWorkspaceProps) {
                    pickedSets={pickedSets} newSetName={nextPickedName()} busy={picking.busy} problem={picking.problem}
                    onUse={(picks, target) => { void savePicks(picks, target); }} onCancel={() => setPicking(null)} />
   );
+  const inspectPromptShown = props.onGoToInspect !== undefined && !inspectPromptAnswered && inspectPromptFile !== null;
+  const answerInspectPrompt = (openInspect: boolean) => {
+    if (openInspect) {
+      fileToSelectInInspect.current = inspectPromptFile;
+      props.onGoToInspect?.();
+    }
+    setInspectPromptAnswered(true);
+    setInspectPromptFile(null);
+    markInspectPromptAnswered(props.token, props.project.name).catch((error: unknown) => reportServiceProblem(error, props.onServiceProblem));
+  };
+  const inspectPrompt = inspectPromptShown && (
+    <InspectPrompt fileName={files.test_surfaces.find((file) => file.name === inspectPromptFile)?.shown_name ?? inspectPromptFile}
+                   onOpenInspect={() => answerInspectPrompt(true)} onNotNow={() => answerInspectPrompt(false)} />
+  );
   const testSurfacesBox = (
+    <>
     <SurfaceSetsBox files={files.test_surfaces} onAddFiles={addFiles} onRemoveFile={removeFile} disabledReason={inputsDisabledReason}
                     drawingProblems={testSurfacesMesh.drawingProblems} onPickFromSurroundings={hasSurroundingsFiles && props.mode === "design" ? startPicking : undefined}
                     onRenameSet={renameSet} onEditPicks={(fileName) => { void editPicks(fileName); }}
                     onDraw={props.mode === "design" ? () => startGround({ kind: "draw" }) : undefined}
                     onEditOutline={props.mode === "design" ? (fileName) => startGround({ kind: "edit", file: fileName }) : undefined} />
+    {inspectPrompt}
+    </>
   );
   const stepContent: Record<StepName, ReactNode> = {
     inputs: (
@@ -942,12 +977,14 @@ function OpenProject(props: ProjectWorkspaceProps) {
                            carving={(
                              <div className="setting-group" data-setting={CARVING_UPDATES_SETTING}>
                                <Subheading className="setting-group-title">{messages.carvingGroup}</Subheading>
-                               <label className="switch-row">
-                                 <input type="checkbox" role="switch" className="setting-switch" checked={carvingUpdatesItself}
-                                        onChange={(event) => changeCarvingUpdates(event.target.checked)} />
-                                 {messages.updateWhenThresholdChanges}
-                               </label>
-                               <p className="setting-note">{messages.updateWhenThresholdChangesHelp}</p>
+                               <div className="setting-label-row">
+                                 <label className="switch-row">
+                                   <input type="checkbox" role="switch" className="setting-switch" checked={carvingUpdatesItself}
+                                          onChange={(event) => changeCarvingUpdates(event.target.checked)} />
+                                   {messages.updateWhenThresholdChanges}
+                                 </label>
+                                 <SettingTooltip settingLabel={messages.updateWhenThresholdChanges} help={messages.updateWhenThresholdChangesHelp} />
+                               </div>
                              </div>
                            )}
                            heights={siteInput.source === null ? undefined : (

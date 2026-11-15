@@ -38,7 +38,7 @@ test("an empty box says what test surfaces are, with Import and, given context, 
   expect(box().querySelector(".input-box-title")!.textContent).toBe("Test surfaces");
   expect(box().classList.contains("input-box-empty")).toBe(true);
   expect(box().querySelector(".input-box-hint")!.textContent).toBe(
-    "Windows, facades or roofs whose sun or sky the carving protects, as files or as faces picked on the context. Each criterion and study chooses which of them to use.");
+    "Windows, facades or roofs whose sun or sky the carving protects, as files or as faces picked on the context.");
   expect(box().querySelector(".input-box-drop-hint")!.textContent).toBe("You can also drag files onto this box.");
   const actions = box().querySelector(".input-box-title-row .site-box-actions")!;
   expect([...actions.querySelectorAll("button")].map((button) => button.textContent)).toEqual(["Pick", "Import"]);
@@ -166,6 +166,6 @@ test("a refused rename is said in the dialog, which stays open", async () => {
 });
 
 test("a mode's hint of what it protects ends with the note on flat panels", () => {
-  expect(protectsHintOf("daylight")).toBe("Windows or facades that need daylight. Flat panels; a curved or folded one is skipped.");
-  expect(protectsHintOf("irradiance")).toBe("Roofs or facades that collect sun and sky energy, for example for solar panels. Flat panels; a curved or folded one is skipped.");
+  expect(protectsHintOf("daylight")).toBe("Windows or facades that need daylight. Flat surfaces only.");
+  expect(protectsHintOf("irradiance")).toBe("Roofs or facades that collect sun and sky energy, for example for solar panels. Flat surfaces only.");
 });

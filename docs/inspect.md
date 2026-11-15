@@ -12,6 +12,8 @@ The switch **Carve | Simulate | Inspect** in the header, next to the project nam
 
 Inspect works while a run of the project is going. Only Save and Restore original wait for it to end, as uploads do.
 
+The first time a test surface file is imported into a project, a prompt under the Site step's **Test surfaces** box asks to check which way its surfaces face before a run. **Open Inspect** opens Inspect with that file selected; **Not now** closes the prompt. Either answer is kept in the project (`project.json`, `inspect_prompt_answered`), so the prompt is shown once per project. Drawn and picked sets do not bring it, and neither do files of the other roles: only a test surface is read from one side.
+
 ## The Geometries panel
 
 The **Geometries** panel floats over the top left of the 3D view and collapses to an icon. It lists the input mesh files by role: maximum volume, test surfaces, existing surroundings and terrain. The weather file has no geometry and is not listed. Each row gives the file name, its triangle count and its area. A file that cannot be read stays in the list with its problem, for example a broken export, and has nothing to select.
