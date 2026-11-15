@@ -59,6 +59,8 @@ Tutorial notebooks are in `examples/`:
 4. **Advanced**: chaining modes (annual irradiance on roofs, then daylight on windows)
 5. **Benefit with simulated weights**: hour weighting from a building simulation (ISO 13790 5R1C)
 
+![Jupyter notebook example](../assets/jupyter_snapshot.png)
+
 ## Input Requirements
 
 - **Max volume mesh**: watertight mesh (PLY recommended; any format Trimesh reads) representing the theoretical maximum buildable volume.
