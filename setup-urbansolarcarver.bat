@@ -46,7 +46,7 @@ echo   %USC_FOLDER%
 echo It downloads, checking each file before it is used:
 echo   uv %USC_UV_VERSION%, about 16 MB, from github.com/astral-sh/uv
 echo   Python %USC_PYTHON_VERSION%, about 30 MB, uv's own build, from github.com/astral-sh/python-build-standalone
-echo   PyTorch from download.pytorch.org: about 2.5 GB with CUDA (NVIDIA graphics cards), about 250 MB without
+echo   PyTorch from download.pytorch.org: about 2.6 GB with CUDA (NVIDIA graphics cards), about 130 MB without
 echo   the other packages, about 300 MB, from pypi.org
 echo Everything stays in this folder: deleting the folder removes it all.
 echo Press a key to start, or close this window to stop.
