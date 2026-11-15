@@ -46,6 +46,10 @@ Each stage reads the previous stage's manifest, so you can re-run thresholding w
 - **[API Reference](api/index.md)**: function signatures, parameters, and return types (generated from docstrings)
 - **[Changelog](https://github.com/avarth/UrbanSolarCarver/blob/main/CHANGELOG.md)**
 
+## Research context
+
+USC builds on earlier solar form-finding methods (Knowles' solar envelope, iso-solar surfaces, solar ordinance methods) and combines them with climate-based sky weighting and GPU voxel ray tracing in one tool. It is scale-agnostic and works on any voxelizable geometry; test surfaces can lie anywhere, also inside the maximum volume (to carve a courtyard or an interior void), and their normals must face the side whose sun or sky is protected.
+
 ## Citation
 
 USC is described in a paper presented at ReSBE 2026 and published open access. If you use USC, please cite:

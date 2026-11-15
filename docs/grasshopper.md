@@ -2,6 +2,8 @@
 
 USC provides 27 custom Grasshopper components for visual parametric workflows in Rhino.
 
+![Grasshopper canvas](assets/grasshopper_canvas_snapshot.png)
+
 ## Installation
 
 Copy all `.ghuser` files from `grasshopper/USC_GHplugin/` to your Grasshopper User Objects folder, or drag them onto the Grasshopper canvas. Requires Rhino 8 (the components are Python 3 script components).
