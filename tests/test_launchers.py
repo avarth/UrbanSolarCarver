@@ -1,6 +1,7 @@
 """The committed launchers of the browser app: start-urbansolarcarver.bat and .sh."""
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -11,6 +12,7 @@ import pytest
 REPOSITORY = Path(__file__).resolve().parents[1]
 WINDOWS_LAUNCHER = REPOSITORY / "start-urbansolarcarver.bat"
 UNIX_LAUNCHER = REPOSITORY / "start-urbansolarcarver.sh"
+WINDOWS_SETUP = REPOSITORY / "setup-urbansolarcarver.bat"
 RUNNING_ON_WINDOWS = platform.system() == "Windows"
 
 
@@ -25,8 +27,9 @@ def launcher_environment(**variables: str) -> dict:
     return environment
 
 
-def test_the_windows_launcher_keeps_windows_line_endings():
-    text = WINDOWS_LAUNCHER.read_bytes().decode("utf-8")
+@pytest.mark.parametrize("script", [WINDOWS_LAUNCHER, WINDOWS_SETUP])
+def test_the_windows_scripts_keep_windows_line_endings(script):
+    text = script.read_bytes().decode("utf-8")
     assert "\r\n" in text and "\n" not in text.replace("\r\n", "")
 
 
@@ -47,9 +50,65 @@ def test_the_unix_launcher_is_executable_in_git():
 def test_both_launchers_find_their_folder_and_start_usc_ui(launcher):
     text = launcher.read_text(encoding="utf-8")
     assert "urbansolarcarver.carver_cli ui" in text
-    assert "setup_env.py" in text            # the first run installs
-    assert "USC_VENV" in text and ".usc-venv" in text and ".venv" in text
+    assert "USC_VENV" in text and ".venv" in text
     assert "D:\\" not in text and "/home/" not in text and "C:\\Users" not in text   # no machine paths
+
+
+def test_the_unix_launcher_still_installs_on_its_first_run():
+    text = UNIX_LAUNCHER.read_text(encoding="utf-8")
+    assert "setup_env.py" in text and ".usc-venv" in text
+
+
+def test_the_windows_launcher_uses_only_the_environment_in_its_folder():
+    text = WINDOWS_LAUNCHER.read_text(encoding="utf-8")
+    assert "setup-urbansolarcarver.bat" in text and "WARP_CACHE_PATH" in text and ".runtime" in text
+    assert ".usc-venv" not in text and "setup_env.py" not in text
+    assert "where py" not in text and "where python" not in text      # no system Python
+
+
+def test_the_setup_script_pins_uv_and_checks_its_hash():
+    text = WINDOWS_SETUP.read_text(encoding="utf-8")
+    assert re.search(r"USC_UV_VERSION=\d+\.\d+\.\d+", text)
+    assert re.search(r"USC_UV_SHA256=[0-9a-f]{64}\b", text)
+    for needed in ("Get-FileHash", "uv-x86_64-pc-windows-msvc.zip", "--self-contained", "UV_PYTHON_PREFERENCE=only-managed",
+                   "UV_PYTHON_INSTALL_DIR", "UV_CACHE_DIR", "--no-registry", "--no-bin"):
+        assert needed in text, needed
+
+
+def test_the_setup_script_changes_nothing_outside_its_folder():
+    lowered = WINDOWS_SETUP.read_text(encoding="utf-8").lower()
+    for forbidden in ("setx", "reg ", "runas", "invoke-expression", "iex", "| powershell", "|powershell",
+                      'set "path=', "set path="):
+        assert forbidden not in lowered, forbidden
+
+
+@pytest.mark.slow   # two PowerShell starts, about 1 s
+@pytest.mark.skipif(not RUNNING_ON_WINDOWS, reason="runs cmd.exe")
+def test_a_uv_zip_whose_hash_does_not_match_is_deleted_and_setup_stops(tmp_path):
+    folder = tmp_path / "A B (1)"
+    folder.mkdir()
+    shutil.copy(WINDOWS_SETUP, folder)
+    junk = tmp_path / "junk.zip"
+    junk.write_bytes(b"not uv")
+    result = subprocess.run(["cmd", "/c", str(folder / WINDOWS_SETUP.name)], stdin=subprocess.DEVNULL,
+                            capture_output=True, text=True, timeout=120, env=launcher_environment(USC_UV_ZIP=str(junk)))
+    assert result.returncode != 0
+    assert "does not match" in result.stdout, result.stdout + result.stderr
+    assert not (folder / ".runtime" / "uv").exists()
+    assert not list((folder / ".runtime" / "download").glob("*.zip"))
+    assert junk.exists()   # the test's own file is copied, never deleted
+
+
+@pytest.mark.skipif(not RUNNING_ON_WINDOWS, reason="runs cmd.exe")
+def test_the_windows_launcher_asks_for_setup_when_there_is_no_environment(tmp_path):
+    folder = tmp_path / "A B (1)"
+    folder.mkdir()
+    shutil.copy(WINDOWS_LAUNCHER, folder)
+    result = subprocess.run(["cmd", "/c", str(folder / WINDOWS_LAUNCHER.name)], stdin=subprocess.DEVNULL,
+                            capture_output=True, text=True, timeout=60, env=launcher_environment())
+    assert result.returncode == 1
+    assert "Run setup-urbansolarcarver.bat first." in result.stdout, result.stdout + result.stderr
+    assert not (folder / ".venv").exists()
 
 
 @pytest.mark.skipif(not RUNNING_ON_WINDOWS, reason="runs cmd.exe")

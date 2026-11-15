@@ -132,8 +132,8 @@ def test_the_docs_give_the_python_versions_the_installer_accepts():
     assert f"Python {low} to {high}" in installation
     assert f"needs Python {low} or newer" in (root / "docs" / "ui.md").read_text(encoding="utf-8")
     assert f'requires-python = ">={low}"' in (root / "pyproject.toml").read_text(encoding="utf-8")
-    for launcher in ("start-urbansolarcarver.bat", "start-urbansolarcarver.sh"):
-        assert f"Python {low} or newer" in (root / launcher).read_text(encoding="utf-8")
+    # The Windows launcher names no system Python: setup-urbansolarcarver.bat brings its own.
+    assert f"Python {low} or newer" in (root / "start-urbansolarcarver.sh").read_text(encoding="utf-8")
 
 
 HASHED_LOCKFILE = setup_env.LOCKFILE.with_name("requirements-lock-hashed.txt")

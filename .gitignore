@@ -109,3 +109,6 @@ docs/superpowers/
 
 # Design notes: development records, kept locally, not published (user, 2026-11-01). docs/simulated-weights.md holds what users need.
 design/
+
+# What setup-urbansolarcarver.bat downloads and makes: uv, its Python, the caches
+.runtime/
