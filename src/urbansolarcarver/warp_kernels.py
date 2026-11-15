@@ -140,7 +140,7 @@ def require_dda_backend(device) -> None:
     reason = _warp_unavailable_reason or "Warp's CPU backend cannot compile kernels on this machine"
     raise WarpBackendUnavailableError(
         f"Ray tracing needs NVIDIA Warp, which cannot run on device {str(device)!r}: {reason}. "
-        f"Repair the environment with `python setup_env.py` (or reinstall warp-lang)."
+        f"Repair the environment with `python install/setup_env.py` (or reinstall warp-lang)."
     )
 
 if _warp_available:

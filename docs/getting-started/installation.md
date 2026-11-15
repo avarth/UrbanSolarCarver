@@ -20,8 +20,8 @@ What the setup downloads, each file checked against a SHA-256 hash that is alrea
 |---|---|---|---|
 | uv, a pinned version | github.com/astral-sh/uv | about 16 MB | the hash in `setup-urbansolarcarver.bat` |
 | Python 3.14, uv's own build | github.com/astral-sh/python-build-standalone | about 22 MB | the checksums built into uv |
-| PyTorch: with CUDA for an NVIDIA graphics card, else the CPU build | download.pytorch.org | about 2.6 GB, or about 130 MB | `requirements-lock-hashed.txt` |
-| The other packages | pypi.org | about 300 MB | `requirements-lock-hashed.txt` |
+| PyTorch: with CUDA for an NVIDIA graphics card, else the CPU build | download.pytorch.org | about 2.6 GB, or about 130 MB | `install/requirements-lock-hashed.txt` |
+| The other packages | pypi.org | about 300 MB | `install/requirements-lock-hashed.txt` |
 
 It needs about 7 GB of free disk space with CUDA (the packages and their download cache), or about 1.5 GB with the CPU build;
 the setup checks before downloading and says how much is free.
@@ -55,20 +55,20 @@ foot of the project list on the home screen.
 ```bash
 git clone https://github.com/avarth/UrbanSolarCarver.git
 cd UrbanSolarCarver
-python setup_env.py
+python install/setup_env.py
 ```
 
 This creates a virtual environment (`.venv/` in the repository; on Windows it falls back to `~/.usc-venv` when the repository path is too long for the 260-character path limit), reads the CUDA version from your NVIDIA driver, asks the PyTorch wheel indexes that driver can run which torch they offer and installs the newest, installs USC in editable mode together with the browser UI (the `ui` extra), and precompiles the Warp kernels.
 
 ```bash
-python setup_env.py --cpu             # force CPU-only (no CUDA)
-python setup_env.py --dry-run         # show what would be installed
-python setup_env.py --no-ui           # leave out the browser UI (the ui extra)
-python setup_env.py --venv-dir PATH   # put the virtual environment at PATH
-python setup_env.py --latest          # the newest versions, not the tested ones
+python install/setup_env.py --cpu             # force CPU-only (no CUDA)
+python install/setup_env.py --dry-run         # show what would be installed
+python install/setup_env.py --no-ui           # leave out the browser UI (the ui extra)
+python install/setup_env.py --venv-dir PATH   # put the virtual environment at PATH
+python install/setup_env.py --latest          # the newest versions, not the tested ones
 ```
 
-`setup_env.py` installs the versions in `requirements-lock.txt`, which the tests last passed on, so results can be reproduced.
+`install/setup_env.py` installs the versions in `install/requirements-lock.txt`, which the tests last passed on, so results can be reproduced.
 They install on Python 3.12 to 3.14. With a newer Python, or if PyTorch reports that your GPU is too new for it, add `--latest` for the
 newest versions, which have not been tested with this release.
 
@@ -83,13 +83,13 @@ pip install torch --index-url https://download.pytorch.org/whl/cu126
 pip install -e .[dev,ui]       # leave out ,ui if you do not want the browser UI
 ```
 
-This route takes the newest versions, not the tested ones. Pick the PyTorch index for your driver on https://pytorch.org/get-started/locally/ (`nvidia-smi` shows the highest CUDA version the driver supports; `python setup_env.py --dry-run` shows the index the installer would choose). PyTorch stops publishing to older indexes, so prefer one that still receives releases.
+This route takes the newest versions, not the tested ones. Pick the PyTorch index for your driver on https://pytorch.org/get-started/locally/ (`nvidia-smi` shows the highest CUDA version the driver supports; `python install/setup_env.py --dry-run` shows the index the installer would choose). PyTorch stops publishing to older indexes, so prefer one that still receives releases.
 
 An editable install keeps the version number it was installed with. After pulling a new version, refresh it with `pip install -e . --no-deps` so `usc --version` reports it.
 
 ## Browser UI
 
-The browser interface is an optional extra of the package (`ui`). `setup_env.py` installs it unless `--no-ui` is given. To add it to an existing environment:
+The browser interface is an optional extra of the package (`ui`). `install/setup_env.py` installs it unless `--no-ui` is given. To add it to an existing environment:
 
 ```bash
 python -m pip install -e ".[ui]"
@@ -105,7 +105,7 @@ Then start it by double-clicking `start-urbansolarcarver.bat` (Windows) or runni
 
 ## Without an NVIDIA GPU
 
-Everything runs on the CPU too: Macs, and computers with AMD or Intel graphics, use it, as does `setup_env.py --cpu`. The
+Everything runs on the CPU too: Macs, and computers with AMD or Intel graphics, use it, as does `install/setup_env.py --cpu`. The
 scoring stage, where rays are traced from every test point, is the part that slows down; the other stages take about as long.
 The bundled examples, scored on one desktop (AMD Ryzen 7 3800X, 8 cores; NVIDIA RTX 3060), voxel size 1 m:
 

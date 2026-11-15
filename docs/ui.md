@@ -21,7 +21,7 @@ The command prints the address to open and opens it in your default browser once
 | `--no-browser` | off | Print the address without opening the browser |
 | `--device`, `-d` | `auto` | Compute device: `auto`, `cpu` or `cuda` |
 
-The browser interface is an optional extra of the package. `setup_env.py` installs it unless you pass `--no-ui`; to add it to an existing environment run `python -m pip install -e ".[ui]"` (see [Installation](getting-started/installation.md#browser-ui)). Without the extra, `usc ui` prints that command and exits, and every other command is unaffected.
+The browser interface is an optional extra of the package. `install/setup_env.py` installs it unless you pass `--no-ui`; to add it to an existing environment run `python -m pip install -e ".[ui]"` (see [Installation](getting-started/installation.md#browser-ui)). Without the extra, `usc ui` prints that command and exits, and every other command is unaffected.
 
 When the service starts it compiles the GPU kernels in the background. The start screen shows "Preparing the GPU" until that ends; you can open a project and add files meanwhile, and the run buttons wait for the GPU.
 

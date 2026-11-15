@@ -30,13 +30,13 @@ dependency, an outdated editable install). From time to time, and before a
 release, install into a new folder and run the tests there:
 
 ```bash
-python setup_env.py --venv-dir ../usc-fresh-install
+python install/setup_env.py --venv-dir ../usc-fresh-install
 ../usc-fresh-install/Scripts/python.exe -m pytest tests/    # bin/python on Linux and macOS
 ```
 
-Then delete the folder. Fix what fails in `pyproject.toml` or `setup_env.py`.
+Then delete the folder. Fix what fails in `pyproject.toml` or `install/setup_env.py`.
 
-`setup_env.py` installs the exact versions in `requirements-lock.txt`, which the tests last passed on. Before a release, also try
+`install/setup_env.py` installs the exact versions in `install/requirements-lock.txt`, which the tests last passed on. Before a release, also try
 what is new: repeat the check with `--latest`, run the whole suite including the GPU tests, and compare the results of a few
 example projects with the locked versions, because a new torch can move numbers without failing a test. If that holds, run
 `tools/write_lockfile.py` from that environment and commit the file. An upgrade of torch or Warp counts as an engine change.

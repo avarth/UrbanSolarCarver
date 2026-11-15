@@ -34,7 +34,7 @@ Each stage reads the previous stage's manifest, so you can re-run thresholding w
 ## Documentation
 
 - **Getting Started**
-    - [Installation](getting-started/installation.md): setup via `setup_env.py` or manual install
+    - [Installation](getting-started/installation.md): setup via `install/setup_env.py` or manual install
     - [Quick Start](getting-started/quick-start.md): Python API, CLI, and notebook tutorials
     - [Configuration](getting-started/configuration.md): YAML config reference with per-mode examples
 - **[Carving Modes](modes.md)**: the 6 analysis modes (tilted_plane, time-based, irradiance, benefit, daylight, radiative_cooling)

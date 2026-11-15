@@ -6,13 +6,13 @@ rem
 rem What it downloads, each file checked before it is used:
 rem   uv, the version below, from github.com/astral-sh/uv, against USC_UV_SHA256 below;
 rem   Python, uv's own build, against the checksums built into uv;
-rem   PyTorch and the other packages, against requirements-lock-hashed.txt.
+rem   PyTorch and the other packages, against install\requirements-lock-hashed.txt.
 rem Everything it makes stays in this folder (.runtime and .venv): nothing on PATH,
 rem nothing in the registry, no administrator rights, any installed Python untouched.
 rem The one exception, only if you answer Y at the end: a shortcut on the desktop.
 rem PowerShell is used only for fixed commands: the checks, downloading, checking and
 rem unzipping uv, and the shortcut.
-rem Options go to setup_env.py, for example --cpu for the CPU build of PyTorch.
+rem Options go to install\setup_env.py, for example --cpu for the CPU build of PyTorch.
 setlocal
 title UrbanSolarCarver setup
 set "USC_UV_VERSION=0.13.8"
@@ -37,9 +37,9 @@ set "USC_ARCHITECTURE=%PROCESSOR_ARCHITECTURE%"
 if defined PROCESSOR_ARCHITEW6432 set "USC_ARCHITECTURE=%PROCESSOR_ARCHITEW6432%"
 if /i not "%USC_ARCHITECTURE%"=="AMD64" goto not_x64
 rem Run from inside the zip, Explorer copies this file alone to a temporary folder.
-if not exist "%USC_FOLDER%\setup_env.py" goto not_unzipped
-if not exist "%USC_FOLDER%\requirements-lock.txt" goto not_unzipped
-if not exist "%USC_FOLDER%\requirements-lock-hashed.txt" goto not_unzipped
+if not exist "%USC_FOLDER%\install\setup_env.py" goto not_unzipped
+if not exist "%USC_FOLDER%\install\requirements-lock.txt" goto not_unzipped
+if not exist "%USC_FOLDER%\install\requirements-lock-hashed.txt" goto not_unzipped
 if not exist "%USC_POWERSHELL%" goto no_powershell
 
 rem Your own pip and uv settings do not apply here: a PIP_TARGET, for example,
@@ -132,7 +132,7 @@ set "USC_PYTHON=%USC_RUNTIME%\python\cpython-%USC_PYTHON_VERSION%-windows-x86_64
 if not exist "%USC_PYTHON%" goto python_failed
 
 rem 5. The environment (.venv) and the packages, every download checked.
-"%USC_PYTHON%" "%USC_FOLDER%\setup_env.py" --self-contained %*
+"%USC_PYTHON%" "%USC_FOLDER%\install\setup_env.py" --self-contained %*
 if errorlevel 1 goto setup_failed
 
 rem 6. A desktop shortcut, only if asked (the folder may be hidden in AppData).
