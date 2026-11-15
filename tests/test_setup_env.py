@@ -134,3 +134,37 @@ def test_the_docs_give_the_python_versions_the_installer_accepts():
     assert f'requires-python = ">={low}"' in (root / "pyproject.toml").read_text(encoding="utf-8")
     for launcher in ("start-urbansolarcarver.bat", "start-urbansolarcarver.sh"):
         assert f"Python {low} or newer" in (root / launcher).read_text(encoding="utf-8")
+
+
+HASHED_LOCKFILE = setup_env.LOCKFILE.with_name("requirements-lock-hashed.txt")
+
+
+def test_the_hashed_lockfile_text_gives_every_pin_its_hashes_and_torch_both_builds():
+    def hashes_of(name, version):
+        return {"numpy": ["a" * 64, "b" * 64]}[name]
+
+    def torch_hashes_of(version, build):
+        assert version == "2.14.1"
+        return {"cu126": ["c" * 64], "cpu": ["d" * 64]}[build]
+
+    text = write_lockfile.hashed_lockfile_text({"numpy": "2.5.0", "torch": "2.14.1"}, "cu126", hashes_of, torch_hashes_of)
+    header = [line for line in text.splitlines() if line.startswith("#")]
+    assert "# torch-hashes: cu126 cpu" in header
+    numpy_block = text.split("numpy==2.5.0", 1)[1].split("torch==", 1)[0]
+    assert f"--hash=sha256:{'a' * 64}" in numpy_block and f"--hash=sha256:{'b' * 64}" in numpy_block
+    torch_block = text.split("torch==2.14.1", 1)[1]
+    assert f"--hash=sha256:{'c' * 64}" in torch_block and f"--hash=sha256:{'d' * 64}" in torch_block
+
+
+def test_the_committed_hashed_lockfile_matches_the_lockfile():
+    """Fails when requirements-lock.txt changed and tools/write_lockfile.py --hashes was not run after it."""
+    import re
+    lock = setup_env.LOCKFILE.read_text(encoding="utf-8")
+    hashed = HASHED_LOCKFILE.read_text(encoding="utf-8")
+    wheels = re.search(r"^# torch-wheels: (\S+)$", lock, re.MULTILINE).group(1)
+    assert f"# torch-hashes: {wheels} cpu" in hashed
+    blocks = dict(re.findall(r"^(\S+==\S+) \\\n((?:    --hash=sha256:\S+(?: \\)?\n)+)", hashed, re.MULTILINE))
+    pins = [line for line in lock.splitlines() if line and not line.startswith("#")]
+    assert sorted(blocks) == sorted(pins)
+    for pin in pins:
+        assert re.search(r"--hash=sha256:[0-9a-f]{64}", blocks[pin]), pin
