@@ -43,6 +43,7 @@ or to try an upgrade (see CONTRIBUTING.md).
 from __future__ import annotations
 
 import argparse
+import os
 import platform
 import re
 import shutil
@@ -54,6 +55,8 @@ from pathlib import Path
 
 VENV_DIR = ".venv"
 LOCKFILE = Path(__file__).resolve().parent / "requirements-lock.txt"
+HASHED_LOCKFILE = LOCKFILE.with_name("requirements-lock-hashed.txt")  # tools/write_lockfile.py --hashes
+TORCH_REQUIREMENT_FILE = "torch-requirement.txt"  # the torch block of HASHED_LOCKFILE, in .runtime
 MIN_PYTHON = (3, 12)  # numpy 2.5 and scipy 1.18 need it
 MAX_LOCKED_PYTHON = (3, 14)  # the newest Python the locked versions were installed and tested on
 
@@ -283,95 +286,108 @@ def resolve_venv_dir(requested: str | None) -> Path:
     return fallback
 
 
-# ── Main ───────────────────────────────────────────────────────────────
+# ── Self-contained install (setup-urbansolarcarver.bat) ───────────────
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Set up UrbanSolarCarver development environment"
-    )
-    parser.add_argument(
-        "--cpu", action="store_true",
-        help="Force CPU-only installation (skip CUDA detection)"
-    )
-    parser.add_argument(
-        "--dry-run", action="store_true",
-        help="Show what would be installed without doing anything"
-    )
-    parser.add_argument(
-        "--venv-dir", default=None, metavar="PATH",
-        help=f"Virtual environment location (default: {VENV_DIR}/ in the repo; "
-             f"on Windows a short per-user path is used automatically when the "
-             f"repo path is too deep for the 260-char limit)"
-    )
-    parser.add_argument(
-        "--no-ui", action="store_true",
-        help="Do not install the ui extra (the packages behind 'usc ui')"
-    )
-    parser.add_argument(
-        "--latest", action="store_true",
-        help=f"Install the newest versions pyproject.toml allows instead of those in {LOCKFILE.name}, which the tests last passed on"
-    )
-    args = parser.parse_args()
+def self_contained_venv(root: Path) -> Path:
+    """The venv of a self-contained install: always ``root/.venv``.
 
-    # ── 0. Check Python version ──
-    if sys.version_info < MIN_PYTHON:
-        log(f"Python >= {MIN_PYTHON[0]}.{MIN_PYTHON[1]} required, "
-            f"found {sys.version_info[0]}.{sys.version_info[1]}", "error")
-        sys.exit(1)
-    log(f"Python {sys.version_info[0]}.{sys.version_info[1]}.{sys.version_info[2]}")
-    problem = None if args.latest else locked_python_problem(sys.version_info[:2])
-    if problem:
-        log(problem, "error")
-        sys.exit(1)
+    There is no fallback outside the folder: when the path is too long for
+    torch's deepest file and Windows long paths are off, stop before
+    anything is downloaded and say to move the folder.
+    """
+    venv_dir = root / VENV_DIR
+    if platform.system() != "Windows":
+        return venv_dir
+    if len(str(venv_dir)) + TORCH_PATH_HEADROOM <= WINDOWS_MAX_PATH or _windows_long_paths_enabled():
+        return venv_dir
+    sys.exit(f"[X] This folder's path is too long for PyTorch's files ({len(str(root))} characters):\n"
+             f"    {root}\n"
+             f"    Move this folder to a shorter path, for example C:\\UrbanSolarCarver, and run setup again.")
 
-    # ── 1. Detect GPU ──
-    cuda_version = detect_cuda_version()
-    if cuda_version and not args.cpu:
-        log(f"Detected CUDA {cuda_version}")
-    elif args.cpu:
-        log("CPU-only mode (--cpu flag)")
-    else:
-        log("No NVIDIA GPU detected; installing CPU-only PyTorch", "warn")
 
-    torch_requirement, torch_options, constraints, index_url, desc = install_choice(args.latest, cuda_version, args.cpu)
+def torch_hashed_requirement(hashed_text: str) -> str:
+    """The torch block of the hashed lockfile: its pin and every hash of both builds."""
+    block = re.search(r"^torch==\S+(?: \\\n    --hash=sha256:[0-9a-f]{64})+", hashed_text, re.MULTILINE)
+    if not block:
+        sys.exit(f"[X] {HASHED_LOCKFILE.name} does not give torch with its hashes")
+    return block.group(0) + "\n"
+
+
+def self_contained_plan(root: Path, vpy: Path, torch_requirement: str,
+                        index_url: str) -> tuple[dict[str, str], list[list[str]]]:
+    """Return (environment additions, pip commands) of a self-contained install in *root*.
+
+    The caches stay in ``root/.runtime/cache``; pip reads no configuration
+    from the profile; every package is checked against the hashed lockfile
+    (``--require-hashes``) and comes as a wheel, so nothing is built from
+    unchecked sources. The project itself is not pip-installed: the launcher
+    runs it from ``src``. *torch_requirement* is the pin ``locked_torch``
+    chose; the torch command reads it with its hashes from
+    ``root/.runtime/torch-requirement.txt``, which the caller writes.
+    """
+    cache = root / ".runtime" / "cache"
+    environment = {
+        "PIP_CACHE_DIR": str(cache / "pip"),
+        "WARP_CACHE_PATH": str(cache / "warp"),
+        "PIP_CONFIG_FILE": os.devnull,
+        "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+        "PIP_NO_INPUT": "1",
+    }
+    pip = [str(vpy), "-m", "pip", "install", "--require-hashes", "--only-binary", ":all:"]
+    torch_file = root / ".runtime" / TORCH_REQUIREMENT_FILE
+    commands = [
+        [*pip, "--no-deps", "--index-url", index_url, "-r", str(torch_file)],
+        [*pip, "--index-url", "https://pypi.org/simple", "-r", str(root / HASHED_LOCKFILE.name)],
+    ]
+    log(f"Locked torch: {torch_requirement}, from {index_url}")
+    return environment, commands
+
+
+def self_contained_install(args, cuda_version: str | None) -> None:
+    """``setup_env.py --self-contained``: the venv, the caches and hash-checked packages in this folder."""
+    root = Path(__file__).resolve().parent
+    venv_dir = self_contained_venv(root)
+    requirement, index_url, desc = locked_torch(LOCKFILE.read_text(encoding="utf-8"), cuda_version, args.cpu)
     log(f"PyTorch target: {desc}")
-    log(f"Index URL: {index_url}")
-
-    venv_dir = resolve_venv_dir(args.venv_dir)
-    install_target = ".[dev]" if args.no_ui else ".[dev,ui]"
-
+    vpy = venv_python(venv_dir)
+    environment, commands = self_contained_plan(root, vpy, requirement, index_url)
     if args.dry_run:
         log("Dry run, would execute:", "info")
         print(f"  1. python -m venv {venv_dir}")
-        print(f"  2. pip install {' '.join([torch_requirement, *torch_options])} --index-url {index_url}")
-        print(f"  3. pip install {' '.join(constraints + ['-e', install_target])}")
+        for number, command in enumerate(commands, start=2):
+            print(f"  {number}. {' '.join(command[1:])}")
         return
+    os.environ.update(environment)
+    torch_file = root / ".runtime" / TORCH_REQUIREMENT_FILE
+    torch_file.parent.mkdir(parents=True, exist_ok=True)
+    torch_file.write_text(torch_hashed_requirement(HASHED_LOCKFILE.read_text(encoding="utf-8")), encoding="utf-8")
 
-    # ── 2. Create venv ──
-    vpy = venv_python(venv_dir)
     if not vpy.is_file():
         log(f"Creating virtual environment in {venv_dir}")
         run([sys.executable, "-m", "venv", str(venv_dir)])
     else:
         log(f"Virtual environment already exists at {venv_dir}")
-
     if not vpy.is_file():
         log(f"venv creation failed: {vpy} not found", "error")
         sys.exit(1)
 
-    # ── 3. Upgrade pip ──
-    log("Upgrading pip...")
-    run([str(vpy), "-m", "pip", "install", "--upgrade", "pip", "--quiet"])
+    log(f"Installing PyTorch ({desc}), checking every download against {HASHED_LOCKFILE.name}...")
+    run(commands[0])
+    log("Installing the other packages, checking every download...")
+    run(commands[1])
+    # The project runs from src (the launcher sets PYTHONPATH the same way); nothing of it is pip-installed.
+    os.environ["PYTHONPATH"] = str(root / "src")
+    verify_and_warm_up(vpy)
+    print()
+    log("Setup complete.", "ok")
+    print()
+    print("  Start:     start-urbansolarcarver.bat")
+    print("  Remove:    delete this folder; setup kept everything it made inside it.")
+    print()
 
-    # ── 4. Install PyTorch ──
-    log(f"Installing PyTorch ({desc})...")
-    run([str(vpy), "-m", "pip", "install",
-         torch_requirement, *torch_options, "--index-url", index_url, "--quiet"])
 
-    # ── 5. Install UrbanSolarCarver + all deps ──
-    log("Installing UrbanSolarCarver and dependencies...")
-    run([str(vpy), "-m", "pip", "install", *constraints, "-e", install_target, "--quiet"])
-
+def verify_and_warm_up(vpy: Path) -> None:
+    """Steps 6 and 7: check that torch, warp and urbansolarcarver import, then precompile the Warp kernels."""
     # ── 6. Verify ──
     log("Verifying installation...")
 
@@ -424,6 +440,110 @@ def main():
         log("Warp kernels compiled and cached", "ok")
     else:
         log("Kernel precompilation skipped; kernels will compile on first run", "warn")
+
+
+# ── Main ───────────────────────────────────────────────────────────────
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Set up UrbanSolarCarver development environment"
+    )
+    parser.add_argument(
+        "--cpu", action="store_true",
+        help="Force CPU-only installation (skip CUDA detection)"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Show what would be installed without doing anything"
+    )
+    parser.add_argument(
+        "--venv-dir", default=None, metavar="PATH",
+        help=f"Virtual environment location (default: {VENV_DIR}/ in the repo; "
+             f"on Windows a short per-user path is used automatically when the "
+             f"repo path is too deep for the 260-char limit)"
+    )
+    parser.add_argument(
+        "--no-ui", action="store_true",
+        help="Do not install the ui extra (the packages behind 'usc ui')"
+    )
+    parser.add_argument(
+        "--latest", action="store_true",
+        help=f"Install the newest versions pyproject.toml allows instead of those in {LOCKFILE.name}, which the tests last passed on"
+    )
+    parser.add_argument(
+        "--self-contained", action="store_true",
+        help=f"What setup-urbansolarcarver.bat runs: .venv and every cache in this folder, never ~/.usc-venv; "
+             f"every package checked against {HASHED_LOCKFILE.name}; the project runs from src"
+    )
+    args = parser.parse_args()
+
+    # ── 0. Check Python version ──
+    if sys.version_info < MIN_PYTHON:
+        log(f"Python >= {MIN_PYTHON[0]}.{MIN_PYTHON[1]} required, "
+            f"found {sys.version_info[0]}.{sys.version_info[1]}", "error")
+        sys.exit(1)
+    log(f"Python {sys.version_info[0]}.{sys.version_info[1]}.{sys.version_info[2]}")
+    problem = None if args.latest else locked_python_problem(sys.version_info[:2])
+    if problem:
+        log(problem, "error")
+        sys.exit(1)
+
+    # ── 1. Detect GPU ──
+    cuda_version = detect_cuda_version()
+    if cuda_version and not args.cpu:
+        log(f"Detected CUDA {cuda_version}")
+    elif args.cpu:
+        log("CPU-only mode (--cpu flag)")
+    else:
+        log("No NVIDIA GPU detected; installing CPU-only PyTorch", "warn")
+
+    if args.self_contained:
+        if args.latest or args.venv_dir:
+            log("--self-contained takes the locked versions and .venv in this folder: leave out --latest and --venv-dir", "error")
+            sys.exit(1)
+        self_contained_install(args, cuda_version)
+        return
+
+    torch_requirement, torch_options, constraints, index_url, desc = install_choice(args.latest, cuda_version, args.cpu)
+    log(f"PyTorch target: {desc}")
+    log(f"Index URL: {index_url}")
+
+    venv_dir = resolve_venv_dir(args.venv_dir)
+    install_target = ".[dev]" if args.no_ui else ".[dev,ui]"
+
+    if args.dry_run:
+        log("Dry run, would execute:", "info")
+        print(f"  1. python -m venv {venv_dir}")
+        print(f"  2. pip install {' '.join([torch_requirement, *torch_options])} --index-url {index_url}")
+        print(f"  3. pip install {' '.join(constraints + ['-e', install_target])}")
+        return
+
+    # ── 2. Create venv ──
+    vpy = venv_python(venv_dir)
+    if not vpy.is_file():
+        log(f"Creating virtual environment in {venv_dir}")
+        run([sys.executable, "-m", "venv", str(venv_dir)])
+    else:
+        log(f"Virtual environment already exists at {venv_dir}")
+
+    if not vpy.is_file():
+        log(f"venv creation failed: {vpy} not found", "error")
+        sys.exit(1)
+
+    # ── 3. Upgrade pip ──
+    log("Upgrading pip...")
+    run([str(vpy), "-m", "pip", "install", "--upgrade", "pip", "--quiet"])
+
+    # ── 4. Install PyTorch ──
+    log(f"Installing PyTorch ({desc})...")
+    run([str(vpy), "-m", "pip", "install",
+         torch_requirement, *torch_options, "--index-url", index_url, "--quiet"])
+
+    # ── 5. Install UrbanSolarCarver + all deps ──
+    log("Installing UrbanSolarCarver and dependencies...")
+    run([str(vpy), "-m", "pip", "install", *constraints, "-e", install_target, "--quiet"])
+
+    verify_and_warm_up(vpy)
 
     # ── Done ──
     print()

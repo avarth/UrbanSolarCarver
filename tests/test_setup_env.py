@@ -168,3 +168,51 @@ def test_the_committed_hashed_lockfile_matches_the_lockfile():
     assert sorted(blocks) == sorted(pins)
     for pin in pins:
         assert re.search(r"--hash=sha256:[0-9a-f]{64}", blocks[pin]), pin
+
+
+def test_a_self_contained_install_keeps_its_venv_and_caches_in_the_folder(tmp_path):
+    vpy = tmp_path / ".venv" / "Scripts" / "python.exe"
+    environment, commands = setup_env.self_contained_plan(tmp_path, vpy, "torch==2.14.1", setup_env.CPU_WHEEL_INDEX)
+    cache = tmp_path / ".runtime" / "cache"
+    assert Path(environment["PIP_CACHE_DIR"]) == cache / "pip"
+    assert Path(environment["WARP_CACHE_PATH"]) == cache / "warp"
+    assert len(commands) == 2
+    torch_command, rest_command = commands
+    for command in commands:
+        assert command[:4] == [str(vpy), "-m", "pip", "install"]
+        assert "--require-hashes" in command
+        assert "-e" not in command and "--editable" not in command
+        assert "--upgrade" not in command and "pip" not in command[4:]   # no pip self-upgrade, which would be unchecked
+    assert "--no-deps" in torch_command
+    assert torch_command[torch_command.index("--index-url") + 1] == setup_env.CPU_WHEEL_INDEX
+    assert rest_command[rest_command.index("-r") + 1] == str(tmp_path / "requirements-lock-hashed.txt")
+
+
+def test_the_torch_requirement_of_a_self_contained_install_carries_both_builds_hashes():
+    text = setup_env.torch_hashed_requirement(HASHED_LOCKFILE.read_text(encoding="utf-8"))
+    assert text.startswith("torch==")
+    assert text.count("--hash=sha256:") >= 2 and "numpy" not in text
+
+
+def test_a_self_contained_install_on_a_too_long_path_stops_and_says_to_move_the_folder(monkeypatch):
+    monkeypatch.setattr(setup_env.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(setup_env, "_windows_long_paths_enabled", lambda: False)
+    root = Path("C:/") / ("d" * 117)
+    assert len(str(root)) >= 120
+    with pytest.raises(SystemExit) as stopped:
+        setup_env.self_contained_venv(root)
+    message = str(stopped.value)
+    assert "shorter path" in message and ".usc-venv" not in message
+
+
+def test_a_self_contained_install_on_a_short_path_keeps_its_venv_in_the_folder(monkeypatch):
+    monkeypatch.setattr(setup_env.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(setup_env, "_windows_long_paths_enabled", lambda: False)
+    assert setup_env.self_contained_venv(Path("C:/UrbanSolarCarver")) == Path("C:/UrbanSolarCarver") / ".venv"
+
+
+@pytest.mark.parametrize("driver, build", [("13.0", "cu126"), (None, "cpu")])
+def test_a_self_contained_install_takes_the_locked_torch_rule(driver, build):
+    requirement, url, _ = setup_env.locked_torch(setup_env.LOCKFILE.read_text(encoding="utf-8"), driver, force_cpu=False)
+    assert url.endswith("/" + build)
+    assert "# torch-hashes: cu126 cpu" in HASHED_LOCKFILE.read_text(encoding="utf-8")
