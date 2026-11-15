@@ -4,11 +4,12 @@
 
 No Python, git or administrator rights needed beforehand.
 
-1. On the repository's GitHub page, choose **Code > Download ZIP** (or the zip of a release). Unzip the whole zip (right-click,
-   **Extract All**) into your own programs folder, `%LOCALAPPDATA%\Programs\UrbanSolarCarver`: type that path in Explorer's
-   address bar to open it. Running the setup from inside the zip does not work; it asks you to unzip first.
+1. On the repository's GitHub page, choose **Code > Download ZIP** (or the zip of a release). Extract the whole zip (right-click,
+   **Extract All**) to any folder you can write to, outside OneDrive. A per-user programs folder such as
+   `%LOCALAPPDATA%\Programs\UrbanSolarCarver` works well; a short path avoids Windows path-length limits. Running the setup
+   from inside the zip does not work; it asks you to extract first.
 2. Double-click `setup-urbansolarcarver.bat` in that folder. It says what it will download and waits for a key press. At the
-   end it offers a shortcut on the desktop, since that folder is hidden by default.
+   end it offers a shortcut on the desktop.
 3. From then on, double-click `start-urbansolarcarver.bat`, or the shortcut. The interface opens in your browser.
 
 Windows may warn that the `.bat` files come from the internet: choose **More info > Run anyway**, or first right-click each file,
