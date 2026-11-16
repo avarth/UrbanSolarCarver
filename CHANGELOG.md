@@ -7,12 +7,28 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-11-16
+
+### Highlights
+
+- **CUDA with current NVIDIA drivers**: from driver 610 the Windows setup of 0.12.0 installed the CPU build of PyTorch. Run
+  `setup-urbansolarcarver.bat` of this release in your folder again to switch to the CUDA build.
+- **Install on Linux** from `UrbanSolarCarver-linux.tar.gz`, the same way as on Windows. It is new; please report problems.
+- **Small downloads**: each release has an app zip (Windows) and an app archive (Linux) of about 1.3 MB.
+
 ### Install
 
+- **Install on Linux from a release archive**: `UrbanSolarCarver-linux.tar.gz` holds `setup-urbansolarcarver.sh`, which
+  works as the Windows setup does: a pinned uv, uv's own Python and hash-checked packages, everything in the folder, no root
+  rights. It offers an entry in the applications menu. The CUDA build of PyTorch brings NVIDIA's libraries from pypi.org,
+  checked against the new `install/requirements-linux-cuda-hashed.txt`. `start-urbansolarcarver.sh` no longer installs on its
+  first run; it asks for the setup, as the Windows launcher does.
 - **A small app zip for each release**: `UrbanSolarCarver-windows.zip` (about 1.3 MB) holds only what the Windows setup and
   the app need. The installation guide links to it in the latest release. `tools/build_app_zip.py` builds it from a tag; the
   release's source zip, which Zenodo archives, keeps every file.
 - Notebook outputs no longer show the folder paths of the computer they were run on.
+- **Fixed**: with NVIDIA driver 610 or newer the setup installed the CPU build of PyTorch. That driver's `nvidia-smi` prints
+  "CUDA UMD Version" where older ones printed "CUDA Version"; both are read now.
 
 ## [0.12.0] - 2026-11-16
 

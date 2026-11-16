@@ -56,8 +56,17 @@ A project can combine several modes. More are planned, such as outdoor thermal c
    space.
 3. Start the application with `start-urbansolarcarver.bat`.
 
-To uninstall, delete the folder. The [installation guide](https://avarth.github.io/UrbanSolarCarver/getting-started/installation/)
-lists every download and covers Linux, macOS and installing from source.
+To uninstall, delete the folder.
+
+## Install (Linux)
+
+1. Download [UrbanSolarCarver-linux.tar.gz](https://github.com/avarth/UrbanSolarCarver/releases/latest/download/UrbanSolarCarver-linux.tar.gz) from the latest release and extract it in your home folder.
+2. In a terminal in that folder, run `./setup-urbansolarcarver.sh`. As on Windows, it downloads Python and the packages into
+   the folder and checks each file. Python and root rights are not needed. An install with CUDA needs about 12 GB of disk space.
+3. Start the application with `./start-urbansolarcarver.sh`, or from the applications menu if you let the setup add it.
+
+The [installation guide](https://avarth.github.io/UrbanSolarCarver/getting-started/installation/) lists every download and
+covers macOS and installing from source.
 
 ## For developers
 

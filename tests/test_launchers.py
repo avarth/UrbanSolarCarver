@@ -13,6 +13,8 @@ REPOSITORY = Path(__file__).resolve().parents[1]
 WINDOWS_LAUNCHER = REPOSITORY / "start-urbansolarcarver.bat"
 UNIX_LAUNCHER = REPOSITORY / "start-urbansolarcarver.sh"
 WINDOWS_SETUP = REPOSITORY / "setup-urbansolarcarver.bat"
+LINUX_SETUP = REPOSITORY / "setup-urbansolarcarver.sh"
+RUNNING_ON_LINUX = platform.system() == "Linux"
 RUNNING_ON_WINDOWS = platform.system() == "Windows"
 
 
@@ -33,15 +35,17 @@ def test_the_windows_scripts_keep_windows_line_endings(script):
     assert "\r\n" in text and "\n" not in text.replace("\r\n", "")
 
 
-def test_the_unix_launcher_keeps_unix_line_endings_and_a_shebang():
-    text = UNIX_LAUNCHER.read_bytes().decode("utf-8")
+@pytest.mark.parametrize("script", [UNIX_LAUNCHER, LINUX_SETUP])
+def test_the_linux_scripts_keep_unix_line_endings_and_a_shebang(script):
+    text = script.read_bytes().decode("utf-8")
     assert text.startswith("#!/usr/bin/env bash\n") and "\r" not in text
 
 
-def test_the_unix_launcher_is_executable_in_git():
+@pytest.mark.parametrize("script", [UNIX_LAUNCHER, LINUX_SETUP])
+def test_the_linux_scripts_are_executable_in_git(script):
     if shutil.which("git") is None:
         pytest.skip("git is not available")
-    entry = subprocess.run(["git", "ls-files", "-s", UNIX_LAUNCHER.name], cwd=REPOSITORY,
+    entry = subprocess.run(["git", "ls-files", "-s", script.name], cwd=REPOSITORY,
                            capture_output=True, text=True, check=True).stdout
     assert entry.startswith("100755"), entry
 
@@ -54,9 +58,94 @@ def test_both_launchers_find_their_folder_and_start_usc_ui(launcher):
     assert "D:\\" not in text and "/home/" not in text and "C:\\Users" not in text   # no machine paths
 
 
-def test_the_unix_launcher_still_installs_on_its_first_run():
+def test_the_unix_launcher_uses_only_the_environment_in_its_folder():
     text = UNIX_LAUNCHER.read_text(encoding="utf-8")
-    assert "setup_env.py" in text and ".usc-venv" in text
+    assert "setup-urbansolarcarver.sh" in text and "WARP_CACHE_PATH" in text and ".runtime" in text
+    assert ".usc-venv" not in text
+    assert "command -v python" not in text      # no system Python
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="bash is not available")
+def test_the_unix_launcher_asks_for_setup_when_there_is_no_environment(tmp_path):
+    folder = tmp_path / "A B (1)"
+    folder.mkdir()
+    shutil.copy(UNIX_LAUNCHER, folder)
+    result = subprocess.run(["bash", (folder / UNIX_LAUNCHER.name).as_posix()], stdin=subprocess.DEVNULL,
+                            capture_output=True, text=True, timeout=60, env=launcher_environment())
+    assert result.returncode == 1
+    assert "Run ./setup-urbansolarcarver.sh first." in result.stdout, result.stdout + result.stderr
+    assert not (folder / ".venv").exists()
+
+
+def _assignment(text: str, name: str) -> str:
+    return re.search(rf'^(?:set ")?{name}="?([^"\r\n]+)"?$', text, re.MULTILINE).group(1)
+
+
+def test_the_linux_setup_pins_uv_and_python_as_the_windows_one_does_and_checks_uvs_hash():
+    linux, windows = LINUX_SETUP.read_text(encoding="utf-8"), WINDOWS_SETUP.read_text(encoding="utf-8")
+    assert re.fullmatch(r"[0-9a-f]{64}", _assignment(linux, "USC_UV_SHA256"))
+    assert _assignment(linux, "USC_UV_SHA256") != _assignment(windows, "USC_UV_SHA256")    # another file, another hash
+    for name in ("USC_UV_VERSION", "USC_PYTHON_VERSION"):
+        assert _assignment(linux, name) == _assignment(windows, name), name
+    for needed in ("sha256sum", "uv-x86_64-unknown-linux-gnu.tar.gz", "--self-contained", 'UV_PYTHON_PREFERENCE="only-managed"',
+                   "UV_PYTHON_INSTALL_DIR", "UV_CACHE_DIR", "UV_NO_CONFIG=1", "UV_NATIVE_TLS=1", "--no-bin", "--proto '=https'",
+                   "--https-only", 'export TMPDIR="$runtime/tmp"'):
+        assert needed in linux, needed
+
+
+def test_the_linux_setup_unpacks_and_runs_uv_only_after_its_hash_matched():
+    text = LINUX_SETUP.read_text(encoding="utf-8")
+    check = text.index('!= "$USC_UV_SHA256"')
+    assert check < text.index("tar -xzf") < text.index('"$uv" python install')
+    assert 'rm -f "$download"' in text[check:text.index("tar -xzf")]
+
+
+def test_the_linux_setup_checks_before_downloading():
+    text = LINUX_SETUP.read_text(encoding="utf-8")
+    first_download = text.index("curl --fail")
+    for check in ('uname -m)" != "x86_64"', 'id -u)" = "0"', "GNU_LIBC_VERSION", "msdos|vfat|exfat|ntfs|ntfs3|fuseblk",
+                  "exec-check", "link-check", "df -Pk", "UV_*|PIP_*) unset", "needed_gb=12", "needed_gb=2"):
+        assert text.index(check) < first_download, check
+
+
+def test_the_linux_setup_changes_nothing_outside_its_folder_but_the_menu_entry():
+    text = LINUX_SETUP.read_text(encoding="utf-8")
+    code = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith(("#", "echo", "fail ", '"')))
+    for forbidden in ("sudo", ".bashrc", ".profile", "export PATH", "eval ", "| sh", "| bash", "/etc/", "/usr/", "chmod -R"):
+        assert forbidden not in code, forbidden
+    assert re.search(r'read -r -t 30 -p "Add UrbanSolarCarver to the applications menu\? \[y/N\] "', text)
+    assert 'entry="$applications/urbansolarcarver.desktop"' in text and "Terminal=true" in text
+
+
+@pytest.mark.skipif(not RUNNING_ON_LINUX, reason="the Linux setup stops on other systems")
+def test_the_linux_setup_run_alone_asks_to_extract_first(tmp_path):
+    folder = tmp_path / "R&D (1)"
+    folder.mkdir()
+    shutil.copy(LINUX_SETUP, folder)
+    result = subprocess.run(["bash", str(folder / LINUX_SETUP.name)], stdin=subprocess.DEVNULL, capture_output=True,
+                            text=True, timeout=60, env=launcher_environment())
+    assert result.returncode == 1
+    assert "Extract the whole folder first" in result.stdout, result.stdout + result.stderr
+    assert not (folder / ".runtime").exists()
+
+
+@pytest.mark.skipif(not RUNNING_ON_LINUX, reason="the Linux setup stops on other systems")
+def test_a_uv_archive_whose_hash_does_not_match_is_deleted_and_the_linux_setup_stops(tmp_path):
+    folder = tmp_path / "A B (1)"
+    folder.mkdir()
+    shutil.copy(LINUX_SETUP, folder)
+    for name in (*SETUP_NEIGHBOURS, "install/requirements-linux-cuda-hashed.txt"):
+        (folder / name).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(REPOSITORY / name, folder / name)
+    junk = tmp_path / "junk.tar.gz"
+    junk.write_bytes(b"not uv")
+    result = subprocess.run(["bash", str(folder / LINUX_SETUP.name), "--cpu"], stdin=subprocess.DEVNULL, capture_output=True,
+                            text=True, timeout=60, env=launcher_environment(USC_UV_ARCHIVE=str(junk)))
+    assert result.returncode == 1
+    assert "does not match" in result.stdout, result.stdout + result.stderr
+    assert not (folder / ".runtime" / "uv").exists()
+    assert not list((folder / ".runtime" / "download").glob("*.tar.gz"))
+    assert junk.exists()
 
 
 def test_the_windows_launcher_uses_only_the_environment_in_its_folder():

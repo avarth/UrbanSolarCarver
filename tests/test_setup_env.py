@@ -29,6 +29,16 @@ def unreachable(index_url):
     return None
 
 
+@pytest.mark.parametrize("header, version", [
+    ("| NVIDIA-SMI 566.36       Driver Version: 566.36       CUDA Version: 12.7     |", "12.7"),
+    # Driver 610 renamed the field; reading only "CUDA Version:" put an RTX 3060 on the CPU build (2026-11-16).
+    ("| NVIDIA-SMI 610.88                 KMD Version: 610.88        CUDA UMD Version: 13.3     |", "13.3"),
+    ("No devices were found", None),
+])
+def test_the_cuda_version_is_read_from_both_nvidia_smi_headers(header, version):
+    assert setup_env.cuda_version_in(f"Mon Nov 16 12:24:06 2026\n+----+\n{header}\n+----+\n") == version
+
+
 @pytest.mark.parametrize("driver, expected_index", [
     ("12.8", "cu126"),   # cu128 stopped at torch 2.11; cu126 has 2.14.1
     ("12.9", "cu126"),   # cu129 stopped at torch 2.9
@@ -132,8 +142,6 @@ def test_the_docs_give_the_python_versions_the_installer_accepts():
     assert f"Python {low} to {high}" in installation
     assert f"needs Python {low} or newer" in (root / "docs" / "ui.md").read_text(encoding="utf-8")
     assert f'requires-python = ">={low}"' in (root / "pyproject.toml").read_text(encoding="utf-8")
-    # The Windows launcher names no system Python: setup-urbansolarcarver.bat brings its own.
-    assert f"Python {low} or newer" in (root / "start-urbansolarcarver.sh").read_text(encoding="utf-8")
 
 
 HASHED_LOCKFILE = setup_env.LOCKFILE.with_name("requirements-lock-hashed.txt")
@@ -186,6 +194,44 @@ def test_a_self_contained_install_keeps_its_venv_and_caches_in_the_folder(tmp_pa
     assert "--no-deps" in torch_command
     assert torch_command[torch_command.index("--index-url") + 1] == setup_env.CPU_WHEEL_INDEX
     assert rest_command[rest_command.index("-r") + 1] == str(tmp_path / "install" / "requirements-lock-hashed.txt")
+
+
+@pytest.mark.parametrize("system, index, adds_cuda_libraries", [
+    ("Linux", "https://download.pytorch.org/whl/cu126", True),
+    ("Linux", setup_env.CPU_WHEEL_INDEX, False),
+    ("Windows", "https://download.pytorch.org/whl/cu126", False),
+])
+def test_only_a_linux_cuda_install_adds_the_nvidia_libraries(tmp_path, system, index, adds_cuda_libraries):
+    vpy = tmp_path / ".venv" / "bin" / "python"
+    _, commands = setup_env.self_contained_plan(tmp_path, vpy, "torch==2.14.1", index, system=system)
+    linux_file = str(tmp_path / "install" / "requirements-linux-cuda-hashed.txt")
+    assert (linux_file in commands[1]) is adds_cuda_libraries
+    assert linux_file not in commands[0]
+    assert "--require-hashes" in commands[1]
+
+
+LINUX_CUDA_LOCKFILE = setup_env.LINUX_CUDA_LOCKFILE
+
+
+def test_the_committed_linux_cuda_lockfile_pins_torchs_cuda_libraries_with_hashes():
+    """Fails when the torch build changed and tools/write_lockfile.py --hashes was not run after it."""
+    import re
+    lock = setup_env.LOCKFILE.read_text(encoding="utf-8")
+    linux = LINUX_CUDA_LOCKFILE.read_text(encoding="utf-8")
+    wheels = re.search(r"^# torch-wheels: (\S+)$", lock, re.MULTILINE).group(1)
+    assert f"# torch-wheels: {wheels}" in linux
+    blocks = dict(re.findall(r"^(\S+)==\S+ \\\n((?:    --hash=sha256:\S+(?: \\)?\n)+)", linux, re.MULTILINE))
+    assert "triton" in blocks and any(name.startswith("nvidia-") for name in blocks)
+    pinned_in_both = set(blocks) & {line.split("==")[0] for line in lock.splitlines() if "==" in line}
+    assert not pinned_in_both     # pip stops on a package pinned twice
+    for name, hashes in blocks.items():
+        assert re.search(r"--hash=sha256:[0-9a-f]{64}", hashes), name
+
+
+def test_the_linux_cuda_lockfile_text_gives_every_pin_its_hashes():
+    text = write_lockfile.linux_cuda_lockfile_text({"triton": "3.8.0"}, "cu126", lambda name, version: ["e" * 64])
+    assert "# torch-wheels: cu126" in text
+    assert f"triton==3.8.0 \\\n    --hash=sha256:{'e' * 64}\n" in text
 
 
 def test_the_torch_requirement_of_a_self_contained_install_carries_both_builds_hashes():

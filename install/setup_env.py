@@ -57,6 +57,7 @@ VENV_DIR = ".venv"
 REPOSITORY = Path(__file__).resolve().parents[1]  # this file is in install/; the venv and the package are the repository's
 LOCKFILE = Path(__file__).resolve().parent / "requirements-lock.txt"
 HASHED_LOCKFILE = LOCKFILE.with_name("requirements-lock-hashed.txt")  # tools/write_lockfile.py --hashes
+LINUX_CUDA_LOCKFILE = LOCKFILE.with_name("requirements-linux-cuda-hashed.txt")  # what torch's Linux CUDA build adds
 TORCH_REQUIREMENT_FILE = "torch-requirement.txt"  # the torch block of HASHED_LOCKFILE, in .runtime
 MIN_PYTHON = (3, 12)  # numpy 2.5 and scipy 1.18 need it
 MAX_LOCKED_PYTHON = (3, 14)  # the newest Python the locked versions were installed and tested on
@@ -117,13 +118,19 @@ def detect_cuda_version() -> str | None:
 
     try:
         r = run([nvidia_smi], capture=True, check=False)
-        # Parse "CUDA Version: 12.6" from the output
-        m = re.search(r"CUDA Version:\s*([\d.]+)", r.stdout)
-        if m:
-            return m.group(1)
     except Exception:
-        pass
-    return None
+        return None
+    version = cuda_version_in(r.stdout)
+    if version is None and "NVIDIA-SMI" in r.stdout:
+        log("nvidia-smi runs, but its output does not give the CUDA version this setup looks for; "
+            "installing CPU-only PyTorch. Report this, with the first lines nvidia-smi prints.", "warn")
+    return version
+
+
+def cuda_version_in(nvidia_smi_output: str) -> str | None:
+    """The CUDA version in nvidia-smi's header: "CUDA Version: 12.6" before driver 610, "CUDA UMD Version: 13.3" from it."""
+    m = re.search(r"CUDA(?: UMD)? Version:\s*(\d+\.\d+)", nvidia_smi_output)
+    return m.group(1) if m else None
 
 
 def _version_tuple(text: str) -> tuple[int, ...]:
@@ -347,7 +354,7 @@ def venv_needs_making(vpy: Path, base_prefix: Path, base_prefix_of=_base_prefix_
 
 
 def self_contained_plan(root: Path, vpy: Path, torch_requirement: str,
-                        index_url: str) -> tuple[dict[str, str], list[list[str]]]:
+                        index_url: str, system: str | None = None) -> tuple[dict[str, str], list[list[str]]]:
     """Return (environment additions, pip commands) of a self-contained install in *root*.
 
     The caches stay in ``root/.runtime/cache``; pip reads no configuration
@@ -357,6 +364,9 @@ def self_contained_plan(root: Path, vpy: Path, torch_requirement: str,
     runs it from ``src``. *torch_requirement* is the pin ``locked_torch``
     chose; the torch command reads it with its hashes from
     ``root/.runtime/torch-requirement.txt``, which the caller writes.
+    On Linux (*system*, default this computer's) the CUDA build of torch needs
+    the nvidia libraries and triton, which the Windows build does not: the
+    second command then adds them from ``LINUX_CUDA_LOCKFILE``, also hashed.
     """
     cache = root / ".runtime" / "cache"
     environment = {
@@ -372,6 +382,8 @@ def self_contained_plan(root: Path, vpy: Path, torch_requirement: str,
         [*pip, "--no-deps", "--index-url", index_url, "-r", str(torch_file)],
         [*pip, "--index-url", "https://pypi.org/simple", "-r", str(root / "install" / HASHED_LOCKFILE.name)],
     ]
+    if (system or platform.system()) == "Linux" and index_url != CPU_WHEEL_INDEX:
+        commands[1] += ["-r", str(root / "install" / LINUX_CUDA_LOCKFILE.name)]
     log(f"Locked torch: {torch_requirement}, from {index_url}")
     return environment, commands
 
@@ -421,7 +433,7 @@ def self_contained_install(args, cuda_version: str | None) -> None:
     print()
     log("Setup complete.", "ok")
     print()
-    print("  Start:     start-urbansolarcarver.bat")
+    print("  Start:     " + ("start-urbansolarcarver.bat" if platform.system() == "Windows" else "./start-urbansolarcarver.sh"))
     print("  Remove:    delete this folder; setup kept everything it made inside it.")
     print()
 
@@ -516,7 +528,7 @@ def main():
     )
     parser.add_argument(
         "--self-contained", action="store_true",
-        help=f"What setup-urbansolarcarver.bat runs: .venv and every cache in this folder, never ~/.usc-venv; "
+        help=f"What setup-urbansolarcarver.bat and .sh run:.venv and every cache in this folder, never ~/.usc-venv; "
              f"every package checked against {HASHED_LOCKFILE.name}; the project runs from src"
     )
     args = parser.parse_args()
