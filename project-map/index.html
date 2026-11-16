@@ -1458,15 +1458,16 @@ What each file does is written at the top of the file itself.</p>
 <a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>├── benchmarks/             Timing scripts
 <a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>├── pyproject.toml          Package metadata, dependencies and the Python import rules
 <a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>├── install/                setup_env.py (environment setup, GPU detection), requirements-lock.txt (the versions the tests
-<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>│                           last passed on) and requirements-lock-hashed.txt (the same pins with every file's SHA-256)
-<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>├── setup-urbansolarcarver.bat    Windows setup from a release zip: uv, Python and packages in the folder
-<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>├── start-urbansolarcarver.bat    Windows launcher of the browser app (.sh for Linux and macOS)
-<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>├── mkdocs.yml              Documentation site configuration
-<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>├── CHANGELOG.md            Release history
-<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>├── CITATION.cff            Citation metadata
-<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>├── CONTRIBUTING.md         Contribution guidelines
-<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>├── LICENSE                 AGPL-3.0
-<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>└── README.md               Project landing page
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>│                           last passed on), requirements-lock-hashed.txt (the same pins with every file's SHA-256) and
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>│                           requirements-linux-cuda-hashed.txt (the CUDA libraries torch needs on Linux)
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>├── setup-urbansolarcarver.bat    Windows setup from a release zip: uv, Python and packages in the folder (.sh for Linux)
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>├── start-urbansolarcarver.bat    Windows launcher of the browser app (.sh for Linux and macOS)
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>├── mkdocs.yml              Documentation site configuration
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>├── CHANGELOG.md            Release history
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>├── CITATION.cff            Citation metadata
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>├── CONTRIBUTING.md         Contribution guidelines
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>├── LICENSE                 AGPL-3.0
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>└── README.md               Project landing page
 </code></pre></div>
 <h2 id="the-python-package-in-seven-layers">The Python package in seven layers<a class="headerlink" href="#the-python-package-in-seven-layers" title="Permanent link">&para;</a></h2>
 <p>Each module of <code>src/urbansolarcarver/</code> sits in one layer. A module may import from the layers below it, never from a
