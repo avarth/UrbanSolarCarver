@@ -48,6 +48,7 @@ pydantic-core==2.50.4
 pydeps==3.0.9
 pygments==2.21.0
 pyparsing==3.3.3
+pyradiance==1.3.1
 pytest==9.2.0
 pytest-xdist==3.8.0
 python-dateutil==4.0.0

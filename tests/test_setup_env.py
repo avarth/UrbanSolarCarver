@@ -329,3 +329,28 @@ def test_a_too_long_path_suggests_the_per_user_programs_folder(monkeypatch):
     with pytest.raises(SystemExit) as stopped:
         setup_env.self_contained_venv(Path("C:/") / ("d" * 117))
     assert r"C:\Users\A B\AppData\Local\Programs\UrbanSolarCarver" in str(stopped.value)
+
+
+def test_the_setup_stops_when_the_sky_matrix_cannot_be_computed(monkeypatch, capsys, tmp_path):
+    """v0.12.0 and v0.12.1 passed setup on computers without Radiance, then failed at the first Solar energy run."""
+    class Passed:
+        returncode, stdout, stderr = 0, "PyTorch 2.14.1\nWarp 1.19\nUrbanSolarCarver OK", ""
+
+    class Failed:
+        returncode, stdout, stderr = 1, "", "RuntimeError: Solar energy and Solar heating need the pyradiance package"
+
+    monkeypatch.setattr(setup_env, "run", lambda command, **kwargs: Failed() if setup_env.SKY_CHECK in command else Passed())
+    with pytest.raises(SystemExit):
+        setup_env.verify_and_warm_up(tmp_path / "python")
+    output = capsys.readouterr().out
+    assert "sky matrix" in output and "pyradiance" in output
+
+
+@pytest.mark.slow   # starts Python and runs gendaymtx, about 3 s
+def test_the_sky_check_of_the_setup_passes_here():
+    import os
+    import subprocess
+    import sys
+    result = subprocess.run([sys.executable, "-c", setup_env.SKY_CHECK], capture_output=True, text=True, timeout=120,
+                            env={**os.environ, "PYTHONPATH": str(Path(setup_env.__file__).parents[1] / "src")})
+    assert result.returncode == 0 and "sky OK" in result.stdout, result.stderr

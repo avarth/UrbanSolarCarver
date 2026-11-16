@@ -7,6 +7,23 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-11-16
+
+### Highlights
+
+- **Solar energy and Solar heating work on every computer**: 0.12.0 and 0.12.1 needed a Radiance installation (Ladybug
+  Tools) and stopped without one. Radiance's gendaymtx now comes with the packages; results are unchanged.
+
+### Fixed
+
+- **Solar energy and Solar heating on a computer without Radiance**: they stopped with "No Radiance installation was found",
+  because the sky matrix ran Radiance's gendaymtx from an installed Ladybug Tools. It now runs the gendaymtx of the
+  `pyradiance` package (BSD licence), installed with the other packages and checked against its hash. The weights are equal
+  to the last digit to those of Ladybug Tools' Radiance. The setup now computes a small sky before it finishes, so a missing
+  piece shows during setup.
+- With a newer Radiance (version 6), Ladybug's reading of the sky matrix put each value in the next patch, which moved the
+  sun 12 to 30° in azimuth. The output is now read up to the end of its header, whatever its length.
+
 ## [0.12.1] - 2026-11-16
 
 ### Highlights

@@ -438,6 +438,15 @@ def self_contained_install(args, cuda_version: str | None) -> None:
     print()
 
 
+SKY_CHECK = (
+    "from pathlib import Path; import torch, urbansolarcarver; "
+    "from urbansolarcarver.sky_patches import compute_EPW_based_weights; "
+    "epw = next((Path(urbansolarcarver.__file__).parent / 'example_projects' / 'weather').glob('*.epw')); "
+    "w = compute_EPW_based_weights('irradiance', str(epw), list(range(4320, 4344)), torch.device('cpu')); "
+    "assert w.shape == (145,) and float(w.sum()) > 0, w; print('sky OK')"
+)
+
+
 def verify_and_warm_up(vpy: Path) -> None:
     """Steps 6 and 7: check that torch, warp and urbansolarcarver import, then precompile the Warp kernels."""
     # ── 6. Verify ──
@@ -480,6 +489,16 @@ def verify_and_warm_up(vpy: Path) -> None:
     else:
         log("UrbanSolarCarver import failed.", "error")
         print(r.stderr)
+        sys.exit(1)
+
+    # Check the sky of Solar energy and Solar heating: Radiance's gendaymtx from pyradiance, on a day of the example weather
+    # file. v0.12.0 and v0.12.1 used an installed Radiance and failed on every computer without one, after the setup passed.
+    r = run([str(vpy), "-c", SKY_CHECK], capture=True, check=False)
+    if r.returncode == 0 and "sky OK" in r.stdout:
+        log("Sky matrix (Radiance gendaymtx) OK", "ok")
+    else:
+        log("The sky matrix of Solar energy and Solar heating could not be computed.", "error")
+        print(r.stdout + r.stderr)
         sys.exit(1)
 
     # ── 7. Precompile Warp kernels ──
