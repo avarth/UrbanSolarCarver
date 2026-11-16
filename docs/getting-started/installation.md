@@ -1,10 +1,12 @@
 # Installation
 
-## Windows: from the repository zip
+## Windows: from a release zip
 
 No Python, git or administrator rights needed beforehand.
 
-1. On the repository's GitHub page, choose **Code > Download ZIP** (or the zip of a release). Extract the whole zip (right-click,
+1. Download the [latest release](https://github.com/avarth/UrbanSolarCarver/releases/latest): under **Assets**, choose
+   **Source code (zip)**. A release is a tested version; the main branch (**Code > Download ZIP**) may hold work in progress.
+   Extract the whole zip (right-click,
    **Extract All**) to any folder you can write to, outside OneDrive. A per-user programs folder such as
    `%LOCALAPPDATA%\Programs\UrbanSolarCarver` works well; a short path avoids Windows path-length limits. Running the setup
    from inside the zip does not work; it asks you to extract first.

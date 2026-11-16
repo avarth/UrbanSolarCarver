@@ -21,7 +21,7 @@ UrbanSolarCarver/
 ├── pyproject.toml          Package metadata, dependencies and the Python import rules
 ├── install/                setup_env.py (environment setup, GPU detection), requirements-lock.txt (the versions the tests
 │                           last passed on) and requirements-lock-hashed.txt (the same pins with every file's SHA-256)
-├── setup-urbansolarcarver.bat    Windows setup from the repository zip: uv, Python and packages in the folder
+├── setup-urbansolarcarver.bat    Windows setup from a release zip: uv, Python and packages in the folder
 ├── start-urbansolarcarver.bat    Windows launcher of the browser app (.sh for Linux and macOS)
 ├── mkdocs.yml              Documentation site configuration
 ├── CHANGELOG.md            Release history
