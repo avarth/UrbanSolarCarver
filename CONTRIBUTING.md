@@ -49,13 +49,16 @@ Releases are made at milestones, not after every merge. Each GitHub release beco
    into the new version with a short **Highlights** list. Reinstall the package (`pip install -e . --no-deps`) so the version
    test sees it, run the whole suite, merge and push.
 2. Tag and publish: `git tag -a v0.13.0 -m v0.13.0`, `git push origin v0.13.0`, then `gh release create v0.13.0 --notes-file ...`.
-3. Build the app zip from the tag and add it to the release, under the same name every time (the installation guide links to
-   `releases/latest/download/UrbanSolarCarver-windows.zip`):
+3. Build the app downloads from the tag and add them to the release, under the same names every time (the installation guide
+   links to `releases/latest/download/UrbanSolarCarver-windows.zip` and `.../UrbanSolarCarver-linux.tar.gz`):
 
    ```
    .venv/Scripts/python.exe tools/build_app_zip.py
-   gh release upload v0.13.0 build/UrbanSolarCarver-windows.zip
+   gh release upload v0.13.0 build/UrbanSolarCarver-windows.zip build/UrbanSolarCarver-linux.tar.gz
    ```
+
+   After a package upgrade, `tools/write_lockfile.py --hashes` also rewrites `install/requirements-linux-cuda-hashed.txt`, the
+   CUDA libraries the Linux build of torch needs; it asks `uv pip compile` for them, so uv must be on PATH.
 
 4. Redeploy the docs: `.venv/Scripts/python.exe -m mkdocs gh-deploy --strict`.
 

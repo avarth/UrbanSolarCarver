@@ -54,6 +54,37 @@ Your projects are kept apart from the app, in `UrbanSolarCarver\projects` in you
 folder keeps them. To keep them elsewhere, for example in a `projects` folder inside the app folder, use **Change folder** at the
 foot of the project list on the home screen.
 
+## Linux: from a release archive
+
+No Python, git or root rights needed beforehand. It runs on 64-bit Intel or AMD computers with glibc 2.28 or newer: Fedora 29,
+Ubuntu 18.10, Debian 10 and later, not Alpine.
+
+1. Download [UrbanSolarCarver-linux.tar.gz](https://github.com/avarth/UrbanSolarCarver/releases/latest/download/UrbanSolarCarver-linux.tar.gz)
+   from the [latest release](https://github.com/avarth/UrbanSolarCarver/releases/latest) and extract it in your home folder,
+   for example to `~/.local/share/urbansolarcarver`:
+
+    ```bash
+    mkdir -p ~/.local/share && tar -xzf ~/Downloads/UrbanSolarCarver-linux.tar.gz -C ~/.local/share
+    mv ~/.local/share/UrbanSolarCarver ~/.local/share/urbansolarcarver
+    ```
+
+    A file manager's **Extract** works too. Keep the folder on a Linux drive: on a drive formatted for Windows (NTFS, FAT,
+    exFAT), or one mounted `noexec`, the setup stops and says to move it.
+2. In a terminal, in that folder, run `./setup-urbansolarcarver.sh`. It says what it will download and waits for Enter. At the
+   end it offers an entry in the applications menu.
+3. From then on, run `./start-urbansolarcarver.sh`, or choose UrbanSolarCarver in the applications menu. The interface opens
+   in your browser; the terminal stays open while it runs, and Ctrl+C stops it.
+
+The setup works as the Windows one does: it downloads uv (a pinned version, checked against the SHA-256 in the script), uv's
+own Python 3.14, and the packages, each checked against the hashes in `install/`. With the CUDA build of PyTorch it also
+downloads NVIDIA's CUDA libraries from pypi.org, about 2.8 GB, checked against `install/requirements-linux-cuda-hashed.txt`; no
+CUDA toolkit is needed, only the NVIDIA driver. It needs about 12 GB of free disk space with CUDA, or about 2 GB with the CPU
+build (`./setup-urbansolarcarver.sh --cpu`, or when `nvidia-smi` is not found). Everything stays in the folder, in `.runtime`
+and `.venv`: nothing is added to PATH or to your shell's startup files, and it does not use or change a Python installed on the
+computer. It needs no root rights and stops if run with sudo. The one file it can write outside the folder is the menu entry,
+`~/.local/share/applications/urbansolarcarver.desktop`, and only if you answer y. To remove UrbanSolarCarver, delete the folder
+and that file.
+
 ## Quick setup with Python (developers)
 
 ```bash
@@ -99,7 +130,7 @@ The browser interface is an optional extra of the package (`ui`). `install/setup
 python -m pip install -e ".[ui]"
 ```
 
-Then start it by double-clicking `start-urbansolarcarver.bat` (Windows) or running `./start-urbansolarcarver.sh` (Linux, macOS) in the repository folder. On Windows the launcher runs on the environment `setup-urbansolarcarver.bat` made in `.venv` (see above), or the one `USC_VENV` names; on Linux and macOS, on a fresh clone the launcher runs `setup_env.py` first. From a terminal, `usc ui` does the same. Without the extra, every other `usc` command works as before, and `usc ui` prints the install command above and exits.
+Then start it by double-clicking `start-urbansolarcarver.bat` (Windows) or running `./start-urbansolarcarver.sh` (Linux, macOS) in the repository folder. The launcher runs on the environment in `.venv` in that folder, made by the setup script or by `setup_env.py`, or on the one `USC_VENV` names; it does not install anything itself. From a terminal, `usc ui` does the same. Without the extra, every other `usc` command works as before, and `usc ui` prints the install command above and exits.
 
 ## Requirements
 
