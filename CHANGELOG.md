@@ -7,6 +7,20 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-16
+
+### Highlights
+
+- **Install on Windows from a release zip**: extract it, run `setup-urbansolarcarver.bat`, then `start-urbansolarcarver.bat`.
+  No Python, git or administrator rights needed; everything stays in the folder.
+- **Sites as the input**: draw or import plots with a base and a max height, with holes and rectangles; draw context blocks
+  and test surfaces on the ground, or pick test surfaces on the context. A new project starts with a short setup.
+- **Simulate the resulting volumes**: a study accounts for the max volume, the envelope or the massing, and keeps its test
+  points between runs.
+- **Inspect checks the inputs before a run**: which way each test surface faces, the surfaces a run would leave out, and a
+  prompt to check after the first test surface file.
+- **Combined result** of the criteria, with the volume above a base height, and a corrected histogram for later criteria.
+
 ### Install
 
 - **Install on Windows from the repository zip.** Unzip, double-click `setup-urbansolarcarver.bat`, then

@@ -49,8 +49,8 @@ A project can combine several modes. More are planned, such as outdoor thermal c
 
 ## Install (Windows)
 
-1. Download the repository as a zip (**Code > Download ZIP**) and extract it to any folder you can write to. Avoid OneDrive
-   folders.
+1. Download the [latest release](https://github.com/avarth/UrbanSolarCarver/releases/latest) (**Source code (zip)** under
+   Assets) and extract it to any folder you can write to. Avoid OneDrive folders.
 2. Run `setup-urbansolarcarver.bat`. It downloads Python and the required packages into that folder and checks each file
    against a known hash. Python, git and administrator rights are not needed. An install with CUDA needs about 7 GB of disk
    space.
