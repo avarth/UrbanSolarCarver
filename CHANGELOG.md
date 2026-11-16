@@ -7,6 +7,13 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Install
+
+- **A small app zip for each release**: `UrbanSolarCarver-windows.zip` (about 1.3 MB) holds only what the Windows setup and
+  the app need. The installation guide links to it in the latest release. `tools/build_app_zip.py` builds it from a tag; the
+  release's source zip, which Zenodo archives, keeps every file.
+- Notebook outputs no longer show the folder paths of the computer they were run on.
+
 ## [0.12.0] - 2026-11-16
 
 ### Highlights

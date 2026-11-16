@@ -41,6 +41,24 @@ what is new: repeat the check with `--latest`, run the whole suite including the
 example projects with the locked versions, because a new torch can move numbers without failing a test. If that holds, run
 `tools/write_lockfile.py` from that environment and commit the file. An upgrade of torch or Warp counts as an engine change.
 
+## Making a release
+
+Releases are made at milestones, not after every merge. Each GitHub release becomes a citable version on Zenodo.
+
+1. Set the version in `pyproject.toml` and `CITATION.cff` (with `date-released`), and turn `[Unreleased]` in `CHANGELOG.md`
+   into the new version with a short **Highlights** list. Reinstall the package (`pip install -e . --no-deps`) so the version
+   test sees it, run the whole suite, merge and push.
+2. Tag and publish: `git tag -a v0.13.0 -m v0.13.0`, `git push origin v0.13.0`, then `gh release create v0.13.0 --notes-file ...`.
+3. Build the app zip from the tag and add it to the release, under the same name every time (the installation guide links to
+   `releases/latest/download/UrbanSolarCarver-windows.zip`):
+
+   ```
+   .venv/Scripts/python.exe tools/build_app_zip.py
+   gh release upload v0.13.0 build/UrbanSolarCarver-windows.zip
+   ```
+
+4. Redeploy the docs: `.venv/Scripts/python.exe -m mkdocs gh-deploy --strict`.
+
 ## Code Style
 
 - Follow existing patterns in the codebase.
