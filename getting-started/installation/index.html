@@ -403,10 +403,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#windows-from-the-repository-zip" class="md-nav__link">
+  <a href="#windows-from-a-release-zip" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Windows: from the repository zip
+        Windows: from a release zip
       
     </span>
   </a>
@@ -1344,10 +1344,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#windows-from-the-repository-zip" class="md-nav__link">
+  <a href="#windows-from-a-release-zip" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Windows: from the repository zip
+        Windows: from a release zip
       
     </span>
   </a>
@@ -1441,14 +1441,17 @@
 
 
 <h1 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h1>
-<h2 id="windows-from-the-repository-zip">Windows: from the repository zip<a class="headerlink" href="#windows-from-the-repository-zip" title="Permanent link">&para;</a></h2>
+<h2 id="windows-from-a-release-zip">Windows: from a release zip<a class="headerlink" href="#windows-from-a-release-zip" title="Permanent link">&para;</a></h2>
 <p>No Python, git or administrator rights needed beforehand.</p>
 <ol>
-<li>On the repository's GitHub page, choose <strong>Code &gt; Download ZIP</strong> (or the zip of a release). Unzip the whole zip (right-click,
-   <strong>Extract All</strong>) into your own programs folder, <code>%LOCALAPPDATA%\Programs\UrbanSolarCarver</code>: type that path in Explorer's
-   address bar to open it. Running the setup from inside the zip does not work; it asks you to unzip first.</li>
+<li>Download the <a href="https://github.com/avarth/UrbanSolarCarver/releases/latest">latest release</a>: under <strong>Assets</strong>, choose
+   <strong>Source code (zip)</strong>. A release is a tested version; the main branch (<strong>Code &gt; Download ZIP</strong>) may hold work in progress.
+   Extract the whole zip (right-click,
+   <strong>Extract All</strong>) to any folder you can write to, outside OneDrive. A per-user programs folder such as
+   <code>%LOCALAPPDATA%\Programs\UrbanSolarCarver</code> works well; a short path avoids Windows path-length limits. Running the setup
+   from inside the zip does not work; it asks you to extract first.</li>
 <li>Double-click <code>setup-urbansolarcarver.bat</code> in that folder. It says what it will download and waits for a key press. At the
-   end it offers a shortcut on the desktop, since that folder is hidden by default.</li>
+   end it offers a shortcut on the desktop.</li>
 <li>From then on, double-click <code>start-urbansolarcarver.bat</code>, or the shortcut. The interface opens in your browser.</li>
 </ol>
 <p>Windows may warn that the <code>.bat</code> files come from the internet: choose <strong>More info &gt; Run anyway</strong>, or first right-click each file,
