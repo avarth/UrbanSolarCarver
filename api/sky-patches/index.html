@@ -985,6 +985,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.gendaymtx_path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        gendaymtx_path
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.sky_patches.fetch_tregenza_patch_directions" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1406,6 +1417,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.gendaymtx_path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        gendaymtx_path
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.sky_patches.fetch_tregenza_patch_directions" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1620,6 +1642,30 @@ their own for diagnostics or custom weighting schemes.</p>
 
 
 
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.sky_patches.gendaymtx_path" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">gendaymtx_path</span><span class="p">()</span></code>
+
+<a href="#urbansolarcarver.sky_patches.gendaymtx_path" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The gendaymtx program the sky matrix runs: the one in the pyradiance package, a dependency.</p>
+<p>Before 0.12.2 Ladybug's SkyMatrix looked only for an installed Radiance
+(Ladybug Tools); on a computer without one, Solar energy and Solar
+heating stopped with "No Radiance installation was found". pyradiance's
+wheels carry Radiance's programs, so every installation runs the same
+gendaymtx. The package is located, not imported. Raises RuntimeError
+when pyradiance or its gendaymtx is missing.</p>
+
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-function">
 
