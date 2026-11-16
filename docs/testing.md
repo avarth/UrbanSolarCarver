@@ -160,3 +160,8 @@ share it. Tests must not depend on one another or on a shared file: each uses it
 sky matrix in a temporary folder of its own, so workers computing sky matrices at the same time do not share
 Ladybug's weather folder. When another checkout is testing on
 the same machine at the same time, `-n 4` leaves it room.
+
+No test may use a program installed on the computer that a user's computer would not have. `conftest.py`
+(`no_radiance_of_this_computer`) hides an installed Radiance from every test: Ladybug's own SkyMatrix finds no gendaymtx,
+and folders named radiance or ladybug leave PATH. The sky matrix runs pyradiance's gendaymtx (`tests/test_bundled_radiance.py`).
+Before 0.12.2 every test here found the Radiance of Ladybug Tools, so Solar energy failed on every clean computer.

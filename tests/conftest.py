@@ -80,6 +80,19 @@ def no_real_home_folder(tmp_path_factory, monkeypatch):
     return home
 
 
+@pytest.fixture(autouse=True)
+def no_radiance_of_this_computer(monkeypatch):
+    """No test finds a Radiance installed on this computer (Ladybug Tools): a user's computer has none. v0.12.0 and v0.12.1 ran
+    Ladybug's gendaymtx, which every test here found, so Solar energy and Solar heating failed on every clean computer.
+    Ladybug's own SkyMatrix now finds no gendaymtx, and the Radiance folders leave PATH; the sky matrix runs pyradiance's."""
+    from ladybug_radiance import skymatrix
+    monkeypatch.setattr(skymatrix, "GENDAYMTX_EXE", None)
+    kept = [folder for folder in os.environ.get("PATH", "").split(os.pathsep)
+            if "radiance" not in folder.lower() and "ladybug" not in folder.lower()]
+    monkeypatch.setenv("PATH", os.pathsep.join(kept))
+    monkeypatch.delenv("RAYPATH", raising=False)
+
+
 @pytest.fixture
 def home_folder(no_real_home_folder):
     """The home folder of this test (no_real_home_folder), for a test that reads or writes in it."""

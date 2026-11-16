@@ -63,6 +63,52 @@ def _load_view_sphere() -> "ViewSphere":
         _view_sphere = ViewSphere()
     return _view_sphere
 
+def gendaymtx_path() -> str:
+    """The gendaymtx program the sky matrix runs: the one in the pyradiance package, a dependency.
+
+    Before 0.12.2 Ladybug's SkyMatrix looked only for an installed Radiance
+    (Ladybug Tools); on a computer without one, Solar energy and Solar
+    heating stopped with "No Radiance installation was found". pyradiance's
+    wheels carry Radiance's programs, so every installation runs the same
+    gendaymtx. The package is located, not imported. Raises RuntimeError
+    when pyradiance or its gendaymtx is missing.
+    """
+    import importlib.util
+    import os
+    from pathlib import Path
+
+    spec = importlib.util.find_spec("pyradiance")
+    if spec is None or spec.origin is None:
+        raise RuntimeError("Solar energy and Solar heating need the pyradiance package, which brings Radiance's gendaymtx; "
+                           "it is not installed. Run the setup again, or: pip install pyradiance")
+    program = Path(spec.origin).parent / "bin" / ("gendaymtx.exe" if os.name == "nt" else "gendaymtx")
+    if not program.is_file():
+        raise RuntimeError(f"pyradiance is installed but has no gendaymtx at {program}; reinstall it: "
+                           "pip install --force-reinstall pyradiance")
+    return str(program)
+
+
+_LADYBUG_HEADER_LINES = 8   # SkyMatrix._parse_mtx_data skips 8 header lines and the ground patch (data_lines[9:-1])
+
+
+def _with_ladybug_header(output: bytes) -> bytes:
+    """gendaymtx's *output* with its header replaced by the 8 lines Ladybug's parser skips.
+
+    Ladybug's SkyMatrix._parse_mtx_data drops a fixed 8 header lines and then
+    the ground patch. Newer Radiance (pyradiance's) writes one more header
+    line, ``NAVERAGED=8760``, so a fixed count read the ground patch as the
+    first sky patch and moved every value one patch along (the sun 12 to 30°
+    off in azimuth). The header ends at its first empty line; what follows
+    (the ground patch, then the sky patches) is kept as it is. Raises
+    RuntimeError when *output* has no header end.
+    """
+    lines = output.split(b"\n")
+    end = next((index for index, line in enumerate(lines) if line.strip() == b""), None)
+    if end is None or not lines[0].startswith(b"#?RADIANCE"):
+        raise RuntimeError("gendaymtx's output has no Radiance header; its first bytes: " + repr(output[:80]))
+    return b"\n".join([b""] * _LADYBUG_HEADER_LINES + lines[end + 1:])
+
+
 def _load_sky_matrix() -> type:
     """
     Return a ladybug_radiance SkyMatrix class whose patch values turn with
@@ -78,23 +124,25 @@ def _load_sky_matrix() -> type:
     """
     global _sky_matrix_cls
     if _sky_matrix_cls is None:
-        import os
         import subprocess
-        from ladybug_radiance.skymatrix import SkyMatrix, GENDAYMTX_EXE
+        from ladybug_radiance.skymatrix import SkyMatrix
 
         class TurnedSkyMatrix(SkyMatrix):
             __slots__ = ()
 
             def _run_gendaymtx(self, wea_file, wea_duration):
-                # SkyMatrix._run_gendaymtx with -r added.
-                assert GENDAYMTX_EXE is not None, 'No Radiance installation was found.'
+                # SkyMatrix._run_gendaymtx with -r added, run on gendaymtx_path() rather than an installed Radiance.
+                gendaymtx = gendaymtx_path()
                 density = 2 if self.high_density else 1
                 values = []
                 for component in ('-d', '-s'):
-                    cmds = [GENDAYMTX_EXE, '-m', str(density), component, '-O1', '-A',
+                    cmds = [gendaymtx, '-m', str(density), component, '-O1', '-A',
                             '-r', str(float(self.north)), wea_file]
-                    process = subprocess.Popen(cmds, stdout=subprocess.PIPE, shell=os.name == 'nt')
-                    values.append(self._parse_mtx_data(process.communicate()[0], wea_duration, density))
+                    completed = subprocess.run(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+                    if completed.returncode != 0:
+                        raise RuntimeError(f"gendaymtx ({gendaymtx}) failed with exit code {completed.returncode}: "
+                                           f"{completed.stderr.decode(errors='replace').strip()}")
+                    values.append(self._parse_mtx_data(_with_ladybug_header(completed.stdout), wea_duration, density))
                 return values[0], values[1]
 
         _sky_matrix_cls = TurnedSkyMatrix

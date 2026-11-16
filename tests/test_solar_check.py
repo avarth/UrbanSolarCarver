@@ -805,9 +805,11 @@ def test_solar_energy_matches_ladybugs_incident_radiation_with_one_ray_per_patch
     """Ladybug's RadiationStudy on the same Tregenza sky matrix with ground reflectance 0: the cosine of
     each patch centre seen past a box, summed; the check with one ray per patch computes the same."""
     from ladybug_geometry.geometry3d import Face3D, Mesh3D, Point3D
-    from ladybug_radiance.skymatrix import SkyMatrix
     from ladybug_radiance.study.radiation import RadiationStudy
+    from urbansolarcarver.sky_patches import _load_sky_matrix
     from urbansolarcarver.weather_file import read_weather_file
+
+    SkyMatrix = _load_sky_matrix()   # Ladybug's SkyMatrix on pyradiance's gendaymtx (no Radiance of this computer)
 
     box = box_between([0, 0, 0], [12, 8, 15])
     # Sensors: a strip of ground east and south of the box, and the box's south facade.
