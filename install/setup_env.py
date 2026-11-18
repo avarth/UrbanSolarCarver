@@ -57,7 +57,16 @@ VENV_DIR = ".venv"
 REPOSITORY = Path(__file__).resolve().parents[1]  # this file is in install/; the venv and the package are the repository's
 LOCKFILE = Path(__file__).resolve().parent / "requirements-lock.txt"
 HASHED_LOCKFILE = LOCKFILE.with_name("requirements-lock-hashed.txt")  # tools/write_lockfile.py --hashes
-LINUX_CUDA_LOCKFILE = LOCKFILE.with_name("requirements-linux-cuda-hashed.txt")  # what torch's Linux CUDA build adds
+# The torch build for GPUs newer than the locked build has code for. The locked cu126 build stops at sm_90 (RTX 40, H100);
+# compute capability 10 and up (RTX 50, B200) needs a CUDA 13 build, which in turn drops GPUs older than Turing (sm_75), so
+# it is chosen only for those GPUs. It needs NVIDIA driver 580 or newer.
+NEW_GPU_WHEELS = "cu130"
+NEW_GPU_CAPABILITY = (10, 0)
+
+
+def linux_cuda_lockfile(build: str) -> Path:
+    """What torch's Linux *build* (cu126, cu130) needs beyond the hashed lockfile: the nvidia libraries and triton."""
+    return LOCKFILE.with_name(f"requirements-linux-{build}-hashed.txt")
 TORCH_REQUIREMENT_FILE = "torch-requirement.txt"  # the torch block of HASHED_LOCKFILE, in .runtime
 MIN_PYTHON = (3, 12)  # numpy 2.5 and scipy 1.18 need it
 MAX_LOCKED_PYTHON = (3, 14)  # the newest Python the locked versions were installed and tested on
@@ -121,10 +130,30 @@ def detect_cuda_version() -> str | None:
     except Exception:
         return None
     version = cuda_version_in(r.stdout)
+    global DETECTED_COMPUTE_CAPABILITY
+    DETECTED_COMPUTE_CAPABILITY = detect_compute_capability(nvidia_smi)
     if version is None and "NVIDIA-SMI" in r.stdout:
         log("nvidia-smi runs, but its output does not give the CUDA version this setup looks for; "
             "installing CPU-only PyTorch. Report this, with the first lines nvidia-smi prints.", "warn")
     return version
+
+
+DETECTED_COMPUTE_CAPABILITY: tuple[int, int] | None = None    # set by detect_cuda_version
+
+
+def detect_compute_capability(nvidia_smi: str) -> tuple[int, int] | None:
+    """The highest compute capability of the NVIDIA GPUs (8.6 for an RTX 3060), or None when nvidia-smi cannot say."""
+    try:
+        r = run([nvidia_smi, "--query-gpu=compute_cap", "--format=csv,noheader"], capture=True, check=False)
+    except Exception:
+        return None
+    return compute_capability_in(r.stdout) if r.returncode == 0 else None
+
+
+def compute_capability_in(query_output: str) -> tuple[int, int] | None:
+    """The highest of the "major.minor" lines nvidia-smi's compute_cap query prints, or None."""
+    found = [(int(m.group(1)), int(m.group(2))) for m in re.finditer(r"^\s*(\d+)\.(\d+)\s*$", query_output, re.MULTILINE)]
+    return max(found) if found else None
 
 
 def cuda_version_in(nvidia_smi_output: str) -> str | None:
@@ -196,11 +225,14 @@ def locked_python_problem(version: tuple[int, int]) -> str | None:
             "which have not been tested.")
 
 
-def locked_torch(lock_text: str, cuda_version: str | None, force_cpu: bool) -> tuple[str, str, str]:
+def locked_torch(lock_text: str, cuda_version: str | None, force_cpu: bool,
+                 compute_capability: tuple[int, int] | None = None) -> tuple[str, str, str]:
     """Return (requirement, index_url, description) of the torch in *lock_text*.
 
-    The driver must run the wheels the lockfile names (drivers run wheels built
-    for their CUDA version or older); otherwise, as with no driver or a forced
+    The wheels are those the lockfile names, or NEW_GPU_WHEELS for a GPU of
+    *compute_capability* NEW_GPU_CAPABILITY or higher, which the locked build
+    has no code for. The driver must run them (drivers run wheels built for
+    their CUDA version or older); otherwise, as with no driver or a forced
     CPU install, the same torch version comes as CPU wheels.
     """
     torch = re.search(r"^torch==(\S+)$", lock_text, re.MULTILINE)
@@ -209,7 +241,12 @@ def locked_torch(lock_text: str, cuda_version: str | None, force_cpu: bool) -> t
         log(f"{LOCKFILE.name} does not give torch and its wheels", "error")
         sys.exit(1)
     requirement = f"torch=={torch.group(1)}"
-    needed = [cuda for cuda, url in CUDA_WHEEL_INDEXES.items() if url.endswith("/" + wheels.group(1))]
+    build = wheels.group(1)
+    if compute_capability is not None and compute_capability >= NEW_GPU_CAPABILITY and build != "cpu":
+        build = NEW_GPU_WHEELS
+        log(f"This GPU (compute capability {compute_capability[0]}.{compute_capability[1]}) needs the {build} build of torch")
+    wheels = re.match(r"(\S+)", build)
+    needed = [cuda for cuda, url in CUDA_WHEEL_INDEXES.items() if url.endswith("/" + build)]
     if force_cpu or cuda_version is None or not needed:
         return requirement, CPU_WHEEL_INDEX, f"CPU-only, torch {torch.group(1)}"
     try:
@@ -218,6 +255,8 @@ def locked_torch(lock_text: str, cuda_version: str | None, force_cpu: bool) -> t
         return requirement, CPU_WHEEL_INDEX, f"CPU-only, torch {torch.group(1)} (unreadable CUDA {cuda_version})"
     if driver < needed[0]:
         log(f"CUDA {cuda_version} cannot run the locked {wheels.group(1)} wheels; using CPU wheels", "warn")
+        if build == NEW_GPU_WHEELS:
+            log("Update the NVIDIA driver (580 or newer for this GPU), then run setup again to use the GPU.", "warn")
         return requirement, CPU_WHEEL_INDEX, f"CPU-only, torch {torch.group(1)} (CUDA {cuda_version} too old)"
     return requirement, CUDA_WHEEL_INDEXES[needed[0]], f"{wheels.group(1)} wheels, torch {torch.group(1)}"
 
@@ -227,7 +266,8 @@ def install_choice(latest: bool, cuda_version: str | None, force_cpu: bool) -> t
     if latest:
         index_url, description = resolve_torch_index(cuda_version, force_cpu)
         return "torch", [], [], index_url, description
-    requirement, index_url, description = locked_torch(LOCKFILE.read_text(encoding="utf-8"), cuda_version, force_cpu)
+    requirement, index_url, description = locked_torch(LOCKFILE.read_text(encoding="utf-8"), cuda_version, force_cpu,
+                                                       DETECTED_COMPUTE_CAPABILITY)
     # --no-deps: torch's dependencies come next, under the constraints; its wheel index would give newer ones.
     return requirement, ["--no-deps"], ["-c", str(LOCKFILE)], index_url, description
 
@@ -366,7 +406,7 @@ def self_contained_plan(root: Path, vpy: Path, torch_requirement: str,
     ``root/.runtime/torch-requirement.txt``, which the caller writes.
     On Linux (*system*, default this computer's) the CUDA build of torch needs
     the nvidia libraries and triton, which the Windows build does not: the
-    second command then adds them from ``LINUX_CUDA_LOCKFILE``, also hashed.
+    second command then adds them from ``linux_cuda_lockfile(build)``, also hashed.
     """
     cache = root / ".runtime" / "cache"
     environment = {
@@ -383,7 +423,8 @@ def self_contained_plan(root: Path, vpy: Path, torch_requirement: str,
         [*pip, "--index-url", "https://pypi.org/simple", "-r", str(root / "install" / HASHED_LOCKFILE.name)],
     ]
     if (system or platform.system()) == "Linux" and index_url != CPU_WHEEL_INDEX:
-        commands[1] += ["-r", str(root / "install" / LINUX_CUDA_LOCKFILE.name)]
+        build = index_url.rstrip("/").rsplit("/", 1)[-1]
+        commands[1] += ["-r", str(root / "install" / linux_cuda_lockfile(build).name)]
     log(f"Locked torch: {torch_requirement}, from {index_url}")
     return environment, commands
 
@@ -392,7 +433,8 @@ def self_contained_install(args, cuda_version: str | None) -> None:
     """``setup_env.py --self-contained``: the venv, the caches and hash-checked packages in this folder."""
     root = REPOSITORY
     venv_dir = self_contained_venv(root)
-    requirement, index_url, desc = locked_torch(LOCKFILE.read_text(encoding="utf-8"), cuda_version, args.cpu)
+    requirement, index_url, desc = locked_torch(LOCKFILE.read_text(encoding="utf-8"), cuda_version, args.cpu,
+                                                DETECTED_COMPUTE_CAPABILITY)
     log(f"PyTorch target: {desc}")
     vpy = venv_python(venv_dir)
     environment, commands = self_contained_plan(root, vpy, requirement, index_url)
@@ -444,6 +486,19 @@ SKY_CHECK = (
     "epw = next((Path(urbansolarcarver.__file__).parent / 'example_projects' / 'weather').glob('*.epw')); "
     "w = compute_EPW_based_weights('irradiance', str(epw), list(range(4320, 4344)), torch.device('cpu')); "
     "assert w.shape == (145,) and float(w.sum()) > 0, w; print('sky OK')"
+)
+
+
+GPU_CHECK = (
+    "import torch\n"
+    "from urbansolarcarver.compute_device import cuda_device_supported, unsupported_gpu_message\n"
+    "if not torch.cuda.is_available():\n"
+    "    print('gpu none')\n"
+    "elif not cuda_device_supported(0):\n"
+    "    print('gpu unsupported: ' + unsupported_gpu_message(0))\n"
+    "else:\n"
+    "    assert int((torch.arange(4, device='cuda') * 2).sum().item()) == 12\n"
+    "    print('gpu OK')\n"
 )
 
 
@@ -500,6 +555,17 @@ def verify_and_warm_up(vpy: Path) -> None:
         log("The sky matrix of Solar energy and Solar heating could not be computed.", "error")
         print(r.stdout + r.stderr)
         sys.exit(1)
+
+    # Check that the installed torch has GPU code for this GPU, and runs on it: torch reports a GPU as available also when
+    # its build has no code for that GPU's generation (an RTX 50-series card with the cu126 build).
+    r = run([str(vpy), "-c", GPU_CHECK], capture=True, check=False)
+    if "gpu OK" in r.stdout:
+        log("GPU runs PyTorch", "ok")
+    elif "gpu none" in r.stdout:
+        pass
+    else:
+        log("The GPU cannot run this PyTorch; UrbanSolarCarver will use the CPU.", "warn")
+        print((r.stdout + r.stderr).strip())
 
     # ── 7. Precompile Warp kernels ──
     # Warp JIT-compiles kernels on first use (~3-10 s, once per machine,

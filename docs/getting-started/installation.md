@@ -30,7 +30,10 @@ What the setup downloads, each file checked against a SHA-256 hash that is alrea
 It needs about 7 GB of free disk space with CUDA (the packages and their download cache), or about 1.5 GB with the CPU build;
 the setup checks before downloading and says how much is free.
 
-The setup picks the CUDA build of PyTorch when the NVIDIA driver can run it, and the CPU build otherwise, and says which;
+The setup picks the CUDA build of PyTorch when the NVIDIA driver can run it, and the CPU build otherwise, and says which. Most
+cards get the build for CUDA 12.6; RTX 50-series cards (and other GPUs of compute capability 10 or higher) get the build for
+CUDA 13.0, which needs NVIDIA driver 580 or newer. At the end the setup runs a small computation on the GPU. When the app
+finds a GPU that its PyTorch has no code for, it uses the CPU and says so, rather than failing at the first run.
 `setup-urbansolarcarver.bat --cpu` forces the CPU build. Everything it makes stays in the folder: uv, Python, the download
 caches and its temporary files in `.runtime`, the packages in `.venv`. Nothing is added to PATH or the registry, and a Python
 installed on the computer is not used or changed. The one file it can write outside the folder is the desktop shortcut, and only
@@ -77,7 +80,7 @@ Ubuntu 18.10, Debian 10 and later, not Alpine.
 
 The setup works as the Windows one does: it downloads uv (a pinned version, checked against the SHA-256 in the script), uv's
 own Python 3.14, and the packages, each checked against the hashes in `install/`. With the CUDA build of PyTorch it also
-downloads NVIDIA's CUDA libraries from pypi.org, about 2.8 GB, checked against `install/requirements-linux-cuda-hashed.txt`; no
+downloads NVIDIA's CUDA libraries from pypi.org, about 2.8 GB, checked against `install/requirements-linux-cu126-hashed.txt` (`-cu130-` for RTX 50-series cards); no
 CUDA toolkit is needed, only the NVIDIA driver. It needs about 12 GB of free disk space with CUDA, or about 2 GB with the CPU
 build (`./setup-urbansolarcarver.sh --cpu`, or when `nvidia-smi` is not found). Everything stays in the folder, in `.runtime`
 and `.venv`: nothing is added to PATH or to your shell's startup files, and it does not use or change a Python installed on the

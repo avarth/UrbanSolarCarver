@@ -68,7 +68,7 @@ def test_the_setup_scripts_keep_their_windows_line_endings(tmp_path):
 def test_the_linux_archive_holds_what_the_linux_setup_needs_and_no_windows_scripts(tmp_path):
     names = set(_linux(tmp_path).getnames())
     assert all(name.startswith("UrbanSolarCarver") for name in names)
-    for needed in ("setup-urbansolarcarver.sh", "start-urbansolarcarver.sh", "install/requirements-linux-cuda-hashed.txt",
+    for needed in ("setup-urbansolarcarver.sh", "start-urbansolarcarver.sh", "install/requirements-linux-cu126-hashed.txt", "install/requirements-linux-cu130-hashed.txt",
                    *COMMON_NEEDED):
         assert f"UrbanSolarCarver/{needed}" in names, needed
     assert _top_level(names) == set(build_app_zip.LINUX_PATHS)

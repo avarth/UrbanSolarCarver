@@ -7,7 +7,7 @@
 #   uv, the version below, from github.com/astral-sh/uv, against USC_UV_SHA256 below;
 #   Python, uv's own build, against the checksums built into uv;
 #   PyTorch and the other packages, against install/requirements-lock-hashed.txt
-#   (and, for the CUDA build, install/requirements-linux-cuda-hashed.txt).
+#   (and, for a CUDA build, install/requirements-linux-cu126-hashed.txt or -cu130-, for RTX 50-series cards).
 # Everything it makes stays in this folder (.runtime and .venv): nothing on PATH,
 # nothing in your shell's startup files, no root rights, any installed Python untouched.
 # The one exception, only if you answer y at the end: an entry in the applications
@@ -45,7 +45,7 @@ if [ "$(id -u)" = "0" ]; then
        "could not be changed by your own account later. Run it again as yourself."
 fi
 for needed in install/setup_env.py install/requirements-lock.txt install/requirements-lock-hashed.txt \
-              install/requirements-linux-cuda-hashed.txt; do
+              install/requirements-linux-cu126-hashed.txt install/requirements-linux-cu130-hashed.txt; do
   if [ ! -f "$folder/$needed" ]; then
     fail "setup-urbansolarcarver.sh is not next to the other files of UrbanSolarCarver in:" \
          "  \"$folder\"" "Extract the whole folder first, then run setup from there."

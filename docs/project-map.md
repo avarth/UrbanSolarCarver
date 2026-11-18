@@ -21,7 +21,7 @@ UrbanSolarCarver/
 ├── pyproject.toml          Package metadata, dependencies and the Python import rules
 ├── install/                setup_env.py (environment setup, GPU detection), requirements-lock.txt (the versions the tests
 │                           last passed on), requirements-lock-hashed.txt (the same pins with every file's SHA-256) and
-│                           requirements-linux-cuda-hashed.txt (the CUDA libraries torch needs on Linux)
+│                           requirements-linux-cu126/cu130-hashed.txt (the CUDA libraries torch needs on Linux)
 ├── setup-urbansolarcarver.bat    Windows setup from a release zip: uv, Python and packages in the folder (.sh for Linux)
 ├── start-urbansolarcarver.bat    Windows launcher of the browser app (.sh for Linux and macOS)
 ├── mkdocs.yml              Documentation site configuration

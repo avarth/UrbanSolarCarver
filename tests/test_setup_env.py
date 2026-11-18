@@ -153,15 +153,15 @@ def test_the_hashed_lockfile_text_gives_every_pin_its_hashes_and_torch_both_buil
 
     def torch_hashes_of(version, build):
         assert version == "2.14.1"
-        return {"cu126": ["c" * 64], "cpu": ["d" * 64]}[build]
+        return {"cu126": ["c" * 64], "cu130": ["f" * 64], "cpu": ["d" * 64]}[build]
 
     text = write_lockfile.hashed_lockfile_text({"numpy": "2.5.0", "torch": "2.14.1"}, "cu126", hashes_of, torch_hashes_of)
     header = [line for line in text.splitlines() if line.startswith("#")]
-    assert "# torch-hashes: cu126 cpu" in header
+    assert "# torch-hashes: cu126 cu130 cpu" in header
     numpy_block = text.split("numpy==2.5.0", 1)[1].split("torch==", 1)[0]
     assert f"--hash=sha256:{'a' * 64}" in numpy_block and f"--hash=sha256:{'b' * 64}" in numpy_block
     torch_block = text.split("torch==2.14.1", 1)[1]
-    assert f"--hash=sha256:{'c' * 64}" in torch_block and f"--hash=sha256:{'d' * 64}" in torch_block
+    assert f"--hash=sha256:{'c' * 64}" in torch_block and f"--hash=sha256:{'d' * 64}" in torch_block and f"--hash=sha256:{'f' * 64}" in torch_block
 
 
 def test_the_committed_hashed_lockfile_matches_the_lockfile():
@@ -170,7 +170,7 @@ def test_the_committed_hashed_lockfile_matches_the_lockfile():
     lock = setup_env.LOCKFILE.read_text(encoding="utf-8")
     hashed = HASHED_LOCKFILE.read_text(encoding="utf-8")
     wheels = re.search(r"^# torch-wheels: (\S+)$", lock, re.MULTILINE).group(1)
-    assert f"# torch-hashes: {wheels} cpu" in hashed
+    assert f"# torch-hashes: {wheels} {setup_env.NEW_GPU_WHEELS} cpu" in hashed
     blocks = dict(re.findall(r"^(\S+==\S+) \\\n((?:    --hash=sha256:\S+(?: \\)?\n)+)", hashed, re.MULTILINE))
     pins = [line for line in lock.splitlines() if line and not line.startswith("#")]
     assert sorted(blocks) == sorted(pins)
@@ -196,30 +196,29 @@ def test_a_self_contained_install_keeps_its_venv_and_caches_in_the_folder(tmp_pa
     assert rest_command[rest_command.index("-r") + 1] == str(tmp_path / "install" / "requirements-lock-hashed.txt")
 
 
-@pytest.mark.parametrize("system, index, adds_cuda_libraries", [
-    ("Linux", "https://download.pytorch.org/whl/cu126", True),
-    ("Linux", setup_env.CPU_WHEEL_INDEX, False),
-    ("Windows", "https://download.pytorch.org/whl/cu126", False),
+@pytest.mark.parametrize("system, build, adds_cuda_libraries", [
+    ("Linux", "cu126", True),
+    ("Linux", "cu130", True),
+    ("Linux", "cpu", False),
+    ("Windows", "cu126", False),
 ])
-def test_only_a_linux_cuda_install_adds_the_nvidia_libraries(tmp_path, system, index, adds_cuda_libraries):
+def test_only_a_linux_cuda_install_adds_the_nvidia_libraries_of_its_build(tmp_path, system, build, adds_cuda_libraries):
     vpy = tmp_path / ".venv" / "bin" / "python"
+    index = f"https://download.pytorch.org/whl/{build}"
     _, commands = setup_env.self_contained_plan(tmp_path, vpy, "torch==2.14.1", index, system=system)
-    linux_file = str(tmp_path / "install" / "requirements-linux-cuda-hashed.txt")
+    linux_file = str(tmp_path / "install" / f"requirements-linux-{build}-hashed.txt")
     assert (linux_file in commands[1]) is adds_cuda_libraries
-    assert linux_file not in commands[0]
+    assert not any("requirements-linux-" in part and part != linux_file for part in commands[1])
     assert "--require-hashes" in commands[1]
 
 
-LINUX_CUDA_LOCKFILE = setup_env.LINUX_CUDA_LOCKFILE
-
-
-def test_the_committed_linux_cuda_lockfile_pins_torchs_cuda_libraries_with_hashes():
+@pytest.mark.parametrize("build", ["cu126", setup_env.NEW_GPU_WHEELS])
+def test_the_committed_linux_cuda_lockfile_pins_torchs_cuda_libraries_with_hashes(build):
     """Fails when the torch build changed and tools/write_lockfile.py --hashes was not run after it."""
     import re
     lock = setup_env.LOCKFILE.read_text(encoding="utf-8")
-    linux = LINUX_CUDA_LOCKFILE.read_text(encoding="utf-8")
-    wheels = re.search(r"^# torch-wheels: (\S+)$", lock, re.MULTILINE).group(1)
-    assert f"# torch-wheels: {wheels}" in linux
+    linux = setup_env.linux_cuda_lockfile(build).read_text(encoding="utf-8")
+    assert f"# torch-wheels: {build}" in linux
     blocks = dict(re.findall(r"^(\S+)==\S+ \\\n((?:    --hash=sha256:\S+(?: \\)?\n)+)", linux, re.MULTILINE))
     assert "triton" in blocks and any(name.startswith("nvidia-") for name in blocks)
     pinned_in_both = set(blocks) & {line.split("==")[0] for line in lock.splitlines() if "==" in line}
@@ -261,7 +260,7 @@ def test_a_self_contained_install_on_a_short_path_keeps_its_venv_in_the_folder(m
 def test_a_self_contained_install_takes_the_locked_torch_rule(driver, build):
     requirement, url, _ = setup_env.locked_torch(setup_env.LOCKFILE.read_text(encoding="utf-8"), driver, force_cpu=False)
     assert url.endswith("/" + build)
-    assert "# torch-hashes: cu126 cpu" in HASHED_LOCKFILE.read_text(encoding="utf-8")
+    assert "# torch-hashes: cu126 cu130 cpu" in HASHED_LOCKFILE.read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("build", ["cu126", "cpu"])
@@ -354,3 +353,27 @@ def test_the_sky_check_of_the_setup_passes_here():
     result = subprocess.run([sys.executable, "-c", setup_env.SKY_CHECK], capture_output=True, text=True, timeout=120,
                             env={**os.environ, "PYTHONPATH": str(Path(setup_env.__file__).parents[1] / "src")})
     assert result.returncode == 0 and "sky OK" in result.stdout, result.stderr
+
+
+@pytest.mark.parametrize("output, capability", [("8.6\n", (8, 6)), ("8.6\n12.0\n", (12, 0)), ("[N/A]\n", None), ("", None)])
+def test_the_highest_compute_capability_is_read_from_nvidia_smi(output, capability):
+    assert setup_env.compute_capability_in(output) == capability
+
+
+@pytest.mark.parametrize("capability, driver, build", [
+    ((8, 6), "13.3", "cu126"),      # RTX 3060
+    ((9, 0), "12.8", "cu126"),      # H100
+    ((12, 0), "13.3", "cu130"),     # RTX 50-series: the locked cu126 build has no code for sm_120
+    ((10, 0), "13.0", "cu130"),     # B200
+    ((12, 0), "12.8", "cpu"),       # its driver cannot run cu130: update it
+    ((12, 0), None, "cpu"),
+    (None, "13.3", "cu126"),        # nvidia-smi without the compute_cap query
+])
+def test_a_gpu_newer_than_the_locked_build_gets_the_new_gpu_build(capability, driver, build):
+    _, url, _ = setup_env.locked_torch(setup_env.LOCKFILE.read_text(encoding="utf-8"), driver, False, capability)
+    assert url.endswith("/" + build)
+
+
+def test_the_new_gpu_build_has_an_index_and_hashes():
+    assert setup_env.NEW_GPU_WHEELS in {url.rsplit("/", 1)[-1] for url in setup_env.CUDA_WHEEL_INDEXES.values()}
+    assert setup_env.linux_cuda_lockfile(setup_env.NEW_GPU_WHEELS).is_file()

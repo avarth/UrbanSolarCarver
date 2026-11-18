@@ -19,7 +19,7 @@ The command prints the address to open and opens it in your default browser once
 | `--port` | `8770` | Port on `127.0.0.1` |
 | `--projects-folder` | the folder chosen in the app, else `~/UrbanSolarCarver/projects` | Folder that holds one subfolder per project; it is created when missing. It wins over the folder chosen in the app for that launch |
 | `--no-browser` | off | Print the address without opening the browser |
-| `--device`, `-d` | `auto` | Compute device: `auto`, `cpu` or `cuda` |
+| `--device`, `-d` | `auto` | Compute device: `auto`, `cpu` or `cuda`. `auto` takes the GPU only when the installed PyTorch has code for it |
 
 The browser interface is an optional extra of the package. `install/setup_env.py` installs it unless you pass `--no-ui`; to add it to an existing environment run `python -m pip install -e ".[ui]"` (see [Installation](getting-started/installation.md#browser-ui)). Without the extra, `usc ui` prints that command and exits, and every other command is unaffected.
 

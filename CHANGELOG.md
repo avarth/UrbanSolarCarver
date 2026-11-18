@@ -7,6 +7,20 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.12.3] - 2026-11-18
+
+### Highlights
+
+- **RTX 50-series cards**: the setup installs the PyTorch build that runs on them (CUDA 13.0, NVIDIA driver 580 or newer),
+  and the app uses the CPU with a message, instead of failing, on a GPU its PyTorch has no code for.
+
+### Fixed
+
+- **RTX 50-series cards**: the PyTorch build the setup installed (CUDA 12.6) has no code for them (compute capability 12.0),
+  so the app chose the GPU and failed at its first computation. The setup now installs the CUDA 13.0 build for GPUs of
+  compute capability 10 or higher (NVIDIA driver 580 or newer), and runs a small computation on the GPU before it finishes.
+  The app uses the CPU, with a message, when it finds a GPU its PyTorch has no code for.
+
 ## [0.12.2] - 2026-11-16
 
 ### Highlights
