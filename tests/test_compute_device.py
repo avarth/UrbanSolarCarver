@@ -31,6 +31,7 @@ def test_asking_for_cuda_without_cuda_fails_at_once(monkeypatch, choice):
 
 def test_a_numbered_cuda_device_is_kept(monkeypatch):
     monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr("urbansolarcarver.compute_device.cuda_device_supported", lambda index=0: True)   # no second GPU here
     assert resolve_compute_device("cuda:1") == torch.device("cuda:1")
 
 

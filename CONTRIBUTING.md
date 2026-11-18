@@ -57,7 +57,7 @@ Releases are made at milestones, not after every merge. Each GitHub release beco
    gh release upload v0.13.0 build/UrbanSolarCarver-windows.zip build/UrbanSolarCarver-linux.tar.gz
    ```
 
-   After a package upgrade, `tools/write_lockfile.py --hashes` also rewrites `install/requirements-linux-cuda-hashed.txt`, the
+   After a package upgrade, `tools/write_lockfile.py --hashes` also rewrites `install/requirements-linux-cu126-hashed.txt` and `-cu130-`, the
    CUDA libraries the Linux build of torch needs; it asks `uv pip compile` for them, so uv must be on PATH.
 
 4. Redeploy the docs: `.venv/Scripts/python.exe -m mkdocs gh-deploy --strict`.

@@ -134,7 +134,7 @@ def test_a_uv_archive_whose_hash_does_not_match_is_deleted_and_the_linux_setup_s
     folder = tmp_path / "A B (1)"
     folder.mkdir()
     shutil.copy(LINUX_SETUP, folder)
-    for name in (*SETUP_NEIGHBOURS, "install/requirements-linux-cuda-hashed.txt"):
+    for name in (*SETUP_NEIGHBOURS, "install/requirements-linux-cu126-hashed.txt", "install/requirements-linux-cu130-hashed.txt"):
         (folder / name).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(REPOSITORY / name, folder / name)
     junk = tmp_path / "junk.tar.gz"

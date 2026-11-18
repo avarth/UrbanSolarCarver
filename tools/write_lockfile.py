@@ -14,11 +14,12 @@ each release on PyPI, and for torch those of its Windows and Linux x86_64 files 
 one in ``# torch-wheels:`` and cpu). ``setup_env.py --self-contained`` installs from it with ``--require-hashes``.
 
 On Linux the CUDA build of torch needs packages the Windows one does not (the nvidia-*-cu12 libraries, cuda-toolkit and triton).
-``--hashes`` also writes them, with their hashes, to install/requirements-linux-cuda-hashed.txt, which the Linux setup adds when it
+``--hashes`` also writes them, with their hashes, to install/requirements-linux-<build>-hashed.txt (the locked build and setup_env.NEW_GPU_WHEELS), which the Linux setup adds when it
 installs the CUDA build. Their versions come from ``uv pip compile`` for Linux, constrained by requirements-lock.txt, so uv must be on
 PATH for ``--hashes``.
 """
 import argparse
+import importlib.util
 import json
 import platform
 import re
@@ -39,7 +40,9 @@ import tomllib
 ROOT = Path(__file__).resolve().parents[1]
 LOCKFILE = ROOT / "install" / "requirements-lock.txt"
 HASHED_LOCKFILE = ROOT / "install" / "requirements-lock-hashed.txt"
-LINUX_CUDA_LOCKFILE = ROOT / "install" / "requirements-linux-cuda-hashed.txt"
+_setup_spec = importlib.util.spec_from_file_location("setup_env", ROOT / "install" / "setup_env.py")
+setup_env = importlib.util.module_from_spec(_setup_spec)
+_setup_spec.loader.exec_module(setup_env)
 TORCH_PLATFORMS = ("-win_amd64.", "-manylinux_2_28_x86_64.")   # the platforms the setup scripts install on
 TORCH_WHEEL_PAGE = "https://download.pytorch.org/whl/{build}/torch/"
 EXTRAS = ("dev", "ui")
@@ -154,7 +157,7 @@ def linux_cuda_lockfile_text(versions: dict[str, str], wheels: str, hashes_of: C
 def hashed_lockfile_text(versions: dict[str, str], wheels: str, hashes_of: Callable[[str, str], list[str]],
                          torch_hashes_of: Callable[[str, str], list[str]]) -> str:
     """The pins of *versions* as a pip requirements file with every file's hash, torch with both builds' hashes."""
-    builds = [wheels] if wheels == "cpu" else [wheels, "cpu"]
+    builds = [wheels] if wheels == "cpu" else [wheels, setup_env.NEW_GPU_WHEELS, "cpu"]
     header = [
         "# The versions of requirements-lock.txt with the SHA-256 of every file pip may download for them.",
         "# Written by tools/write_lockfile.py --hashes; do not edit by hand. setup_env.py --self-contained installs",
@@ -186,10 +189,11 @@ def main() -> None:
         text = hashed_lockfile_text(versions, wheels, pypi_hashes, torch_hashes)
         HASHED_LOCKFILE.write_text(text, encoding="utf-8", newline="\n")
         print(f"{HASHED_LOCKFILE.name}: {len(versions)} packages with their hashes")
-        if wheels != "cpu":
-            linux = linux_cuda_versions(versions, wheels)
-            LINUX_CUDA_LOCKFILE.write_text(linux_cuda_lockfile_text(linux, wheels, pypi_hashes), encoding="utf-8", newline="\n")
-            print(f"{LINUX_CUDA_LOCKFILE.name}: {len(linux)} packages with their hashes")
+        for build in ([] if wheels == "cpu" else [wheels, setup_env.NEW_GPU_WHEELS]):
+            linux = linux_cuda_versions(versions, build)
+            path = setup_env.linux_cuda_lockfile(build)
+            path.write_text(linux_cuda_lockfile_text(linux, build, pypi_hashes), encoding="utf-8", newline="\n")
+            print(f"{path.name}: {len(linux)} packages with their hashes")
 
 
 if __name__ == "__main__":

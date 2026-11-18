@@ -38,10 +38,10 @@ def prepare_compute_device(device: str) -> str | None:
 
 
 def cuda_is_available() -> bool:
-    """Whether torch sees a CUDA device, also when the CPU was chosen."""
-    import torch
+    """Whether torch sees a CUDA device it has GPU code for, also when the CPU was chosen."""
+    from ..compute_device import cuda_is_usable
 
-    return torch.cuda.is_available()
+    return cuda_is_usable()
 
 
 class GpuWarmUp:
