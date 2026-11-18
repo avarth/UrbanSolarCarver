@@ -1275,6 +1275,39 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.compute_device.cuda_device_supported" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        cuda_device_supported
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.compute_device.unsupported_gpu_message" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        unsupported_gpu_message
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.compute_device.cuda_is_usable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        cuda_is_usable
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.compute_device.warp_device_name" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1544,6 +1577,39 @@
     <span class="md-ellipsis">
       
         resolve_compute_device
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.compute_device.cuda_device_supported" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        cuda_device_supported
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.compute_device.unsupported_gpu_message" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        unsupported_gpu_message
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.compute_device.cuda_is_usable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        cuda_is_usable
       
     </span>
   </a>
@@ -1921,6 +1987,65 @@ else the CPU.  <code>"cpu"</code>, <code>"cuda"</code>, <code>"cuda:N"</code> an
           </tr>
       </tbody>
     </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.compute_device.cuda_device_supported" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">cuda_device_supported</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">capability</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">arch_list</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.compute_device.cuda_device_supported" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Whether this torch build has GPU code for CUDA device <em>index</em>.</p>
+<p>torch reports a GPU as available even when its build has no kernels for that GPU's generation: torch 2.14.1 for CUDA
+12.6 stops at sm_90, so an RTX 50-series card (sm_120) failed at its first GPU operation. A build runs on a GPU when it
+has machine code of the same major version and an equal or lower minor (sm_80 runs on sm_86), or PTX of an equal or
+lower version, which the driver compiles for newer GPUs. <em>capability</em> and <em>arch_list</em> stand in for the device's and the
+build's in tests.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.compute_device.unsupported_gpu_message" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">unsupported_gpu_message</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.compute_device.unsupported_gpu_message" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Why the GPU at <em>index</em> cannot be used, and what to do.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.compute_device.cuda_is_usable" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">cuda_is_usable</span><span class="p">()</span></code>
+
+<a href="#urbansolarcarver.compute_device.cuda_is_usable" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Whether torch sees a CUDA GPU and has code for it; logs once why a GPU it sees cannot be used.</p>
 
 
     </div>
